@@ -12,10 +12,29 @@
 
 - 사용자가 **“완료된 작업은 체크하고, 에이전트가 잊고 같은 작업을 다시 하지 않도록 반드시 지켜”**라고 명시했다.
 - 작업 재개 전에 `TASKS.md` 상단 **완료 체크 — 재작업 방지 기준**을 먼저 읽는다. 이 목록이 완료 세부 ID의 기준 원장이다. 상세 규칙은 `AGENTS.md`6.1. 기억 부재/compaction으로 완료 항목을 재구현·검수 반복하지 않는다.
-- 최초 체크 정리는 로컬 완료31개[x]/잔여8개[ ]였고 위젯(fe6a524)·PLAN-BASIS(b639a4d)를 거쳐 **CONSENT-BACKEND(1a04815)** 추가로 현재 **36개[x]/7개[ ]**다(FIRST-CHARGE 00c3e0d 추가). TASKS 상단이 최신 세부 원장이며 과거 개수는 당시 이력이다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다.
+- 현재 **내부36개[x]/잔여7개[ ]**다. 최신 추가 완료는 **FIRST-CHARGE(00c3e0d)**이며 TASKS 상단이 기준 원장이다. 최초 체크 당시31개[x]/8개[ ]와 이후 단계의 개수는 이력이다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다.
 - 신규 오류/요구변경/현재상태 불일치가 확인됐을 때만 같은 완료 ID에 재개 사유·증거·추가 범위를 먼저 기록한다. 이전 완료 근거/commit은 삭제하지 않는다.
 - 최초 체크 정리 당시 변경 파일: AGENTS.md·TASKS.md·PHASE_2_EXECUTION_PLAN·DEVELOPMENT_REMAINING_AUDIT·이 인계. 문서 변경으로 서비스 테스트 재실행 없이 diff 체크만 수행했고 당시 mock36780 양 ready/생존을 재확인했다. 지금 runtime/체크는 아래 최신 단계가 우선한다.
 - 원래 진행 목표는 계속 전체 v3/C03 로컬 기능이다. 체크 정리 당시 다음은 A05.WIDGET-END였으며 현재 진행 상태는 바로 아래 별도 세부 작업 기록을 따른다.
+
+## 완료 표시 정합성 점검 — 2026-09-27
+
+- **목표/범위:** 사용자 필수 완료 체크를 문서 전체에 일치시킨다. 착수 HEAD520aed2/status clean·TASKS36[x]/7[ ]와 AGENTS.md6.1을 실제 읽었다. 코드/API/schema와 완료 세부 ID는 변경하지 않는다.
+- **수정/결정:** AGENTS.md에 완료·미완료가 섞인 체크박스 분리와 과거 “다음 작업”의 이력 표시를 추가했다. TASKS·paid 계획·phase·coverage·잔여 audit·이 인계를 함께 갱신한다. paid/phase의 owner 동의·fixture 실행·durable 요청/동일 주문 복구·설정 부재/기존 runtime 반영을 기존 세부 ID/commit 근거로 `[x]`에 맞췄다. SDK callback/갱신/해지/유예/환불/제공량/UI는 별도 `[ ]`로 보존한다. 과거 계획의 “현재 선택” 표기는 이력으로 바꿨다.
+- **근거/검수:** 현재 양제품 native 소스와 보존된 `/tmp/{ap,field}-paid-consent-final-db.log` 각3/3, `/tmp/{ap,field}-billing-first-charge-final-db.log` 각12/12 결과를 대조했다. 이는 기존 실행 증빙의 확인이며 이번에 서비스 테스트를 재실행한 것이 아니다. 실제 Python 문서 대조 exit0: 완료36/미완료7·세부 ID 중복0·완료4개 commit/남은 기능 체크/시안 경로 유지. 문서 diff 확인과 `git diff --check` exit0. 구현 checkpoint520aed2 이후 이번7문서만 별도 commit으로 저장한다.
+- **환경/실패/복구:** managed65775를 실제 poll하여 같은 session의 live 상태를 확인했고 재시작하지 않았다. 일부 잘못 추측한 test 파일명/docs/plans 검색은 exit2였으며 `rg --files`로 실제 `paid-billing-consent.db.test.ts`와 docs/technical 계획을 찾아 대조했다. 문서 표시 수정으로 구현/DB/운영 상태를 바꾸지 않는다.
+- **남은 일/다음:** 전체 v3/C03 목표는 active다. 최신 구현은 FIRST-CHARGE00c3e0d이고, 다음 미완료는 **PAID 갱신/해지/유예**다. 이번 문서 점검을 새 기능 완료로 합산하지 않는다. 실 공급사/최종 UI 인수는 사용자 후속 범위다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+sed -n '1,68p' TASKS.md
+git status --short
+git log -3 --oneline
+sed -n '1,35p' docs/technical/A07_F09_PAID_EXECUTION_PLAN.md
+rg -n '^\- \[ \]' docs/technical/A07_F09_PAID_EXECUTION_PLAN.md
+```
+
+미완료 세부 ID/파일 범위/관련 QA/검수 명령을 paid 계획에 기록한 후 다음 코드를 수정한다. 기존 `[x]`를 기억 부재로 재개하지 않는다.
 
 ## 현재 인수인계 — A07.F09.FIRST-CHARGE 완료 (2026-09-27)
 
@@ -49,7 +68,7 @@ curl -fsS http://127.0.0.1:4321/health/ready
 
 다음 갱신/해지/유예 범위/파일/QA/검수 명령을 paid plan에 먼저 기록하고 새 native 실패부터 구현한다. 완료한 최초 청구/동의/발급을 재구현하지 않는다. 26858은 terminal이므로 반복 poll/재검토하지 않는다. 65775는 실제 생존 확인해 유지하며 source 반영이 필요할 때만 종료/재기동한다. timeout으로 중복실행하지 않는다. 시안 경로는 상단에 계속 유지한다.
 
-## 현재 인수인계 — A07.F09.AUTH-ISSUE 완료 (2026-09-27)
+## 완료 이력 — A07.F09.AUTH-ISSUE (2026-09-27)
 
 - **목표/Task/상태:** 전체 v3/C03 기능과 사용할 로컬 환경은 active/in_progress. 이번 AUTH-ISSUE/AP와 Field 자체 소유 경로/순차 Coordinator·AP·Field는 아래 내부 범위 implemented/verified. 착수 HEAD ed196d2·clean·완료34/잔여7을 실제 확인했으며 이번 실제 코드/검수/환경/체크는 progress다. PAID 전체/QA160/출시를 완료 처리하지 않는다.
 - **완료/commit/변경 경로:** **ed61b70**, AP71/Field65, 각 src/billing-authorization-execution.ts·billing-authorization-worker.ts·test/billing-authorization.db.test.ts·package start, tools/mock-run.mjs, BILLING_PROVIDER_SETUP와 paid 시작 범위13파일. 완료 체크는 TASKS/paid plan/phase/coverage/audit/이 인계·옵시디언에 같은 checkpoint로 저장한다. TASKS **35개[x]/7개[ ]**. 이미 완료한 가격/동의 API/port·trial/usage/위젯/보존/회수는 재개하지 않았다.
@@ -81,7 +100,7 @@ curl -fsS http://127.0.0.1:4321/health/ready
 
 다음 첫 청구 범위/파일/QA/명령을 paid plan에 먼저 기록하고 새 native 실패부터 진행한다. 기존 체크 완료 worker/계산/동의를 재구현하지 않는다. 92981/79675는 terminal이며 다시 poll하지 않는다. 48041은 생존 확인해서 유지하고 source 변경 반영이 필요할 때만 종료/재기동한다. timeout만으로 중복 기동하지 않는다. 이번 backend에 UI 비교를 수행하지 않았으며 상단 시안 경로는 유지한다.
 
-## 현재 인수인계 — A07.F09.CONSENT-BACKEND 완료 (2026-09-26)
+## 완료 이력 — A07.F09.CONSENT-BACKEND (2026-09-26)
 
 - **목표/착수:** 전체 v3/C03 서비스와 사용 가능한 독립 로컬 환경 구축은 active. 직전 turn은 가격/기간 기반 b639a4d와 완료 체크9734843·managed53591 반영의 progress였다. 현재 TASKS33[x]/7[ ]·HEAD9734843/status clean을 실제 확인하고 남은 PAID의 owner 동의/인증을 선택했다. 이미 체크한 PLAN-BASIS/trial/usage/위젯/보존/회수는 다시 구현하지 않는다.
 - **완료/변경/commit:** backend 내부 범위 implemented/아래 local verified, 코드 **1a04815**. AP70/Field64, 각 src/toss-billing.ts/billing-context.ts/billing-consent-routes.ts·business/app/server·subscription 유료503 stub 이동·package unit 등록, 새 test/toss-billing.adapter.test.ts/paid-billing-consent.db.test.ts의22파일. paid plan에 범위/QA/명령을 먼저 기록했고 TASKS34[x]/7[ ]·phase/coverage/audit/인계·BILLING_PROVIDER_SETUP/옵시디언을 같은 checkpoint로 갱신했다. QA43~46/113/126/146 저장/동의 부분이며 전체QA/G 통과가 아니다. 공개 cross-product 계약 변경/다른 제품domain·DB import는 없다.

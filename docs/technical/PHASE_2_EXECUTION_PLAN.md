@@ -1927,7 +1927,8 @@ AP와 Field의 독립 웹 앱에서 문서의 역할별 화면·이동 경로·�
 - 1차 코드 범위: AP69/Field63 migration, 각 billing/period/routes·subscription·app/business·paid-billing DB/calendar 검사. 먼저 AP native plan404/calendar 부재를 실제 red로 실행한다. 다음 provider/worker·환불/제공량·owner/admin UI를 같은 전체 목표로 이어간다.
 - 시안 owner/billing/admin/billing을 file:// Chromium320으로 실제 열어 /tmp/ap-paid-{owner,admin}-prototype-320.png 직접 확인했다. 기존 통합29,000/31,900원 가격은 승계하지 않는다.
 - 설계 기준: 제품별 불변 승인 plan·명시 동의·(subscription,period) 유일 거래·월말 원래 기준일. unknown은 같은 거래 조회로 대조하고 새 청구/가짜 성공으로 해결하지 않는다.
-- [ ] 전체 원장/기간/owner 동의 native API, [ ] provider/worker·갱신/해지/미상, [ ] 환불/제공량/cleanup 제한, [ ] 시안 owner/admin UI. 아래 PLAN-BASIS 완료 부분은 유지하고 남은 owner 동의/provider부터 이어간다.
+- [x] **PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE:** 가격/기간/owner 동의 native API·인증 발급/최초 청구 worker·같은 주문 미상 복구는 각 완료 checkpoint를 따른다(b639a4d/1a04815/ed61b70/00c3e0d). 기존 구현을 반복하지 않는다.
+- [ ] 남은 갱신/해지/유예·HTTP 확정거절 분류, 환불/제공량/cleanup 제한, SDK callback/시안 owner/admin UI. 현재 다음은 갱신/해지/유예다. 아래 착수 당시 미구현/“다음” 문구는 이력이다.
 
 - 1차 구현 당시 이력: AP69/Field63 native plan 요청/다른 운영자 승인/retire·승인 불변, own billing 최근100 조회와 schema 기간 유일/동의 binding·원래 KST 월말 계산. AP77913 3/3/Field45417 3/3(각 새1+관련기존trial2)·제품별 calendar1/1 통과. API type78751/35863·lint41444도 실제 exit0. 당시 review87487의 P2 consent binding을 다음 기록대로 보완했다. 유료 owner 동의/PG/worker/환불/제공량/UI 미구현이며 위 전체 Paid 체크박스는[ ]로 유지한다.
 

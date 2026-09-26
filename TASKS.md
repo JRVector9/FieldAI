@@ -8,6 +8,8 @@
 
 최신 추가 완료: **A07.F09.FIRST-CHARGE / 00c3e0d**. 현재 내부 세부36개[x]/남은7개[ ]이며 실제 검수/환경은 인계 상단을 따른다. 부모 전체 출시 완료로 해석하지 않는다.
 
+완료 표시 정합성 점검(2026-09-27, verified): 사용자 필수 지침/AGENTS.md6.1에 따라 이 원장·paid/phase 계획·coverage·잔여 audit·인계를 대조했다. 해당7문서만 수정했고 코드/API/schema 변경은 없다. paid 계획의 완료 동의/최초 청구가 미완료와 묶인 체크박스와 phase의 오래된 “owner 동의부터” 지시를 분리하고, 과거 착수 기록은 이력으로 표시했다. 근거는 기존 구현 commit/현재 native 테스트 소스와 보존된 검수 로그다. 실제 Python 문서 대조 exit0: 완료36/미완료7·세부 ID 중복0·완료4개 commit/남은 기능 체크/시안 경로 유지. 문서 diff 확인·`git diff --check` exit0. 서비스 테스트는 재실행하지 않았고 새 기능 완료를 추가한 것은 아니다.
+
 ### 완료된 내부 세부 작업 — 같은 범위를 다시 구현하지 않는다
 
 - [x] **C02.LOCAL** 제품별 API/웹·PG17/migration/키·Field Valkey·managed mock 실행/정상 종료·DB 볼륨 유지. `tools/mock-run.mjs`, 양제품 health 실제ready. 운영 ACL/CI는 별도다.

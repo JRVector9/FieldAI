@@ -2,6 +2,8 @@
 
 **최신 완료 원장:** TASKS 상단 내부36개[x]/7개[ ]를 따른다. WIDGET-END·PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE(00c3e0d)는 완료 범위다. PAID 갱신/해지/유예·환불/제공량·접근제한·SDK/UI와 전체QA/실 공급사/최종 인수는 미완료다. 아래 과거 “남음/다음/runtime”은 당시 이력이며 최신 원장/인계가 우선한다.
 
+**2026-09-27 완료 표시 점검:** paid/phase 계획에 남아 있던 완료 동의·fixture 실행·최초 거래/동일 주문 복구·설정 부재/기존 runtime 반영 체크를 위 세부 ID/commit과 현재 소스·기존 검수 로그에 맞췄다. 완료와 미완료가 섞인 항목을 분리했고 SDK callback/갱신/해지/환불/제공량/UI는 미완료로 유지했다. 기존 테스트 결과를 확인한 문서 점검이며 서비스 테스트 재실행/새 기능 완료 추가는 없다. TASKS의36[x]/7[ ]를 유지한다.
+
 ## 최신 A07.F09.FIRST-CHARGE — 00c3e0d / 최초 청구 내부 완료 (2026-09-27)
 
 - AP72/Field66·각 charge-execution/worker/native 검사·billing/routes/consent tax 확장·Toss fingerprint/adapter 검사·package·managed 시작·PG 설명/착수 기록24파일. 먼저 period0/transaction/order/request를 저장, 첫 claim에 MID/key fingerprint/고정본문/암호화 billingKey/원래 started_at을 commit한다. 응답 유실은 동일 order GET, 없음 때만 원래 키/본문/멱등창으로 재시도. 키 회전·멱등창 종료2분 전에는 POST 중지/GET 대조 유지, stale claim은 폐기한다.
