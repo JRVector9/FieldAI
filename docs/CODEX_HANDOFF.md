@@ -8,6 +8,15 @@
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 - **사용자 요청:** `CODEX_HANDOFF.md`에 위 시안 경로를 계속 남긴다. 이 섹션은 인계파일 상단에 유지하고, 화면 구현을 재개할 때 `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`을 직접 연 뒤 해당 화면·기능·동선을 비교한다.
 
+## 필수 사용자 지침 — 완료 체크/재작업 금지 (2026-09-26)
+
+- 사용자가 **“완료된 작업은 체크하고, 에이전트가 잊고 같은 작업을 다시 하지 않도록 반드시 지켜”**라고 명시했다.
+- 작업 재개 전에 `TASKS.md` 상단 **완료 체크 — 재작업 방지 기준**을 먼저 읽는다. 이 목록이 완료 세부 ID의 기준 원장이다. 상세 규칙은 `AGENTS.md`6.1. 기억 부재/compaction으로 완료 항목을 재구현·검수 반복하지 않는다.
+- 이번에 현재 로그/AP29·Field30/commit/source와 기존 범위별 evidence를 확인해 로컬 완료 세부31개를 `[x]`, 남은8개 항목을 `[ ]`로 기록했다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다. phase plan에서 이미 구현된 AP native 회수5개가 아직 `[ ]`였던 것을 실제 결과에 맞춰 `[x]`로 수정했다.
+- 신규 오류/요구변경/현재상태 불일치가 확인됐을 때만 같은 완료 ID에 재개 사유·증거·추가 범위를 먼저 기록한다. 이전 완료 근거/commit은 삭제하지 않는다.
+- 변경 파일: AGENTS.md·TASKS.md·PHASE_2_EXECUTION_PLAN·DEVELOPMENT_REMAINING_AUDIT·이 인계. 문서 변경으로 서비스 테스트 재실행 없음, diff 체크만 수행. 현재 mock36780 양 ready/생존을 실제 재확인했다.
+- 원래 진행 목표는 계속 전체 v3/C03 로컬 기능이며 **다음은 A05.WIDGET-END**다. 아직 UI/API 코드는 변경하지 않았다. native renderer deployments.ts와 현재 create/get/startNew API부터 확인해 시안을 직접 열고 범위/QA/명령 기록 후 구현한다.
+
 ## 현재 작업 — 개발 종료 범위 대조 (2026-09-26)
 
 - **목표/결과:** 전체 v3 기능/사용 가능한 로컬 환경 구축은 계속 active/in_progress다. 사용자의 종료 시점 질문에 대해 TASKS46개·QA160의 기능군과 양제품 PRD/계약을 코드와 대조한 `docs/technical/DEVELOPMENT_REMAINING_AUDIT.md`를 작성했다. 46개 완료/160개 통과나 최종 누락 확정을 주장하지 않는다.

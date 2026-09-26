@@ -1,5 +1,8 @@
 # 개발 종료까지 남은 범위 — 2026-09-26 1차 코드 대조
 
+**완료 항목 기준:** `TASKS.md` 상단 체크 원장을 먼저 읽는다. 본 문서의 부모 Task “부분/미완료”는 남은 범위가 있다는 뜻이며, 이미 `[x]`인 세부 구현을 다시 하라는 지시가 아니다. 재개는 AGENTS.md6.1에 따른 구체적 증거/사유가 있을 때만 한다.
+
+
 ## 기준과 한계
 
 - 기준 commit: **eab1d30** (AP native revocation journal/격리 restore), Node24.18.0·로컬 mock PostgreSQL17·Field Valkey8.1.10.

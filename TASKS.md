@@ -1,5 +1,61 @@
 # TASKS — 독립 제품 개발 작업 보드 v3.0
 
+## 완료 체크 — 재작업 방지 기준 (2026-09-26)
+
+**사용자 필수 지침: 완료된 작업을 체크하고, 후속 에이전트가 같은 작업을 다시 하지 않도록 유지한다.** 이 섹션이 현재 세부 완료의 기준 원장이다. `[x]`는 아래에 적힌 **내부/로컬 범위** 완료이며 전체 부모 Task·운영 출시·사용자 최종 시안 인수 완료가 아니다. 기억 부재로 재작업하지 않는다.
+
+근거 스냅샷: AP 실제29/29(`/tmp/ap-revocation-metadata-cache-db.log`)·Field30/30(`/tmp/ap-revocation-runner-field.log`), Node24.18.0/제품별 mock PG17, AP 단독 실행 실제통과(`/tmp/ap-revocation-independent-standalone.log`). 코드가 포함된 최신 commit **eab1d30** 및 이전 원본 구현 commit, `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`의 범위별 실제 결과. 아래 해당 native 테스트 파일과 현재 구현도 직접 대조했다. 이번 체크 정리는 테스트 재실행이 아니다.
+
+### 완료된 내부 세부 작업 — 같은 범위를 다시 구현하지 않는다
+
+- [x] **C02.LOCAL** 제품별 API/웹·PG17/migration/키·Field Valkey·managed mock 실행/정상 종료·DB 볼륨 유지. `tools/mock-run.mjs`, 양제품 health 실제ready. 운영 ACL/CI는 별도다.
+- [x] **A00.LOCAL / F00.LOCAL** 로컬 이메일 계정/별도 세션·조직/membership·다른 조직 접근 차단. `auth.ts/business.ts`, 양제품 business-core DB 검사. 실메일/카카오/MFA는 별도다.
+- [x] **A01.NATIVE** AP 직접 지식 초안 자동저장·미완성 비공개·지역/시간·명시 승인·불변 공개본. `business-core.db.test.ts`, 지역/시간441c60c. 새로운 public client write와 혼동하지 않는다.
+- [x] **A04.ADAPTER** AP 모델 adapter·승인 근거 검증·테스트와 고객 업무 분리·예산/실패 차단. `openai.ts/agents.ts`, `agents.db.test.ts`. 실 LLM 결과 검수는 별도다.
+- [x] **A02.INTAKE** AP 익명 상담→명시 동의 사람 접수·확인키/후속 대화·재시도 원장·비공개 사진. `customer-consultations/inquiries/inquiry-attachments.db.test.ts`. 실 발송은 별도다.
+- [x] **A03.REPLY** AP 사업자 문의 목록/답변·내부 메모 분리·mode·종결/재개·스팸 발송 중단. `inquiries/inquiry-spam.db.test.ts`, 스팸06e7314.
+- [x] **A05.INSTALL** AP 상담 링크·QR·정확한 own origin 소유 확인·기본 floating/inline SDK·1회 first-party handoff. `deployments.db.test.ts`, QR f9e1c96·AP 실제 단독 브라우저1/1. **iframe 보존 종료/새 상담은 A05.WIDGET-END로 별도 미완료다.**
+- [x] **F01.CATALOG** Field 사업정보/업종·서비스·가격·FAQ·두 예약 방식 상속/명시 선택·서버 초안/승인본. `business-core.db.test.ts`, 업종4ca067d.
+- [x] **F02.EDITOR / F04.BASIC-PUBLISH** Field3배치·다중 소개 페이지·편집/자동저장/충돌·사진/alt·명시 공개·과거 디자인을 초안으로 복구. `sites.db.test.ts/site-media.store.test.ts`, 이전 native UI evidence. **자체 domain은 F04.CUSTOM-DOMAIN으로 별도 미완료다.**
+- [x] **F03.ADAPTER** Field 자체 제작 LLM adapter·PG job/Valkey/별도 worker·제안 검수 후 초안 적용·충돌/사진 보존. `site-generation.db.test.ts` 및 worker/queue 기존 evidence. 실 LLM 공급사 검수는 별도다.
+- [x] **F05.INTAKE / F06.REPLY** Field 비회원 직접 문의·확인키·비공개 사진·후속 질문/사업자 답변/내부 메모·멱등 복구. `business-core/inquiry-attachments.db.test.ts`. 고객 외부 발송은 별도다.
+- [x] **F07.BOOKING** 희망시간/시간표형·공통 자원·사업자 최종확정·수동 일정·제안/변경/취소·점유 충돌/동시성·고객 확인키/메시지. `bookings/reservations.db.test.ts`. 실 알림/최종 사용자 인수는 별도다.
+- [x] **I00.OAUTH-BIND / I01.MAPPING** 양방향 별도 OAuth 조직/actor/AI/scopes 동의·grant/binding·허용 자원 검증. 양제품 integrator/connection DB 검사. 최소 public POST API 추가는 별도다.
+- [x] **I02.SOURCE** 승인 Field facts→AP 검토/승인·revision/hash·가격/중요값 재확인·stale 대체·독립 worker/outbox. 양제품 connection/field-actions DB 검사와 기존 연결 HTTP evidence.
+- [x] **I03.SDK** Field 사이트의 AP 공식 공개 SDK 설치·origin 확인·비연결 직접 문의/예약 fallback 유지. `deployments/sites`·기존 설치 native HTTP evidence. 자체 domain 새 origin은 별도다.
+- [x] **I04.REQUEST / I05.ORIGINAL** 고객이 확인한 ActionRequest·외부 요청 idempotency/unknown 대조·수신 snapshot·Field 예약·안전 handoff, Field에서 AP 원본 API 답변/초안·내부 메모 차단. `field-actions/integrator/ap-connection` DB 검사. AP 원문을 Field DB에 복제하는 작업은 하지 않는다.
+- [x] **I06.NATIVE-REVOKE** 양쪽 owner/selection/서명 회수3경로·로컬 차단·durable 원격 retry/ACK·기존 업무/확인키 유지. `revocation-restore/connection/integrator` DB 검사. 범용 manage·개별 token lifecycle·route key 종료는 별도다.
+- [x] **A06.IN-APP / F08.IN-APP** 처리 업무 outbox/알림 이벤트·읽음·사업자 내부 목록·단일 알림 주체/route generation. 양제품 inquiry/booking/event 검사. **Kakao/SMS/webpush 발송은 A06.F08.DELIVERY로 별도 미완료다.**
+- [x] **A07.TRIAL / F09.TRIAL** 제품별 mock14일 체험 동의·한 번 시작/종료 예약·만료 신규업무 제한·기존업무/내보내기 보존. `subscription.db.test.ts` 각2개. **유료 billing은 A07.F09.PAID로 별도 미완료다.**
+- [x] **A08.ADMIN / F09.ADMIN** 각제품 관리자 membership·metadata 조회/감사·타제품 권한 차단·non-mock MFA 미연결 차단. 양제품 `admin.db.test.ts`. 실 MFA/모든 운영 메뉴 인수는 별도다.
+- [x] **A08.MODERATION / F09.MODERATION** 신고 snapshot·다른 운영자 승인 접근·대상 제한·사업자 알림/이의·기존 업무 유지. `moderation.db.test.ts`, AP9f08208/Field5bfe05e.
+- [x] **A08.SUPPORT / F09.SUPPORT** 업무별 사유/기간/scope·다른 운영자 승인·현재 membership/만료/회수 확인·원본/사진 읽기 감사. `customer-support.db.test.ts`, APcb98923/Fielda13510e.
+- [x] **A08.RETENTION-BASIS / F09.RETENTION-BASIS** 자체 보존 정책/다른 승인·실제 종결 clock·dispute hold·기한/미확인/미래 업무·private preview. `retention.db.test.ts`, APe89bf2a/Fieldc87f14f.
+- [x] **A08.RETENTION-EXEC / F09.RETENTION-EXEC** 승인 정리 job/별도 worker·파일/원문 제거·tombstone/late writer 차단·ID/usage/확인키 유지·reader 잠금/소비자 종료. `retention-purge.db.test.ts`, APa5aee2b/Fielde28229f. 운영 자료를 임의 삭제하지 않는다.
+- [x] **A08.RETENTION-RESTORE / F09.RETENTION-RESTORE** 제품별 signed journal·immutable receipts·별도 최신 checkpoint·실제 PG17 dump/별도 restore 삭제 재적용·반복0·누락/변조 거절. `retention-purge.db.test.ts`, APa5aee2b/Fieldd717532. 운영 RPO/RTO·proof 동시rollback은 별도다.
+- [x] **A08.REVOCATION-RESTORE / F09.REVOCATION-RESTORE** native3경로 별도signed 회수 원장·token ciphertext 즉시폐기·재활성화/늦은발급 차단·실제PG17 dump/restore200→401·checkpoint CLI·원본/확인키 유지. AP**eab1d30**/Field**c809c28**, 각 `revocation-restore.db.test.ts`. **일반 provider token/legacy/route key 후속과 구분한다.**
+- [x] **D00.CARD / D01.PUBLISHER / D02.PLACEMENT** 카드 초안/승인본/보류·매체 조직/정확 domain/slot·정확 카드 버전 배치 승인/중지. `campaigns/publishers/placements.db.test.ts`. 실 매체 계약/최종 시안은 별도다.
+- [x] **D03.HANDOFF / D04.METRICS** 매체외부카드→AP 안전접수·출처변조 차단·이벤트·PII 제외/작은집단 집계/export. `distribution.db.test.ts` 및 기존 native metrics evidence. 신규 widget 종료만 별도 추가한다.
+- [x] **A08.F09.EXPORT / A07.F09.USAGE** 제품별 원본/사진 아카이브·usage 원장/실적 분리·다른 조직 거절. `inquiry-archive/operations-archive/usage`와 기존 export DB/UI evidence. 대용량 분할/법정 청구 원장은 별도다.
+- [x] **C02.AP-STANDALONE-REVOKE** 실제 Field API/web/DB/Valkey·비밀값 부재에서 AP signup/승인/직접 문의·답변/export/외부widget·selection회수200→401/owner guest브라우저. eab1d30, `pnpm test:independence:agent`53496 exit0. 모든 공급사/전체AP gate 완료는 아니다.
+- [x] **R00.INVENTORY-1** TASKS46개/QA160 기능군·현재 코드/계약을 대조한 잔여1차목록. **b1ef381**, `DEVELOPMENT_REMAINING_AUDIT.md`. 전체QA 실행/최종 누락 확정은 아니다.
+
+### 남은 작업 — 여기서 다음 세부 ID를 선택한다
+
+- [ ] **A05.WIDGET-END** native iframe 보존 종료/입력·stale AI 결과 폐기/명시 새 상담/기존 receipt 분리. 다음 구현 대상.
+- [ ] **A07.F09.PAID** 제품별 유료 plan/동의·거래/주기·갱신/해지/유예/환불·entitlement/UI/PG adapter.
+- [ ] **A06.F08.DELIVERY** Kakao/SMS/webpush 발송·콜백/unknown 조회·중복/역순/한도·설정/실패확정 fallback.
+- [ ] **F04.CUSTOM-DOMAIN** 자체domain 등록/검증/연결/TLS/대표URL 상태·기본주소 유지/새AP origin.
+- [ ] **A09.PUBLIC-WRITE** PRD 최소 public connection/deployment POST·scope 계약 정리→consumer→구현/동등외부client.
+- [ ] **I06.AUTH-LIFECYCLE** 일반 OAuth token 삭제/refresh family·legacy revoked baseline·Field route key 종료/복원 증빙.
+- [ ] **AUTH.LIVE / PROVIDERS.LIVE** 사용자가 후속으로 지정한 실메일/카카오/계정연결/번호변경/MFA·실LLM/PG/발송/DNS/TLS/운영저장소 연결·공급사 검수.
+- [ ] **R00.QA / R02.ACCEPTANCE** 추가 문서/역할 누락 대조·모든 적용QA evidence·사용자 최종 시안/동선/실기기·키보드/스크린리더/운영게이트.
+
+**재개 기록 규칙:** `[x]`를 다시 열어야 하면 동일 ID 아래 `재개 사유 / 현재 증거 / 추가 범위 / 이전 완료 commit`을 먼저 남긴다. compaction·다른 에이전트·오래된 문서의 “남음”만으로 재개하지 않는다. 무관한 테스트를 반복하지 않는다. 상세 사용범위는 `AGENTS.md`6.1과 audit/현재 handoff를 따른다.
+
+---
+
+
 **개발 잔여 대조(2026-09-26):** docs/technical/DEVELOPMENT_REMAINING_AUDIT.md에 TASKS46개 인벤토리/확인된 내부6묶음을 기록했다. native widget 종료, 유료 billing, 메시지 발송, 자체 domain, public client write 계약, OAuth/복원 수명 보완이 남는다. 외부 key 부재와 내부 미구현을 구분하며 전체/C03 in_progress. 코드 단계는 eab1d30 커밋/당시 status clean. 이 문서 대조는 테스트 실행/전체160 QA 통과가 아니다. 다음은 widget→billing/발송/주소/public client 구현이다.
 
 
