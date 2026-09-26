@@ -6,6 +6,17 @@
 - 저장소 기준 경로: `reference/field_ui_prototype_v3.html`. 후속 에이전트도 이 파일을 화면·동선 구현 기준으로 사용하며, 인수인계 갱신 시 이 시안 경로를 상단에 유지한다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03/F01·F02 Field 업종 입력 (2026-09-26)
+
+- **현재 목표:** 기준 HTML/v3.0 문서의 전체 AP/Field 독립 기능을 끝까지 구현해 사용할 수 있는 환경을 유지한다. 전체 기능/QA·사용자 최종 시각·동선/실 공급사·출시는 미완료다.
+- **완료/파일:** Field API `src/business.ts`, `src/field-openai.ts`, 기존 `test/{business-core,site-generation}.db.test.ts`; 웹 `src/field-api.ts`, `src/{field-workspace,field-site}.tsx`, 기존 `test/site-image.test.tsx`; 기존 `tools/spikes/{field-catalog-autosave,field-owner-flow}-browser.py`, 실행 계획/현황/TASKS/coverage/인계. 직접 업종 입력·제안 목록·자동 저장/충돌/재개·owner 승인·공개 사이트·제작 AI 승인 snapshot을 연결했다. 직전 코드/문서 커밋 `19a21aa`. 이 단계도 아래 변경을 커밋한다.
+- **설계:** 선택 문자열 industry 최대160자, 새 사업체/구버전 누락 빈 값·자동 선택 없음. null/숫자/초과400. 구버전 PUT에서 업종 누락은 기존 값을 보존하며 revision 조건 갱신한다. 과거 불변 승인본/해시를 다시 쓰지 않는다. 미승인 업종은 공개·제작 모델에 전달하지 않는다. Field 자체 JSONB를 쓰고 migration/AP 코드·DB·제품 간 공개 facts 계약 변경 없음.
+- **실제 검사:** Field DB22/25 red→`pnpm test:db:field`25/25(session47139), 임시 DB 제거. 업종 값/권한/승인 전후/구버전 원본·요청 보존/제작 snapshot 검사 포함. Field 사이트 렌더 red→2/2. 전체 typecheck84722/lint29562 exit0. mock **88953** 양제품 API/웹 build/ready와 양 API ready 실제 확인. `FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python node --env-file=infra/field/.env --test tools/spikes/field-catalog-autosave-http.test.mjs` 최종28560 1/1(업종만 수정한 응답 분실·409두 선택/재개/공개본 유지), `FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python pnpm test:spike:field-owner-flow:http` 최종43752 1/1(공개 업종·기존 사진/FAQ/직접 문의/두 예약·충돌/확인키). Python 구문/diff exit0. 시안 create/business와 `/tmp/field-industry-320.png`를 실제 열었다. 공급사 실제 LLM은 검사하지 않았으며 generation DB는 명시 합성 모델이다. 전체 보안/독립성/정식 E2E 세트는 이번 변경 뒤 반복하지 않았다.
+- **실패/수정:** 기존 자동 저장 스크립트가 접힌 편집기 진입을 생략해 입력을 찾지 못했다. 실제 사업 정보·공개 관리 버튼을 눌러 기존 흐름을 유지했다. 기존 고정 승인1/2번 단언은 자동 저장 revision 증가 때문에 실패했으며 서버에 실제 저장된 revision과 승인 표시가 일치하도록 수정했다. 시안의 select[name=industry]는 없으므로 실제 data-business 속성을 확인했다. 제품 버그에 맞춰 기대값을 낮추거나 실패 검사를 삭제하지 않았다.
+- **남은 확정 누락:** 양제품 관리자 admin.ts는 GET overview만 제공하며 신고 저장/검토/이의 업무 API·원장이 없다. Field 신고·감사 화면도 조회 감사만 표시한다. Field PRD3.9/F-A06, F09/C03, QA48/49/157에 따라 Field 자체 신고 접수·운영 처리 사유·감사/사업자 이의를 먼저 구현하고 AP A08은 별도 원장·권한으로 구현한다. 필요하면 제한 범위를 별도 계약/설계로 정하며 신고만으로 자동 전체 정지를 만들지 않는다. 보존 종결/hold/정리, 전체 PRD·QA/G와 실 인증/LLM/발송/결제/도메인/백업은 여전히 미완료다.
+- **복구/환경:** 코드 롤백 시 새 JSONB 업종 값은 남는다. 과거 승인본·예약·원본을 삭제하지 않는다. 이전 mock2217을 살아 있음을 확인한 뒤 Ctrl+C로 exit130 종료했고 새 mock88953만 유지한다. AP http://localhost:3001/workspace, Field http://localhost:3002/workspace. 운영 배포·청구·실 고객 발송·운영 삭제 없음.
+- **다음 정확한 명령:** `git status --short`, `git log -3 --oneline`, `sed -n '238,256p' TASKS.md`, `sed -n '59,61p' docs/06_REQUIREMENTS_QA.md`, `cat apps/field-api/migrations/000043_platform_admin.sql`, `cat apps/field-api/migrations/000044_admin_access_audit.sql`, `sed -n '1,105p' apps/field-api/src/admin.ts`, `sed -n '126,167p' apps/field-web/src/field-admin.tsx`, `curl -fsS http://127.0.0.1:4321/health/ready`. 88953이 살아 있으면 유지한다. 신고 Task의 정확 파일/요구/QA/명령과 스키마를 기록하고 실제 DB/브라우저 red부터 진행한다. 상단 기준 시안 경로를 계속 보존한다.
+
 ## 최신 인수인계 — C03/I04·F-O09 Field 업무 수신 기록 (2026-09-26)
 
 - **현재 목표:** 시안/v3.0 전체 기능을 실제 AP/Field 독립 로컬 서비스로 완성한다. C03 전체·사용자 최종 시각/동선·실 공급사/운영 검수는 미완료다.

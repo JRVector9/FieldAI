@@ -53,7 +53,7 @@ test('Field site generation records a job and applies only after owner review', 
   try {
     const organization = await app.inject({ method: 'POST', url: '/v1/organizations', headers: { cookie }, payload: { name: '검수 사업자' } });
     assert.equal(organization.statusCode, 201);
-    const catalog = { expectedRevision: 0, businessName: '검수 사업자', introduction: '직접 쓴 소개', region: '서울', openingHours: '평일', contactPhone: '010-1234-5678', services: [{ id: randomUUID(), name: '방문 상담', description: '서비스 설명', bookingMode: 'request', durationMinutes: 30, priceAmount: 10000 }] };
+    const catalog = { expectedRevision: 0, businessName: '검수 사업자', industry: '상담·컨설팅', introduction: '직접 쓴 소개', region: '서울', openingHours: '평일', contactPhone: '010-1234-5678', services: [{ id: randomUUID(), name: '방문 상담', description: '서비스 설명', bookingMode: 'request', durationMinutes: 30, priceAmount: 10000 }] };
     assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft', headers: { cookie }, payload: catalog })).statusCode, 200);
     assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases', headers: { cookie }, payload: { expectedRevision: 1 } })).statusCode, 201);
     assert.equal((await app.inject({ method: 'POST', url: '/v1/sites', headers: { cookie } })).statusCode, 201);
@@ -71,7 +71,8 @@ test('Field site generation records a job and applies only after owner review', 
       pool, resolveUserId: async (headers: import('node:http').IncomingHttpHeaders) =>
         (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
       siteQueue: { enqueue: async (id: string) => { if (enqueueFails) throw new Error('synthetic_queue_outage'); queueIds.push(id); } },
-      siteGenerator: { model: 'synthetic-layout', generate: async () => {
+      siteGenerator: { model: 'synthetic-layout', generate: async (input: { catalog: { industry?: string } }) => {
+        assert.equal(input.catalog.industry, '상담·컨설팅');
         generateCount += 1;
         modelEntered?.();
         if (modelWait) await modelWait;
@@ -89,6 +90,10 @@ test('Field site generation records a job and applies only after owner review', 
     assert.equal(created.statusCode, 202);
     const jobId = created.json().id as string;
     assert.deepEqual(queueIds, [jobId]);
+    assert.equal((await pool.query('select catalog_snapshot from field.site_generation_jobs where id = $1',
+      [jobId])).rows[0].catalog_snapshot.industry, '상담·컨설팅');
+    assert.equal((await generatedApp.inject({ method: 'PUT', url: '/v1/business/draft', headers: { cookie },
+      payload: { ...catalog, expectedRevision: 1, industry: '미승인 제작 업종' } })).statusCode, 200);
     assert.equal((await start()).json().error, 'generation_active');
     assert.equal((await generatedApp.inject({ url: '/v1/sites/draft', headers: { cookie } })).json().revision, 0);
     assert.equal(await runSiteGenerationJob(runtime, randomUUID()), false);

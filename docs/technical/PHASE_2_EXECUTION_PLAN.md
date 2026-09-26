@@ -1,5 +1,16 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/F01·F02 Field 업종 입력·서버 초안·승인 — 2026-09-26
+
+- 상태: `in_progress`. 요구: Field PRD 3.2/3.3, QA05/07/10/53/63/119의 사업 정보 입력·승인본 보호 관련 부분. 사용자 승인 범위 내에서 순차 구현한다.
+- 범위: `apps/field-api/src/{business,field-openai}.ts`, 기존 `test/{business-core,site-generation}.db.test.ts`; `apps/field-web/src/field-api.ts`, `apps/field-web/src/{field-workspace,field-site}.tsx`, 기존 `test/site-image.test.tsx`; 기존 `tools/spikes/{field-catalog-autosave,field-owner-flow}-browser.py`; 현황/TASKS/coverage/인계. 기존 Field JSONB 초안/승인본/제작 job snapshot을 사용하며 migration·AP 코드·제품 간 facts 계약 변경 없음.
+- 설계: 직접 입력한 `industry` 선택 문자열(160자)을 저장한다. 시안의 업종 목록을 입력 제안으로 사용하되 자동 선택하지 않는다. 새 사업체/구버전 원본의 누락은 빈 값이다. null/숫자/초과 값은 400, 구버전 PUT 누락은 기존 업종을 보존한다. 공개는 owner 명시 승인본만 사용하고 제작 AI에는 그 승인 snapshot만 전달한다. 과거 승인본·해시는 수정하지 않는다.
+- 순서/명령: 기존 DB 검사에 입력/재개/검증/승인 전후·미승인 변경/구버전 JSONB와 요청 보존·제작 snapshot 단언을 추가하고 `pnpm test:db:field` red→API green. 기존 320px autosave 검사에 업종만 수정한 저장 응답 분실/409 선택·재개를 추가해 red→UI green. `pnpm typecheck`, `pnpm lint`, Python 구문·`git diff --check`; 확인된 mock 세션만 정상 종료 후 `pnpm mock:run`; `FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python node --env-file=infra/field/.env --test tools/spikes/field-catalog-autosave-http.test.mjs`와 기존 owner HTTP flow를 실행한다. 기준 HTML `create/business`를 직접 열고 해당 입력과 실제 화면을 대조한다.
+- 복구/미검수: 이전 코드로 롤백하면 새 JSONB 값은 남으며 과거 릴리스는 불변이다. 실제 LLM 공급사/사용자 최종 시각·동선/전체 QA/G는 미검수로 유지한다. 운영 배포·청구·삭제·고객 메시지 발송 없음.
+
+- 결과: Field 업종 입력·자동 저장·충돌 비교·재접속·명시 승인·공개 사이트 표시·제작 snapshot을 연결했다. 구버전 JSONB 미등록/불변 해시와 구버전 PUT 기존 업종 보존, null/숫자/초과 거부를 확인했다. Field DB red→25/25(session47139), 사이트 렌더링 red→2/2, typecheck(84722)/lint(29562) exit 0. mock **88953**에서 자동 저장 HTTP/320px 브라우저(28560) 1/1·사업자→공개 사이트→직접 문의/두 예약 HTTP/브라우저(43752) 1/1, Python 구문/diff exit 0. 업종만 바뀐 응답 분실/409 두 선택·승인본 유지 포함. 시안 create/business와 실제 320px 입력 캡처를 직접 열었다. migration/AP/공개 제품 간 facts 계약 변경 없음. C03 전체·사용자 최종 인수·실 공급사/출시 게이트는 미완료다.
+- 실패/수정: 최초 기존 자동 저장 스크립트는 더보기→서비스 이후 닫힌 사업 정보 편집기를 열지 않았다. 실제 사업 정보·공개 관리 버튼으로 진입하도록 고쳤다. 업종 추가로 자동 저장 revision이 2번이 된 정상 동작에 고정 1번 단언이 실패해 실제 서버 revision의 승인/재조회 일치를 확인하도록 수정했다. 기존 핵심 공개/예약 단언을 삭제하지 않았다. 기준 시안 select는 name이 아닌 data-business 속성을 쓰므로 실제 DOM을 확인해 대조했다.
+
 ### C03/I04·F-O09 외부 업무 수신 목적·보존 기준 — 2026-09-26
 
 - 상태: `in_progress`. 요구: Field PRD 3.6, 연동 계약 4.1/4.7, 보안 운영 5.5의 정식 문의/업무 종결 후 180일·사진 90일 **제안값**, QA139/153/155/159의 수신 원본 보존/권한 관련 부분. Field 업무 수신 기록과 AP 대화 원문은 별개다.

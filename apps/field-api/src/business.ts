@@ -29,6 +29,7 @@ type Service = {
 type Faq = { question: string; answer: string };
 type Catalog = {
   businessName: string;
+  industry: string;
   introduction: string;
   region: string;
   openingHours: string;
@@ -51,16 +52,17 @@ function expectedRevision(value: unknown): number | null {
   return typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0 ? revision : null;
 }
 function parseCatalog(value: unknown, fallbackBookingMode: 'request' | 'slot' = 'request',
-  allowIncomplete = false): Catalog | null {
+  allowIncomplete = false, fallbackIndustry = ''): Catalog | null {
   const body = object(value);
   if (!body) return null;
   const businessName = fieldText(body.businessName, 160, !allowIncomplete);
+  const industry = fieldText(body.industry === undefined ? fallbackIndustry : body.industry, 160);
   const introduction = fieldText(body.introduction, 5000);
   const region = fieldText(body.region, 200);
   const openingHours = fieldText(body.openingHours, 500);
   const contactPhone = fieldText(body.contactPhone, 30);
   const defaultBookingMode = body.defaultBookingMode === undefined ? fallbackBookingMode : body.defaultBookingMode;
-  if (businessName === null || introduction === null || region === null || openingHours === null
+  if (businessName === null || industry === null || introduction === null || region === null || openingHours === null
       || contactPhone === null || (defaultBookingMode !== 'request' && defaultBookingMode !== 'slot')
       || !Array.isArray(body.services) || body.services.length > 100) return null;
   const services: Service[] = [];
@@ -92,7 +94,7 @@ function parseCatalog(value: unknown, fallbackBookingMode: 'request' | 'slot' = 
     if (question === null || answer === null) return null;
     faqs.push({ question, answer });
   }
-  return { businessName, introduction, region, openingHours, contactPhone, defaultBookingMode, services, faqs };
+  return { businessName, industry, introduction, region, openingHours, contactPhone, defaultBookingMode, services, faqs };
 }
 async function userFor(request: FastifyRequest, reply: FastifyReply, runtime: FieldBusinessRuntime) {
   const userId = await runtime.resolveUserId(request.headers);
@@ -135,7 +137,7 @@ export function registerFieldBusinessRoutes(app: FastifyInstance, runtime: Field
         return reply.code(409).send({ error: 'organization_exists' });
       }
       await client.query("insert into field.memberships(organization_id, user_id, role) values ($1, $2, 'owner')", [id, userId]);
-      const content: Catalog = { businessName: name, introduction: '', region: '', openingHours: '',
+      const content: Catalog = { businessName: name, industry: '', introduction: '', region: '', openingHours: '',
         contactPhone: '', defaultBookingMode: 'request', services: [], faqs: [] };
       await client.query(
         'insert into field.catalog_drafts(organization_id, content, updated_by) values ($1, $2::jsonb, $3)',
@@ -162,6 +164,7 @@ export function registerFieldBusinessRoutes(app: FastifyInstance, runtime: Field
       'select revision, content from field.catalog_drafts where organization_id = $1', [organizationId],
     );
     return { organizationId, revision: result.rows[0]!.revision, ...result.rows[0]!.content,
+      industry: result.rows[0]!.content.industry ?? '',
       defaultBookingMode: result.rows[0]!.content.defaultBookingMode ?? 'request',
       faqs: result.rows[0]!.content.faqs ?? [] };
   });
@@ -174,12 +177,12 @@ export function registerFieldBusinessRoutes(app: FastifyInstance, runtime: Field
     const revision = expectedRevision(request.body);
     const body = object(request.body);
     if (revision === null || !body) return reply.code(400).send({ error: 'invalid_catalog' });
-    const previous = body.defaultBookingMode === undefined
-      ? await runtime.pool.query<{ content: Pick<Catalog, 'defaultBookingMode'> }>(
+    const previous = body.defaultBookingMode === undefined || body.industry === undefined
+      ? await runtime.pool.query<{ content: Pick<Catalog, 'defaultBookingMode' | 'industry'> }>(
         'select content from field.catalog_drafts where organization_id = $1', [organizationId])
       : null;
     const fallback = previous?.rows[0]?.content.defaultBookingMode === 'slot' ? 'slot' : 'request';
-    const content = parseCatalog(body, fallback, true);
+    const content = parseCatalog(body, fallback, true, previous?.rows[0]?.content.industry ?? '');
     if (!content) return reply.code(400).send({ error: 'invalid_catalog' });
     const result = await runtime.pool.query<{ revision: number }>(
       `update field.catalog_drafts set revision = revision + 1, content = $3::jsonb,
@@ -225,7 +228,7 @@ export function registerFieldBusinessRoutes(app: FastifyInstance, runtime: Field
         await client.query('rollback');
         return reply.code(409).send({ error: 'catalog_incomplete' });
       }
-      const content = JSON.stringify({ ...source, defaultBookingMode, faqs: source.faqs ?? [],
+      const content = JSON.stringify({ ...source, industry: source.industry ?? '', defaultBookingMode, faqs: source.faqs ?? [],
         services: source.services.map(service => ({ ...service,
           bookingMode: service.bookingMode === 'inherit' ? defaultBookingMode : service.bookingMode })) });
       await client.query(
@@ -252,6 +255,7 @@ export function registerFieldBusinessRoutes(app: FastifyInstance, runtime: Field
     );
     if (!result.rows[0]) return reply.code(404).send({ error: 'not_found' });
     return { organizationId: request.params.id, revision: result.rows[0].revision, ...result.rows[0].content,
+      industry: result.rows[0].content.industry ?? '',
       faqs: result.rows[0].content.faqs ?? [] };
   });
 }

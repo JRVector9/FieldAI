@@ -23,3 +23,12 @@ test('Field preview and public site render the same saved photo with alt through
   const publicSite = renderToStaticMarkup(<SiteRenderer site={site} catalog={catalog} />);
   assert.match(publicSite, /src="\/v1\/public\/site-assets\/asset-id"/);
 });
+
+test('Field site renders the supplied industry and leaves legacy missing values unfilled', () => {
+  const registered = renderToStaticMarkup(<SiteRenderer site={site}
+    catalog={{ ...catalog, industry: '사진·촬영' }} />);
+  assert.match(registered, /사진·촬영 · 서울/);
+  const legacy = renderToStaticMarkup(<SiteRenderer site={site} catalog={catalog} />);
+  assert.doesNotMatch(legacy, /사진·촬영/);
+  assert.match(legacy, /field-site-section-index">서울</);
+});

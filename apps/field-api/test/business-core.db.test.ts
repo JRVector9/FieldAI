@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { after, test } from 'node:test';
 import type { IncomingHttpHeaders } from 'node:http';
@@ -49,6 +49,7 @@ test('Field catalog keeps both booking modes and publishes only owner-approved f
     assert.equal(initial.statusCode, 200);
     assert.equal((initial.json() as { revision: number }).revision, 0);
     assert.equal(initial.json().defaultBookingMode, 'request');
+    assert.equal(initial.json().industry, '');
     assert.deepEqual(initial.json().faqs, []);
     const services = [
       { id: randomUUID(), name: '기본 방식 상속', description: '사업장 기본 방식을 따릅니다', bookingMode: 'inherit', durationMinutes: 30, priceAmount: null },
@@ -56,7 +57,7 @@ test('Field catalog keeps both booking modes and publishes only owner-approved f
       { id: randomUUID(), name: '희망 시간 고정', description: '사업장 기본 방식과 별도입니다', bookingMode: 'request', durationMinutes: 45, priceAmount: 30000 },
     ];
     const draft = {
-      expectedRevision: 0, businessName: '실제 Field 상호', introduction: '사업자가 입력한 소개', region: '서울',
+      expectedRevision: 0, businessName: '실제 Field 상호', industry: '사진·촬영', introduction: '사업자가 입력한 소개', region: '서울',
       openingHours: '평일 10:00-18:00', contactPhone: '010-0000-0000', defaultBookingMode: 'request', services,
       faqs: [{ question: '방문 가능 지역은 어디인가요?', answer: '서울입니다.' }],
     };
@@ -64,6 +65,13 @@ test('Field catalog keeps both booking modes and publishes only owner-approved f
     assert.equal(saved.statusCode, 200);
     assert.equal((saved.json() as { revision: number }).revision, 1);
     assert.deepEqual(saved.json().faqs, draft.faqs);
+    assert.equal(saved.json().industry, '사진·촬영');
+    assert.equal((await app.inject({ url: '/v1/business/draft', headers: { cookie: owner.cookie } })).json().industry,
+      '사진·촬영');
+    for (const industry of [null, 42, '가'.repeat(161)]) {
+      assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft',
+        headers: { cookie: owner.cookie }, payload: { ...draft, expectedRevision: 1, industry } })).statusCode, 400);
+    }
     assert.equal((saved.json() as { services: typeof services }).services[1]?.bookingMode, 'slot');
     assert.equal((await app.inject({ url: `/v1/public/catalog/${organizationId}` })).statusCode, 404);
     assert.equal((await app.inject({ url: '/v1/business/draft', headers: { cookie: other.cookie } })).statusCode, 404);
@@ -78,16 +86,18 @@ test('Field catalog keeps both booking modes and publishes only owner-approved f
     const publicCatalog = await app.inject({ url: `/v1/public/catalog/${organizationId}` });
     assert.equal(publicCatalog.statusCode, 200);
     assert.deepEqual(publicCatalog.json().faqs, draft.faqs);
+    assert.equal(publicCatalog.json().industry, '사진·촬영');
     assert.deepEqual(publicCatalog.json().services.map((service: { bookingMode: string }) => service.bookingMode),
       ['request', 'slot', 'request']);
     assert.doesNotMatch(publicCatalog.body, /approvedBy|ownerUserId/);
     const next = await app.inject({ method: 'PUT', url: '/v1/business/draft', headers: { cookie: owner.cookie }, payload: {
-      ...draft, expectedRevision: 1, defaultBookingMode: 'slot', introduction: '미승인 새 정보',
+      ...draft, expectedRevision: 1, defaultBookingMode: 'slot', industry: '미승인 업종', introduction: '미승인 새 정보',
       faqs: [{ question: '미승인 질문', answer: '아직 공개되지 않았습니다.' }],
     } });
     assert.equal(next.statusCode, 200);
     const stillPublic = await app.inject({ url: `/v1/public/catalog/${organizationId}` });
     assert.doesNotMatch(stillPublic.body, /미승인 새 정보/);
+    assert.equal(stillPublic.json().industry, '사진·촬영');
     assert.deepEqual(stillPublic.json().faqs, draft.faqs);
     assert.equal(stillPublic.json().services[0].bookingMode, 'request');
     assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases',
@@ -96,14 +106,16 @@ test('Field catalog keeps both booking modes and publishes only owner-approved f
     assert.deepEqual(changedPublic.json().services.map((service: { bookingMode: string }) => service.bookingMode),
       ['slot', 'slot', 'request']);
     assert.deepEqual(changedPublic.json().faqs, next.json().faqs);
+    assert.equal(changedPublic.json().industry, '미승인 업종');
     const afterApproval = await app.inject({ url: '/v1/business/draft', headers: { cookie: owner.cookie } });
     assert.equal(afterApproval.json().services[0].bookingMode, 'inherit');
     assert.equal(afterApproval.json().defaultBookingMode, 'slot');
     const legacySave = await app.inject({ method: 'PUT', url: '/v1/business/draft',
       headers: { cookie: owner.cookie }, payload: { ...draft, expectedRevision: 2, introduction: '구버전 입력',
-        defaultBookingMode: undefined } });
+        defaultBookingMode: undefined, industry: undefined } });
     assert.equal(legacySave.statusCode, 200);
     assert.equal(legacySave.json().defaultBookingMode, 'slot');
+    assert.equal(legacySave.json().industry, '미승인 업종');
     assert.deepEqual(legacySave.json().faqs, draft.faqs);
     const incompleteFaq = await app.inject({ method: 'PUT', url: '/v1/business/draft',
       headers: { cookie: owner.cookie }, payload: { ...draft, expectedRevision: 3,
@@ -121,6 +133,48 @@ test('Field catalog keeps both booking modes and publishes only owner-approved f
     await app.close();
     await pool.query('DELETE FROM field.organizations WHERE owner_user_id = (SELECT id FROM "user" WHERE email = $1)', [owner.email]).catch(() => undefined);
     await authPool.query('DELETE FROM "user" WHERE email = ANY($1::text[])', [[owner.email, other.email]]);
+  }
+});
+
+test('Field legacy catalogs read an unregistered industry without rewriting immutable facts', async () => {
+  const owner = await createOwner();
+  const app = createFieldApp(async () => undefined, auth.handler, base, {
+    pool, resolveUserId: async headers =>
+      (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+  });
+  try {
+    const organizationId = (await app.inject({ method: 'POST', url: '/v1/organizations',
+      headers: { cookie: owner.cookie }, payload: { name: '구버전 업종 미등록' } })).json().id;
+    await pool.query("update field.catalog_drafts set revision = 1, content = content - 'industry' where organization_id = $1",
+      [organizationId]);
+    const source = (await pool.query('select content from field.catalog_drafts where organization_id = $1',
+      [organizationId])).rows[0].content;
+    const content = JSON.stringify(source);
+    const hash = createHash('sha256').update(content).digest('hex');
+    const releaseId = randomUUID();
+    await pool.query(`insert into field.catalog_releases
+      (id, organization_id, revision, content, content_hash, approved_by)
+      select $1, $2, 1, $3::jsonb, $4, owner_user_id from field.organizations where id = $2`,
+    [releaseId, organizationId, content, hash]);
+    assert.equal((await app.inject({ url: '/v1/business/draft', headers: { cookie: owner.cookie } })).json().industry, '');
+    assert.equal((await app.inject({ url: `/v1/public/catalog/${organizationId}` })).json().industry, '');
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases',
+      headers: { cookie: owner.cookie }, payload: { expectedRevision: 1 } })).json().releaseId, releaseId);
+    const stored = (await pool.query('select content, content_hash from field.catalog_releases where id = $1',
+      [releaseId])).rows[0];
+    assert.equal(stored.content_hash, hash);
+    assert.deepEqual(stored.content, source);
+    assert.equal(Object.hasOwn(stored.content, 'industry'), false);
+    const saved = await app.inject({ method: 'PUT', url: '/v1/business/draft', headers: { cookie: owner.cookie },
+      payload: { ...source, expectedRevision: 1, industry: '기타 서비스' } });
+    assert.equal(saved.statusCode, 200);
+    assert.equal(saved.json().industry, '기타 서비스');
+    assert.equal((await app.inject({ url: `/v1/public/catalog/${organizationId}` })).json().industry, '');
+  } finally {
+    await app.close();
+    await pool.query('DELETE FROM field.organizations WHERE owner_user_id = (SELECT id FROM "user" WHERE email = $1)',
+      [owner.email]).catch(() => undefined);
+    await authPool.query('DELETE FROM "user" WHERE email = $1', [owner.email]);
   }
 });
 

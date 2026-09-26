@@ -5,6 +5,7 @@ export type SiteGenerationPlan = {
 };
 export type SiteGenerationCatalog = {
   businessName: string; introduction: string; region: string; openingHours: string; contactPhone: string;
+  industry?: string;
   services: { name: string; description: string }[];
 };
 export type FieldSiteGenerator = {

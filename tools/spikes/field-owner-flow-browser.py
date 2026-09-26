@@ -123,6 +123,7 @@ async def main():
             await recovery.close()
 
             await owner.get_by_role("button", name="서비스 추가", exact=True).click()
+            await owner.get_by_label("업종", exact=True).fill("레슨·교육")
             await owner.get_by_label("서비스 이름").fill("개인 레슨")
             await owner.get_by_label("서비스 설명").fill("상담 후 진행")
             await owner.get_by_role("button", name="서비스 추가", exact=True).click()
@@ -134,8 +135,11 @@ async def main():
             await owner.get_by_label("FAQ 질문 1").fill("준비물이 필요한가요?")
             await owner.get_by_label("FAQ 답변 1").fill("별도 준비물은 없습니다.")
             await expect(owner.get_by_role("button", name="현재 초안 승인")).to_be_enabled(timeout=15000)
+            saved_catalog = await owner.request.get("http://127.0.0.1:3002/v1/business/draft")
+            assert saved_catalog.status == 200
+            approved_revision = (await saved_catalog.json())["revision"]
             await owner.get_by_role("button", name="현재 초안 승인").click()
-            await expect(owner.get_by_text("승인 버전: 1번")).to_be_visible()
+            await expect(owner.get_by_text(f"승인 버전: {approved_revision}번")).to_be_visible()
             publication_check = await owner_context.new_page()
             publication_check.set_default_timeout(15000)
             publication_check.on("pageerror", lambda error: errors.append(f"publication: {error}"))
@@ -253,6 +257,8 @@ async def main():
             public_url = await public_link.get_attribute("href")
             assert public_url and public_url.startswith("http://field-")
             assert ".localhost:3002/site/" in public_url
+            await guest.goto(public_url, wait_until="networkidle")
+            await expect(guest.locator(".field-site-section.hero .field-site-section-index")).to_contain_text("레슨·교육")
             await guest.goto(f"{public_url}/services", wait_until="networkidle")
             await expect(guest.get_by_text("준비물이 필요한가요?", exact=True)).to_be_visible()
             await expect(guest.get_by_text("별도 준비물은 없습니다.", exact=True)).to_be_visible()
@@ -339,7 +345,7 @@ async def main():
             await expect(publication_check.get_by_role("button", name="현재 초안 승인")).to_be_disabled()
             fail_catalog_status = False
             await publication_check.get_by_role("button", name="사업 정보 공개 상태 다시 확인").click()
-            await expect(publication_check.get_by_text("승인 버전: 1번")).to_be_visible()
+            await expect(publication_check.get_by_text(f"승인 버전: {approved_revision}번")).to_be_visible()
             await publication_check.unroute("**/v1/public/catalog/*", catalog_status_route)
 
             fail_site_status = True
@@ -1211,8 +1217,11 @@ async def main():
             await owner.get_by_role("button", name="사업 정보·공개 관리").click()
             await owner.get_by_label("확정 가격(원, 미정이면 빈칸)").first.fill("25000")
             await expect(owner.get_by_role("button", name="현재 초안 승인")).to_be_enabled()
+            changed_catalog = await owner.request.get("http://127.0.0.1:3002/v1/business/draft")
+            assert changed_catalog.status == 200
+            changed_revision = (await changed_catalog.json())["revision"]
             await owner.get_by_role("button", name="현재 초안 승인").click()
-            await expect(owner.get_by_text("승인 버전: 2번")).to_be_visible()
+            await expect(owner.get_by_text(f"승인 버전: {changed_revision}번")).to_be_visible()
             await guest.goto(f"http://127.0.0.1:3002{review_url}", wait_until="networkidle")
             await guest.get_by_label("예약 확인키").fill(review_key)
             await guest.get_by_role("button", name="예약 열기").click()

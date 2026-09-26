@@ -12,6 +12,7 @@ export type Catalog = {
   organizationId: string;
   revision: number;
   businessName: string;
+  industry?: string;
   introduction: string;
   region: string;
   openingHours: string;
