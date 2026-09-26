@@ -27,6 +27,7 @@ import { registerFieldConnectionRevokeRoutes } from './field-connection-revoke.j
 import { registerAgentUsageRoutes } from './usage.js';
 import { registerAgentSubscriptionRoutes } from './subscription.js';
 import { registerAgentAdminRoutes } from './admin.js';
+import { registerAgentModerationRoutes } from './deployment-moderation.js';
 import { registerSourceRefreshRoutes } from './source-refreshes.js';
 
 export function createAgentApp(
@@ -75,6 +76,7 @@ export function createAgentApp(
     registerAgentUsageRoutes(app, businessRuntime);
     registerAgentSubscriptionRoutes(app, businessRuntime);
     registerAgentAdminRoutes(app, businessRuntime);
+    registerAgentModerationRoutes(app, businessRuntime);
   }
   if (authHandler) {
     app.route({

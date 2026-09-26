@@ -54,7 +54,7 @@ export function registerIntegratorRoutes(app: FastifyInstance, runtime: Business
       public_id: string; kind: string; allowed_origin: string | null }>(
       `select d.id, d.organization_id, d.public_id, d.kind, d.allowed_origin
        from ap.deployments d where d.organization_id = any($1::uuid[])
-         and d.kind in ('link', 'owned_embed', 'placement_embed') and d.status = 'active'
+         and d.kind in ('link', 'owned_embed', 'placement_embed') and d.status = 'active' and not d.moderation_restricted
        order by d.created_at`, [organizations.rows.map(row => row.id)],
     ) : { rows: [] };
     return reply.header('Cache-Control', 'no-store').send({
@@ -104,7 +104,7 @@ export function registerIntegratorRoutes(app: FastifyInstance, runtime: Business
       if (deploymentIds.length) {
         const deployments = await db.query<{ id: string }>(
           `select id from ap.deployments where organization_id = $1 and id = any($2::uuid[])
-           and kind in ('link', 'owned_embed', 'placement_embed') and status = 'active'`,
+           and kind in ('link', 'owned_embed', 'placement_embed') and status = 'active' and not moderation_restricted for share`,
           [organizationId, deploymentIds]);
         if (deployments.rows.length !== deploymentIds.length) {
           await db.query('rollback'); return reply.code(404).send({ error: 'deployment_not_found' });
@@ -221,7 +221,7 @@ export function registerIntegratorRoutes(app: FastifyInstance, runtime: Business
       `select d.id, d.public_id, d.kind, d.allowed_origin
        from ap.deployments d join ap.agent_releases a on a.id = d.agent_release_id
        where d.organization_id = $1 and d.id = any($2::uuid[])
-         and d.status = 'active' and d.kind in ('link','owned_embed','placement_embed')
+         and d.status = 'active' and not d.moderation_restricted and d.kind in ('link','owned_embed','placement_embed')
          and (d.kind = 'link' or d.verified_at is not null)
          and a.agent_id = $3
          and a.id = (select id from ap.agent_releases where organization_id = $1 order by revision desc limit 1)

@@ -45,7 +45,8 @@ type ActiveDeployment = {
   agent_release_id: string; agent: AgentConfig;
   knowledge_release_id: string; knowledge_revision: number; knowledge: Knowledge;
 };
-async function activeDeployment(pool: Pool | PoolClient, publicId: string, kind?: 'link' | 'owned_embed'): Promise<ActiveDeployment | null> {
+async function activeDeployment(pool: Pool | PoolClient, publicId: string, kind?: 'link' | 'owned_embed',
+  allowRestricted = false): Promise<ActiveDeployment | null> {
   if (!deploymentId.test(publicId)) return null;
   const result = await pool.query<ActiveDeployment>(
     `select d.id as deployment_id, d.organization_id, d.public_id, d.kind, d.placement_id,
@@ -55,10 +56,11 @@ async function activeDeployment(pool: Pool | PoolClient, publicId: string, kind?
      join ap.agent_releases a on a.id = d.agent_release_id
      join ap.knowledge_releases k on k.id = a.knowledge_release_id
      where d.public_id = $1 and ($2::text is null or d.kind = $2) and d.status = 'active'
+       and (not d.moderation_restricted or $3::boolean)
        and (d.kind = 'link' or d.verified_at is not null)
        and a.id = (select id from ap.agent_releases where organization_id = d.organization_id order by revision desc limit 1)
        and k.id = (select id from ap.knowledge_releases where organization_id = d.organization_id order by revision desc limit 1)`,
-    [publicId, kind ?? null],
+    [publicId, kind ?? null, allowRestricted],
   );
   const row = result.rows[0];
   if (!row) return null;
@@ -73,7 +75,7 @@ type Conversation = {
   distribution_traffic_class: DistributionTrafficClass;
 };
 async function session(pool: Pool | PoolClient, request: FastifyRequest, id?: string, lock = false,
-  requireActive = true): Promise<Conversation | null> {
+  requireActive = true, allowRestricted = false): Promise<Conversation | null> {
   if (id && !uuid.test(id)) return null;
   const bearer = /^Bearer ([A-Za-z0-9_-]{40,64})$/.exec(request.headers.authorization ?? '')?.[1];
   const secret = request.headers.authorization ? null : sessionSecret(request);
@@ -102,7 +104,7 @@ async function session(pool: Pool | PoolClient, request: FastifyRequest, id?: st
   if (!row || (requireActive && (row.state !== 'ai_assisting' || row.mode !== 'ai'
       || row.automation_paused))) return null;
   if (lock && row.placement_id) await pool.query('select id from ap.placements where id = $1 for share', [row.placement_id]);
-  return !requireActive || await activeDeployment(pool, row.public_id) ? row : null;
+  return !requireActive || await activeDeployment(pool, row.public_id, undefined, allowRestricted) ? row : null;
 }
 async function publicMessages(pool: Pool | PoolClient, id: string) {
   const result = await pool.query<{ id: string; sequence: string; actor: string; body: string; created_at: string }>(
@@ -224,6 +226,11 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
           await client.query('rollback'); return reply.code(409).send({ error: 'placement_changed' });
         }
       }
+      const currentDeployment = (await client.query<{ status: string; moderation_restricted: boolean }>(
+        'select status,moderation_restricted from ap.deployments where id=$1 for share', [link.deployment_id])).rows[0];
+      if (!currentDeployment || currentDeployment.status !== 'active' || currentDeployment.moderation_restricted) {
+        await client.query('rollback'); return reply.code(409).send({ error: 'deployment_inactive' });
+      }
       await client.query(
         `insert into ap.inquiries(id, organization_id, knowledge_release_id, knowledge_revision,
            deployment_id, agent_release_id, placement_id, consult_session_hash, consult_session_expires_at,
@@ -272,6 +279,11 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
             await client.query('rollback'); return reply.code(409).send({ error: 'placement_changed' });
           }
         }
+        const currentDeployment = (await client.query<{ status: string; moderation_restricted: boolean }>(
+          'select status,moderation_restricted from ap.deployments where id=$1 for share', [deployment.deployment_id])).rows[0];
+        if (!currentDeployment || currentDeployment.status !== 'active' || currentDeployment.moderation_restricted) {
+          await client.query('rollback'); return reply.code(409).send({ error: 'deployment_inactive' });
+        }
         await client.query(
           `insert into ap.inquiries(id, organization_id, knowledge_release_id, knowledge_revision,
              deployment_id, agent_release_id, placement_id, consult_session_hash, consult_session_expires_at,
@@ -291,15 +303,18 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
   });
 
   app.get<{ Params: { publicId: string } }>('/v1/public/deployments/:publicId/engagements/current', async (request, reply) => {
-    const row = await session(runtime.pool, request);
+    const row = await session(runtime.pool, request, undefined, false, true, true);
     if (!row || row.public_id !== request.params.publicId)
       return reply.header('Cache-Control', 'no-store').send({ engagement: null });
-    return reply.header('Cache-Control', 'no-store').send({ engagement: { id: row.id, state: row.state,
+    const deployment = (await runtime.pool.query<{ moderation_restricted: boolean }>(
+      'select moderation_restricted from ap.deployments where public_id=$1', [row.public_id])).rows[0];
+    return reply.header('Cache-Control', 'no-store').send({ organizationId: row.organization_id,
+      deploymentRestricted: deployment?.moderation_restricted ?? false, engagement: { id: row.id, state: row.state,
       messages: await publicMessages(runtime.pool, row.id) } });
   });
 
   app.get<{ Params: { id: string } }>('/v1/engagements/:id', async (request, reply) => {
-    const row = await session(runtime.pool, request, request.params.id);
+    const row = await session(runtime.pool, request, request.params.id, false, true, true);
     if (!row) return reply.code(401).send({ error: 'consult_session_required' });
     return reply.header('Cache-Control', 'no-store').send({ id: row.id, state: row.state,
       messages: await publicMessages(runtime.pool, row.id) });
@@ -445,6 +460,7 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
     const committed = await runtime.pool.connect();
     try {
       await committed.query('begin');
+      await committed.query('select id from ap.deployments where public_id=$1 for share', [initial.public_id]);
       const row = await committed.query<Conversation>(
         'select id, organization_id, state, mode, automation_paused, revision, next_sequence from ap.inquiries where id = $1 for update',
         [initial.id],
@@ -556,7 +572,7 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
     const client = await runtime.pool.connect();
     try {
       await client.query('begin');
-      const row = await session(client, request, request.params.id, true);
+      const row = await session(client, request, request.params.id, true, true, destination === 'human');
       if (!row) {
         await client.query('rollback');
         const result = await replay();

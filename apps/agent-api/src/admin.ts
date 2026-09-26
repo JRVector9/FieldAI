@@ -38,7 +38,7 @@ export function registerAgentAdminRoutes(app: FastifyInstance, runtime: Business
         (select count(*)::text from ap.inquiries where state not in ('closed', 'spam')) as "openInquiries",
         (select count(*)::text from ap.notification_events
           where audience = 'customer' and state = 'blocked_integration') as "blockedCustomerNotifications",
-        (select count(*)::text from ap.deployments where status = 'active') as "activeDeployments",
+        (select count(*)::text from ap.deployments where status = 'active' and not moderation_restricted) as "activeDeployments",
         (select count(*)::text from ap.publishers) as "publisherOrganizations",
         (select count(*)::text from ap.outbox o where delivered_at is null
           and not exists (select 1 from ap.notification_events n where n.outbox_id = o.id
@@ -72,7 +72,7 @@ export function registerAgentAdminRoutes(app: FastifyInstance, runtime: Business
       actorUserId: string; resource: string; accessedAt: Date;
     }>(`select actor_user_id as "actorUserId", resource, accessed_at as "accessedAt"
       from ap.admin_access_audit order by id desc limit 20`);
-    return { product: 'agent', role: member.rows[0].role, snapshotAt: new Date().toISOString(),
+    return { product: 'agent', actorUserId: userId, role: member.rows[0].role, snapshotAt: new Date().toISOString(),
       counts: { ...result.rows[0], adminReads: adminReads.rows[0]?.count ?? '0' },
       recentIncidents: incidents.rows, recentAdminAccesses: accesses.rows };
   });

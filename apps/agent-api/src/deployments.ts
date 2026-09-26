@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { resolveTxt } from 'node:dns/promises';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { Pool, PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
 import { rejectExpiredTrial } from './trial-access.js';
 import { activePlacement } from './placements.js';
@@ -22,7 +23,8 @@ type Deployment = { id: string; organization_id: string; public_id: string; kind
   placement_id: string | null; agent_release_id: string | null;
   creation_key: string | null;
   allowed_origin: string | null; verification_proof: string | null; verified_at: string | null;
-  status: 'pending' | 'active' | 'paused'; knowledge_revision: number | null; created_at: string };
+  status: 'pending' | 'active' | 'paused'; moderation_restricted: boolean;
+  knowledge_revision: number | null; created_at: string };
 function originHost(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > 253) return null;
   try {
@@ -79,7 +81,8 @@ async function ownedDeployment(request: FastifyRequest<{ Params: { id: string } 
 function output(row: Deployment) {
   return { id: row.id, publicId: row.public_id, organizationId: row.organization_id, kind: row.kind,
     origin: row.allowed_origin, verificationProof: row.verification_proof, verifiedAt: row.verified_at,
-    status: row.status, knowledgeRevision: row.knowledge_revision, createdAt: row.created_at };
+    status: row.status, moderationRestricted: row.moderation_restricted,
+    knowledgeRevision: row.knowledge_revision, createdAt: row.created_at };
 }
 
 export function registerDeploymentRoutes(app: FastifyInstance, runtime: BusinessRuntime) {
@@ -162,7 +165,8 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
       return reply.code(409).send({ error: 'knowledge_stale' });
     const result = await runtime.pool.query<Deployment>(
       `update ap.deployments set status = 'active', agent_release_id = $2, knowledge_revision = $3, updated_at = now()
-       where id = $1 returning *`, [row.id, current.rows[0].id, current.rows[0].knowledge_revision]);
+       where id = $1 and not moderation_restricted returning *`, [row.id, current.rows[0].id, current.rows[0].knowledge_revision]);
+    if (!result.rows[0]) return reply.code(409).send({ error: 'deployment_moderation_restricted' });
     return output(result.rows[0]!);
   });
   app.post<{ Params: { id: string } }>('/v1/deployments/:id/pause', async (request, reply) => {
@@ -173,21 +177,22 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
     return output(result.rows[0]!);
   });
 
-  async function active(publicDeploymentId: string, kind?: string) {
+  async function active(publicDeploymentId: string, kind?: string, allowRestricted = false,
+    db: Pool | PoolClient = runtime.pool) {
     if (!publicId.test(publicDeploymentId)) return null;
-    const found = await runtime.pool.query<Deployment & { business_name: string; introduction: string }>(
+    const found = await db.query<Deployment & { business_name: string; introduction: string }>(
       `select d.*, k.content->>'businessName' as business_name, k.content->>'introduction' as introduction
        from ap.deployments d join ap.agent_releases a on a.id = d.agent_release_id
        join ap.knowledge_releases k on k.id = a.knowledge_release_id
-       where d.public_id = $1 and d.status = 'active' and ($2::text is null or d.kind = $2)
+       where d.public_id = $1 and d.status = 'active' and (not d.moderation_restricted or $3::boolean) and ($2::text is null or d.kind = $2)
          and (d.kind = 'link' or d.verified_at is not null)
          and a.id = (select id from ap.agent_releases where organization_id = d.organization_id order by revision desc limit 1)
          and k.id = (select id from ap.knowledge_releases where organization_id = d.organization_id order by revision desc limit 1)`,
-      [publicDeploymentId, kind ?? null]);
+      [publicDeploymentId, kind ?? null, allowRestricted]);
     const row = found.rows[0];
     if (!row) return null;
     if (row.kind === 'placement_embed') {
-      const placement = row.placement_id && await activePlacement(runtime.pool, row.placement_id);
+      const placement = row.placement_id && await activePlacement(db, row.placement_id);
       if (!placement || placement.origin !== row.allowed_origin || placement.organizationId !== row.organization_id) return null;
     }
     return row;
@@ -485,13 +490,16 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
            (select placement_id from ap.deployments where id = n.deployment_id) as placement_id`, [hash(nonce)]);
       const deploymentId = consumed.rows[0]?.deployment_id;
       if (!deploymentId) { await client.query('rollback'); return reply.code(409).send({ error: 'nonce_expired_or_used' }); }
-      if (!await active(consumed.rows[0]!.public_id)) {
-        await client.query('rollback'); return reply.code(409).send({ error: 'deployment_inactive' });
-      }
       const owner = await client.query<{ organization_id: string }>(
         'select organization_id from ap.deployments where id = $1', [deploymentId]);
       if (await rejectExpiredTrial(reply, client, owner.rows[0]!.organization_id)) {
         await client.query('rollback'); return reply;
+      }
+      if (consumed.rows[0]!.placement_id)
+        await client.query('select id from ap.placements where id=$1 for share', [consumed.rows[0]!.placement_id]);
+      await client.query('select id from ap.deployments where id=$1 for share', [deploymentId]);
+      if (!await active(consumed.rows[0]!.public_id, undefined, false, client)) {
+        await client.query('rollback'); return reply.code(409).send({ error: 'deployment_inactive' });
       }
       const sessionToken = secret();
       await client.query(
@@ -513,12 +521,12 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
       || typeof conditions !== 'string' || conditions.length > 1000
       || /(?:\+?\d[\d\s-]{8,}\d|[\w.+-]+@[\w.-]+\.[a-z]{2,})/i.test(question + '\n' + conditions))
       return reply.code(400).send({ error: 'question_contains_contact_or_invalid' });
-    const session = await runtime.pool.query<{ id: string; public_id: string }>(
-      `select s.id, d.public_id from ap.embed_sessions s join ap.deployments d on d.id = s.deployment_id
+    const session = await runtime.pool.query<{ id: string; public_id: string; conversation_id: string | null }>(
+      `select s.id, d.public_id,s.conversation_id from ap.embed_sessions s join ap.deployments d on d.id = s.deployment_id
        where s.token_hash = $1 and s.expires_at > now() and s.transferred_at is null
          and d.status = 'active'`, [hash(bearer)]);
     const current = session.rows[0];
-    const deployment = current && await active(current.public_id);
+    const deployment = current && await active(current.public_id, undefined, !!current.conversation_id);
     if (!current || !deployment || (deployment.kind !== 'owned_embed' && deployment.kind !== 'placement_embed'))
       return reply.code(401).send({ error: 'invalid_embed_session' });
     const ticket = secret();
@@ -566,6 +574,7 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
       await client.query('begin');
       const consumed = await client.query<{ deployment_id: string; public_id: string; question: string; conditions: string;
         session_id: string; placement_id: string | null; organization_id: string; agent_release_id: string;
+        conversation_id: string | null;
         distribution_traffic_class: DistributionTrafficClass | null }>(
         `update ap.embed_handoffs h set consumed_at = now()
          from ap.embed_sessions s, ap.deployments d
@@ -574,14 +583,15 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
            and d.id = s.deployment_id and d.status = 'active'
          returning d.id as deployment_id, d.public_id, d.placement_id, d.organization_id,
            s.distribution_traffic_class,
-           d.agent_release_id, h.question, h.conditions, s.id as session_id`, [hash(ticket)]);
+           d.agent_release_id, h.question, h.conditions, s.id as session_id,s.conversation_id`, [hash(ticket)]);
       const row = consumed.rows[0];
       if (!row) { await client.query('rollback'); return reply.code(410).send({ error: 'ticket_expired_or_used' }); }
       if (await rejectExpiredTrial(reply, client, row.organization_id)) {
         await client.query('rollback'); return reply;
       }
       if (row.placement_id) await client.query('select id from ap.placements where id = $1 for share', [row.placement_id]);
-      const deployment = await active(row.public_id);
+      await client.query('select id from ap.deployments where id=$1 for share', [row.deployment_id]);
+      const deployment = await active(row.public_id, undefined, !!row.conversation_id, client);
       if (!deployment || (deployment.kind !== 'owned_embed' && deployment.kind !== 'placement_embed')) {
         await client.query('rollback'); return reply.code(410).send({ error: 'deployment_inactive' });
       }

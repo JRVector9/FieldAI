@@ -36,8 +36,11 @@ const inquirySourceLabel = (kind: string) => kind === 'link' ? '상담 링크'
 const inquiryStateLabel = (state: string) => state === 'needs_owner' ? '확인 필요'
   : state === 'waiting_customer' ? '고객 답변 대기' : state === 'closed' ? '처리 완료'
     : state === 'spam' ? '스팸 · 알림 중단' : '직접 응대 중';
-type OwnerNotification = { id: string; inquiryId: string; eventType: string; createdAt: string; readAt: string | null };
-const notificationLabel = (eventType: string) => eventType === 'ap.inquiry.created' ? '새 문의 접수' : '고객 추가 질문';
+type OwnerNotification = { id: string; inquiryId: string | null; targetKind?: 'inquiry' | 'moderation_report';
+  reportId?: string | null; eventType: string; createdAt: string; readAt: string | null };
+const notificationLabel = (eventType: string) => eventType === 'ap.moderation.review' ? '사업 안내 신고 검토 결과'
+  : eventType === 'ap.moderation.appeal-decision' ? '사업 안내 신고 이의 결정'
+    : eventType === 'ap.inquiry.created' ? '새 문의 접수' : '고객 추가 질문';
 const deliveryLabel = (state: string) => state === 'blocked_integration' ? '외부 알림 미연결' : state;
 const randomMessageKey = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
   .replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
@@ -463,6 +466,8 @@ export function AgentWorkspace() {
       const result = await jsonRequest(`/v1/owner/notifications/${item.id}/read`, 'POST');
       if (result.status !== 200) { setStatus('알림 읽음 상태를 저장하지 못했습니다.'); return; }
     }
+    if (item.targetKind === 'moderation_report') { window.location.assign('/workspace/moderation'); return; }
+    if (!item.inquiryId) { setStatus('업무 대상이 없는 알림입니다. 이력을 다시 확인해 주세요.'); return; }
     showOwnerSection("inbox");
     await selectInquiry(item.inquiryId);
     await loadNotifications();
@@ -594,7 +599,7 @@ export function AgentWorkspace() {
           </div>
         </div>
       </section>}
-      {phase === "draft" && <section className="agent-owner-more" id="agent-more"><h1>더보기</h1><p>AP 사업 운영 기능과 계정 관리를 엽니다.</p><div><a href="/workspace/deployments">상담 링크·위젯</a><a href="/workspace/campaigns">홍보 카드</a><a href="/workspace/integrations">Field 연결</a><a href="/workspace/usage">사용량</a><a href="/workspace/subscription">구독·데이터 관리</a></div></section>}
+      {phase === "draft" && <section className="agent-owner-more" id="agent-more"><h1>더보기</h1><p>AP 사업 운영 기능과 계정 관리를 엽니다.</p><div><a href="/workspace/deployments">상담 링크·위젯</a><a href="/workspace/campaigns">홍보 카드</a><a href="/workspace/integrations">Field 연결</a><a href="/workspace/usage">사용량</a><a href="/workspace/subscription">구독·데이터 관리</a><a href="/workspace/moderation">신고·검토 결과</a></div></section>}
     </main>
     {phase === "draft" && <nav className="agent-owner-mobile-nav" aria-label="AP 모바일 관리 메뉴"><a href="#agent-today" aria-current={activeSection === "today" ? "page" : undefined} onClick={event => { event.preventDefault(); showOwnerSection("today"); }}>오늘</a><a href="#agent-inquiries" aria-current={activeSection === "inbox" ? "page" : undefined} onClick={event => { event.preventDefault(); showOwnerSection("inbox"); }}>문의</a><a href="/workspace/ai">내 AI</a><a href="#agent-knowledge" aria-current={activeSection === "knowledge" ? "page" : undefined} onClick={event => { event.preventDefault(); showOwnerSection("knowledge"); }}>승인</a><a href="#agent-more" aria-current={activeSection === "more" ? "page" : undefined} onClick={event => { event.preventDefault(); showOwnerSection("more"); }}>더보기</a></nav>}
   </div>;

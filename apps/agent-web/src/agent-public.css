@@ -1,6 +1,7 @@
 .agent-public-shell{min-height:100vh;background:#f7f9fd}
 .agent-public-shell .site-header{max-width:none;height:92px;background:#fff;padding-inline:clamp(20px,5vw,70px)}
 .agent-public-header-business{display:flex;align-items:center;gap:11px;min-width:0}
+.agent-public-header-business>span:last-child{min-width:0}
 .agent-public-header-business strong,.agent-public-header-business small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .agent-public-header-business strong{font-size:16px;line-height:1.35}
 .agent-public-header-business small{color:#6b7789;font-size:14px}

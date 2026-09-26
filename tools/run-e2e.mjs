@@ -10,6 +10,7 @@ const suites = {
     ['AP owner, external widget, and guest consultation', 'agent-owner-flow-http.test.mjs'],
     ['AP publisher recovery', 'publisher-recovery-http.test.mjs'],
     ['AP administrator routes and permission boundary', 'agent-admin-http.test.mjs'],
+    ['AP report, approved support access, and owner appeal', 'agent-moderation-http.test.mjs'],
   ],
   field: [
     ['Field owner, public site, inquiry, and two booking modes', 'field-owner-flow-http.test.mjs'],

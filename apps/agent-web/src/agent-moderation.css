@@ -1,0 +1,16 @@
+.agent-moderation-dialog{box-sizing:border-box;width:min(560px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overflow:auto;border:1px solid #dce1e9;border-radius:20px;padding:24px;color:#17212e;background:#fff;font-size:16px;line-height:1.65}
+.agent-moderation-dialog::backdrop{background:rgb(20 30 45 / 40%)}
+.agent-deployment-report-button{min-height:44px;border:0;background:transparent;padding:10px 0;color:inherit;font-size:14px;cursor:pointer;text-align:left}
+.agent-moderation-dialog p,.agent-moderation-panel p{overflow-wrap:anywhere;white-space:pre-wrap}
+.agent-moderation-dialog code,.agent-moderation-panel code{overflow-wrap:anywhere;font-size:14px}
+.agent-moderation-panel{box-sizing:border-box;max-width:100%;margin:24px 0;padding:24px;border:1px solid #dce1e9;border-radius:18px;background:white;color:#17212e;font-size:16px;line-height:1.65}
+.agent-moderation-panel h2{font-size:22px}.agent-moderation-panel h3{font-size:18px}
+.agent-moderation-case,.agent-moderation-access{margin:16px 0;padding:18px;border:1px solid #dce1e9;border-radius:14px}
+.agent-moderation-panel button,.agent-moderation-dialog button,.agent-moderation-owner>button{min-height:44px;max-width:100%;padding:10px 16px;border:1px solid #cdd5e1;border-radius:10px;background:#f5f8fc;color:#17212e;font-size:16px;white-space:normal}
+.agent-moderation-panel input,.agent-moderation-panel textarea,.agent-moderation-panel select,.agent-moderation-dialog input,.agent-moderation-dialog textarea,.agent-moderation-dialog select{box-sizing:border-box;max-width:100%;min-width:0;font-size:16px}
+.agent-moderation-panel textarea,.agent-moderation-dialog textarea{min-height:120px}
+.agent-moderation-snapshot dl div,.agent-moderation-snapshot article{margin:16px 0}.agent-moderation-snapshot dt,.agent-moderation-snapshot h4{font-size:16px;font-weight:700}.agent-moderation-snapshot dd{margin:4px 0;overflow-wrap:anywhere;white-space:pre-wrap}
+.agent-moderation-check{display:flex;gap:12px;align-items:flex-start}.agent-moderation-check input{width:auto;flex-shrink:0;margin-top:6px}
+.agent-moderation-owner{max-width:900px;margin:auto;padding:24px 16px}.agent-moderation-owner nav{display:flex;flex-wrap:wrap;gap:16px;font-size:16px}
+@media(max-width:600px){.agent-moderation-panel{padding:16px}.agent-moderation-case,.agent-moderation-access{padding:12px}.agent-moderation-dialog{padding:20px}}
+

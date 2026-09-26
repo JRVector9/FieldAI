@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
 import { agentAdminSections as sections, type AgentAdminSection } from "./agent-admin-sections";
 import "./agent-admin.css";
+import { AgentModerationAdmin } from './AgentModerationAdmin';
 
 type Overview = {
   product: "agent";
+  actorUserId: string;
   role: "operator" | "auditor";
   snapshotAt: string;
   counts: {
@@ -112,7 +114,7 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
     notifications: "실제 발송 공급사가 연결되지 않아 고객 알림은 미연결 상태입니다. 결과 미상 사건을 임의 재발송하지 않습니다.",
     "ai-deployments": "AI·지식 승인과 배포 활성화는 실제 모델 응답 성공과 구별됩니다.",
     billing: "실결제 공급사와 승인된 AP 가격·청구 원장이 미연결입니다. 체험을 유료 결제로 표시하지 않습니다.",
-    audit: "고객 상세 지원 접근은 별도 승인·사유·기간·추가 인증이 마련된 뒤 제공합니다.",
+    audit: "신고 상세는 승인된 범위로만 표시합니다. 일반 고객 대화 지원 열람과 운영 추가 인증은 미연결입니다.",
   };
   return <div className="site-shell"><header className="site-header"><a href="/"><Brand product="Agent Platform" /></a>
     <nav aria-label="제품 이동"><a href="/workspace">AP 사업자 작업실</a></nav></header>
@@ -146,6 +148,7 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
               <p>사건 ID {item.eventId}</p>
             </article>)}</div>}
         </section>}
+        {section === "audit" && <AgentModerationAdmin actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <section className="special-panel" aria-label="최근 관리자 조회"><h2>최근 관리자 조회</h2>
           {overview.recentAdminAccesses.length === 0 ? <p>조회 기록이 없습니다.</p>
             : <div className="agent-admin-list">{overview.recentAdminAccesses.map((item, index) => <article key={`${item.actorUserId}-${item.accessedAt}-${index}`}>

@@ -339,9 +339,9 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
     const userId = await ownerUser(request, reply, runtime);
     if (!userId) return reply;
     const result = await runtime.pool.query<{
-      id: string; inquiry_id: string; event_type: string; created_at: string; read_at: string | null;
+      id: string; inquiry_id: string | null; moderation_report_id: string | null; event_type: string; created_at: string; read_at: string | null;
     }>(
-      `select n.id, n.inquiry_id, o.event_type, n.created_at, r.read_at
+      `select n.id, n.inquiry_id, n.moderation_report_id, o.event_type, n.created_at, r.read_at
        from ap.notification_events n
        join ap.outbox o on o.id = n.outbox_id
        join ap.memberships m on m.organization_id = n.organization_id
@@ -355,6 +355,7 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
        where m.user_id = $1 and m.role in ('owner', 'editor') and n.audience = 'owner' and n.state = 'available'
          and r.notification_id is null`, [userId]);
     return { notifications: result.rows.map(row => ({ id: row.id, inquiryId: row.inquiry_id,
+      targetKind: row.moderation_report_id ? 'moderation_report' : 'inquiry', reportId: row.moderation_report_id,
       eventType: row.event_type, createdAt: row.created_at, readAt: row.read_at })),
     unreadCount: Number(count.rows[0]?.unread_count ?? 0) };
   });
