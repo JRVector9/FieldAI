@@ -1,5 +1,9 @@
 # 개발 진행 상태 — 2026-09-26
 
+## 최신 C03/I03 Field AP 연결·설치 재확인 (2026-09-26)
+
+Field 사업장/사이트 조회와 AP 연결 목록 조회를 분리했다. 목록 GET 실패는 승인 연결 없음과 구분하고 재조회 전에는 이전 기록의 조작을 멈춘다. 이미 설치된 배포가 선택한 연결의 현재 AP 활성 후보에서 사라지거나 연결 자체가 해제된 경우, Field 설치 기록과 고객 상담 가용성을 별도로 표시한다. 320px 브라우저의 거짓 빈 목록·해제 연결 상태 red→최종 exit 0(연결/설치/배포 조회 실패·재시도, 배포 제거, 연결 revoked, 가로 넘침/pageerror 0). 실제 AP pause→Field 활성 후보 제외/AP 공개 404/Field 공개 사이트 200→reactivate 뒤 후보 복귀를 포함한 양제품 HTTP 1/1. Field web typecheck·전체 lint·Python/Node 구문·diff 검사 exit 0, 새 mock **23141** 양제품 build/ready. 실 DNS/TLS·사용자 디자인/동선 인수·정식 QA/G는 미실행이며 C03/I03 `in_progress`다.
+
 ## 최신 C03/I03 Field 사이트 AP 설치 상태 (2026-09-26)
 
 Field 사이트의 초안 주소와 실제 공개 주소를 분리했다. 설치 조회 API는 release 존재 여부를 반환하며 UI는 초안에서는 AP 계정 연결을 허용하되 사이트 증명/위젯 설치를 공개 뒤에만 보여준다. 설치 조회 503과 AP 배포 후보 조회 503은 확인 실패/재시도로 표시하고 정상 빈 배포와 구분한다. Field DB 검사 초안 `published` 누락 red→최종 2/2, 320px 새 조직/초안·조회 실패/재시도 브라우저 red→green 및 가로 넘침/pageerror 0, 기존 AP↔Field 연결 HTTP 1/1, Field API build·web typecheck·전체 lint·Python 구문 exit 0. 새 mock **86290** 양제품 build/ready. 사용자 최종 디자인/동선 인수·정식 QA/G·실 공급사는 미실행이며 C03/I03 `in_progress`다.

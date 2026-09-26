@@ -1,5 +1,7 @@
 # 2단계 화면 검토본 — 2차 검수
 
+2026-09-26 Field AP 연결·설치 상태 추가 검수: 320px 신규 사업자 화면에서 AP 연결 목록 503은 `연결 없음`을 숨기고 재조회 버튼을 보여준다. 설치 기록 active라도 현재 AP 활성 배포에서 빠졌거나 해당 연결이 revoked이면 별도 사용 불가 안내를 표시하며 Field 직접 문의·예약 경로는 남는다. 새 mock **23141** 브라우저에서 실패·복구·현재 사용 불가와 가로 넘침/pageerror 0을 확인했다. 원본 시안은 `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`; 사용자 최종 시각·동선 인수는 이후다.
+
 2026-09-26 Field AP 설치 화면 상태 검수: 사이트 초안을 공개 주소처럼 보이게 하던 표시를 `사이트 초안 주소`로 구분하고 공개 전 증명/설치 조작을 숨겼다. 설치 상태 조회 503과 AP 배포 조회 503은 각각 확인 실패/재시도이며 정상 빈 배포와 구분한다. 새 mock **86290**의 신규 조직 320px Chromium에서 초안, 두 조회 실패·재시도, 가로 넘침/pageerror 0을 확인했다. 시안 원본은 `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`; 사용자 최종 시각·동선 인수는 이후다.
 
 2026-09-26 AP/Field 사업자 키보드 부분 검수: 원본 `reference/field_ui_prototype_v3.html`의 320px `owner/today`를 Chromium으로 다시 열어 하단 메뉴 구조를 확인했다. 실제 제품별 신규 조직 화면에서 Tab으로 긴 사업 정보 폼을 이동하면 Field 첫 입력의 하단 687px, AP `사업 소개` 입력의 하단 691px이 654px 하단 메뉴 뒤에 가려졌다. 모바일 작업실 스크롤 영역에 100px 초점 여유를 주고, 새 mock **2358**에서 두 제품의 320/390px Tab 초점·하단 메뉴 Enter 이동을 각각 확인했다. 이 검사는 사업자 초기 폼과 메뉴 경로이며 전체 역할 키보드·스크린리더·실 브라우저 200% 확대·사용자 최종 시각 인수는 아직 아니다.

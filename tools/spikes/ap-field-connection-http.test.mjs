@@ -540,6 +540,20 @@ test('local AP OAuth code crosses HTTP into Field encrypted pending connection',
     if (process.env.FIELD_BROWSER_PYTHON) execFileSync(process.env.FIELD_BROWSER_PYTHON,
       ['tools/spikes/field-ap-widget-browser.py', siteOrigin, site.value.slug, apDeployment.value.publicId],
       { stdio: 'inherit', timeout: 30000 });
+    assert.equal((await json(`${ap}/v1/deployments/${apDeployment.value.id}/pause`, 'POST', undefined,
+      apOwner.cookie)).response.status, 200);
+    const pausedCandidates = await json(`${field}/v1/connections/ap/${connections.value.connections[0].id}/deployments`,
+      'GET', undefined, fieldOwner.cookie);
+    assert.equal(pausedCandidates.response.status, 200, JSON.stringify(pausedCandidates.value));
+    assert.equal(pausedCandidates.value.deployments.some(item => item.id === apDeployment.value.id), false);
+    assert.equal((await json(`${ap}/v1/public/deployments/${apDeployment.value.publicId}`)).response.status, 404);
+    assert.equal((await fetch(`${siteOrigin}/site/${site.value.slug}`)).status, 200);
+    assert.equal((await json(`${ap}/v1/deployments/${apDeployment.value.id}/activate`, 'POST', undefined,
+      apOwner.cookie)).response.status, 200);
+    const resumedCandidates = await json(`${field}/v1/connections/ap/${connections.value.connections[0].id}/deployments`,
+      'GET', undefined, fieldOwner.cookie);
+    assert.equal(resumedCandidates.response.status, 200, JSON.stringify(resumedCandidates.value));
+    assert.ok(resumedCandidates.value.deployments.some(item => item.id === apDeployment.value.id));
     const capabilities = await json(`${ap}/v1/connections/field/${connections.value.connections[0].id}/capabilities`,
       'GET', undefined, apOwner.cookie);
     assert.equal(capabilities.response.status, 200, JSON.stringify(capabilities.value));

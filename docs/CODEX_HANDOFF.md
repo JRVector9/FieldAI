@@ -5,6 +5,29 @@
 - 시안 파일: `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03/I03 Field AP 연결·설치 재확인 (2026-09-26)
+
+- **현재 목표:** 위 절대경로의 시안과 v3.0 개발 문서에 맞춰 실제 기능을 끝까지 연결하고 로컬에서 사용할 수 있는 AP/Field 독립 환경을 유지한다. 사용자 최종 디자인·동선 인수와 실 공급사 연동은 이후다. C03 전체/출시 승인은 미완료다.
+- **완료 작업:** Field 사업장 조회와 AP 연결 목록 조회를 분리했다. 목록 503/네트워크 실패를 실제 0건과 구분하고 이전 기록은 보존하되 재조회 전 연결 조작을 멈춘다. 설치 기록 active와 AP 활성 배포 가용성을 별도 표시하며, 해당 배포가 현재 후보에서 사라졌거나 연결이 revoked인 경우 사용 불가와 Field 중지 경로를 안내한다. 직접 문의·예약은 유지한다.
+- **수정 파일:** `apps/field-web/src/field-ap-connections.tsx`, `tools/spikes/field-installation-state-browser.py`, `tools/spikes/ap-field-connection-http.test.mjs`, `docs/technical/{PHASE_2_EXECUTION_PLAN,PHASE_2_UI_REVIEW}.md`, `TASKS.md`, `DEVELOPMENT_STATUS.md`, 이 파일. API/DB migration/제품 간 공개 계약 변경 없음.
+- **핵심 설계 결정:** Field 설치 `active`는 자체 원장 상태다. AP 후보 GET 200에서 해당 배포가 없거나 연결 GET 200에서 해당 연결이 사용 가능하지 않을 때에만 현재 사용 불가를 표시한다. AP 조회 실패에는 중지/부재를 추측하지 않는다. 다른 연결이 선택되면 설치된 연결을 명시적으로 다시 선택할 수 있다.
+- **실제 검사/환경/커밋:** 로컬 PostgreSQL 17·Field Valkey·mock. 연결 목록 503 주입 시 거짓 빈 목록 0/1 red, 연결 revoked인데 설치 active인 경우 별도 안내 timeout red→새 mock **23141** 최종 `/tmp/fieldai-ui-venv/bin/python tools/spikes/field-installation-state-browser.py` exit 0(320px, 연결/사이트/AP 후보 실패·재시도, 후보 제거/해제, 가로 넘침/pageerror 0). `FIELD_EVENT_WORKERS_RUNNING=1 pnpm test:spike:ap-field:http` 1/1은 실제 AP 배포 pause→Field 후보 제외/AP 공개 404/Field 사이트 200→activate 후보 복귀와 기존 양방향 연결을 확인했다. `pnpm --filter @fieldai/field-web typecheck`, `pnpm lint`, Python `py_compile`, Node `--check`, `git diff --check` exit 0. `pnpm mock:run` PTY **23141**에서 양제품 build/ready. 커밋은 `git log -1 --oneline`으로 확인한다.
+- **실패한 접근:** 첫 브라우저 실행은 이전 mock PTY가 종료되어 `ERR_CONNECTION_REFUSED`였고 현 세션으로 재기동한 뒤에만 코드 red를 판정했다. 종전 초기 `Promise.all`은 연결 목록 장애를 사업장 화면 상태와 묶었고, 목록 실패를 `아직 승인된 AP 연결이 없습니다`로 렌더링했다. 종전 설치 화면은 자체 active 기록만 남겨 현재 AP 배포/연결 부재를 별도로 알려주지 않았다.
+- **남은 작업:** C03 다른 실제 역할/화면의 기능·시안 대조, 사용자 최종 디자인·동선 검토, 정식 QA/G. 운영 DNS/TLS·실 인증/LLM/발송/결제/백업 공급사는 `blocked_integration`; 운영 배포·고객 발송·청구 없음. 이번 검사는 Field 설치/연결 상태와 실제 AP 배포 중지/재활성화의 로컬 mock 경로에 한정한다.
+- **다음 에이전트 정확한 명령:**
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -1 --oneline
+sed -n '1,38p' docs/CODEX_HANDOFF.md
+curl -s -o /dev/null -w '%{http_code}' http://localhost:3002/workspace
+/tmp/fieldai-ui-venv/bin/python tools/spikes/field-installation-state-browser.py
+FIELD_EVENT_WORKERS_RUNNING=1 pnpm test:spike:ap-field:http
+```
+
+mock PTY **23141**가 살아 있으면 AP `http://localhost:3001/workspace`, Field `http://localhost:3002/workspace`다. HTTP를 먼저 확인하고 세션이 없을 때만 `pnpm mock:run`으로 재기동한다. 화면 작업에는 위 시안 절대경로를 직접 사용한다.
+
 ## 최신 인수인계 — C03/I03 Field 사이트 AP 설치 상태 (2026-09-26)
 
 - **현재 목표:** 위 절대경로의 시안과 v3.0 문서에 맞춰 AP/Field 독립 서비스의 실제 기능을 완성한다. 사용자는 최종 디자인·동선 및 외부 공급사 연동을 직접 확인할 예정이다. C03 전체와 출시 승인은 미완료다.

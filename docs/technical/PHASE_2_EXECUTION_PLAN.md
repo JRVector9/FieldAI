@@ -1,5 +1,12 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/I03 Field AP 연결 목록·설치 배포 재확인 — 2026-09-26
+
+- 파일 범위: `apps/field-web/src/field-ap-connections.tsx`, `tools/spikes/field-installation-state-browser.py`, 계획·상태·화면 검토·인수인계 문서. AP/Field API·DB migration·공개 연동 계약은 변경하지 않는다.
+- 요구/QA/게이트: C03/I03, Field 외부 AP 설치, QA86/94/119/128. 연결 목록 조회 503을 승인된 연결 0건으로 표시하지 않고 사업장 조회와 독립적으로 재시도한다. 이미 설치된 연결의 AP 활성 배포 후보가 정상 200 목록에서 사라지면 Field 설치 기록과 현재 AP 가용성을 구분해 사업자가 중지/복구를 선택할 수 있게 한다. AP 조회 실패는 배포 중지로 추측하지 않고 직접 문의·예약은 계속 유지한다.
+- 검사/구현 순서: 기존 로컬 mock의 320px 신규 사업자 AP 연결 화면에서 연결 GET 503과 재조회 200, 설치 기록은 active이나 해당 AP 후보 200 빈 목록을 주입해 화면 단언을 먼저 red로 확인한다. 실패/정상 빈 목록·선택된 연결의 설치 상태를 명시적으로 관리한다. 수정 뒤 같은 브라우저, Field web typecheck·lint·새 mock build/ready와 기존 AP↔Field 연결 HTTP 경로를 확인한다. 사용자 최종 시각·동선/실 DNS·정식 QA/G는 이후다.
+- 실행 결과: Field 사업장 조회와 AP 연결 목록 조회를 분리하고 목록에 idle/loading/ready/failed를 적용했다. 연결 GET 503의 320px 브라우저에서 기존 `아직 승인된 AP 연결이 없습니다` 표시가 남는 0/1 red를 확인한 뒤 실패 안내/재조회로 변경했다. 실패 중에는 이전 기록을 보존하되 연결 조작과 설치 후보를 멈추고, 200 빈 목록일 때만 실제 연결 없음으로 표시한다. 설치 기록 active이나 선택한 연결의 AP 활성 배포 후보 200 목록에서 배포가 사라지면 현재 사용 불가/중지 안내를 표시한다. 연결 상태 revoked인데 설치 기록만 active인 경우의 별도 안내도 320px red→green 확인했다. 새 mock **23141** 양제품 build/ready에서 브라우저 최종 exit 0(초안/설치 조회 503/AP 배포 503/연결 목록 503·재시도/배포 제거/연결 해제, 가로 넘침·pageerror 0). 실제 양제품 HTTP에서는 AP 배포 pause→Field 후보 200 목록에서 제외/AP 공개 404/Field 사이트 200→activate 뒤 후보 복귀를 포함해 `FIELD_EVENT_WORKERS_RUNNING=1 pnpm test:spike:ap-field:http` 1/1. Field web typecheck·전체 lint·Python 구문·Node 구문·diff 검사 exit 0. 실 DNS/TLS·사용자 최종 시각/동선·정식 QA/G는 미실행이고 C03/I03은 `in_progress`다.
+
 ### C03/I03 Field 사이트 AP 설치의 초안·공개·조회 실패 구분 — 2026-09-26
 
 - 파일 범위: Field 내부 `apps/field-api/src/sites.ts`, `apps/field-api/test/sites.db.test.ts`, `apps/field-web/src/field-ap-connections.tsx`, 필요한 320px 브라우저 검사와 계획·상태·인수인계 문서. AP 제품/공개 연동 계약·DB migration은 변경하지 않는다.
