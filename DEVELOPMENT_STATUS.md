@@ -1,5 +1,9 @@
 # 개발 진행 상태 — 2026-09-26
 
+## 최신 C03/QA57·119 AP/Field 사업자 키보드 초점 (2026-09-26)
+
+원본 시안 HTML의 320px 사업자 `owner/today`를 Chromium에서 다시 열고 하단 메뉴를 확인했다. 실제 제품별 신규 조직 화면의 긴 폼에서 Tab 초점이 하단 메뉴 뒤로 내려가는 오류를 Field(입력 하단 687px)·AP(사업 소개 하단 691px) 각각 0/1 red로 재현했다. 모바일 작업실 내부 스크롤의 하단 여유 100px을 주어 초점이 보이게 했다. 새 mock **2358** 양제품 build/ready, AP/Field 각각 320/390px 폼 초점·모바일 메뉴 Enter 경로 검사 exit 0, 양 웹 typecheck·전체 lint·Python 구문 exit 0. 전체 화면 키보드/스크린리더·실 200% 확대·사용자 최종 시각/동선·정식 QA/G는 미실행으로 C03 `in_progress`다.
+
 ## 최신 C03/I04 AP Field 전달 기록 부분 장애 복구 (2026-09-26)
 
 기존 Field 요청이 있는 AP 고객 320px 화면에서 전달 이력 GET 503 뒤 이미 확인한 기록이 사라지는 0/1 red를 재현했다. 같은 문의·확인키의 재조회에서는 마지막으로 확인한 전달 기록과 사진 목록을 유지하고, 다른 문의·확인키로 바뀌면 폐기한다. 서비스/가격/동의·사건 현황은 다시 확인해야 한다. 최종 `FIELD_EVENT_WORKERS_RUNNING=1 FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python pnpm test:spike:ap-field:http` 1/1(전달 화면·위젯·원본 답변·해제·알림), AP web typecheck·전체 lint·Python 구문 exit 0. 첫 green 시도는 실행 중인 mock worker와 수동 연결 해제 검사 경합으로 non-zero였으며 최종 실행에서 worker 상태를 명시해 통과했다. mock **7578** 양제품 build/ready·양 API/웹 HTTP 200. 사용자 최종 시각/동선·실 공급사·정식 QA/G는 남아 C03/I04 `in_progress`다.

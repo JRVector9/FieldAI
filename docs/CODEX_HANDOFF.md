@@ -5,6 +5,30 @@
 - 시안 파일: `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03/QA57·119 AP/Field 사업자 키보드 초점 (2026-09-26)
+
+- **현재 목표:** 위 시안과 v3.0 문서대로 AP/Field 독립 제품의 기능을 로컬에서 끝까지 사용할 수 있게 한다. 사용자는 최종 디자인·동선/외부 연동을 직접 확인할 예정이다. C03 전체/출시 승인은 미증명이다. 새 mock PTY **2358**: AP 웹 `http://localhost:3001/workspace`/API `127.0.0.1:4311`, Field 웹 `http://localhost:3002/workspace`/API `127.0.0.1:4321`.
+- **완료 작업:** `reference/field_ui_prototype_v3.html`을 Chromium에서 `FieldPrototype.seedDemo()`→`owner/today` 320px으로 열어 하단 메뉴를 다시 확인했다(`/tmp/field-prototype-keyboard-320.png`). 실제 신규 조직의 사업자 폼에서 키보드 Tab 초점이 하단 메뉴에 가리는 AP/Field 결함을 고쳤다. 각 제품의 모바일 작업실 스크롤 영역에 하단 초점 여유를 주었다.
+- **수정 파일:** `apps/agent-web/src/agent-home.css`, `apps/field-web/src/site.css`, 새 `tools/spikes/{agent-owner-keyboard-browser,field-owner-keyboard-browser}.py`, `docs/technical/{PHASE_2_EXECUTION_PLAN,PHASE_2_UI_REVIEW}.md`, `TASKS.md`, `DEVELOPMENT_STATUS.md`, 이 파일. API/DB/migration·제품 간 공개 계약 변경 없음.
+- **핵심 설계 결정:** 고정된 66px 하단 메뉴와 작업실 내부 스크롤 구조를 유지하고, 760px 이하에서 스크롤 컨테이너에 100px 하단 여유를 적용한다. 시안의 통합 역할 전환은 제품별 화면에 복제하지 않는다.
+- **실제 검사/환경/커밋:** 로컬 PostgreSQL 17·Field Valkey·mock. 실제 320px Field 첫 입력 하단 687px/하단 메뉴 시작 654px, AP 사업 소개 하단 691px/메뉴 654px에서 제품별 브라우저 검사 각 0/1 red. 새 mock **2358** 양제품 build/ready 뒤 AP/Field 각각 320px·390px Tab 초점이 보이고 하단 메뉴 Enter로 AP 오늘→문의, Field 오늘→예약에 이동하는 검사가 exit 0. `pnpm --filter @fieldai/agent-web typecheck`, `pnpm --filter @fieldai/field-web typecheck`, `pnpm lint`, 변경 Python `py_compile` exit 0. 이 변경 커밋은 `git log -1 --oneline`으로 확인한다.
+- **실패한 접근:** 첫 CSS 전체 줄 교체 patch는 현재 파일 한 줄과 정확히 일치하지 않아 적용되지 않았다. 같은 위치에 모바일 전용 규칙을 별도 삽입해 수정했다. 탐색용 Tab 위치 즉시 측정은 CSS smooth scroll 완료 전 좌표를 읽어 오탐이 있었고, 400ms 뒤 측정으로 실제 가림을 구분했다.
+- **남은 작업:** C03 나머지 실제 경로의 기능·시안 대조, 전체 역할 키보드/스크린리더·실 200% 확대, 사용자 최종 시각·동선 인수, 정식 QA/G. 실 인증·LLM·알림·결제·DNS/TLS·백업 공급사는 `blocked_integration`; 운영 배포·고객 발송·청구 없음. 이번 검사는 신규 사업자 초기 폼과 모바일 메뉴 경로에 한정한다.
+- **다음 에이전트 정확한 명령:**
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short --branch
+git log -2 --oneline
+sed -n '1,14p' docs/technical/PHASE_2_EXECUTION_PLAN.md
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+/tmp/fieldai-ui-venv/bin/python tools/spikes/agent-owner-keyboard-browser.py
+/tmp/fieldai-ui-venv/bin/python tools/spikes/field-owner-keyboard-browser.py
+```
+
+서버가 종료됐으면 `pnpm mock:run`으로 재시작한다. 다음 기능 Task도 실행 계획 맨 위에 파일 범위·요구/QA·명령을 먼저 적는다.
+
 ## 최신 인수인계 — C03/I04 AP Field 전달 기록 부분 장애 복구 (2026-09-26)
 
 - **현재 목표:** 위 시안과 v3.0 문서대로 AP/Field 별도 제품의 기능을 로컬에서 끝까지 사용할 수 있게 한다. 사용자는 최종 화면 디자인·동선/외부 연동을 직접 확인할 예정이다. C03 전체/출시 승인은 아직 미증명이다. 로컬 mock PTY **7578**의 AP 웹 `http://localhost:3001/workspace`/API `127.0.0.1:4311`, Field 웹 `http://localhost:3002/workspace`/API `127.0.0.1:4321` 네 HTTP 200을 실제 확인했다.

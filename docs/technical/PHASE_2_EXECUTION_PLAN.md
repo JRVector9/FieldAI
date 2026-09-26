@@ -1,5 +1,12 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/QA57·119 실제 AP/Field 사업자 키보드 조작 경로 — 2026-09-26
+
+- 파일 범위: 실제 AP/Field 작업실의 모바일 스크롤 CSS와 제품별 좁은 Playwright 회귀 검사, `docs/technical/PHASE_2_UI_REVIEW.md`, 계획·현황·인수인계 문서. 결함이 확인된 경로만 수정하며 양제품 API·DB·제품 간 계약은 변경하지 않는다.
+- 요구/QA/게이트: 시안 v3의 역할별 사업자 업무·승인·예약 작업 경로, C03과 QA57/58/119. 320/390px 화면에서 키보드 Tab/Enter로 주요 메뉴와 폼 조작에 도달하고 현재 초점이 하단 메뉴에 가리지 않게 한다. 사용자의 최종 시각/동선 인수는 이후다.
+- 검사/구현 순서: 원본 HTML의 해당 화면 조작 구조를 확인하고 실제 제품별 가입/조직 생성 뒤 320/390px DOM·화면을 먼저 조사한다. 키보드 전용 실패를 구체적 행동으로 재현하면 red 검사에 고정하고 좁게 수정한다. 해당 브라우저 검사·양 웹 typecheck·lint, 새 mock build/ready를 확인한다.
+- 실행 결과: 원본 `reference/field_ui_prototype_v3.html`을 Chromium 320px으로 열어 `owner/today`의 하단 메뉴를 다시 확인했다(`/tmp/field-prototype-keyboard-320.png`). 실제 Field 신규 조직의 서비스/사업 정보 폼에서 Tab이 첫 입력을 화면 아래 687px까지 이동시켜 654px 하단 메뉴에 가리는 0/1 red였다. AP 신규 조직의 승인 폼도 `사업 소개` 입력이 691px까지 내려가 같은 0/1 red였다. 두 제품의 모바일 전용 작업실 스크롤 영역에 `scroll-padding-bottom:100px`을 적용했다. 새 mock **2358** 양제품 build/ready, AP/Field 각각 320/390px 키보드 검사 exit 0(보이는 폼 초점, 하단 메뉴 도달, AP 오늘→문의/Field 오늘→예약 Enter 이동, 가로 넘침·pageerror 0). 양 웹 typecheck·전체 lint·Python 구문 exit 0. 전체 역할/화면 키보드·실 200% 확대/스크린리더·사용자 최종 인수는 미실행이다.
+
 ### C03/I04 AP 고객 Field 전달 기록의 부분 조회 실패 복구 — 2026-09-26
 
 - 파일 범위: `apps/agent-web/src/agent-field-action.tsx`, 기존 320px 양제품 브라우저 검사 `tools/spikes/field-action-browser.py`, 계획·현황·인수인계 문서. 두 제품 API/DB/migration·공개 계약은 변경하지 않는다.

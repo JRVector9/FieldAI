@@ -1,5 +1,7 @@
 # TASKS — 독립 제품 개발 작업 보드 v3.0
 
+최근 C03/QA57·119 AP/Field 사업자 키보드 초점(2026-09-26): 시안 v3 `owner/today` 320px을 다시 열고, 실제 신규 조직의 긴 폼을 Tab으로 이동할 때 두 제품 입력 초점이 하단 메뉴 뒤에 가리는 각 0/1 red를 확인했다. 모바일 작업실 스크롤 영역에 100px 초점 여유를 적용해 AP/Field 320/390px 키보드 초점·메뉴 Enter 이동 각 exit 0, 양 웹 typecheck·lint·Python 구문 exit 0. 새 mock **2358** 양제품 build/ready. 전체 키보드·스크린리더·실 200% 확대·사용자 시각/동선 인수는 남아 C03 `in_progress`다.
+
 최근 C03/I04 AP 고객 Field 전달 기록 부분 장애(2026-09-26): 기존 요청이 있는 320px 화면에서 전달 이력 GET 503 뒤 기록이 사라지는 0/1 red를 확인했다. 같은 문의·확인키의 재조회는 마지막으로 확인한 전달 기록/사진을 유지하고 새 문의·확인키는 초기화한다. 실패한 서비스 조회로 새 가격·시간·동의를 진행하지 않는다. 최종 양방향 연결 HTTP/브라우저 1/1, AP web typecheck·전체 lint·Python 구문 exit 0, 새 mock **7578** 네 HTTP 200. mock worker가 켜진 첫 green 실행의 수동 revoke `empty` 경합은 `FIELD_EVENT_WORKERS_RUNNING=1`로 실제 실행 환경을 명시한 최종 재실행에서 해소했다. 사용자 시각/동선·정식 QA/G·실 공급사는 남아 C03/I04 `in_progress`다.
 
 최근 C03/A00/F00 로그인 진입·분배 E2E(2026-09-26): AP 홈 로그인 링크가 가입 폼으로 열리는 실제 320px red를 `?mode=login` 연결로 수정했고 Field의 기존 진입도 함께 확인해 두 제품 로그인/가입 4경로 1/1. 표준 로컬 AP E2E 3/3·Field E2E 3/3, 예전 UI 선택자에 걸린 분배 E2E red들을 실제 모바일 메뉴·문의 목록·고객 관리 도구로 갱신한 최종 분배 2/2 exit 0. 새 mock **1896** 빌드/ready, AP web typecheck·lint·Python 구문 통과. `reference/field_ui_prototype_v3.html`의 오늘 1440/320px을 직접 열어 실제 업무·서비스·예약 화면 캡처와 대조했다. 사용자 시각/동선 인수·실 인증/알림/LLM·정식 QA/G는 남아 C03/A00/F00 `in_progress`다.
