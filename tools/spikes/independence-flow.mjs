@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import pg from 'pg';
 
@@ -29,6 +29,7 @@ function status(result, expected) {
 
 let email;
 let externalSite;
+let revocationClient;
 try {
   assert.equal((await request('/workspace')).response.status, 200);
   email = `independence-${product}-${randomUUID()}@example.invalid`;
@@ -72,6 +73,25 @@ try {
     status(await request('/v1/agents/releases', 'POST', {
       expectedRevision: 1, expectedKnowledgeRevision: 1,
     }, cookie), 201);
+    // The independent launcher must provide AP's own durable revocation journal without any Field settings.
+    assert.ok(process.env.AP_REVOCATION_JOURNAL_DIRECTORY);assert.ok(process.env.AP_REVOCATION_JOURNAL_SECRET);
+    const actor=(await pool.query('select id from "user" where email=$1',[email])).rows[0].id;
+    const actorSession=(await pool.query('select id from "session" where "userId"=$1 order by "createdAt" desc limit 1',[actor])).rows[0].id;
+    const agentId=(await pool.query('select agent_id from ap.agent_releases where organization_id=$1 order by revision desc limit 1',[organizationId])).rows[0].agent_id;
+    revocationClient=randomUUID();const selectionId=randomUUID(),token=randomBytes(32).toString('base64url');
+    await pool.query('insert into "oauthClient"(id,"clientId","redirectUris") values($1,$1,\'[]\')',[revocationClient]);
+    await pool.query(`insert into ap.oauth_selections(id,session_id,actor_user_id,client_id,organization_id,agent_id,requested_scopes,selection_expires_at)
+      values($1,$2,$3,$4,$5,$6,array['ap.agent.read'],now()+interval '1 day')`,[selectionId,actorSession,actor,revocationClient,organizationId,agentId]);
+    await pool.query(`insert into "oauthConsent"(id,"clientId","userId","referenceId",scopes,"createdAt","updatedAt")
+      values($1,$2,$3,$4,'["ap.agent.read"]',now(),now())`,[randomUUID(),revocationClient,actor,selectionId]);
+    await pool.query(`insert into "oauthAccessToken"(id,token,"clientId","userId","referenceId",resources,"expiresAt","createdAt",scopes)
+      values($1,$2,$3,$4,$5,'["http://127.0.0.1:4311/integrations/v1"]',now()+interval '1 hour',now(),'["ap.agent.read"]')`,
+      [randomUUID(),createHash('sha256').update(token).digest('base64url'),revocationClient,actor,selectionId]);
+    const access=()=>fetch(`${web}/integrations/v1/me`,{headers:{authorization:`Bearer ${token}`}});
+    assert.equal((await access()).status,200);
+    status(await request(`/integrations/v1/authorization/selections/${selectionId}/revoke`,'POST',undefined,cookie),200);
+    assert.equal((await access()).status,401);
+    assert.ok((await pool.query('select revoked_at from ap.oauth_selections where id=$1',[selectionId])).rows[0].revoked_at);
     let proof = '';
     externalSite = createServer((incoming, outgoing) => {
       if (incoming.url === '/.well-known/ap-site-verification' && proof) {
@@ -174,8 +194,9 @@ try {
           where owner_user_id = (select id from "user" where email = $1))`, [email]);
       await pool.query(`delete from ${isAgent ? 'ap' : 'field'}.organizations
         where owner_user_id = (select id from "user" where email = $1)`, [email]);
+      if (revocationClient) await pool.query('delete from "oauthClient" where "clientId"=$1',[revocationClient]);
       await pool.query('delete from "user" where email = $1', [email]);
     }
   } finally { await pool.end(); }
 }
-process.stdout.write(`${product}: own sign-up, approval, intake, response${isAgent ? ', external owned widget' : ''} and mock trial passed\n`);
+process.stdout.write(`${product}: own sign-up, approval, intake, response${isAgent ? ', external owned widget and durable selection revocation' : ''} and mock trial passed\n`);

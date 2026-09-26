@@ -1,3 +1,4 @@
+import { recordAgentRevocation } from './revocation-journal.js';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { BusinessRuntime } from './business.js';
@@ -371,6 +372,10 @@ export function registerFieldConnectorRoutes(app: FastifyInstance, runtime: Busi
       if (!connection) {
         await db.query('rollback'); return reply.code(404).send({ error: 'connection_not_found' });
       }
+      const existingRemote = await db.query<{ id: string }>('select id from ap.field_remote_revocations where connection_id=$1', [connection.id]);
+      const intent = await recordAgentRevocation(db, runtime.revocationJournal, { organizationId: connection.ap_organization_id,
+        targetKind: 'connection', targetId: connection.id, selectionId: connection.ap_grant_id, source: 'owner',
+        revocationId: existingRemote.rows[0]?.id ?? (connection.status !== 'revoked' && connection.event_key_id && connection.event_secret_cipher ? randomUUID() : null) });
       if (connection.status !== 'revoked') {
         await db.query(`update ap.field_connections set status = 'revoked',updated_at = now()
           where id = $1`, [connection.id]);
@@ -385,7 +390,7 @@ export function registerFieldConnectorRoutes(app: FastifyInstance, runtime: Busi
         await db.query(`delete from "oauthConsent" where "referenceId" = $1`, [connection.ap_grant_id]);
         if (connection.event_key_id && connection.event_secret_cipher) {
           await db.query(`insert into ap.field_remote_revocations(id,connection_id)
-            values ($1,$2) on conflict (connection_id) do nothing`, [randomUUID(), connection.id]);
+            values ($1,$2) on conflict (connection_id) do nothing`, [intent.revocationId, connection.id]);
         }
         await db.query(`insert into ap.outbox(id,organization_id,event_type,aggregate_id,payload)
           values ($1,$2,'ap.field_connection.local_revoked',$3,$4::jsonb)`,

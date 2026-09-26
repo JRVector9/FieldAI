@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { after, test } from 'node:test';
 import { fromNodeHeaders } from 'better-auth/node';
 import { Pool } from 'pg';
+import { agentRevocationJournalFromEnvironment } from '../src/revocation-journal.js';
 import { createAgentApp } from '../src/app.js';
 
 process.loadEnvFile(resolve('../../infra/agent/.env'));
@@ -82,6 +83,7 @@ test('AP integrator chooses an owned AI and reads only explicitly delegated reso
   const outsider = await actor();
   const app = createAgentApp(async () => undefined, auth.handler, authBase, undefined, {
     pool,
+    revocationJournal: agentRevocationJournalFromEnvironment(),
     resolveUserId: async headers => (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
     resolveSession: async headers => {
       const session = await auth.api.getSession({ headers: fromNodeHeaders(headers) });

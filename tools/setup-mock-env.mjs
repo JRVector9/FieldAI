@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 
 const requested = process.argv.slice(2);
@@ -65,6 +65,25 @@ for (const product of requested.length ? [...new Set(requested)] : ['agent', 'fi
   if (isAgent && !content.includes('AP_RETENTION_JOURNAL_SECRET=')) {
     initializeFreshRetentionJournal();
     appendFileSync(path, `AP_RETENTION_JOURNAL_SECRET=${randomBytes(32).toString('base64url')}\n`, { mode: 0o600 });
+  }
+  if (isAgent && !content.includes('AP_REVOCATION_JOURNAL_DIRECTORY=')) {
+    appendFileSync(path, `AP_REVOCATION_JOURNAL_DIRECTORY=${resolve('infra/agent/revocation-journal')}\n`, { mode: 0o600 });
+  }
+  if (isAgent) {
+    const current = readFileSync(path, 'utf8');
+    const directory = parseEnv(current).AP_REVOCATION_JOURNAL_DIRECTORY;
+    if (directory && !isAbsolute(directory)) {
+      writeFileSync(path, current.replace(/^AP_REVOCATION_JOURNAL_DIRECTORY=.*$/m,
+        `AP_REVOCATION_JOURNAL_DIRECTORY=${resolve(directory)}`), { mode: 0o600 });
+    }
+  }
+  if (isAgent && !content.includes('AP_REVOCATION_JOURNAL_SECRET=')) {
+    const directory = parseEnv(readFileSync(path, 'utf8')).AP_REVOCATION_JOURNAL_DIRECTORY;
+    if (!directory) throw new Error('AP mock revocation directory is required before first initialization');
+    const root = resolve(directory);
+    if (existsSync(root) && readdirSync(root).length) throw new Error('AP existing revocation journal requires its original key');
+    mkdirSync(root, { recursive: true, mode: 0o700 });
+    appendFileSync(path, `AP_REVOCATION_JOURNAL_SECRET=${randomBytes(32).toString('base64url')}\n`, { mode: 0o600 });
   }
   if (isAgent && !content.includes('AP_INQUIRY_MEDIA_DIRECTORY=')) {
     appendFileSync(path, 'AP_INQUIRY_MEDIA_DIRECTORY=infra/agent/inquiry-media\n', { mode: 0o600 });

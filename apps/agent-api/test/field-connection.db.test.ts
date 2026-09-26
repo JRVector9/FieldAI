@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { after, test } from 'node:test';
 import { fromNodeHeaders } from 'better-auth/node';
 import { Pool } from 'pg';
+import { agentRevocationJournalFromEnvironment } from '../src/revocation-journal.js';
 import { createAgentApp } from '../src/app.js';
 import { approvedConnectorFacts } from '../src/agents.js';
 import { deliverFieldConnectionRevokeOnce } from '../src/field-connection-revoke-worker.js';
@@ -140,6 +141,7 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
   };
   const runtime = {
     pool,
+    revocationJournal: agentRevocationJournalFromEnvironment(),
     resolveUserId: async (headers: import('node:http').IncomingHttpHeaders) =>
       (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
     resolveSession: async (headers: import('node:http').IncomingHttpHeaders) => {
@@ -777,6 +779,8 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
     assert.equal(await processing, 'blocked');
     assert.equal(revoked.statusCode, 200, revoked.body);
     assert.equal(revoked.json().localStatus, 'revoked');
+    const clearedTokens=(await pool.query('select access_token_cipher,refresh_token_cipher from ap.field_connections where id=$1',[fieldConnectionId])).rows[0];
+    assert.deepEqual(clearedTokens,{access_token_cipher:null,refresh_token_cipher:null});
     assert.equal(revoked.json().remoteState, 'pending');
     assert.equal((await pool.query<{ state: string }>(
       'select state from ap.source_refresh_jobs where id = $1',

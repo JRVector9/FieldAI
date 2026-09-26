@@ -1,3 +1,4 @@
+import { recordAgentRevocation } from './revocation-journal.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { BusinessRuntime } from './business.js';
@@ -165,6 +166,8 @@ export function registerIntegratorRoutes(app: FastifyInstance, runtime: Business
          where s.id = $1 and s.actor_user_id = $2 and m.user_id = $2 and m.role = 'owner'
          for update of s`, [request.params.id, actor.userId]);
       if (!selected.rows[0]) { await db.query('rollback'); return reply.code(404).send({ error: 'selection_not_found' }); }
+      await recordAgentRevocation(db, runtime.revocationJournal, { organizationId: selected.rows[0].organization_id,
+        targetKind: 'selection', targetId: request.params.id, selectionId: request.params.id, source: 'owner', revocationId: null });
       const changed = await db.query(
         'update ap.oauth_selections set revoked_at = now() where id = $1 and revoked_at is null returning id',
         [request.params.id]);

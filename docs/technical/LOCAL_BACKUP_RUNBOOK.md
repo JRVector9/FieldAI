@@ -55,7 +55,7 @@ node --env-file=/absolute/protected/path/ap-restored.env \
   apps/agent-api/dist/retention-restore-cli.js --offline-restored
 ```
 
-`pnpm test:db:agent`에서 실제 격리 PG17 dump/restore 후 원문/사진 정리와 반복0, 원장 directory/entry 누락·추가/변조·미확인 의도 거절, checkpoint export/restore CLI 및 현재 DB localhost 별칭·현재 파일 경로·원장 내부 출력 거절을 확인했다. 사진 scope 정리 후 새로 업로드한 사진은 기존 정리 job의 cutoff 밖이므로 복원 재적용에서도 유지하며, 이 경로를 실제 AP DB 검사에 포함했다. 이 결과는 모든 namespace/경로 별칭 부정 사례나 운영 RPO/RTO 검수의 완료 근거가 아니다. AP 연결/OAuth revoke 원장 재적용은 아직 별도 후속이며, 전체 복구 검수 전 운영 서비스 재개를 승인하지 않는다.
+`pnpm test:db:agent`에서 실제 격리 PG17 dump/restore 후 원문/사진 정리와 반복0, 원장 directory/entry 누락·추가/변조·미확인 의도 거절, checkpoint export/restore CLI 및 현재 DB localhost 별칭·현재 파일 경로·원장 내부 출력 거절을 확인했다. 사진 scope 정리 후 새로 업로드한 사진은 기존 정리 job의 cutoff 밖이므로 복원 재적용에서도 유지하며, 이 경로를 실제 AP DB 검사에 포함했다. 이 결과는 모든 namespace/경로 별칭 부정 사례나 운영 RPO/RTO 검수의 완료 근거가 아니다. AP native 연결/선택 회수 재적용은 아래 절차로 구현했다. 일반 OAuth provider의 개별 토큰 삭제/refresh family lifecycle은 아직 후속이며 전체 복구 검수 전 운영 서비스 재개를 승인하지 않는다.
 
 ## Field 업무 삭제 원장 재적용 — 로컬 격리 복원
 
@@ -132,3 +132,25 @@ checkpoint 출력은 원장 디렉터리 밖의 새 파일(0600)이어야 한다
 AP migration66와 Field migration62의 제품별 `retention_journal_receipts`는 signed entry ID/내용 SHA-256만 기록하며 조직·업무 삭제에 종속되지 않는다. update/delete는 DB에서 거절한다. 두 worker는 startup/다음 job/각 append 전에 이 기록과 기존 completed job/file-deleted 감사 사실을 자체 signed journal과 대조한다. 폴더가 있어도 기록이 없거나 내용이 바뀌면 정리를 진행하지 않는다. read/append는 없는 폴더를 빈 성공이나 신규 초기화로 바꾸지 않는다.
 
 최초 로컬 설정은 `node tools/setup-mock-env.mjs agent field`로 각 제품의 최초 key 생성 때만 빈 directory를 만든다. 기존 key가 있는 환경의 directory를 잃었다면 자동 초기화하지 말고 원래 signed journal을 보호된 보관본에서 복구한다. 기존 완료/파일 감사 사실이 원장과 맞아야 최초 receipt baseline도 기록할 수 있다. 파일 fsync 뒤 DB receipt 저장이 실패한 signed entry는 다음 대조에서 보존하며 없애지 않는다. DB 백업을 복원한 뒤에는 공개 서비스/worker를 재개하기 전에 해당 제품의 최신 별도 checkpoint와 삭제·revoke 원장을 검증·재적용해야 한다. DB와 journal/checkpoint를 함께 과거로 교체한 상황이나 baseline 이전에 원래부터 없던 기록의 운영 보장은 별도다.
+
+## AP native 연결·선택 회수 원장 재적용 — 로컬 격리 복원
+
+AP owner 연결/선택 회수와 검증된 원격 수신은 AP_REVOCATION_JOURNAL_DIRECTORY/SECRET의 자체 HMAC/fsync 원장에 최소 intent를 기록한 뒤 DB를 commit한다. 원장과 키는 DB·삭제 원장과 별도로 보관한다. 기존 키가 있는 원장이 사라지면 setup/append가 새 빈 원장을 만들지 않는다. 불변 ap.revocation_journal_receipts의 ID/hash와 대조해 실패를503으로 보고한다.
+
+모든 AP 회수 원장 작성자를 중단한 뒤 원장 밖 새 보호 파일로 최신 전체 checkpoint를 내보낸다. --quiesced는 실제 API/worker 중단을 대신하지 않는다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+# AP_PROFILE=mock, AP_DATABASE_URL(현재 로컬 AP DB), 기존 AP_REVOCATION_JOURNAL_DIRECTORY/SECRET
+# AP_REVOCATION_CHECKPOINT_OUTPUT=/absolute/protected/separate/ap-revocations-latest.json
+node --env-file=/absolute/protected/path/ap-revocations.env \
+  apps/agent-api/dist/revocation-checkpoint-cli.js --quiesced
+# AP_REVOCATION_RESTORE_DATABASE_URL=별도 fieldai_agent_restore_<hex> DB
+# AP_REVOCATION_RESTORE_CHECKPOINT_FILE=별도 최신 protected checkpoint
+node --env-file=/absolute/protected/path/ap-revocations-restored.env \
+  apps/agent-api/dist/revocation-restore-cli.js --offline-restored
+```
+
+CLI는 localhost/127.0.0.1:55431의 agent_local과 자기 mock/test DB 식별·별도 restore DB만 허용한다. 활성 DB 이름 alias/Field port·namespace를 거절한다. 전체 서명/누락/추가/DB receipt와 native org/selection/connection binding 검증 뒤 단일 transaction으로 token/consent·connection/source를 회수한다. 기존 문의/확인키·Field 원본 예약/구독은 유지한다. 원격 receipt ID를 복원하되 미확인 송신은 blocked/restore_remote_reconciliation_required이고 가짜 ACK/자동 발송을 시작하지 않는다.
+
+실제 AP PG17 dump/restore에서 bearer200→재적용401, ciphertext null·회수 재활성화 금지·고객 원본/확인키 유지·반복0·전체 rollback과 CLI 부정 사례를 검수했다. native 3경로 밖의 일반 OAuth 토큰 삭제/refresh family lifecycle·legacy baseline·증빙/DB/원장 동시 과거 교체·운영 RPO/RTO/실 공급사 복구는 별도 남는다.

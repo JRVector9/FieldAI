@@ -1,3 +1,4 @@
+import { recordAgentRevocation } from './revocation-journal.js';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { BusinessRuntime } from './business.js';
@@ -51,6 +52,8 @@ export function registerFieldConnectionRevokeRoutes(app: FastifyInstance, runtim
       if (prior.rows[0] && prior.rows[0].id !== revocationId) {
         await db.query('rollback'); return reply.code(409).send({ error: 'revocation_id_conflict' });
       }
+      await recordAgentRevocation(db, runtime.revocationJournal, { organizationId: connection.ap_organization_id,
+        targetKind: 'connection', targetId: connection.id, selectionId: connection.ap_grant_id, source: 'remote', revocationId });
       if (!prior.rows[0]) {
         await db.query(`insert into ap.field_connection_revocations(id,connection_id)
           values ($1,$2)`, [revocationId, connectionId]);

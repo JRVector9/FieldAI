@@ -1,5 +1,18 @@
 # 개발 진행 상태 — 2026-09-26
 
+**2026-09-26 AP native 회수 단계 최종:** AP74855 29/29·Field52785 30/30·전체 type/lint57153·최신 lint37774 exit0. 실제 Field 미배포 AP independence53496 exit0(own native 회수/token200→401 포함). 세 번째 review62519 P2 package cwd 문제는 AP 생성/기존 journal 경로 절대화·key/파일 보존으로 보완, actual 설정2/2와 마지막 repair review87113 exit0/추가P1/P2 없음. 리뷰 내부 test는 read-only EPERM 미실행이며 root 설정2/2와 구분한다. mock36780 양 API/웹·retention worker ready/health 실제 확인. 전체/C03/A08는 in_progress. 다음은 전체 문서 기능 대조로 남은 범위 확정이며 위젯/일반 OAuth lifecycle·legacy/Field key·유료 구독 원장/외부 발송 adapter·최종 사용자 화면/실 공급사·운영 QA/G는 완료되지 않았다. 자세한 현재 사실은 docs/CODEX_HANDOFF.md 상단 참조. 아래 누적 기록의 이전 handle/미완료는 당시 이력이다.
+
+- **단독 실행 최신 결과:** 재리뷰88411 exit0/P2 1건은 independence launcher가 AP 회수 원장 설정을 누락하던 문제였다. tools/run-independence.mjs own AP 경로/키 allowlist·환경 단위검사 실제 undefined red→2/2, independence-flow의 실제 owner selection revoke/토큰200→401을 추가했다. managed92152 정상 종료130와 Field DB/Valkey compose stop33427 exit0 뒤 pnpm test:independence:agent **53496 exit0**(/tmp/ap-revocation-independent-standalone.log): 실제 Field API/web/DB/Valkey 미배포/포트 부재를 시작·종료 시 확인하고 AP 가입/승인/문의/답변/export/외부 widget/공개 이어가기·native 회수와 owner/guest browser1/1을 확인했다. 모든 AP 기능/실 공급사 완료를 주장하지 않는다. 후속 세 번째 독립 review62519(/tmp/ap-revocation-third-review.log)는 진행 중이며 clean/commit 미확인이다. 양제품 복구 mock36780(/tmp/ap-revocation-standalone-restored-runtime.log)가 현재 기동 중이다. 이전92152/46139/62510/68922는 종료됐고 독립 gate53496의 API/web도 정상 종료됐다.
+
+
+## 최신 C03/A08 AP native 회수·복원
+
+최신 리뷰 보완: 첫 독립93162 exit0 P2 3건(잠금40P01·UUID index·전체 원장 재읽기)을 migration68/증분 서명·DB proof cache로 보완했다. watcher 방식은 실제 same-size 변조 즉시200을 놓친98265/99027 red로 폐기했고, 현재 요청마다 전체 파일 inode/크기/mtime/ctime을 직접 대조한다. 변경 파일만 HMAC/hash를 다시 검사하며 checkpoint/restore는 항상 전체 재검증한다. 최종 AP74855 29/29 fail0/skip0 exit0, type/lint57153 exit0, metadata 읽기500entry/10회18.744ms 대 이전361.09ms(전체 서비스 latency 검수 아님). 최신 mock92152 양제품 build/migrate/ready와 retention worker ready. 재리뷰88411 실행 중으로 clean/commit은 아직 미확인이다. 전체 목표/C03는 in_progress다.
+
+
+AP native owner 연결/선택 회수·검증된 원격 수신을 AP 전용 HMAC/fsync 원장과 불변 ID/hash receipt에 연결했다. migration67은 해제 즉시 access/refresh ciphertext null·재활성화 금지·늦은 OAuth token 발급 직렬화를 적용한다. 실제 해제 전 PG17 dump/별도 restore의 bearer200→회수 재적용401, 고객 문의/확인키 보존·수신 ID 복원·외부 회수 blocked/가짜 ACK 금지·반복0을 검수했다. 최신 checkpoint 필수·원장 유실/변조/추가·namespace/조직 binding 불일치 전체 rollback과 current DB localhost alias/Field port/원장 내부 증빙 출력 거절을 확인했다. AP DB26074 29/29·Field DB52785 30/30 fail0/skip0 exit0, 최종 type25729/lint6277 exit0, 초기 mock 설정1/1·직접 내부 import 경계12312 exit0, 연결 화면 HTML smoke1/1. mock62510 양제품 API/웹 build/migrate/ready·독립 retention worker ready와 양 health를 확인했다. 독립 CLI93162(gpt-6-sol/high)는 진행 중이며 clean을 아직 주장하지 않는다. 일반 OAuth provider의 개별 토큰 삭제/refresh family 수명·양제품 legacy 회수 baseline/Field route key 수명·embed 종료/새 상담·전체 PRD/QA/G/독립 실행·운영 RPO/RTO·외부 공급사/MFA·사용자 최종 화면/동선은 남아 전체/C03 in_progress다.
+
+
 ## 최신 C03/A08 AP 실제 정리·독립 worker·복원
 
 AP 정리 요청/다른 승인/취소·독립 worker·실제 파일/원문/AI/자체 사본 정리·usage/ID 보존·DB 재저장 차단, 고객 종료/명시적 새 상담을 연결했다. AP migration65/66·Field migration62의 제품별 immutable journal receipt와 signed 원장 대조로 유실·대체·변조/실행 중 폴더 부재 뒤 추가 정리를 차단한다. JSON/사진/archive/지원 읽기는 응답 종료까지 보호하며 photo-only 첨부 목록은 현재 ready ID와 재대조한다. 열린 고객 follow-up410은 원본 재조회/기존 시도 폐기로 종료 안내를 반영한다. AP DB89449 28/28·Field DB17798 30/30 fail0/skip0 exit0, type18900/lint7378 exit0, native HTTP/320px6968 1/1 exit0. 독립 CLI13308 재리뷰 exit0에서 추가 지적 없음. 최신 mock68922 양제품 build/migrate/ready·독립 worker ready와 양 health를 확인했다. AP revoke 독립 원장/복원·Field route key/legacy·전체 문서 기능/QA/G·운영 RPO/RTO·실 공급사/MFA/사용자 최종 화면·동선은 남아 전체/C03 in_progress다.

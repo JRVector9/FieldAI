@@ -54,10 +54,10 @@ async function runIsolatedSuite() {
   const admin = new Client({ connectionString: adminUrl.toString() });
   await admin.connect();
   let created = false;
-  const revocationRoot = product === 'field' ? mkdtempSync(resolve(tmpdir(), 'field-suite-revocations-')) : null;
+  const revocationRoot = mkdtempSync(resolve(tmpdir(), `${product}-suite-revocations-`));
   if (revocationRoot) {
-    env.FIELD_REVOCATION_JOURNAL_DIRECTORY = revocationRoot;
-    env.FIELD_REVOCATION_JOURNAL_SECRET = `synthetic-${randomUUID()}-${randomUUID()}`;
+    env[`${product === 'agent' ? 'AP' : 'FIELD'}_REVOCATION_JOURNAL_DIRECTORY`] = revocationRoot;
+    env[`${product === 'agent' ? 'AP' : 'FIELD'}_REVOCATION_JOURNAL_SECRET`] = `synthetic-${randomUUID()}-${randomUUID()}`;
   }
   try {
     await admin.query(`create database "${database}"`);

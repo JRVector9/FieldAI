@@ -28,7 +28,8 @@ export function isolatedApiEnvironment(product, source, base = {}) {
     `${config.prefix}_AUTH_BASE_URL`];
   for (const name of required) if (!source[name]) throw new Error(`${name} is required`);
   const optional = product === 'agent'
-    ? ['AP_PUBLIC_WEB_ORIGIN', 'AP_INQUIRY_MEDIA_DIRECTORY']
+    ? ['AP_PUBLIC_WEB_ORIGIN', 'AP_INQUIRY_MEDIA_DIRECTORY',
+      'AP_REVOCATION_JOURNAL_DIRECTORY', 'AP_REVOCATION_JOURNAL_SECRET']
     : ['FIELD_PUBLIC_WEB_ORIGIN', 'FIELD_VALKEY_URL', 'FIELD_MEDIA_DIRECTORY',
       'FIELD_INQUIRY_MEDIA_DIRECTORY'];
   return { ...base, ...Object.fromEntries([...required, ...optional]

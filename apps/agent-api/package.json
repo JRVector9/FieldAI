@@ -7,6 +7,8 @@
     "start": "node dist/server.js",
     "start:field-events": "node dist/field-event-worker.js",
     "start:retention": "node dist/retention-purge-worker.js",
+    "revocation:checkpoint": "node dist/revocation-checkpoint-cli.js --quiesced",
+    "revocation:restore": "node dist/revocation-restore-cli.js --offline-restored",
     "retention:checkpoint": "node dist/retention-checkpoint-cli.js --quiesced",
     "retention:restore": "node dist/retention-restore-cli.js --offline-restored",
     "build": "tsc -p tsconfig.build.json",

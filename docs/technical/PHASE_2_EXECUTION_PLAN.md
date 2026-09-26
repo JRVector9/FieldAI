@@ -1,5 +1,41 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/A08 AP 권한 회수·격리 복원 — 2026-09-26 작업 시작
+
+**실제 진행 결과:** AP native owner 연결/선택 회수·검증된 원격 수신을 AP 전용 HMAC/fsync 원장과 불변 ID/hash receipt에 연결했다. migration67은 해제 즉시 access/refresh ciphertext null·재활성화 금지·늦은 OAuth token 발급 직렬화를 적용한다. 실제 해제 전 PG17 dump/별도 restore의 bearer200→회수 재적용401, 고객 문의/확인키 보존·수신 ID 복원·외부 회수 blocked/가짜 ACK 금지·반복0을 검수했다. 최신 checkpoint 필수·원장 유실/변조/추가·namespace/조직 binding 불일치 전체 rollback과 current DB localhost alias/Field port/원장 내부 증빙 출력 거절을 확인했다. AP DB26074 29/29·Field DB52785 30/30 fail0/skip0 exit0, 최종 type25729/lint6277 exit0, 초기 mock 설정1/1·직접 내부 import 경계12312 exit0, 연결 화면 HTML smoke1/1. mock62510 양제품 API/웹 build/migrate/ready·독립 retention worker ready와 양 health를 확인했다. 독립 CLI93162(gpt-6-sol/high)는 진행 중이며 clean을 아직 주장하지 않는다. 일반 OAuth provider의 개별 토큰 삭제/refresh family 수명·양제품 legacy 회수 baseline/Field route key 수명·embed 종료/새 상담·전체 PRD/QA/G/독립 실행·운영 RPO/RTO·외부 공급사/MFA·사용자 최종 화면/동선은 남아 전체/C03 in_progress다.
+
+**단독 실행 리뷰 보완 범위:** tools/run-independence.mjs AP allowlist에 AP 자체 회수 원장 경로/키를 전달한다. tools/test/independence-runner.test.mjs의 own key 전달/Field key 제거 실제 red→green, tools/spikes/independence-flow.mjs의 실제 AP server owner revoke/bearer200→401을 추가한다. 최신 managed mock을 정상 종료하고 Field API/web/DB/Valkey를 실제 중단한 뒤 pnpm test:independence:agent를 실행하며 완료 후 양제품 mock을 복구한다. 원본/운영 자료 삭제나 실제 공급사 발송은 하지 않는다.
+
+
+- **단독 실행 최신 결과:** 재리뷰88411 exit0/P2 1건은 independence launcher가 AP 회수 원장 설정을 누락하던 문제였다. tools/run-independence.mjs own AP 경로/키 allowlist·환경 단위검사 실제 undefined red→2/2, independence-flow의 실제 owner selection revoke/토큰200→401을 추가했다. managed92152 정상 종료130와 Field DB/Valkey compose stop33427 exit0 뒤 pnpm test:independence:agent **53496 exit0**(/tmp/ap-revocation-independent-standalone.log): 실제 Field API/web/DB/Valkey 미배포/포트 부재를 시작·종료 시 확인하고 AP 가입/승인/문의/답변/export/외부 widget/공개 이어가기·native 회수와 owner/guest browser1/1을 확인했다. 모든 AP 기능/실 공급사 완료를 주장하지 않는다. 후속 세 번째 독립 review62519(/tmp/ap-revocation-third-review.log)는 진행 중이며 clean/commit 미확인이다. 양제품 복구 mock36780(/tmp/ap-revocation-standalone-restored-runtime.log)가 현재 기동 중이다. 이전92152/46139/62510/68922는 종료됐고 독립 gate53496의 API/web도 정상 종료됐다.
+**Goal:** native AP owner 연결/선택 회수와 서명 수신 기록을 AP 전용 원장으로 남기고 별도 복원 DB에서 재적용한다. 전체 C03 기능 목표는 유지하며 이 단계의 일부 검수를 전체 완료로 대신하지 않는다.
+
+**리뷰 수정 범위/검수:** 새 AP migration68은 이미 적용67을 덮어쓰지 않고 token 잠금/UUID 인덱스를 보완한다. revocation-journal의 파일 metadata/변경 서명·DB proof index, native same-size 파일 변조 반복503·정상 복구/늦은 provider update 경합, server cache 종료 hook만 추가한다.
+
+최신 리뷰 보완: 첫 독립93162 exit0 P2 3건(잠금40P01·UUID index·전체 원장 재읽기)을 migration68/증분 서명·DB proof cache로 보완했다. watcher 방식은 실제 same-size 변조 즉시200을 놓친98265/99027 red로 폐기했고, 현재 요청마다 전체 파일 inode/크기/mtime/ctime을 직접 대조한다. 변경 파일만 HMAC/hash를 다시 검사하며 checkpoint/restore는 항상 전체 재검증한다. 최종 AP74855 29/29 fail0/skip0 exit0, type/lint57153 exit0, metadata 읽기500entry/10회18.744ms 대 이전361.09ms(전체 서비스 latency 검수 아님). 최신 mock92152 양제품 build/migrate/ready와 retention worker ready. 재리뷰88411 실행 중으로 clean/commit은 아직 미확인이다. 전체 목표/C03는 in_progress다.
+**검사 격리 보완:** tools/run-db-suite.mjs에서 AP 검사 전용 임시 공용 원장을 만들고 명시 주입한다. 복원 검사 자체는 별도 AP test DB·원장을 사용해 다른 파일의 동시 회수 증빙과 섞이지 않게 한다.
+
+**Architecture:** AP DB·키·원장·scope만 사용한다. 기존 3경로의 현재 actor/owner 또는 검증된 서명을 확인한 뒤 대상 row lock 아래 최소 회수 intent를 HMAC/fsync로 기록하고 DB 회수/외부 API access·refresh ciphertext 폐기를 commit한다. 원장 실패는503/DB rollback이다. AP 삭제 원장과 별도 HMAC purpose/폴더이며 불변 signed-entry receipt로 유실·대체를 차단한다. 복원은 최신 외부 checkpoint 검증/전체 binding 확인 뒤 AP-only 단일 transaction으로 처리하고 원격 pending은 ACK 대신 blocked 재대조로 남긴다. 기존 문의·확인키/대화·구독·Field 원본은 유지한다.
+
+**Tech Stack:** 기존 Node24/TypeScript/Fastify/PG17, node crypto/fs와 제품별 Better Auth OAuth 테이블. 외부 공급사/Field 내부 import는 없다.
+
+- Task/Product/Owner: C03/A08 / AP / 순차 실행, in_progress. 요구 AP PRD2.7/2.8/관리자·보안5.5, QA47/129/131/132/150~155/157/159의 로컬 부분. 사용자 최종 화면/동선·실 공급사/MFA/RPO/RTO는 별도다.
+- 경로: AP 다음 migration67, 새 `src/revocation-journal.ts`, `src/revocation-restore.ts`, `src/revocation-restore-cli.ts`, `src/revocation-checkpoint-cli.ts`, 새 `test/revocation-restore.db.test.ts`; 기존 `business.ts`/`server.ts`/`integrator-routes.ts`/`field-connector.ts`/`field-connection-revoke.ts`/API package, 해당 기존 native DB fixture, mock 설정/ignore/진행/인계/runbook. 필요 late token 보호는 native DB trigger로 추가한다. AP Field-token ciphertext는 nullable purge와 재활성화 거절이 필요하며 event route key는 기존 revoke ACK/업무 알림 종료 계약의 제한 목적과 구분해 수명 후속을 유지한다.
+
+#### 실행 순서와 검수
+
+- [ ] 현재 연결 회수 뒤 ciphertext가 남는 사실을 native PG fixture의 `assert.equal(access_token_cipher,null)`로 먼저 재현하고 `pnpm test:db:agent`의 실제 실패를 기록한다.
+- [ ] migration67에서 revoked connection의 access/refresh null·재활성화/선택 회수시각 원복 거절·늦은 OAuth token의 selection FOR SHARE 직렬화와 native restore 감사/불변 journal receipt를 구현한다.
+- [ ] AP 자체 원장은 signed minimal IDs/org/selection/source/revocation ID만 기록한다. prototype interface `recordAgentRevocation(pool,journal,intent)`를 native 3경로에 넣고 같은 intent retry는 기존 record를 재사용한다. `AP_REVOCATION_JOURNAL_DIRECTORY/SECRET`를 mock 최초 설정/서버에 연결하며 기존 키의 원장 유실을 자동 초기화하지 않는다. 각 native DB 테스트는 자신의 임시 원장만 주입한다.
+- [ ] dedicated native PG17 test에서 실패503/rollback·타 owner 거절·세 native 경로/중복·권한 회수/비밀값 null·DB 재활성화 거절·늦은 token vs회수 경합·고객 원본 유지를 검수한다. 실제 해제 전 dump→별도 AP restore DB→기존 bearer200→checkpoint/CLI 재적용→bearer401/토큰 회수/null·repeat0·원본/확인키 유지, entry 누락/추가/변조/다른 purpose/없는 directory·Field namespace/잘못된 binding·active DB alias/wrong product port를 검수한다.
+- [ ] `pnpm test:db:agent`, `pnpm typecheck`, `pnpm lint`, mock 새 build/ready와 기존 연결 HTTP/320px를 필요한 범위에서 실행한다. ak 독립 CLI 검토(지정 모델 미지원 예외는 기존 기록대로 현재 CLI 모델/high), 실제 지적 반영/검수 뒤 clean·문서/일지·단계 커밋을 만든다. 살아 있는68922는 실제 확인/필요 시에만 정상 재기동한다.
+
+#### 확인한 범위와 남은 의존성
+
+- native 대상은 `/v1/connections/field/:id/revoke`, `/integrations/v1/authorization/selections/:id/revoke`, 서명 `/integrations/v1/connections/:id/revoke`다. 기존 공개 요청/반환 DTO·scope·token 사용 계약은 바꾸지 않는다.
+- 설치된 OAuth provider의 표준 `/api/auth/oauth2/revoke`는 opaque access token row를 삭제하고 refresh 회수/rotation도 별도 mutation이다(실제 installed source 확인). 이 단계의 native selection/connection 기록만으로 모든 provider token 삭제/rotation 복원 방지를 완료했다고 주장하지 않는다. 후속에서 provider auth adapter/단독 token lifecycle의 별도 증빙 경로도 구현·검수해야 한다.
+- Field route key·legacy 회수 baseline, DB/journal/proof 동시 과거 교체·운영 복구, embed 종료/새 상담과 전체 PRD/역할/QA/G·최종 사용자 인수는 남긴다. AP/Field 현재 고객 자료 복제/삭제·실 메시지 발송/청구/배포는 하지 않는다. 테스트 자신의 합성 자료/UUID test·restore DB만 정리한다.
+
 ### C03/A08·F09 다섯 번째 리뷰 보완 — 2026-09-26
 
 - 최종 부분 결과: AP89449 28/28·Field17798 30/30/type18900/lint7378 exit0, native 열린 고객410 전환/익명 새 상담 HTTP6968 1/1 exit0. Sixth CLI13308 exit0 추가 지적 없음. 최종 패널 스타일을 포함한 mock68922 양제품 build/ready·각 worker ready/양 health. 최종 결과/실패/남은 전체 목표와 review 표는 CODEX_HANDOFF 상단에 기록했다.
@@ -1850,3 +1886,9 @@ AP와 Field의 독립 웹 앱에서 문서의 역할별 화면·이동 경로·�
 - 검사 순서: 공개 API의 5건 허용·6번째 429·다른 번호/조직 독립·멱등 재시도·원장 건수 기대를 DB 테스트에 먼저 추가해 red 확인 → migration/라우트 구현 → `pnpm test:spike:inquiries:agent`, `pnpm test:spike:consultations:agent`, `pnpm test:spike:business:field`, `pnpm test:spike:bookings:field`, `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, `pnpm build:agent`, `pnpm build:field`, `pnpm test:spike:imports`, `pnpm test:spike:db:isolation`. 실프록시/운영 부하/정식 QA48은 별도다.
 
 1단계(C00·기술 spike)는 검토본이 있다. 2단계는 두 제품과 역할별 화면의 디자인 검토본이다. 3단계는 AP·Field의 독립 핵심 업무를 실제 DB/API에 연결한 동작 검토본이다. 4단계는 AI/알림/구독·공식 연결과 독립 운영 검수, 5단계는 홍보/매체·전체 QA·복구·R02 최종 인수다. **화면 전체 모습은 2단계**, 실제 주요 경로는 3단계, 문서의 **최종 결과물** 판정은 5단계 R02와 적용 출시 게이트까지 필요하다. 공급사 자격·가격/법무 승인 부재는 해당 게이트를 `blocked_integration`으로 유지한다.
+
+### C03/A08 AP package 실행 경로 보완 (2026-09-26, in_progress)
+
+- 범위: tools/setup-mock-env.mjs·tools/spikes/mock-retention-initialization.test.mjs의 AP 회수 directory만. 생성 설정을 절대 경로로 기록하고 기존 상대 경로를 같은 저장소 폴더로 해석해 정규화한다. 기존 signing key/원장 파일을 유지하며 유실된 keyed 폴더를 재생성하지 않는다.
+- 요구/QA: AP 단독 실행·QA121/150/151/160 로컬 부분. 세 번째 review62519 exit0의 P2 package cwd 문제.
+- 검수: node --test tools/spikes/mock-retention-initialization.test.mjs 실제 red exit1(/tmp/ap-revocation-package-path-red.log) 후 새 설정/기존 상대 경로·package cwd·원장 유실 재생성 금지, pnpm lint. DB/API/schema/UI 변화 없음.

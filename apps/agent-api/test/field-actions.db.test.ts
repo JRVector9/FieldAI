@@ -5,6 +5,7 @@ import { after, test } from 'node:test';
 import { fromNodeHeaders } from 'better-auth/node';
 import { Pool } from 'pg';
 import sharp from 'sharp';
+import { agentRevocationJournalFromEnvironment } from '../src/revocation-journal.js';
 import { createAgentApp } from '../src/app.js';
 import { processFieldEventInboxOnce } from '../src/field-event-inbox.js';
 
@@ -132,7 +133,7 @@ test('AP customer approves current Field terms once and reconciles an unknown de
     }
     throw new Error(`Unexpected Field request ${url.pathname}`);
   };
-  const runtime = { pool, resolveUserId: async (headers: import('node:http').IncomingHttpHeaders) =>
+  const runtime = { pool, revocationJournal: agentRevocationJournalFromEnvironment(), resolveUserId: async (headers: import('node:http').IncomingHttpHeaders) =>
     (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
   fieldConnector: { issuer, clientId: 'synthetic-field-client', clientSecret: 'synthetic-secret',
     tokenKey, redirectUri: `${base}/v1/connections/field/callback`,
@@ -626,8 +627,7 @@ test('AP customer approves current Field terms once and reconciles an unknown de
     } finally {
       await raceDb.query('rollback');
       raceDb.release();
-      await pool.query(`update ap.field_connections set status = 'review_required' where id = $1`,
-        [connectionId]);
+      // A committed revocation is permanent; the signed retry below uses the same revoked connection.
     }
     assert.equal(racedStatus, 401, 'revoke must win before an in-flight event is accepted');
     const revocationId = randomUUID();

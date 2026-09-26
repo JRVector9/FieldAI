@@ -8,6 +8,37 @@
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 - **사용자 요청:** `CODEX_HANDOFF.md`에 위 시안 경로를 계속 남긴다. 이 섹션은 인계파일 상단에 유지하고, 화면 구현을 재개할 때 `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`을 직접 연 뒤 해당 화면·기능·동선을 비교한다.
 
+## 현재 인수인계 — AP native 회수·격리 복원 (2026-09-26, 단계 구현 완료)
+
+- **목표/상태:** 전체 v3.0/C03 기능을 독립 AP/Field 로컬 서비스로 완성한다. 직전 HEAD a5aee2b 이후 이번 native 회수/복원 단계는 implemented/부분 verified다. **전체/C03/A08는 in_progress**이고 출시 승인/전체 인수가 아니다. 단계 commit은 `git log -1 --oneline`으로 확인한다. 시안 경로는 상단에 유지한다.
+- **파일/요구:** AP PRD2.5/2.9·연동4.11·보안5.5·QA47/129~133/150~153/157/160의 로컬 부분. AP migration67/68, 새 revocation-journal/restore/restore-cli/checkpoint-cli·native DB 검사, business/server·field-connector·field-connection-revoke·integrator-routes·API package. 기존 native DB fixture 3개, tools/run-db-suite·setup-mock-env·run-independence·independence-flow·초기 설정/환경 검사, gitignore·진행/계획/TASKS/coverage/runbook/이 인계. 공개 DTO/scope 변경/Field 내부 import·DB 접근 없음.
+- **설계:** 대상 lock·owner 권한 또는 검증 HMAC 뒤 최소 metadata intent를 AP 전용 HMAC/fsync 원장에 쓰고 DB commit한다. 원장/불변 ID/hash receipt 대조 실패503/rollback, fsync 후 DB 실패 의도는 같은 outgoing UUID로 채택한다. access/refresh ciphertext 즉시 null·연결/selection/token 재활성화 금지. 새 migration68은 provider revoked 쓰기를 parent lock에서 제외하고 active UPDATE는 NOWAIT55P03, INSERT는 selection share lock으로 발급/회수를 직렬화한다. UUID ref는 검증 후 indexed cast한다. 기존 적용 migration을 덮어쓰지 않았다.
+- **복원:** 원장 밖 최신 protected checkpoint의 전체 ID/hash/signature·DB receipt·AP-only namespace·모든 org/selection/target binding을 검사한 뒤 단일 TX로 회수한다. 수신 ID 복원·미확인 outgoing은 blocked/reconciliation_required, 새 ACK/네트워크 발송 없음. 고객 문의/확인키·기존 Field 예약/양제품 구독을 유지한다. local mock 전용 CLI는 활성 DB localhost/URL alias·Field port·원장 안 출력 거절. --quiesced/--offline-restored는 실제 writer 중단을 대신하지 않는다.
+- **성능 결정:** OS watcher는 same-size 변조 즉시200 red로 폐기했다. 현재 매 요청 전체 파일 inode/size/mtime/ctime을64개 병렬 대조하고 변경 파일만 HMAC/hash 재검사한다. DB receipt/intent index는 동일 validated snapshot/DB에서 재사용, checkpoint/restore는 항상 전체 검증. 합성500entry/10warm read는361.09ms→18.744ms(/tmp/ap-revocation-read-metadata.log)이며 전체 HTTP latency/운영 성능 인증이 아니다. metadata 대조는 O(N)이다.
+- **실제 검사:** Node24.18.0·local mock PG17·a5aee2b 이후 작업트리. AP `pnpm test:db:agent` **74855 exit0,29/29 fail0/skip0** /tmp/ap-revocation-metadata-cache-db.log. Field shared runner 변경 검수 **52785 exit0,30/30** /tmp/ap-revocation-runner-field.log. 전체 typecheck/lint **57153 exit0**, 최신 MJS lint **37774 exit0** /tmp/ap-revocation-package-path-lint.log. 실제 PG17 dump/별도 restore·bearer200→401·원본/확인키 유지·repeat0·원장 missing/tamper/추가/namespace/binding rollback·CLI 부정 대상·late mint 경합·orphan intent dedup·즉시 동일크기 변조 첫/두 요청503/파일 복구200을 확인했다. 자기 UUID DB/fixture만 정리했다.
+- **실제 독립 실행:** own 설정 allowlist 누락은 unit red→2/2. runtime92152 정상 종료130·Field API/web/DB/Valkey 실제 stop33427 뒤 `pnpm test:independence:agent` **53496 exit0**, /tmp/ap-revocation-independent-standalone.log. 반대 제품 컨테이너/포트 부재를 시작/종료에 확인하고 자체 가입/승인/문의/답변/export·외부 widget/handoff/이어가기·owner selection revoke/token200→401·owner/guest browser1/1을 확인했다. 모든 AP 기능/실 공급사 완료를 주장하지 않는다. import 경계12312 exit0·연결 화면 HTML smoke1/1은 실제 클릭 검사와 구분한다.
+- **리뷰:** ak 지정 gpt-5.6/high는 이전 실제 계정 미지원400 때문에 현재 gpt-6-sol/high 사용. 첫93162 exit0/P2 3건(40P01·UUID index·전 원장 재읽기), 재리뷰88411 exit0/P2 1건(독립 env 누락), 세 번째62519 exit0/P2 1건(package cwd 상대 원장 경로)을 수정했다. 마지막 경로 보완은 신규/기존 env를 같은 절대 경로로 정규화하며 key/기록 유지·유실 keyed 폴더 재생성 금지. 실제 설정 red→**2/2 exit0** /tmp/ap-revocation-package-path-green.log, /var와/private/var canonical fixture 보완. 수정 독립 검토 **87113 exit0**, /tmp/ap-revocation-path-repair-review.log: **No remaining P1/P2 finding for the repair**. 해당 read-only 리뷰의 node test는 EPERM/mkdtemp로 미실행이고 root에서 실제 실행한2/2만 pass다. raw confidence는 미출력.
+- **실패/복구:** fixture /v1/business/draft404→실제 /v1/knowledge/draft, cipher null61905·journal장애200/89997·restore/CLI부재64375/22677 red를 보완했다. 영구회수15184 fixture는 재활성화를 삭제하고 동일 revoked 연결의 서명 retry 유지. token parent/child40P01와provider revoke57014 red81459→새68. watcher/cache orphan4≠3·ES toSorted type 오류·signature 두번째200/98265·즉시첫200/99027은 실제 실패로 기록하고 watcher 제거. 후속 lint 성공으로 이전 type 실패를 pass 처리하지 않았다. 회수 rollback으로 권한/비밀값을 되살리지 않는다. 운영 자료 삭제/실 메시지/청구/배포 없음.
+- **현재 환경:** managed mock **36780**, /tmp/ap-revocation-standalone-restored-runtime.log. 양 API/웹 build/migrate/ready·독립 retention worker ready, 이번 기록 때 AP4311/Field4321 health/ready 모두 실제 ready. AP http://localhost:3001/workspace, Field http://localhost:3002/workspace. Field 컨테이너는 mock 재기동으로 복구됐다. 이전92152/46139/62510/68922와 독립 gate 서버는 종료 상태다. AP mock에67/68 적용됨, 다음 migration69. 최신 ignored AP env 경로를 정규화했으며 서버가 가리키는 실제 폴더/키는 동일하다. Field 제작 LLM model 미설정 blocked_integration.
+- **미검수/남음:** 이 backend 단계에서 새 시안 비교/전체 UI QA를 수행하지 않았다. 일반 OAuth provider의 개별 access 삭제/refresh family lifecycle 복원·양제품 legacy baseline·Field route key 종료/미확인 대조, native widget 종료/새 상담/이전 receipt, 전체 문서 기능 누락·구독 유료 상태/발송 공급사 adapter·정식 QA/G·운영 proof/DB 동시 과거 교체/RPO/RTO·실 인증/MFA/외부 공급사·사용자 최종 화면 인수가 남는다. **사용자 “개발 종료까지 얼마나?” 후 다음은 전체 기능 대조로 실제 남은 목록을 확정하는 작업이다. 작은 보안 단계만 무한 반복하지 않는다.** 세 작업군을 작은 Task3개/시간 추정으로 해석하지 않는다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -1 --oneline
+cat docs/01_AGENT_PLATFORM_PRD.md
+cat docs/02_FIELD_PRD.md
+cat apps/agent-api/src/subscription.ts
+cat apps/field-api/src/subscription.ts
+rg --files apps/agent-api/src apps/field-api/src apps/agent-web/src apps/field-web/src
+rg -n 'blocked_integration|paid_checkout_not_configured|delivery_state' apps/agent-api/src apps/field-api/src
+sed -n '277,475p' apps/agent-api/src/deployments.ts
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+36780을 생존 확인해 유지한다. UI 작업은 상단 reference HTML을 직접 열고 비교한다. native 위젯 renderer는 deployments.ts이며 embed.ts는 spike fixture다. 최신 코드 반영이 필요할 때만 확인된 managed process를 정상 종료 후 pnpm mock:run한다. 단순 timeout으로 중복 실행하지 않는다.
+
 ## 현재 인수인계 — AP 실제 정리·양제품 원장 연속성 단계 (2026-09-26)
 
 - **현재 목표/상태:** C03 전체 기능을 독립 AP/Field 로컬 서비스로 끝까지 연결한다. 이번 보존 실행/복원·소비자 오류 상태는 구현과 부분 검수를 마친 단계이며 전체/C03/A08/F09는 `in_progress`다. 출시/사용자 최종 인수 완료를 주장하지 않는다. 직전 HEAD `e89bf2a`, 단계 커밋은 `git log -1 --oneline`으로 확인한다. 시안 경로는 상단에 유지한다.

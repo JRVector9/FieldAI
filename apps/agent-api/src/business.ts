@@ -5,10 +5,12 @@ import type { Pool } from 'pg';
 import type { AgentModelProvider } from './openai.js';
 import type { AgentInquiryMediaStore } from './inquiry-media.js';
 import type { FieldConnectorConfig } from './field-connector.js';
+import type { AgentRevocationJournal } from './revocation-journal.js';
 import { rejectExpiredTrial } from './trial-access.js';
 
 export type BusinessRuntime = {
   pool: Pool;
+  revocationJournal?: Pick<AgentRevocationJournal, 'read' | 'append'>;
   resolveUserId: (headers: IncomingHttpHeaders) => Promise<string | null>;
   resolveSession?: (headers: IncomingHttpHeaders) => Promise<{ id: string; userId: string } | null>;
   modelProvider?: AgentModelProvider;
