@@ -14,7 +14,8 @@
     "checkpoint:revocations": "node dist/revocation-checkpoint-cli.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test:unit": "tsx --test test/health.test.ts test/billing-period.test.ts test/toss-billing.adapter.test.ts"
+    "test:unit": "tsx --test test/health.test.ts test/billing-period.test.ts test/toss-billing.adapter.test.ts",
+    "start:billing-authorization": "node dist/billing-authorization-worker.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1139.0",

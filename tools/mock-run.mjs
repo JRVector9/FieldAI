@@ -181,6 +181,11 @@ async function main() {
         { APP_PROFILE: 'mock' }, managed, error => { void shutdown(error); },
         resolve(root, `apps/${product}-web`));
       await ready(`http://127.0.0.1:${webPort}/`, product, managed);
+      start(`${prefix} billing authorization worker`, process.execPath,
+        [`--env-file=infra/${product}/.env`, `apps/${product}-api/dist/billing-authorization-worker.js`],
+        environment, managed, error => {
+          process.stderr.write(`${error.message}; ${prefix} core remains ready, billing authorization is unavailable\n`);
+        }, root, false);
       if (isAgent) {
         start('AP retention worker', process.execPath,
           ['--env-file=infra/agent/.env', 'apps/agent-api/dist/retention-purge-worker.js'],

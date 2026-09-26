@@ -1,6 +1,6 @@
 # 제품별 구독 PG 설정 — 구현 중
 
-현재 구현 범위는 승인 가격의 명시 동의·SDK 카드 인증 준비·콜백의 암호화 대기 저장과 Toss HTTP port다. 인증 발급/실제 청구 worker·갱신/환불·제공량·콜백 페이지/결제 UI는 아직 구현 중이다. 아래 설정만으로 전체 유료 구독이 완료되지 않는다. 외부 설정은 사용자의 후속 기능 테스트 때 연결한다.
+현재 구현 범위는 승인 가격의 명시 동의·SDK 카드 인증 준비·콜백의 암호화 대기 저장, Toss HTTP port와 제품별 인증 발급 worker다. 실제 청구 worker·갱신/환불·제공량·콜백 페이지/결제 UI는 아직 구현 중이다. 아래 설정만으로 전체 유료 구독이 완료되지 않는다. 외부 설정은 사용자의 후속 기능 테스트 때 연결한다.
 
 ## 각 제품의 자체 환경변수
 
@@ -25,10 +25,20 @@ Toss4항목이 모두 없으면 native API는 정상 부팅하고 checkout503/bl
 - GET `/v1/subscription/authorizations/:id`: 자체 조직 owner에게 비밀값 없는 상태를 반환한다.
 - POST `/v1/subscription/authorizations/:id/cancel`: 아직 발급을 시작하지 않은 인증을 중지하고 callback/auth ciphertext를 폐기하며 동의/감사 metadata를 보존한다. 이미 processing/unknown/completed인 인증은 이 경로에서 삭제하지 않는다. 전체 유료 해지는 다음 worker/구독 단계에서 별도 연결한다.
 
-신규 인증/청구 worker는 저장된 같은 request_key/order만 사용해야 한다. 미상 상태에 새 주문을 만들지 않고 같은 원격 주문을 조회한다. 현재 port의 공급사 오류는 보수적으로 unknown으로 분류하며 확정 거절/유예 처리와 환불 API는 다음 실제 worker 단계의 미완료다. HTTP port의 fixture fetcher는 테스트 주입이며 runtime fallback이 아니다.
+인증 worker는 조직→구독/인증 순서로 잠그고 공급사 호출 전에 원래 request_key·첫 시작 시각·120초 lease/claim token을 저장한다. 응답 유실/만료 lease는 unknown으로 복구하고 같은 request_key·authKey·customerKey로만 발급을 재요청한다. 원래 첫 시작 시각은 변경할 수 없으며 15일 멱등창 종료 1분 전부터 자동 발급을 중단하고 reconciliation_required로 보존한다. settings/MID/암호화 key가 없거나 달라졌을 때 미시작만 blocked_integration이고 시작한 요청은 unknown이다. 늦게 돌아온 이전 claim의 결과는 폐기한다. 성공 시 billingKey는 제품/구독 purpose로 암호화해 저장하고 authKey/callback ciphertext를 폐기한다. authorization completed는 구독 active/paid나 실제 청구 성공이 아니다.
+
+managed mock은 양제품 인증 worker도 시작한다. 별도 실행은 저장소 root에서 해당 제품 DB/자체 환경만 사용한다.
+
+```bash
+node --env-file=infra/agent/.env apps/agent-api/dist/billing-authorization-worker.js
+node --env-file=infra/field/.env apps/field-api/dist/billing-authorization-worker.js
+# 위 명령에 --once를 추가하면 한 번 처리한 뒤 종료한다.
+```
+
+청구 worker는 저장된 같은 order만 조회하도록 후속 구현한다. 현재 port의 공급사 오류는 보수적으로 unknown이며 확정 거절/유예 처리와 환불 API는 미완료다. HTTP fixture/provider는 테스트 주입이며 runtime fallback이 아니다.
 
 ## 공식 API 근거 / 미검수
 
-[Toss 빌링 SDK 연동](https://docs.tosspayments.com/guides/v2/billing/integration), [코어 API](https://docs.tosspayments.com/reference), [인증·멱등 header](https://docs.tosspayments.com/reference/using-api/authorization)를 2026-09-26 직접 확인했다. authKey/customerKey 발급·기존 billingKey 청구·같은 orderId 조회를 각 제품 HTTP port가 사용한다. 청구 timeout은65초로 설정했다. 공급사 멱등키의15일 유효기간은 worker의 복구 기한으로 반영할 후속 범위다.
+[Toss 빌링 SDK 연동](https://docs.tosspayments.com/guides/v2/billing/integration), [코어 API](https://docs.tosspayments.com/reference), [인증·멱등 header](https://docs.tosspayments.com/reference/using-api/authorization)를 직접 확인했고 [공식 quick reference](https://docs.tosspayments.com/guides/v2/get-started/llms-quick-reference)의15일 멱등창을 인증 worker에 반영했다(2026-09-27). authKey/customerKey 발급·기존 billingKey 청구·같은 orderId 조회를 각 제품 HTTP port가 사용한다. 청구 timeout은65초다.
 
 검수는 own UUID PG17 native app과 synthetic HTTP 응답이다. 실제 PG 호출/카드 청구·native callback 웹 페이지·Toss 결제창/실 브라우저 흐름·운영 세금/법무·출시 gate는 미실행이다. 로컬 서버 주소/적용 migration의 최신 사실은 CODEX_HANDOFF.md 상단을 따른다.

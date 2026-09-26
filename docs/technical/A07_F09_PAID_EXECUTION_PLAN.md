@@ -55,6 +55,16 @@ assert.equal(response.statusCode, 201, response.body);
 
 ## 2. 실제 provider port/거래 실행·미상 복구·갱신/해지
 
+### 현재 선택 — A07.F09.AUTH-ISSUE (2026-09-26)
+
+- 착수 근거: HEAD ed196d2, 작업트리 clean, TASKS 34개[x]/7개[ ]. CONSENT-BACKEND(1a04815)는 완료로 유지한다. 이번은 queued authKey를 실제 공급사 billingKey로 발급하는 제품별 worker와 재시작 복구다.
+- 범위: 각 새 src/billing-authorization-execution.ts·billing-authorization-worker.ts·test/billing-authorization.db.test.ts, 새 AP71/Field65 migration, 각 package start 명령, managed runner, 환경 설명/완료 원장/인계. 기존 적용 migration은 변경하지 않는다. provider port/동의 API는 재구현하지 않는다.
+- 요구/QA: AP PRD2.8·Field3.8·보안5.4/5.5·QA43~46/113/126/146 중 인증 실행/미상 복구. org→subscription/authorization 잠금, 공급사 호출 전 lease/동일 request key 저장, timeout/프로세스 중단은 unknown, 같은 키로만 재시도, 15일 멱등 유효창 이후 자동 재발급 금지. 설정 부재/다른 MID에서는 미시작만 blocked_integration이며 시작한 요청은 unknown을 유지한다.
+- 성공은 암호화 credential 저장 및 authorization completed까지다. 구독 active/paid·거래/기간/첫 청구·갱신/환불/제공량/UI/실 PG는 이번 완료에 포함하지 않는다. 어떤 카드 청구도 이 worker에 연결하지 않는다.
+- 검수: 각 own UUID PG17에서 새 native 파일의 성공/암호화·동시 worker·lease 만료·응답 유실 동일키·MID/키 부재·원래 TTL/취소·재시도창 초과를 먼저 red로 재현한다. 직접 영향을 받는 consent native 검사만 추가 실행하고 변경 API type/lint/build·read-only 독립 CLI 리뷰를 수행한다. live 호출과 전체 QA/시안 인수는 미실행으로 남긴다.
+
+- [ ] 제품별 인증 발급 worker와 동일키 unknown 복구를 구현·검수하고 세부 완료 원장에 체크한다.
+
 ### 현재 선택한 미완료 범위 — A07.F09.CONSENT-AUTH (2026-09-26)
 
 - HEAD9734843/status clean·TASKS33[x]/7[ ]를 확인했다. 직전 turn은 PLAN-BASIS 구현/검수/commit·최신 managed53591 반영의 progress다. 이미 체크한 저장 기반/월말/trial/usage/위젯/보존/회수를 재구현하지 않는다.
