@@ -5,6 +5,7 @@ import { Brand } from "@fieldai/ui";
 import { requestJson } from "./field-api";
 import { FieldSourceRefresh } from "./field-source-refresh";
 import { FieldApPublicInstallation } from "./field-ap-public-installation";
+import { FieldRouteKey } from "./field-route-key";
 
 type Connection = { id: string; organizationId: string; apOrganizationId: string;
   apGrantId: string; apAgentId: string; apAgentName: string; scopes: string[];
@@ -214,6 +215,7 @@ export function FieldApConnections() {
                 AP에서 Field 정보 제공 동의 계속하기</a></p>}{connectionState === "ready" && item.status === "review_required" && <button type="button" onClick={() => setConnectionId(item.id)} aria-pressed={connectionId === item.id}>이 연결로 설치</button>}
               {connectionState === "ready" && item.status === "review_required" && <FieldSourceRefresh connectionId={item.id} scopes={item.scopes} />}
               {connectionState === "ready" && item.status !== "revoked" && <div><label><input type="checkbox" checked={revokeCheckedId === item.id} onChange={event => setRevokeCheckedId(event.target.checked ? item.id : "")} /> 기존 예약과 고객 확인키는 남기고 이 연결을 해제합니다.</label><button type="button" disabled={busy || revokeCheckedId !== item.id} onClick={() => void revoke(item.id)}>이 연결 해제</button></div>}
+              {connectionState === "ready" && organizationId === item.organizationId && <FieldRouteKey organizationId={item.organizationId} connectionId={item.id} connectionStatus={item.status} />}
             </li>)}</ul>}
           <p>Field의 사이트 제작, 직접 문의와 예약은 AP 연결 없이 사용할 수 있습니다.</p></aside></div>
       <section className="special-panel field-ap-installation"><h2>Field 사이트에 AP 상담 설치</h2>

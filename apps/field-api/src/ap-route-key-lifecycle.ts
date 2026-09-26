@@ -6,6 +6,13 @@ import { fingerprint, lifecycleJournalFromEnvironment, recordLifecycle, type Lif
 import { applyLifecycleEntry } from './oauth-lifecycle-restore.js';
 
 const uuid=/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
+async function uiSessionMatches(runtime:FieldBusinessRuntime,headers:import('node:http').IncomingHttpHeaders,actor:string) {
+  const expectedActor=headers['x-field-route-key-actor-id'],expectedSession=headers['x-field-route-key-session-id'];
+  if(expectedActor===undefined&&expectedSession===undefined)return true;
+  if(typeof expectedActor!=='string'||typeof expectedSession!=='string'||expectedActor!==actor||!runtime.resolveSession)return false;
+  const session=await runtime.resolveSession(headers);
+  return !!session&&session.userId===actor&&session.id===expectedSession;
+}
 type Close={id:string;connection_id:string;organization_id:string;actor_user_id:string;key_id:string;state:string;last_reason:string};
 export async function finalizeApRouteKeyRequest(pool:Pool,journal:LifecycleJournal|undefined,id:string) {
   const db=await pool.connect();try{
@@ -45,16 +52,18 @@ export function registerApRouteKeyLifecycleRoutes(app:FastifyInstance,runtime:Fi
   const path='/v1/connections/ap/:id/route-key';
   app.get<{Params:{id:string}}>(path,async(request,reply)=>{
     const actor=await runtime.resolveUserId(request.headers);if(!actor)return reply.code(401).send({error:'authentication_required'});
+    if(!await uiSessionMatches(runtime,request.headers,actor))return reply.code(409).send({error:'route_key_session_changed'});
     if(!uuid.test(request.params.id))return reply.code(404).send({error:'connection_not_found'});
-    const source=(await runtime.pool.query(`select c.route_key_closed_at,c.event_secret_cipher is not null as retained,r.id as close_id,r.state,r.last_reason
+    const source=(await runtime.pool.query(`select c.route_key_closed_at,c.event_secret_cipher is not null as retained,r.id as close_id,r.state,r.last_reason,r.actor_user_id=$2 as requested_by_current_actor
       from field.ap_connections c join field.memberships m on m.organization_id=c.organization_id and m.user_id=$2 and m.role='owner'
       left join lateral(select * from field.ap_route_key_close_requests where connection_id=c.id order by requested_at desc limit 1)r on true
       where c.id=$1`,[request.params.id,actor])).rows[0];
     if(!source)return reply.code(404).send({error:'connection_not_found'});
-    return reply.header('Cache-Control','private, no-store').send({closeId:source.close_id??null,state:source.route_key_closed_at?'closed':source.state??'retained',reason:source.last_reason??'not_requested',keyRetained:source.retained});
+    return reply.header('Cache-Control','private, no-store').send({closeId:source.close_id??null,state:source.route_key_closed_at?'closed':source.state??'retained',reason:source.last_reason??'not_requested',keyRetained:source.retained,requestedByCurrentActor:source.requested_by_current_actor===true});
   });
   app.post<{Params:{id:string}}>(`${path}/close`,async(request,reply)=>{
     const actor=await runtime.resolveUserId(request.headers);if(!actor)return reply.code(401).send({error:'authentication_required'});
+    if(!await uiSessionMatches(runtime,request.headers,actor))return reply.code(409).send({error:'route_key_session_changed'});
     const origin=runtime.apConnector?.webOrigin??process.env.FIELD_PUBLIC_WEB_ORIGIN;
     if(!origin||request.headers.origin!==origin)return reply.code(403).send({error:'origin_not_allowed'});
     const value=request.body as Record<string,unknown>|undefined;

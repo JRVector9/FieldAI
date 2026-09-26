@@ -1,6 +1,6 @@
 # 계약 예제 사용 안내
 
-이 디렉터리는 연동 명세의 **JSON Schema·합성 예제**와 구현 중인 AP/Field 공개 API의 `agent-integrator-v1.openapi.json`·`field-integrator-v1.openapi.json` 미리보기를 제공합니다. Field 미리보기 preview.8에는 현재 동작하는 bearer 읽기, 승인된 FAQ와 명시 binding 경로가, AP 미리보기 preview.9에는 명시 scope를 가진 설치 전용 connection·owned_embed 공개 생성/관리와 연결별 source 버전·갱신 요청/상태, Field 서명 `facts.changed` 수신, 연결 해제 후 서명된 사건 상태 복구 조회와 예약별 세대 1 종료 영수증이 포함됩니다. 정보 동기화·설치·업무 요청을 포함한 완성 OpenAPI 또는 SDK가 아니며 실제 서명 검증은 각 제품 서버 구현에서 수행합니다.
+이 디렉터리는 연동 명세의 **JSON Schema·합성 예제**와 구현 중인 AP/Field 공개 API의 `agent-integrator-v1.openapi.json`·`field-integrator-v1.openapi.json` 미리보기를 제공합니다. Field 미리보기 preview.8에는 현재 동작하는 bearer 읽기, 승인된 FAQ와 명시 binding 경로가, AP 미리보기 preview.10에는 명시 scope를 가진 설치 전용 connection·owned_embed 공개 생성/관리와 연결별 source 버전·갱신 요청/상태, Field 서명 `facts.changed` 수신, 연결 해제 후 서명된 사건 상태 복구 조회와 예약별 세대 1 종료 영수증이 포함됩니다. 정보 동기화·설치·업무 요청을 포함한 완성 OpenAPI 또는 SDK가 아니며 실제 서명 검증은 각 제품 서버 구현에서 수행합니다.
 
 - event_envelope: 웹훅 최소 메타데이터 계약. 서명/인가/원본 조회는 서버 별도 검증입니다.
 - action_request: 고객 확인 후 외부 문의/예약 요청. 예약 확정 권한이 아닙니다.
@@ -21,3 +21,9 @@ Schema/example 검사는 문서 패키지 품질 검사이며 서비스 인수 �
 - 생성으로 기존 대화 읽기 배포 선택을 확장하지 않는다. 새 배포 상담 원문은 owner가 별도 선택/동의한다. 기존 selection 회수는 그 grant의 public 설치만 paused로 전환하고 다른 native 배포·예약·구독·원본을 보존한다.
 - Field의 `ap-public-write-client.ts`는 preview.9 HTTP만 소비한다. 일반 외부 client와 동일 API/권한이며 AP domain/DB를 import하지 않는다. 저장 뒤 미상/응답 형상 오류는 같은 UUID로 복구하며 새 UUID/자동 retry를 만들지 않는다. caller가 원래 UUID를 지속 저장해야 한다.
 - 내부 계약/native HTTP/PG17/합성 DNS port 검수와 실 외부 DNS·Field 사업자 새 UI/BFF·공급사/출시 QA는 분리한다. public API와 consumer 모듈 구현은 최종 운영 인수 완료가 아니다.
+
+## AP preview.10 출처 수신 상태 읽기
+
+- source GET의 `syncedAt`는 현재 `source_id`/`source_revision`에 맞는 AP source snapshot의 실제 `fetched_at`만 읽는 nullable RFC3339 metadata다. 같은revision heartbeat·owner 승인·AP 지식/AI 공개시각을 뜻하지 않는다. source나맞는snapshot이없으면null이며now/updated_at/source.fetched_at/원격publishedAt로채우지않는다.
+- Field BFF의 신규consumer는 preview.9의missing syncedAt을legacy null로호환하지만 present malformedtimestamp는502로거부한다. 상태와시각은readonly이며자동승인이나고객AI반영을의미하지않는다.
+- preview.9의publicwrite endpoint subset/UUID/If-Match/scope/origin 계약은변경없다. 설치용 `ap-public-write-client.ts`는그고정subset을계속소비하며source GET을사용하지않으므로version/client변경없음. 이미리보기는전체SDK/실외부/버전호환출시승인을뜻하지않는다.

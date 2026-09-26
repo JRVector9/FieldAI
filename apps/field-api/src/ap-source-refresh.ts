@@ -10,6 +10,16 @@ const jobStates = new Set(['pending', 'retry', 'completed', 'blocked']);
 const object = (value: unknown): Record<string, unknown> | null => value !== null
   && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
+function receiptTimestamp(value:unknown):value is string {
+  if(typeof value!=='string'||value.length>64)return false;
+  const match=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
+  if(!match||!Number.isFinite(Date.parse(value)))return false;
+  const [year,month,day,hour,minute,second]=match.slice(1,7).map(Number);
+  const calendar=new Date(0);calendar.setUTCFullYear(year!,month!-1,day!);
+  return calendar.getUTCFullYear()===year&&calendar.getUTCMonth()===month!-1&&calendar.getUTCDate()===day
+    && hour!<24&&minute!<60&&second!<60&&(!match[7]||(Number(match[8])<24&&Number(match[9])<60));
+}
+
 async function sourceAccess(runtime: FieldBusinessRuntime, request: FastifyRequest, id: string) {
   const userId = await runtime.resolveUserId(request.headers);
   if (!userId) return { error: 'authentication_required', status: 401 } as const;
@@ -56,11 +66,13 @@ export function registerApSourceRefreshRoutes(app: FastifyInstance, runtime: Fie
         || (source.approvedSourceRevision !== null
           && (typeof source.approvedSourceRevision !== 'number'
             || !Number.isSafeInteger(source.approvedSourceRevision)
-            || source.approvedSourceRevision < 1)))
+            || source.approvedSourceRevision < 1))
+        || (source.syncedAt !== undefined && source.syncedAt !== null && !receiptTimestamp(source.syncedAt)))
         return reply.code(502).send({ error: 'invalid_ap_source_response' });
       return reply.header('Cache-Control', 'private, no-store').send({
         connectionId: request.params.id, sourceRevision: source.sourceRevision,
-        approvedSourceRevision: source.approvedSourceRevision, state: source.state });
+        approvedSourceRevision: source.approvedSourceRevision, state: source.state,
+        syncedAt: source.syncedAt ?? null });
     } catch { return reply.code(503).send({ error: 'ap_source_unavailable' }); }
   });
 

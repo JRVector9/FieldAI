@@ -121,3 +121,17 @@ test('AP public integrator preview contract has resolvable schemas and explicit 
   const exposed = JSON.stringify(paths);
   assert.doesNotMatch(exposed, /customerPhone|receiptKey|visitorKey|internalNote/);
 });
+
+
+test('preview.10 pins nullable current snapshot receipt metadata without changing the preview.9 write subset',()=>{
+  assert.equal(document.info.version,'1.0.0-preview.10');
+  const source=document.components.schemas.SourceRevision;
+  assert.ok(source.required.includes('syncedAt'));
+  assert.deepEqual(source.properties.syncedAt.type,['string','null']);
+  assert.equal(source.properties.syncedAt.format,'date-time');
+  assert.equal(source.properties.syncedAt.readOnly,true);
+  assert.equal(source.additionalProperties,false);
+  assert.match(source.properties.syncedAt.description,/matching the current source revision/);
+  assert.equal(document.paths['/integrations/v1/connections'].post.parameters.find(p=>p.name==='Idempotency-Key').schema.format,'uuid');
+  assert.equal(document.components.schemas.PublicInstallationConnection.properties.state.const,'installation_only');
+});

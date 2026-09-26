@@ -88,7 +88,7 @@ export function preserveSitePhotos(proposal: SiteContent, draft: SiteContent): S
       }
     }
   }
-  return parseContent({ ...proposal, pages });
+  return parseContent({ ...proposal, pages, font: draft.font });
 }
 
 export function registerSiteGenerationRoutes(app: FastifyInstance, runtime: FieldBusinessRuntime) {
@@ -207,8 +207,8 @@ export function registerSiteGenerationRoutes(app: FastifyInstance, runtime: Fiel
       const job = result.rows[0];
       if (!job) { await client.query('rollback'); return reply.code(404).send({ error: 'job_not_found' }); }
       if (job.status !== 'proposed' || !job.proposal) { await client.query('rollback'); return reply.code(409).send({ error: 'job_not_proposed' }); }
-      const draft = await client.query<{ revision: number }>(
-        'select revision from field.site_drafts where site_id = $1 for update', [site.id]);
+      const draft = await client.query<{ revision: number; content: SiteContent }>(
+        'select revision, content from field.site_drafts where site_id = $1 for update', [site.id]);
       const catalog = await client.query<{ revision: number }>(
         'select revision from field.catalog_releases where organization_id = $1 order by revision desc limit 1', [organization.organization_id]);
       if (draft.rows[0]?.revision !== job.base_revision || catalog.rows[0]?.revision !== job.catalog_revision) {
@@ -216,7 +216,8 @@ export function registerSiteGenerationRoutes(app: FastifyInstance, runtime: Fiel
         await client.query('commit');
         return reply.code(409).send({ error: 'generation_stale' });
       }
-      const proposal = parseContent(job.proposal);
+      const parsed = parseContent(job.proposal);
+      const proposal = parsed && parseContent({ ...parsed, font: draft.rows[0]!.content.font });
       if (!proposal) { await client.query('rollback'); return reply.code(422).send({ error: 'invalid_proposal' }); }
       const updated = await client.query<{ revision: number }>(
         'update field.site_drafts set revision = revision + 1, content = $2::jsonb, updated_by = $3, updated_at = now() where site_id = $1 returning revision',

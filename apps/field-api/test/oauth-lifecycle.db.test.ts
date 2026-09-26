@@ -121,6 +121,10 @@ test('Field keeps a route key while revoke/old work are unresolved and accepts a
   try{
     const close=await app.inject({method:'POST',url:`/v1/connections/ap/${connection}/route-key/close`,headers:{origin:process.env.FIELD_PUBLIC_WEB_ORIGIN!},payload:{closeId:randomUUID(),confirm:true}});
     assert.equal(close.statusCode,202,close.body);assert.equal(close.json().reason,'remote_revoke_unacknowledged');
+    const metadata=await app.inject({url:`/v1/connections/ap/${connection}/route-key`});
+    assert.equal(metadata.statusCode,200,metadata.body);
+    assert.equal(metadata.json().closeId,close.json().closeId);assert.equal(metadata.json().requestedByCurrentActor,true);
+    assert.equal(metadata.json().keyRetained,true);assert.equal(metadata.json().eventSecret,undefined);
     assert.ok((await pool.query('select event_secret_cipher from field.ap_connections where id=$1',[connection])).rows[0].event_secret_cipher);
     const closeId=close.json().closeId as string,reservation=randomUUID(),service=randomUUID(),receipt=randomBytes(32).toString('base64url'),event=randomUUID();
     const {finalizeApRouteKeyRequest}=await import('../src/ap-route-key-lifecycle.js');

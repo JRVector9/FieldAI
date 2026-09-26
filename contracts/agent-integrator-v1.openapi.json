@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Agent Platform delegated integrator API",
-    "version": "1.0.0-preview.9",
+    "version": "1.0.0-preview.10",
     "description": "AP bearer reads, selected deployment discovery, delegated conversation replies and source refresh requests, action-bound authorized attachment bytes, signed Field reservation/facts event inbox, signed connection revoke, post-revoke event status recovery, and durable reservation notification route closure. Adds consent-bound installation-only public connections and origin-verified owned_embed preparation and management; native Field bidirectional bindings and selected conversation resources remain unchanged."
   },
   "servers": [{ "url": "/" }],
@@ -401,11 +401,12 @@
       },
       "SourceRevision": {
         "type": "object",
-        "required": ["connectionId", "sourceRevision", "approvedSourceRevision", "state"],
+        "required": ["connectionId", "sourceRevision", "approvedSourceRevision", "state", "syncedAt"],
         "properties": {
           "connectionId": { "type": "string", "format": "uuid" },
           "sourceRevision": { "type": "integer", "minimum": 0 },
           "approvedSourceRevision": { "type": ["integer", "null"], "minimum": 1 },
+          "syncedAt": { "type": ["string", "null"], "format": "date-time", "readOnly": true, "description": "Actual AP receipt time of the snapshot matching the current source revision. Null when no matching snapshot exists. Not owner approval, AI publication or a repeated same-revision fetch heartbeat." },
           "state": { "type": "string", "enum": ["not_synced", "pending_review", "current", "stale", "unavailable", "integrity_conflict", "revoked"] }
         }, "additionalProperties": false
       },
@@ -1388,7 +1389,7 @@
     "/integrations/v1/connections/{id}/source": {
       "get": {
         "operationId": "getDelegatedSourceRevision",
-        "description": "Returns only the current and approved Field source revisions for the exact connection. No facts or AP native knowledge are exposed.",
+        "description": "Returns safe current/approved source revisions, source state, and the actual receipt timestamp of the matching current source snapshot for the exact connection. Null timestamp is permitted for unsynced or legacy missing snapshots. No facts or AP native knowledge are exposed.",
         "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } }],
         "security": [{ "apOAuth": ["ap.sources.refresh"] }],
         "responses": {

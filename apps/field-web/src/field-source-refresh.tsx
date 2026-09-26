@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { requestJson } from "./field-api";
+import { FieldSourceSyncStatus, parseSourceStatus, type SourceStatus } from "./field-source-sync-status";
 
-type Source = { sourceRevision: number; approvedSourceRevision: number | null; state: string };
+type Source = SourceStatus;
 type Attempt = { expectedSourceRevision: number; key: string; operationId: string | null };
 type Operation = { state: "pending" | "retry" | "completed" | "blocked";
   sourceRevision: number | null; error: string | null };
@@ -42,7 +43,9 @@ export function FieldSourceRefresh({ connectionId, scopes }: { connectionId: str
       setStatus(response.status === 403 ? "AP 정보 갱신 권한이 없습니다. AP에서 새 범위에 동의해 주세요."
         : "AP 출처 상태를 확인하지 못했습니다. 다시 확인해 주세요."); return;
     }
-    setSource(response.data as Source);
+    const parsed=parseSourceStatus(response.data,connectionId);
+    if(!parsed){setSource(null);setStatus("AP 출처 상태 응답을 확인할 수 없습니다.");return;}
+    setSource(parsed);
   }
   useEffect(() => {
     if (!permitted) return;
@@ -99,9 +102,11 @@ export function FieldSourceRefresh({ connectionId, scopes }: { connectionId: str
     finally { setBusy(false); }
   }
 
+  const currentSource=source?.connectionId===connectionId?source:null;
   return <section className="knowledge-source" aria-label="AP 정보 갱신"><h3>AP 정보 갱신</h3>
     {!permitted ? <p>기존 연결에는 정보 갱신 범위가 없습니다. AP 연결을 다시 승인해야 합니다.</p>
-      : <><p>AP 저장 버전: {source ? source.sourceRevision || "없음" : "확인 중"} · AP 승인 버전: {source?.approvedSourceRevision ?? "없음"}</p>
+      : <><p>AP 저장 버전: {currentSource ? currentSource.sourceRevision || "없음" : "확인 중"} · AP 승인 버전: {currentSource?.approvedSourceRevision ?? "없음"}</p>
+        {currentSource && <FieldSourceSyncStatus source={currentSource}/>}
         <p>Field의 최신 승인 사업 정보를 AP 검토 대기로 가져옵니다. AP 고객 AI는 자동 변경되지 않습니다.</p>
         <button type="button" disabled={busy || (!source && !attempt)} onClick={() => void requestRefresh()}>
           {attempt ? "같은 갱신 요청 확인" : "AP 정보 갱신 요청"}</button>

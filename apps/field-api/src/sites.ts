@@ -6,10 +6,11 @@ import { authorizedApDeployments } from './ap-connector.js';
 import { publicInstallationFor } from './ap-public-installation-execution.js';
 import { rejectExpiredTrial } from './trial-access.js';
 import { activeSiteOrigin, primarySiteOrigin, resolvedCustomHost } from './custom-domains.js';
+import { isSiteFont, type SiteFont } from './site-fonts.js';
 
 type Section = { id: string; kind: 'hero' | 'text' | 'service_list' | 'faq'; heading: string; body: string; assetId?: string; alt?: string };
 type Page = { id: string; slug: string; title: string; sections: Section[] };
-export type SiteContent = { template: 'essential' | 'editorial' | 'warm'; palette: string; pages: Page[] };
+export type SiteContent = { template: 'essential' | 'editorial' | 'warm'; palette: string; font?: SiteFont; pages: Page[] };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const siteSlugPattern = /^field-[0-9a-f]{12}$/;
 const proofPattern = /^[A-Za-z0-9_-]{32,64}$/;
@@ -36,6 +37,7 @@ export function parseContent(value: unknown): SiteContent | null {
   const body = object(value);
   if (!body || (body.template !== 'essential' && body.template !== 'editorial' && body.template !== 'warm')
       || typeof body.palette !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(body.palette)
+      || (body.font !== undefined && !isSiteFont(body.font))
       || !Array.isArray(body.pages) || body.pages.length < 1 || body.pages.length > 5) return null;
   const pages: Page[] = [];
   const slugs = new Set<string>();
@@ -72,7 +74,7 @@ export function parseContent(value: unknown): SiteContent | null {
     pages.push({ id, slug, title, sections });
   }
   if (!slugs.has('home')) return null;
-  return { template: body.template, palette: body.palette, pages };
+  return { template: body.template, palette: body.palette, ...(isSiteFont(body.font) ? { font: body.font } : {}), pages };
 }
 function assetIds(content: SiteContent) {
   return [...new Set(content.pages.flatMap(page => page.sections.flatMap(section => section.assetId ? [section.assetId] : [])))];

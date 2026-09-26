@@ -23,9 +23,11 @@ export function registerSourceRefreshRoutes(app: FastifyInstance, runtime: Busin
       if (!grant) return reply;
       if (!uuid.test(request.params.id)) return reply.code(404).send({ error: 'connection_not_found' });
       const found = await runtime.pool.query<{ source_revision: number | null;
-        approved_source_revision: number | null; state: string | null }>(
-        `select s.source_revision,s.approved_source_revision,s.state
+        approved_source_revision: number | null; state: string | null; synced_at: Date | null }>(
+        `select s.source_revision,s.approved_source_revision,s.state,snap.fetched_at as synced_at
            from ap.field_connections c left join ap.knowledge_sources s on s.connection_id = c.id
+           left join ap.knowledge_source_snapshots snap on snap.source_id=s.id
+             and snap.source_revision=s.source_revision
           where c.id = $1 and c.ap_grant_id = $2 and c.ap_organization_id = $3
             and c.ap_agent_id = $4 and c.initiator_user_id = $5 and c.status = 'review_required'`,
         [request.params.id, grant.id, grant.organization_id, grant.agent_id, grant.actor_user_id]);
@@ -35,6 +37,7 @@ export function registerSourceRefreshRoutes(app: FastifyInstance, runtime: Busin
         connectionId: request.params.id, sourceRevision: source.source_revision ?? 0,
         approvedSourceRevision: source.approved_source_revision,
         state: source.state ?? 'not_synced',
+        syncedAt: source.synced_at?.toISOString() ?? null,
       });
     });
 

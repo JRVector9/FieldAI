@@ -62,7 +62,7 @@ IntegrationBinding
 |---|---|---|
 | ap.agent.read | 선택한 AI의 공개·상태 정보 | AP 전체 조직 조회 불가 |
 | ap.connections.create | 선택한 AP 조직·AI와 외부 사이트의 설치 전용 연결 생성/조회 | 상대 로그인·정보·예약·결제 권한을 만들지 않음 |
-| ap.sources.refresh | 이 연결의 승인 정보 갱신 요청 | 임의 source/지식 공개 금지 |
+| ap.sources.refresh | 이 연결의 승인 정보 갱신 요청·원본 검토 상태/수신 시각 읽기 | 임의 source/지식 공개 금지 |
 | ap.deployments.manage | Field 및 일반 외부 client의 정확 origin owned_embed 준비·소유 검증·활성·중지 | 현재 client+grant가 만든 설치만 허용, 다른 native/client 배포 조작 불가 |
 | ap.conversations.read | 이 연결·배포 또는 넘겨받은 업무에 관련된 대화 | AI의 다른 사이트 대화를 전부 조회하지 않음 |
 | ap.conversations.reply | 연결 대화에 동의한 사업자의 직접 답변 | 설치용 백그라운드 credential에는 넣지 않음 |
@@ -126,6 +126,8 @@ state: current | pending_review | stale | unavailable | revoked
 현재 로컬 AP owner 출처 공개 화면은 `GET /v1/connections/field/{id}/source/mapping-options`로 **최신 AP 직접 승인 공개본**의 서비스 이름·설명과 공개본 ID를 읽고, 별도로 저장된 Field 승인 snapshot과 나란히 보여준다. 선택한 Field 서비스가 AP 서비스와 이름이 같으면 owner가 **별도 서비스**, **AP 설명 우선**, **Field 설명 우선** 중 하나를 명시해야 한다. 서로 다른 이름도 owner가 같은 대상으로 지정할 수 있다. 공개 요청은 선택한 Field service ID, AP 서비스 인덱스/우선순위, `expectedNativeReleaseId`, Field `expectedSourceRevision`/`expectedContentHash`를 전송한다. AP 직접 승인본 또는 Field 버전이 변경되면 409로 재검토를 요구한다. 매핑은 AP `source_selection`에 공개본별로 저장되며 같은 선택의 재시도는 멱등이다. AP 설명 우선이면 Field 서비스 설명을 연결 AI 근거에서 제외하고, Field 설명 우선이면 새 connector KnowledgeRelease에서 대응하는 AP 서비스 설명을 제외한다. 별도 서비스는 두 설명을 출처별로 보존한다. AP 직접 초안·승인 원본은 수정하지 않으며 새 AI 공개는 owner의 별도 승인이 필요하다. 가격·시간·예약 조건은 이 매핑의 정적 AI 근거가 아니다.
 
 현재 로컬 연결의 공식 갱신 경로는 `ap.sources.refresh`를 별도 동의한 Field owner가 AP 공개 `GET /connections/{id}/source`에서 AP 저장/승인 버전을 읽고, 현재 저장 버전을 `expectedSourceRevision`으로 보내 `POST /connections/{id}/source-refreshes`를 호출한다. 요청에는 32바이트 무작위값의 base64url `Idempotency-Key`가 필요하다. AP는 token·client·grant·actor·조직·AI·연결 상태와 버전을 확인하고 내구 작업 ID를 202로 반환한다. 같은 키/요청은 같은 작업으로 돌아오고 다른 버전 재사용 또는 현재 버전 충돌은 409다. `GET /connections/{id}/source-refreshes/{operationId}`로 `pending/retry/completed/blocked`를 조회한다. worker는 Field의 승인 사실을 공개 API로 가져와 AP 검토 초안으로 저장하며, AP 사업자 source 승인과 고객 AI 지식 공개는 별도다. 기존 연결에 갱신 범위가 없으면 재동의가 필요하고, Field 조회 장애는 재시도 상태로 남긴다. 이 경로는 예약 확정이나 자동 가격 승인이 아니다.
+
+AP 읽기 preview.10의 `syncedAt`는 현재 source_id/source_revision에 맞는 AP snapshot의 실제 수신 시각이며 source·snapshot이 없으면 null이다. 같은 버전 재조회·사업자 승인·AI 공개 시각을 뜻하지 않는다. Field 신규 consumer는 preview.9에서 빠진 값을 null로 호환하고 잘못된 시각은 502로 거부한다. 설치 쓰기의 preview.9 고정 subset은 바뀌지 않는다.
 
 현재 로컬 자동 경로는 Field의 승인 카탈로그 release와 같은 트랜잭션의 `field.catalog.approved` outbox를 기준으로, 연결 생성 뒤의 최신 승인 release를 활성 연결별 내구 전송 원장에 재조정한다. Field는 연결별 키로 `field.facts.changed`를 서명해 AP `/integrations/v1/field-events`에 전달한다. 사건에는 연결·release ID, 버전, 승인 시각만 있고 사업 설명·가격·연락처는 없다. AP는 서명·시간창·현재 owner/grant·`ap.sources.refresh` 동의를 확인하고 제품 전체에서 event ID를 멱등 검사해 inbox commit 뒤 202를 준다. 별도 worker가 과거 버전은 무시하고 최신 Field 공개 facts를 다시 읽는 내구 갱신 작업을 만든다. Field 전송 실패/응답 미상은 같은 event ID로 재시도한다. 새 AP source는 `pending_review`이며 기존 승인 버전·고객 AI 공개를 바꾸지 않는다. 연결 전 승인분의 최초 가져오기는 사업자의 명시 갱신/연결 검토 경로를 사용한다. release/outbox와 연결 원장만으로 최신 변경을 재조정하므로 모든 중간 버전의 독립 전달 이력을 보장하지 않는다.
 
@@ -320,7 +322,7 @@ Field source가 해제되면 그 값의 AP 사용을 중단한다. 데이터가 
 | GET /integrations/v1/me | AP 위임 token | 허용 조직·AI·scope·grant 상태 |
 | POST /integrations/v1/connections | ap.connections.create, 현재 owner 위임/선택 조직·AI·client·grant, 외부 조직 UUID·정확 origin | installation_only binding, UUID 멱등 영수증 |
 | GET /integrations/v1/connections/{id} | ap.connections.create, 같은 client·grant·조직·AI | 설치 전용 연결 상태 |
-| GET /integrations/v1/connections/{id}/source | ap.sources.refresh, 현재 연결 | AP 저장/승인 source 버전·검토 상태 |
+| GET /integrations/v1/connections/{id}/source | ap.sources.refresh, 현재 연결 | AP 저장/승인 source 버전·검토 상태·현재 snapshot 실제 수신 시각(nullable) |
 | POST /integrations/v1/connections/{id}/source-refreshes | ap.sources.refresh, 예상 source 버전 |202 sync_job |
 | GET /integrations/v1/connections/{id}/source-refreshes/{operationId} | ap.sources.refresh, 현재 연결 | 갱신 작업 상태·결과 |
 | POST /integrations/v1/deployments | ap.deployments.manage, 자기 public 연결·정확 origin·선택 조직/AI, UUID key | owned_embed pending 준비; 검증/명시 활성은 별도 |
