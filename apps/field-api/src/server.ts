@@ -10,6 +10,7 @@ import { FieldSiteQueue } from './site-queue.js';
 import { createFieldSiteMediaStore } from './site-media.js';
 import { createFieldInquiryMediaStore } from './inquiry-media.js';
 import { apConnectorFromEnvironment } from './ap-connector.js';
+import { assertLifecycleServing, lifecycleJournalFromEnvironment } from './oauth-lifecycle-journal.js';
 
 if (process.env.NODE_ENV === 'production' && process.env.FIELD_PROFILE === 'mock') {
   throw new Error('mock profile is forbidden in production');
@@ -25,6 +26,7 @@ const runtime = {
   billing: billingContextFromEnvironment(),
   notification: notificationContextFromEnvironment(),
   customDomain: customDomainContextFromEnvironment(),
+  oauthLifecycleGuard: () => assertLifecycleServing(pool, lifecycleJournalFromEnvironment()),
   resolveUserId: async (headers: import('node:http').IncomingHttpHeaders) =>
     (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
   resolveSession: async (headers: import('node:http').IncomingHttpHeaders) => {

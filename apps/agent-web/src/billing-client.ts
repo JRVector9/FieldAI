@@ -2,6 +2,7 @@ export const billingProduct = 'agent' as const;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const object = (v: unknown): Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 const text = (v: unknown, max: number) => typeof v === 'string' && v.length > 0 && v.length <= max && !/[\u0000-\u001f]/.test(v);
+const policyText = (v: unknown, max: number) => typeof v === 'string' && v.length > 0 && v.length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(v);
 export type BillingIdentity = { userId: string; sessionId: string };
 export type BillingPlan = { id: string; mode: string; state: string; name: string; currency: string;
   totalAmount: number; supplyAmount: number; vatAmount: number; taxFreeAmount: number | null;
@@ -27,8 +28,8 @@ function ownOrigin(v: unknown): v is string {
 export function parseBillingPlan(value: unknown): BillingPlan | null {
   const p = object(value);
   if (!uuid.test(String(p.id)) || !['test','live'].includes(String(p.mode)) || !['pending','approved','retired'].includes(String(p.state))
-    || !text(p.name,100) || p.currency !== 'KRW' || !text(p.termsVersion,100) || !text(p.termsText,8000)
-    || !text(p.refundVersion,100) || !text(p.refundText,8000)
+    || !text(p.name,100) || p.currency !== 'KRW' || !text(p.termsVersion,100) || !policyText(p.termsText,8000)
+    || !text(p.refundVersion,100) || !policyText(p.refundText,8000)
     || ['totalAmount','supplyAmount','vatAmount','includedAiUnits','graceDays'].some(k => !Number.isSafeInteger(p[k]) || Number(p[k]) < 0)
     || Number(p.totalAmount) < 1 || Number(p.includedAiUnits) < 1 || Number(p.graceDays) > 30
     || p.totalAmount !== Number(p.supplyAmount) + Number(p.vatAmount)

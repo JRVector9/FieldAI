@@ -87,7 +87,9 @@
     "build:agent": "pnpm --filter @fieldai/agent-api build",
     "build:field": "pnpm --filter @fieldai/field-api build",
     "build:web:agent": "pnpm --filter @fieldai/agent-web build",
-    "build:web:field": "pnpm --filter @fieldai/field-web build"
+    "build:web:field": "pnpm --filter @fieldai/field-web build",
+    "test:oauth-lifecycle:agent": "node tools/run-auth-lifecycle-db-tests.mjs agent",
+    "test:oauth-lifecycle:field": "node tools/run-auth-lifecycle-db-tests.mjs field"
   },
   "devDependencies": {
     "@types/node": "26.6.2",

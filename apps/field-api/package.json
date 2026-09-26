@@ -14,12 +14,16 @@
     "checkpoint:revocations": "node dist/revocation-checkpoint-cli.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test:unit": "tsx --test test/health.test.ts test/billing-period.test.ts test/toss-billing.adapter.test.ts test/notification-delivery.adapter.test.ts test/ap-public-write-client.test.ts test/custom-domain-dns.test.ts test/toss-billing-refund.adapter.test.ts",
+    "test:unit": "tsx --test test/health.test.ts test/billing-period.test.ts test/toss-billing.adapter.test.ts test/notification-delivery.adapter.test.ts test/ap-public-write-client.test.ts test/custom-domain-dns.test.ts test/toss-billing-refund.adapter.test.ts test/admin-billing.test.ts",
     "start:billing-authorization": "node dist/billing-authorization-worker.js",
     "start:billing-charge": "node dist/billing-charge-worker.js",
     "start:notifications": "node dist/notification-delivery-worker.js",
     "start:custom-domain": "node dist/custom-domain-worker.js",
-    "start:billing-refund": "node dist/billing-refund-worker.js"
+    "start:billing-refund": "node dist/billing-refund-worker.js",
+    "lifecycle:baseline": "node dist/oauth-lifecycle-cli.js --baseline-quiesced",
+    "lifecycle:checkpoint": "node dist/oauth-lifecycle-cli.js --checkpoint-quiesced",
+    "lifecycle:restore": "node dist/oauth-lifecycle-cli.js --offline-restored",
+    "start:route-keys": "node dist/ap-route-key-worker.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1139.0",

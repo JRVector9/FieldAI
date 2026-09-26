@@ -13,6 +13,8 @@ import { activePlacement } from './placements.js';
 import { guardPlacementEngagement } from './placement-limit.js';
 import { distributionTrafficClass, recordDistributionEvent, type DistributionTrafficClass } from './distribution-events.js';
 import { rejectExpiredTrial } from './trial-access.js';
+import { AgentModelUsageError } from './openai.js';
+import { AiEntitlementError, reserveAi, dispatchAi, settleAi, failAi, validAiReceipt, aiEntitlement } from './ai-entitlement.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const idempotencyKey = /^[A-Za-z0-9_-]{43}$/;
@@ -120,7 +122,7 @@ async function customerAiRun(pool: Pool | PoolClient, inquiryId: string, keyHash
   const found = await pool.query<CustomerAiRun>(
     `select r.id, r.question, r.status, r.answer, r.error_code, r.input_tokens, r.output_tokens,
        k.revision as knowledge_revision,
-       (r.status = 'in_progress' and r.started_at <= now() - interval '5 minutes') as result_unknown
+       (r.status = 'in_progress' and (r.started_at <= now() - interval '5 minutes' or exists(select 1 from ap.ai_usage_ledger l where l.run_id=r.id and l.state='unknown'))) as result_unknown
      from ap.ai_runs r join ap.knowledge_releases k on k.id = r.knowledge_release_id
      where r.inquiry_id = $1 and r.kind = 'customer_message' and r.idempotency_key_hash = $2`,
     [inquiryId, keyHash]);
@@ -393,7 +395,8 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
     const provider = runtime.modelProvider;
     if (!provider) return reply.code(503).send({ error: 'blocked_integration' });
     const limit = dailyLimit(runtime);
-    if (!limit) return reply.code(503).send({ error: 'budget_not_configured' });
+    const initialEntitlement=await aiEntitlement(runtime.pool,initial.organization_id);
+    if (!limit&&!['paid','grace'].includes(initialEntitlement.access.mode)) return reply.code(503).send({ error: 'budget_not_configured' });
     const link = await activeDeployment(runtime.pool, initial.public_id);
     if (!link || link.agent_release_id !== initial.agent_release_id
         || link.knowledge_release_id !== initial.knowledge_release_id)
@@ -417,6 +420,9 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
       if (await rejectExpiredTrial(reply, client, row.organization_id)) {
         await client.query('rollback'); return reply;
       }
+      const currentEntitlement=await aiEntitlement(client,row.organization_id);
+      const paid=['paid','grace'].includes(currentEntitlement.access.mode);
+      if(!paid&&!limit){await client.query('rollback');return reply.code(503).send({error:'budget_not_configured'});}
       const count = await client.query<{ daily: string; turns: string; active: string }>(
         `select count(*) filter (where started_at >= now() - interval '24 hours')::text as daily,
            count(*) filter (where inquiry_id = $2)::text as turns,
@@ -425,7 +431,7 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
         [row.organization_id, row.id],
       );
       if (Number(count.rows[0]?.active)) { await client.query('rollback'); return reply.code(409).send({ error: 'answer_in_progress' }); }
-      if (Number(count.rows[0]?.daily) >= limit || Number(count.rows[0]?.turns) >= 12) {
+      if ((!paid&&Number(count.rows[0]?.daily) >= limit!) || Number(count.rows[0]?.turns) >= 12) {
         await client.query('rollback'); return reply.code(429).send({ error: 'customer_ai_limit' });
       }
       const prior = await client.query<{ actor: 'customer' | 'assistant'; body: string }>(
@@ -449,25 +455,40 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
         [runId, row.organization_id, link.agent_release_id, link.knowledge_release_id,
           row.id, revision, question, provider.model, keyHash],
       );
+      await reserveAi(client,runId);
       await client.query('commit');
-    } catch (error) { await client.query('rollback'); throw error; } finally { client.release(); }
+    } catch (error) { await client.query('rollback'); if(error instanceof AiEntitlementError)return reply.code(error.code==='ai_included_units_exhausted'?429:409).send({error:error.code});throw error; } finally { client.release(); }
 
     const connector = await confirmedConnectorFacts(runtime, link.knowledge_release_id);
     const facts = factsFor(link.knowledge, connector.facts);
+    const dispatch=await runtime.pool.connect();
+    try {
+      await dispatch.query('begin');
+      await dispatch.query('select id from ap.organizations where id=$1 for update',[initial.organization_id]);
+      const current=await session(dispatch,request,request.params.id,true,true,false,true);
+      const source=await activeDeployment(dispatch,initial.public_id);
+      if(!current||current.retention_work_purged_at||current.revision!==revision||current.state!=='ai_assisting'||current.mode!=='ai'||current.automation_paused||source?.agent_release_id!==link.agent_release_id||source.knowledge_release_id!==link.knowledge_release_id)throw new AiEntitlementError('ai_access_ended');
+      await dispatchAi(dispatch,runId);
+      await dispatch.query('commit');
+    } catch(error){await dispatch.query('rollback');await failAi(runtime.pool,runId,error);await runtime.pool.query("update ap.ai_runs set status='failed',error_code='ai_access_ended',finished_at=now() where id=$1",[runId]);return reply.code(409).send({error:'ai_access_ended',runId});}finally{dispatch.release();}
     let generated: Awaited<ReturnType<typeof provider.generate>>;
     try {
       generated = await provider.generate({ question, facts, history,
         agent: link.agent, maxOutputTokens: 768 });
-    } catch {
+    } catch (error) {
+      const confirmed=error instanceof AgentModelUsageError&&validAiReceipt(error.receipt);
+      const unknown=confirmed?(await settleAi(runtime.pool,runId,error.receipt),false):await failAi(runtime.pool,runId,error);
       await runtime.pool.query(
-        `update ap.ai_runs set status = 'failed', error_code = 'provider_unavailable', finished_at = now() where id = $1`, [runId]);
-      return reply.code(503).send({ error: 'provider_unavailable', runId });
+        `update ap.ai_runs set status = $2, error_code = $3, finished_at = case when $2='in_progress' then null else now() end,
+          provider_response_id=$4,input_tokens=$5,output_tokens=$6 where id=$1`, [runId,confirmed?'rejected':unknown?'in_progress':'failed',confirmed?'provider_output_rejected':unknown?'provider_result_unknown':'provider_unavailable',confirmed?error.receipt.responseId:null,confirmed?error.receipt.inputTokens:null,confirmed?error.receipt.outputTokens:null]);
+      return reply.code(confirmed?422:503).send({ error: confirmed?'provider_output_rejected':unknown?'provider_result_unknown':'provider_unavailable', runId });
     }
+    await settleAi(runtime.pool,runId,generated);
     const output = outputFrom(generated.output);
     const evidence = output?.evidenceIds ?? [];
     const supported = new Set(facts.map(fact => fact.id));
-    const inputTokens = Number.isSafeInteger(generated.inputTokens) && generated.inputTokens >= 0 ? generated.inputTokens : null;
-    const outputTokens = Number.isSafeInteger(generated.outputTokens) && generated.outputTokens >= 0 ? generated.outputTokens : null;
+    const inputTokens = Number.isSafeInteger(generated.inputTokens) && generated.inputTokens >= 0 && generated.inputTokens<=2147483647 ? generated.inputTokens : null;
+    const outputTokens = Number.isSafeInteger(generated.outputTokens) && generated.outputTokens >= 0 && generated.outputTokens<=2147483647 ? generated.outputTokens : null;
     const responseId = typeof generated.responseId === 'string' && generated.responseId.length > 0
       && generated.responseId.length <= 200 ? generated.responseId : null;
     const error = !output || inputTokens === null || outputTokens === null || responseId === null
@@ -477,11 +498,12 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
         : output.answer && unsupportedNumber(output.answer, facts.filter(fact => evidence.includes(fact.id)))
           ? 'unsupported_number' : null;
     if (error) {
+      const uncertain=!validAiReceipt(generated)&&!!(await runtime.pool.query<{period_id:string|null}>('select period_id from ap.ai_usage_ledger where run_id=$1',[runId])).rows[0]?.period_id;
       await runtime.pool.query(
-        `update ap.ai_runs set status = 'rejected', error_code = $2, provider_response_id = $3,
+        `update ap.ai_runs set status = $6, error_code = $2, provider_response_id = $3,
            input_tokens = $4, output_tokens = $5, finished_at = now() where id = $1`,
-        [runId, error, responseId, inputTokens, outputTokens]);
-      return reply.code(422).send({ error, runId });
+        [runId, uncertain?'provider_result_unknown':error, responseId, inputTokens, outputTokens,uncertain?'in_progress':'rejected']);
+      return reply.code(uncertain?503:422).send({ error:uncertain?'provider_result_unknown':error, runId });
     }
     const afterGeneration = evidence.some(id => id.startsWith('field:'))
       ? await confirmedConnectorFacts(runtime, link.knowledge_release_id) : undefined;
@@ -489,13 +511,17 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
     const committed = await runtime.pool.connect();
     try {
       await committed.query('begin');
+      await committed.query('select id from ap.organizations where id=$1 for update',[initial.organization_id]);
       await committed.query('select id from ap.deployments where public_id=$1 for share', [initial.public_id]);
       const row = await committed.query<Conversation>(
         'select id, organization_id, state, mode, automation_paused, revision, next_sequence from ap.inquiries where id = $1 for update',
         [initial.id],
       );
       const latest = await activeDeployment(committed, initial.public_id);
-      if (!row.rows[0] || row.rows[0].state !== 'ai_assisting' || row.rows[0].mode !== 'ai'
+      const currentSession=await session(committed,request,request.params.id,false,true,false,true);
+      const currentAccess=await aiEntitlement(committed,initial.organization_id);
+      if(currentSession?.retention_work_purged_at){await committed.query('commit');return reply.code(410).send({error:'retention_work_ended',runId});}
+      if (!currentSession||currentSession.retention_work_purged_at||!currentAccess.access.canStartNew||!row.rows[0] || row.rows[0].state !== 'ai_assisting' || row.rows[0].mode !== 'ai'
           || row.rows[0].automation_paused || row.rows[0].revision !== revision
           || latest?.agent_release_id !== link.agent_release_id
           || latest.knowledge_release_id !== link.knowledge_release_id) {

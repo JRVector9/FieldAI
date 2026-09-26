@@ -1,3 +1,5 @@
+import { oauthLifecycleProvider } from './oauth-lifecycle-provider.js';
+import { lifecycleJournalFromEnvironment } from './oauth-lifecycle-journal.js';
 import { Pool } from 'pg';
 import { betterAuth } from 'better-auth';
 import { oauthProvider } from '@better-auth/oauth-provider';
@@ -25,6 +27,7 @@ export const auth = betterAuth({
   database: authPool,
   emailAndPassword: { enabled: true, requireEmailVerification: process.env.AP_PROFILE !== 'mock' },
   plugins: [
+    oauthLifecycleProvider(authPool, lifecycleJournalFromEnvironment()),
     oauthProvider({
       loginPage: `${webOrigin}/connect/sign-in`,
       consentPage: `${webOrigin}/consent`,

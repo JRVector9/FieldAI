@@ -13,7 +13,9 @@ type Snapshot={currentPlan:BillingPlan|null;product:string;organizationId:string
   subscription:{id:string;planId:string;state:string;anchorAt:string|null;cancelRequestedAt:string|null;terminatedAt:string|null}|null;
   periods:Period[];transactions:Array<{id:string;periodId:string;orderId:string;state:string;mode:string;errorCode:string|null}>};
 type Refund={id:string;periodId:string;amount:number;state:string;reason:string;createdAt:string};
-type Usage={product:string;organizationId:string;period:{start:string;end:string};ai:Record<string,number>};
+type Quota={includedUnits:number|null;consumedUnits:number;reservedUnits:number;unknownUnits:number;remainingUnits:number|null};
+type Usage={product:string;organizationId:string;period:{start:string;end:string};siteAi:Record<string,number>;
+  entitlement?:{unitPolicy:string;mode:string;periodId:string|null;endsAt:string|null;graceEndsAt:string|null;siteAi:Quota}};
 const date=(s:string|null)=>s?new Date(s).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}):'확인 중';
 const money=(n:number)=>Number.isSafeInteger(n)?`${n.toLocaleString('ko-KR')}원`:'확인 중';
 const stateLabel=(s:string)=>({paid:'결제 완료',completed:'처리 완료',pending:'처리 대기',processing:'처리 중',unknown:'결과 확인 필요',
@@ -56,7 +58,7 @@ export function FieldBillingSettings({organizationId,canManage}:{organizationId:
     }catch(error){if(current())setNotice(billingErrorNotice(error));}
     finally{if(current())setBusy(false);}
     try{const u=await request('/v1/usage/summary',organizationId) as Usage;
-      if(current())setUsage(u.product===billingProduct&&u.organizationId===organizationId&&u.ai&&u.period?u:null);}catch{if(current())setUsage(null);}
+      if(current())setUsage(u.product===billingProduct&&u.organizationId===organizationId&&u.siteAi&&u.period?u:null);}catch{if(current())setUsage(null);}
     try{const r=await request('/v1/subscription/refunds',organizationId) as {product:string;organizationId:string;refunds:Refund[]};
       if(current())setRefunds(r.product===billingProduct&&r.organizationId===organizationId&&Array.isArray(r.refunds)?r.refunds:null);}catch{if(current())setRefunds(null);}
   },[organizationId]);
@@ -135,8 +137,9 @@ export function FieldBillingSettings({organizationId,canManage}:{organizationId:
   }
   const currentPeriod=snapshot?.periods.find(p=>snapshot.access.mode==='paid'&&p.id===snapshot.access.periodId);
   const title=({agent:'AP',field:'Field'})[billingProduct];
-  const usageEntries=usage?Object.entries(usage.ai).filter(([name])=>['customerAnswers','ownerTests','completedProposals','recordedCalls'].includes(name)):[];
-  const usageLabel:Record<string,string>={customerAnswers:'AI 고객 안내',ownerTests:'AI 답변 테스트',completedProposals:'AI 사이트 수정',recordedCalls:'기록된 모델 응답'};
+  const usageEntries=usage?Object.entries(usage.siteAi).filter(([name])=>['jobRequests','recordedCalls'].includes(name)):[];
+  const usageLabel:Record<string,string>={jobRequests:'AI 사이트 제작 요청',recordedCalls:'기록된 모델 응답'};
+  const entitlement=usage?.entitlement,quota=entitlement?.siteAi;
   return <section className="field-billing-settings" aria-label={`${title} 유료 구독`}>
     <div className="row-between"><h2>구독·청구</h2><button className="btn btn-secondary" type="button" disabled={busy} onClick={()=>void load()}>상태 새로고침</button></div>
     {notice&&<p className="notice mt24" role="status">{notice}</p>}{stale&&<p className="field-note mt16">현재 상태를 확인하지 못했습니다. 마지막 표시값으로 구독을 변경할 수 없습니다.</p>}
@@ -160,6 +163,10 @@ export function FieldBillingSettings({organizationId,canManage}:{organizationId:
       {existing?.terminatedAt&&attempt?.subscriptionId===existing.id&&<button className="btn btn-secondary mt16" type="button" disabled={busy} onClick={newSubscription}>새 구독 신청 (추가)</button>}
     </section><section className="card card-pad"><h2>이번 기간 사용량</h2>{usage?<p className="small muted mt8">{date(usage.period.start)}–{date(usage.period.end)} 집계</p>:<p className="field-note mt8">현재 사용량을 확인하지 못했습니다.</p>}
       {usageEntries.map(([name,value])=><div key={name} className="usage-row"><div className="row-between"><strong>{usageLabel[name]}</strong><span className="muted">{value.toLocaleString('ko-KR')}회</span></div></div>)}
+      {entitlement?.unitPolicy==='model_call_v1'&&quota?.includedUnits!==null&&quota?.includedUnits!==undefined&&<div className="usage-row"><div className="row-between"><strong>결제 기간 AI 제공량 (추가)</strong><span className="muted">{quota.consumedUnits.toLocaleString('ko-KR')} / {quota.includedUnits.toLocaleString('ko-KR')}회</span></div>
+        <p className="field-note mt8">남은 제공량 {quota.remainingUnits?.toLocaleString('ko-KR')}회 · 예약/호출 중 {quota.reservedUnits.toLocaleString('ko-KR')}회 · 결과 미상 {quota.unknownUnits.toLocaleString('ko-KR')}회</p>
+        <p className="field-note mt8">공급사 사용량이 확인된 제작 호출을 1회로 기록합니다. 취소·오래된 제안에도 실제 호출은 포함되며, 미상 호출은 재발송하거나 제공량을 자동 복구하지 않습니다.</p>
+        {entitlement.mode==='grace'&&<p className="field-note mt8">유예 중에는 직전 결제 기간의 남은 제공량을 사용합니다. 새 결제 완료 전에는 제공량을 충전하지 않습니다.</p>}</div>}
       {currentPeriod&&<p className="field-note mt16">현재 결제 기간: {date(currentPeriod.startsAt)}–{date(currentPeriod.endsAt)} · 실제 결제 {money(currentPeriod.totalAmount)}</p>}
       {snapshot?.access.mode==='grace'&&<p className="field-note mt16">유예 종료: {date(snapshot.access.graceEndsAt)}</p>}
       {snapshot?.access.mode==='cleanup_only'&&<p className="field-note mt16">새 업무는 제한됩니다. 기존 문의·예약 처리와 기록 내보내기는 유지됩니다.</p>}

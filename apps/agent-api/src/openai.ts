@@ -19,6 +19,13 @@ export type AgentModelProvider = {
   }>;
 };
 
+// Safe billing metadata only: never attach provider output, refusal text, prompt or key.
+export class AgentModelUsageError extends Error {
+  constructor(code: string, readonly receipt: {responseId:string;inputTokens:number;outputTokens:number}) {
+    super(code);
+  }
+}
+
 const answerSchema = {
   type: 'object',
   properties: {
@@ -64,6 +71,11 @@ export function createOpenAIProvider(): AgentModelProvider | undefined {
       const result: unknown = await response.json();
       if (!result || typeof result !== 'object') throw new Error('provider_invalid_response');
       const body = result as Record<string, unknown>;
+      const usage = body.usage && typeof body.usage === 'object' ? body.usage as Record<string, unknown> : {};
+      const token=(n:unknown):n is number=>typeof n==='number'&&Number.isInteger(n)&&n>=0&&n<=2147483647;
+      const receipt=typeof body.id==='string'&&body.id.trim().length>0&&body.id.length<=200&&token(usage.input_tokens)&&token(usage.output_tokens)
+        ?{responseId:body.id,inputTokens:usage.input_tokens,outputTokens:usage.output_tokens}:null;
+      try{
       if (body.status !== 'completed' || !Array.isArray(body.output)) throw new Error('provider_incomplete');
       const contents = body.output.flatMap(item => {
         const message = item && typeof item === 'object' ? item as Record<string, unknown> : null;
@@ -76,12 +88,15 @@ export function createOpenAIProvider(): AgentModelProvider | undefined {
         .map(item => (item as Record<string, unknown>).text)
         .filter((item): item is string => typeof item === 'string').join('');
       if (!rawText || rawText.length > 20_000) throw new Error('provider_empty_output');
-      const output: unknown = JSON.parse(rawText);
-      const usage = body.usage && typeof body.usage === 'object' ? body.usage as Record<string, unknown> : {};
-      if (typeof body.id !== 'string' || !Number.isSafeInteger(usage.input_tokens)
-          || !Number.isSafeInteger(usage.output_tokens)) throw new Error('provider_missing_usage');
-      return { output: output as AgentModelOutput, inputTokens: usage.input_tokens as number,
-        outputTokens: usage.output_tokens as number, responseId: body.id };
+      let output:unknown;
+      try{output=JSON.parse(rawText);}catch{throw new Error('provider_invalid_output');}
+
+        if(!receipt)throw new Error('provider_missing_usage');
+        return {output:output as AgentModelOutput,...receipt};
+      }catch(error){
+        if(receipt)throw new AgentModelUsageError(error instanceof Error?error.message:'provider_invalid_output',receipt);
+        throw error;
+      }
     },
   };
 }

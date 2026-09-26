@@ -10,6 +10,10 @@ export async function fieldIntegratorGrant(request: FastifyRequest, reply: Fasti
     | 'field.requests.create' | 'field.requests.read' | 'field.customer_access.create'): Promise<FieldGrant | null> {
   const bearer = /^Bearer ([A-Za-z0-9_-]{20,512})$/.exec(request.headers.authorization ?? '')?.[1];
   if (!bearer) { reply.code(401).send({ error: 'invalid_access_token' }); return null; }
+  if (runtime.oauthLifecycleGuard) {
+    try { await runtime.oauthLifecycleGuard(); }
+    catch { reply.code(503).send({ error: 'oauth_lifecycle_unavailable' }); return null; }
+  }
   const digest = createHash('sha256').update(bearer).digest('base64url');
   const found = await runtime.pool.query<FieldGrant>(
     `select s.id, s.organization_id, s.actor_user_id, s.client_id, s.requested_scopes,

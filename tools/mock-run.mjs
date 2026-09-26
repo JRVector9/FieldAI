@@ -35,8 +35,8 @@ export async function assertPortsFree(services) {
   }
 }
 
-async function command(file, args) {
-  const child = spawn(file, args, { cwd: root, env: baseEnv, stdio: 'inherit' });
+async function command(file, args, environment = {}) {
+  const child = spawn(file, args, { cwd: root, env: { ...baseEnv, ...environment }, stdio: 'inherit' });
   const code = await new Promise((resolveExit, rejectExit) => {
     child.once('error', rejectExit);
     child.once('exit', resolveExit);
@@ -146,6 +146,15 @@ async function main() {
       'up', '-d', '--wait']);
     await command(process.execPath, ['tools/run-migrations.mjs', product]);
     await command('pnpm', [`build:${product}`]);
+    const prefix = product === 'agent' ? 'AP' : 'FIELD';
+    if (configured(product, [`${prefix}_REVOCATION_JOURNAL_DIRECTORY`, `${prefix}_REVOCATION_JOURNAL_SECRET`])) {
+      // No issuer/connector writers exist yet: preserve the first local signed cutover.
+      await command(process.execPath,
+        [`--env-file=infra/${product}/.env`, `apps/${product}-api/dist/oauth-lifecycle-cli.js`, '--baseline-quiesced'],
+        { [`${prefix}_PROFILE`]: 'mock' });
+    } else {
+      process.stderr.write(`${prefix} lifecycle baseline blocked_integration; public OAuth serving remains unavailable\n`);
+    }
     await command('pnpm', [`build:web:${product}`]);
   }
   if (mode === 'suite') await prepareMockConnectors();
@@ -205,6 +214,11 @@ async function main() {
         ['--env-file=infra/field/.env', 'apps/field-api/dist/custom-domain-worker.js'],
         environment, managed, error => {
           process.stderr.write(`${error.message}; Field core remains ready, custom domain processing is unavailable\n`);
+        }, root, false);
+      if (!isAgent) start('Field route-key worker', process.execPath,
+        ['--env-file=infra/field/.env', 'apps/field-api/dist/ap-route-key-worker.js'],
+        environment, managed, error => {
+          process.stderr.write(`${error.message}; Field core remains ready, route-key reconciliation is unavailable\n`);
         }, root, false);
       if (isAgent) {
         start('AP retention worker', process.execPath,

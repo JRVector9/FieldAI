@@ -7,6 +7,8 @@ import "./field-admin.css";
 import { FieldModerationAdmin } from './FieldModerationAdmin';
 import { FieldCustomerSupport } from './FieldCustomerSupport';
 import { FieldRetentionAdmin } from './FieldRetentionAdmin';
+import { BillingAdmin } from './billing-admin';
+import './billing-admin.css';
 
 type Overview = {
   product: "field";
@@ -138,10 +140,10 @@ export function FieldAdmin({ section = "operations" }: { section?: FieldAdminSec
         <button type="button" disabled={busy} onClick={() => void signOut()}>다른 Field 계정으로 로그인</button></section>}
       {phase === "blocked" && <section className="special-panel"><h2>관리자 추가 인증 미연결</h2><p>관리자 추가 인증과 운영 승인이 연결되기 전에는 운영 상태 접근을 차단합니다.</p></section>}
       {phase === "failed" && <button type="button" disabled={busy} onClick={() => void load()}>운영 상태 다시 불러오기</button>}
-      {phase === "ready" && overview && <><section className="field-admin-summary"><div className="field-admin-summary-head"><div><h2>{section === "operations" ? "오늘의 운영 현황" : current.title}</h2><p>Field 관리자 · {overview.role} · 조회 시각 {new Date(overview.snapshotAt).toLocaleString("ko-KR")}</p></div><button type="button" disabled={busy} onClick={() => void load()}>새로고침</button></div>
+      {phase === "ready" && overview && <>{section === "billing" ? <><BillingAdmin /><button className="field-admin-signout" type="button" disabled={busy} onClick={() => void signOut()}>Field 관리자 로그아웃</button></> : <section className="field-admin-summary"><div className="field-admin-summary-head"><div><h2>{section === "operations" ? "오늘의 운영 현황" : current.title}</h2><p>Field 관리자 · {overview.role} · 조회 시각 {new Date(overview.snapshotAt).toLocaleString("ko-KR")}</p></div><button type="button" disabled={busy} onClick={() => void load()}>새로고침</button></div>
         <div className="field-admin-stats">{cards.map(([label, count]) => <article key={label}><h3>{label}</h3><strong>{count}</strong><span>건</span></article>)}</div>
         <p className="field-admin-note">{notes[section]}</p>
-        <button className="field-admin-signout" type="button" disabled={busy} onClick={() => void signOut()}>Field 관리자 로그아웃</button></section>
+        <button className="field-admin-signout" type="button" disabled={busy} onClick={() => void signOut()}>Field 관리자 로그아웃</button></section>}
         {(section === "operations" || section === "notifications") && <section className="special-panel" aria-label="최근 대기 사건"><h2>최근 대기 사건</h2>
           <p>사건 유형·시각·상태만 표시합니다. 이 운영 조회는 Field 감사 원장에 기록됩니다.</p>
           {overview.recentIncidents.length === 0 ? <p>현재 표시할 대기 사건이 없습니다.</p>

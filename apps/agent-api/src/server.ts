@@ -7,6 +7,7 @@ import { auth, authPool } from './auth.js';
 import { createOpenAIProvider } from './openai.js';
 import { createAgentInquiryMediaStore } from './inquiry-media.js';
 import { agentRevocationJournalFromEnvironment } from './revocation-journal.js';
+import { assertLifecycleServing, lifecycleJournalFromEnvironment } from './oauth-lifecycle-journal.js';
 import { fieldConnectorFromEnvironment } from './field-connector.js';
 
 if (process.env.NODE_ENV === 'production' && process.env.AP_PROFILE === 'mock') {
@@ -28,6 +29,7 @@ const app = createAgentApp(
     billing: billingContextFromEnvironment(),
     notification: notificationContextFromEnvironment(),
     revocationJournal,
+    oauthLifecycleGuard: () => assertLifecycleServing(pool, lifecycleJournalFromEnvironment()),
     resolveUserId: async (headers) =>
       (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
     resolveSession: async (headers) => {

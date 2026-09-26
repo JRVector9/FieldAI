@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
+import { fieldAiEntitlement } from './ai-entitlement.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const count = (value: string) => {
@@ -39,8 +40,14 @@ export function registerFieldUsageRoutes(app: FastifyInstance, runtime: FieldBus
              and input_tokens is not null and output_tokens is not null), 0)::text as input_tokens,
            coalesce(sum(output_tokens) filter (where provider_response_id is not null
              and input_tokens is not null and output_tokens is not null), 0)::text as output_tokens
-         from field.site_generation_jobs
-         where organization_id = $1 and created_at >= $2 and created_at < $3`,
+         from (
+           select e.reserved_at as created_at,e.provider_response_id,e.input_tokens,e.output_tokens
+             from field.ai_entitlements e where e.organization_id=$1
+           union all
+           select j.created_at,j.provider_response_id,j.input_tokens,j.output_tokens
+             from field.site_generation_jobs j where j.organization_id=$1
+               and not exists(select 1 from field.ai_entitlements e where e.job_id=j.id)
+         ) model_usage where created_at >= $2 and created_at < $3`,
         [organizationId, period.start, period.end]),
       runtime.pool.query<{ direct_inquiries: string; public_reservations: string; reservation_messages: string;
         manual_reservations: string; external_reservations: string }>(
@@ -62,7 +69,7 @@ export function registerFieldUsageRoutes(app: FastifyInstance, runtime: FieldBus
     const model = siteAi.rows[0]!;
     const operations = work.rows[0]!;
     reply.header('Cache-Control', 'private, no-store');
-    return { product: 'field', organizationId, period,
+    return { product: 'field', organizationId, period, entitlement: await fieldAiEntitlement(runtime.pool, organizationId),
       siteAi: { jobRequests: count(model.job_requests), recordedCalls: count(model.recorded_calls),
         inputTokens: count(model.input_tokens), outputTokens: count(model.output_tokens) },
       work: { directInquiries: count(operations.direct_inquiries),

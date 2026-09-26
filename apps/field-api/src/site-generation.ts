@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
-import type { SiteGenerationCatalog, SiteGenerationPlan } from './field-openai.js';
+import { FieldSiteProviderResultError, type FieldModelUsage, type SiteGenerationCatalog, type SiteGenerationPlan } from './field-openai.js';
 import { organizationFor, parseContent, siteFor, userFor, type SiteContent } from './sites.js';
 import { rejectExpiredTrial } from './trial-access.js';
+import { consumeFieldAi, dispatchFieldAi, fieldAiCanExpose, fieldAiEntitlement, fieldProviderDefinitelyRefused,
+  markFieldAiUnknown, releaseFieldAi, reserveFieldAi } from './ai-entitlement.js';
 
 type Job = {
   id: string; organization_id: string; site_id: string; requested_by: string; prompt: string;
@@ -109,15 +111,26 @@ export function registerSiteGenerationRoutes(app: FastifyInstance, runtime: Fiel
     const client = await runtime.pool.connect();
     try {
       await client.query('begin');
+      await client.query('select id from field.organizations where id=$1 for update', [organization.organization_id]);
+      if (!(await client.query("select 1 from field.memberships where organization_id=$1 and user_id=$2 and role in ('owner','editor') for share",
+        [organization.organization_id, userId])).rowCount) {
+        await client.query('rollback'); return reply.code(404).send({ error: 'organization_not_found' });
+      }
       await client.query('select id from field.sites where id = $1 for update', [site.id]);
       const draft = await client.query<{ revision: number }>('select revision from field.site_drafts where site_id = $1', [site.id]);
       if (draft.rows[0]?.revision !== revision) { await client.query('rollback'); return reply.code(409).send({ error: 'revision_conflict' }); }
       const active = await client.query<{ id: string }>(
         `select id from field.site_generation_jobs where site_id = $1 and status in ('queued', 'running', 'proposed')`, [site.id]);
       if (active.rowCount) { await client.query('rollback'); return reply.code(409).send({ error: 'generation_active', jobId: active.rows[0]!.id }); }
-      const count = await client.query<{ count: string }>(
-        `select count(*)::text as count from field.site_generation_jobs where site_id = $1 and created_at >= date_trunc('day', now())`, [site.id]);
-      if (Number(count.rows[0]?.count) >= 20) { await client.query('rollback'); return reply.code(429).send({ error: 'generation_daily_limit' }); }
+      const entitlement = await fieldAiEntitlement(client, organization.organization_id);
+      if (entitlement.mode !== 'paid' && entitlement.mode !== 'grace') {
+        const count = await client.query<{ count: string }>(`select count(*)::text as count from (
+          select reserved_at as created_at from field.ai_entitlements where organization_id=$1
+          union all select created_at from field.site_generation_jobs j where organization_id=$1
+            and not exists(select 1 from field.ai_entitlements e where e.job_id=j.id)
+          ) jobs where created_at>=date_trunc('day',now())`, [organization.organization_id]);
+        if (Number(count.rows[0]?.count) >= 20) { await client.query('rollback'); return reply.code(429).send({ error: 'generation_daily_limit' }); }
+      }
       const catalog = await client.query<{ revision: number; content: SiteGenerationCatalog }>(
         'select revision, content from field.catalog_releases where organization_id = $1 order by revision desc limit 1',
         [organization.organization_id]);
@@ -128,6 +141,11 @@ export function registerSiteGenerationRoutes(app: FastifyInstance, runtime: Fiel
          values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,'queued',$9)`,
         [id, organization.organization_id, site.id, userId, prompt, revision, catalog.rows[0].revision,
           JSON.stringify(catalog.rows[0].content), runtime.siteGenerator.model]);
+      const quotaError = await reserveFieldAi(client, organization.organization_id, id);
+      if (quotaError) {
+        await client.query('rollback');
+        return reply.code(quotaError === 'ai_quota_exhausted' ? 429 : 403).send({ error: quotaError });
+      }
       await client.query('commit');
     } catch (error) { await client.query('rollback'); throw error; }
     finally { client.release(); }
@@ -155,11 +173,23 @@ export function registerSiteGenerationRoutes(app: FastifyInstance, runtime: Fiel
     if (!organization) return reply;
     const site = await siteFor(runtime, organization.organization_id);
     if (!site || !uuidPattern.test(request.params.id)) return reply.code(404).send({ error: 'job_not_found' });
-    const result = await runtime.pool.query<Job>(
-      `update field.site_generation_jobs set status = 'canceled', updated_at = now(), completed_at = now()
-       where id = $1 and site_id = $2 and status in ('queued', 'running', 'proposed') returning *`, [request.params.id, site.id]);
-    if (!result.rows[0]) return reply.code(409).send({ error: 'job_not_cancelable' });
-    return publicJob(result.rows[0]);
+    const client = await runtime.pool.connect();
+    try {
+      await client.query('begin');
+      await client.query('select id from field.organizations where id=$1 for update', [organization.organization_id]);
+      if (!(await client.query("select 1 from field.memberships where organization_id=$1 and user_id=$2 and role in ('owner','editor') for share",
+        [organization.organization_id, userId])).rowCount) {
+        await client.query('rollback'); return reply.code(404).send({ error: 'organization_not_found' });
+      }
+      const result = await client.query<Job>(
+        `update field.site_generation_jobs set status = 'canceled', updated_at = now(), completed_at = now()
+         where id = $1 and site_id = $2 and status in ('queued', 'running', 'proposed') returning *`, [request.params.id, site.id]);
+      if (!result.rows[0]) { await client.query('rollback'); return reply.code(409).send({ error: 'job_not_cancelable' }); }
+      await releaseFieldAi(client, request.params.id, 'canceled_before_dispatch');
+      await client.query('commit');
+      return publicJob(result.rows[0]);
+    } catch (error) { await client.query('rollback'); throw error; }
+    finally { client.release(); }
   });
 
   app.post<{ Params: { id: string } }>('/v1/sites/generation-jobs/:id/apply', async (request, reply) => {
@@ -200,10 +230,25 @@ export function registerSiteGenerationRoutes(app: FastifyInstance, runtime: Fiel
 }
 
 export async function failAbandonedSiteJobs(runtime: FieldBusinessRuntime): Promise<void> {
-  await runtime.pool.query(
-    `update field.site_generation_jobs set status = 'failed', error_code = 'result_unknown_after_restart',
-       updated_at = now(), completed_at = now()
-     where status = 'running' and started_at < now() - interval '60 seconds'`);
+  const candidates = (await runtime.pool.query<Job>(`select j.* from field.site_generation_jobs j
+    where j.started_at<clock_timestamp()-interval '60 seconds' and (j.status='running' or (
+      j.status='canceled' and exists(select 1 from field.ai_entitlements e where e.job_id=j.id and e.state='dispatched'))) limit 100`)).rows;
+  for (const job of candidates) {
+    const client = await runtime.pool.connect();
+    try {
+      await client.query('begin');
+      await client.query('select id from field.organizations where id=$1 for update', [job.organization_id]);
+      const current = (await client.query<Job>(`select * from field.site_generation_jobs where id=$1
+        and started_at<clock_timestamp()-interval '60 seconds' and status in ('running','canceled') for update`, [job.id])).rows[0];
+      if (current) {
+        await markFieldAiUnknown(client, job.id, 'result_unknown_after_restart');
+        await client.query(`update field.site_generation_jobs set status='failed',error_code='result_unknown_after_restart',
+          updated_at=now(),completed_at=now() where id=$1 and status='running'`, [job.id]);
+      }
+      await client.query('commit');
+    } catch (error) { await client.query('rollback'); throw error; }
+    finally { client.release(); }
+  }
 }
 
 export async function reconcileQueuedSiteJobs(runtime: FieldBusinessRuntime): Promise<number> {
@@ -220,29 +265,51 @@ export async function runSiteGenerationJob(runtime: FieldBusinessRuntime, id?: s
   if (!provider) return false;
   if (id && !uuidPattern.test(id)) return false;
   await failAbandonedSiteJobs(runtime);
-  const claimed = await runtime.pool.query<Job>(
-    `update field.site_generation_jobs set status = 'running', started_at = now(), updated_at = now()
-     where id = (select id from field.site_generation_jobs where status = 'queued'
-       and ($1::uuid is null or id = $1::uuid)
-       order by created_at for update skip locked limit 1) returning *`, [id ?? null]);
-  const job = claimed.rows[0];
-  if (!job) return false;
-  if (job.model !== provider.model) {
-    await runtime.pool.query(
-      `update field.site_generation_jobs set status = 'failed', error_code = 'model_changed',
-         completed_at = now(), updated_at = now() where id = $1 and status = 'running'`, [job.id]);
-    return true;
-  }
+  const candidate = (await runtime.pool.query<Job>(`select * from field.site_generation_jobs where status='queued'
+    and ($1::uuid is null or id=$1::uuid) order by created_at,id limit 1`, [id ?? null])).rows[0];
+  if (!candidate) return false;
+  const dispatch = await runtime.pool.connect();
+  let job: Job | undefined;
+  try {
+    await dispatch.query('begin');
+    if (!(await dispatch.query('select id from field.organizations where id=$1 for update skip locked', [candidate.organization_id])).rowCount) {
+      await dispatch.query('rollback'); return false;
+    }
+    job = (await dispatch.query<Job>("select * from field.site_generation_jobs where id=$1 and status='queued' for update", [candidate.id])).rows[0];
+    if (!job) { await dispatch.query('rollback'); return false; }
+    const authorized = (await dispatch.query("select 1 from field.memberships where organization_id=$1 and user_id=$2 and role in ('owner','editor') for share",
+      [job.organization_id, job.requested_by])).rowCount;
+    const refusal = !authorized ? 'requester_authority_changed' : job.model !== provider.model ? 'model_changed'
+      : await dispatchFieldAi(dispatch, job.organization_id, job.id);
+    if (refusal) {
+      await releaseFieldAi(dispatch, job.id, refusal);
+      await dispatch.query("update field.site_generation_jobs set status='failed',error_code=$2,completed_at=now(),updated_at=now() where id=$1", [job.id, refusal]);
+      await dispatch.query('commit'); return true;
+    }
+    await dispatch.query("update field.site_generation_jobs set status='running',started_at=clock_timestamp(),updated_at=now() where id=$1", [job.id]);
+    await dispatch.query('commit');
+  } catch (error) { await dispatch.query('rollback'); throw error; }
+  finally { dispatch.release(); }
+  const recordUsage = async (response: FieldModelUsage) => {
+    const usage = await runtime.pool.connect();
+    try {
+      await usage.query('begin');
+      await usage.query('select id from field.organizations where id=$1 for update', [job.organization_id]);
+      await consumeFieldAi(usage, job.id, response);
+      await usage.query(`update field.site_generation_jobs set input_tokens=$2,output_tokens=$3,
+        provider_response_id=$4,updated_at=now() where id=$1 and input_tokens is null
+        and (status in ('running','canceled') or (status='failed' and error_code='result_unknown_after_restart'))`,
+        [job.id, response.inputTokens, response.outputTokens, response.responseId]);
+      await usage.query('commit');
+    } catch (error) { await usage.query('rollback'); throw error; }
+    finally { usage.release(); }
+  };
   try {
     const response = await provider.generate({ prompt: job.prompt, catalog: job.catalog_snapshot });
-    if (!Number.isSafeInteger(response.inputTokens) || response.inputTokens < 0
-        || !Number.isSafeInteger(response.outputTokens) || response.outputTokens < 0
+    if (!Number.isSafeInteger(response.inputTokens) || response.inputTokens < 0 || response.inputTokens > 2147483647
+        || !Number.isSafeInteger(response.outputTokens) || response.outputTokens < 0 || response.outputTokens > 2147483647
         || !response.responseId || response.responseId.length > 200) throw new Error('provider_invalid_usage');
-    await runtime.pool.query(
-      `update field.site_generation_jobs set input_tokens = $2, output_tokens = $3,
-         provider_response_id = $4, updated_at = now()
-       where id = $1 and status in ('running', 'canceled') and input_tokens is null`,
-      [job.id, response.inputTokens, response.outputTokens, response.responseId]);
+    await recordUsage(response);
     const layout = layoutToSite(response.plan as SiteGenerationPlan, job.catalog_snapshot);
     if (!layout) throw new Error('provider_invalid_plan');
     const draft = await runtime.pool.query<{ revision: number; content: SiteContent }>(
@@ -254,19 +321,37 @@ export async function runSiteGenerationJob(runtime: FieldBusinessRuntime, id?: s
     if (!stale && !current) throw new Error('draft_invalid');
     const proposal = current ? preserveSitePhotos(layout, current) : layout;
     if (!proposal) throw new Error('media_layout_conflict');
-    await runtime.pool.query(
-      `update field.site_generation_jobs set status = case when status = 'running' then $2 else status end,
-         proposal = case when status = 'running' then $3::jsonb else proposal end,
-         error_code = case when status = 'running' and $2 = 'stale' then 'source_changed' else error_code end,
-         completed_at = now(), updated_at = now()
-       where id = $1 and status in ('running', 'canceled')`,
-      [job.id, stale ? 'stale' : 'proposed', JSON.stringify(proposal)]);
+    const finish = await runtime.pool.connect();
+    try {
+      await finish.query('begin');
+      await finish.query('select id from field.organizations where id=$1 for update', [job.organization_id]);
+      const allowed = await fieldAiCanExpose(finish, job.organization_id, job.id)
+        && !!(await finish.query("select 1 from field.memberships where organization_id=$1 and user_id=$2 and role in ('owner','editor') for share",
+          [job.organization_id, job.requested_by])).rowCount;
+      const status = !allowed ? 'stale' : stale ? 'stale' : 'proposed';
+      await finish.query(`update field.site_generation_jobs set status=case when status='running' then $2 else status end,
+        proposal=case when status='running' and $4 then $3::jsonb else proposal end,
+        error_code=case when status='running' and $2='stale' then $5 else error_code end,
+        completed_at=now(),updated_at=now() where id=$1 and status in ('running','canceled')`,
+        [job.id, status, JSON.stringify(proposal), allowed, allowed ? 'source_changed' : 'subscription_or_authority_changed']);
+      await finish.query('commit');
+    } catch (error) { await finish.query('rollback'); throw error; }
+    finally { finish.release(); }
   } catch (error) {
-    const code = error instanceof Error && ['provider_invalid_plan', 'media_layout_conflict', 'draft_invalid'].includes(error.message)
+    if (error instanceof FieldSiteProviderResultError) await recordUsage(error.usage);
+    const code = error instanceof Error && ['provider_invalid_plan', 'provider_refusal', 'provider_incomplete', 'provider_empty_output', 'media_layout_conflict', 'draft_invalid'].includes(error.message)
       ? error.message : 'provider_failed';
-    await runtime.pool.query(
-      `update field.site_generation_jobs set status = 'failed', error_code = $2, completed_at = now(), updated_at = now()
-       where id = $1 and status = 'running'`, [job.id, code]);
+    const failed = await runtime.pool.connect();
+    try {
+      await failed.query('begin');
+      await failed.query('select id from field.organizations where id=$1 for update', [job.organization_id]);
+      if (fieldProviderDefinitelyRefused(error)) await releaseFieldAi(failed, job.id, 'provider_definitive_refusal', true);
+      else await markFieldAiUnknown(failed, job.id, 'provider_outcome_unknown');
+      await failed.query(`update field.site_generation_jobs set status='failed',error_code=$2,completed_at=now(),updated_at=now()
+        where id=$1 and status='running'`, [job.id, code]);
+      await failed.query('commit');
+    } catch (failure) { await failed.query('rollback'); throw failure; }
+    finally { failed.release(); }
   }
   return true;
 }

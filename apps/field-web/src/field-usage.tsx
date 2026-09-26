@@ -7,6 +7,8 @@ type Summary = {
   product: "field";
   period: { start: string; end: string };
   siteAi: { jobRequests: number; recordedCalls: number; inputTokens: number; outputTokens: number };
+  entitlement?: {mode:string;periodId:string|null;endsAt:string|null;graceEndsAt:string|null;
+    siteAi:{includedUnits:number|null;consumedUnits:number;reservedUnits:number;unknownUnits:number;remainingUnits:number|null}};
   work: { directInquiries: number; publicReservations: number; reservationMessages: number;
     manualReservations: number; externalReservations: number };
 };
@@ -48,7 +50,10 @@ export function FieldUsage() {
           <li>사업자 수동 예약: {summary.work.manualReservations.toLocaleString()}건</li>
           <li>AP 외부 예약 요청: {summary.work.externalReservations.toLocaleString()}건</li>
         </ul><p>예약 요청 건수는 확정된 예약 수나 매출을 뜻하지 않습니다.</p></section></div>
-        <section className="special-panel"><h2>구독·청구 상태</h2><p>Field의 승인된 요금과 결제 공급사가 아직 연결되지 않았습니다. 이 기록으로 청구를 시작하거나 금액을 계산하지 않습니다.</p><p><a href="/workspace/subscription">Field 체험·구독 상태 보기</a></p></section>
+        <section className="special-panel"><h2>구독·청구 상태</h2>
+          <p>현재 이용 상태: {({paid:'유료 기간',grace:'결제 유예',trial:'체험 기간',mock_unconfigured:'로컬 체험 미시작',cleanup_only:'기존 업무 정리'} as Record<string,string>)[summary.entitlement?.mode??'']??'확인되지 않음'}. 사용 기록을 청구액으로 환산하거나 동의 없이 추가 결제하지 않습니다.</p>
+          {summary.entitlement?.siteAi.includedUnits!==null&&summary.entitlement?.siteAi.includedUnits!==undefined&&<><h3>결제 기간 AI 제공량 (추가)</h3><p>승인 제공량 {summary.entitlement.siteAi.includedUnits.toLocaleString()}회 · 소비 {summary.entitlement.siteAi.consumedUnits.toLocaleString()}회 · 예약/호출 중 {summary.entitlement.siteAi.reservedUnits.toLocaleString()}회 · 결과 미상 {summary.entitlement.siteAi.unknownUnits.toLocaleString()}회 · 남은 {summary.entitlement.siteAi.remainingUnits?.toLocaleString()}회</p><p>이 제공량은 위 UTC 월 집계와 별개인 실제 구독 기간에 적용됩니다. 유예 중에는 직전 기간의 남은 제공량만 사용합니다.</p></>}
+          <p><a href="/workspace/subscription">Field 체험·구독 상태 보기</a></p></section>
       </>}
     </main></div>;
 }

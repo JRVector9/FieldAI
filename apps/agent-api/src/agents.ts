@@ -3,7 +3,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
 import { rejectExpiredTrial } from './trial-access.js';
-import type { AgentFact, AgentModelOutput } from './openai.js';
+import { AiEntitlementError, reserveAi, dispatchAi, settleAi, failAi, validAiReceipt, aiEntitlement } from './ai-entitlement.js';
+import { AgentModelUsageError,type AgentFact,type AgentModelOutput } from './openai.js';
 import { confirmedConnectorFacts, guardedConnectorAnswer } from './connector-facts-live.js';
 export { approvedConnectorFacts } from './connector-facts-live.js';
 
@@ -213,26 +214,38 @@ export function registerAgentRoutes(app: FastifyInstance, runtime: BusinessRunti
         [runId, organization.id, release.id, release.knowledge_release_id,
           question.trim(), runtime.modelProvider.model],
       );
+      await reserveAi(client,runId);
       await client.query('commit');
     } catch (error) { await client.query('rollback'); throw error; } finally { client.release(); }
     const connector = await confirmedConnectorFacts(runtime, knowledge.rows[0].id);
     const facts = factsFor(knowledge.rows[0].content, connector.facts);
+    const dispatch=await runtime.pool.connect();
+    try{await dispatch.query('begin');await dispatch.query('select id from ap.organizations where id=$1 for update',[organization.id]);
+      const actor=await runtime.resolveUserId(request.headers);
+      const owner=actor===organization.userId&&(await dispatch.query("select 1 from ap.memberships where organization_id=$1 and user_id=$2 and role='owner' for share",[organization.id,actor])).rowCount;
+      const source=await latestAgentRelease(runtime,organization.id);
+      const currentKnowledge=(await dispatch.query('select id from ap.knowledge_releases where organization_id=$1 order by revision desc limit 1',[organization.id])).rows[0];
+      if(!owner||source?.id!==release.id||currentKnowledge?.id!==knowledge.rows[0].id)throw new AiEntitlementError('ai_access_ended');
+      await dispatchAi(dispatch,runId);await dispatch.query('commit');
+    }catch(error){await dispatch.query('rollback');await failAi(runtime.pool,runId,error);await runtime.pool.query("update ap.ai_runs set status='failed',error_code='ai_access_ended',finished_at=now() where id=$1",[runId]);return reply.code(409).send({error:'ai_access_ended',runId});}finally{dispatch.release();}
     let generated;
     try {
       generated = await runtime.modelProvider.generate({ question: question.trim(), facts,
         agent: release.content, maxOutputTokens: 768 });
-    } catch {
+    } catch (error) {
+      const confirmed=error instanceof AgentModelUsageError&&validAiReceipt(error.receipt);
+      if(confirmed)await settleAi(runtime.pool,runId,error.receipt);else await failAi(runtime.pool,runId,error);
       await runtime.pool.query(
-        `update ap.ai_runs set status = 'failed', error_code = 'provider_unavailable', finished_at = now()
-         where id = $1`, [runId]);
-      return reply.code(503).send({ error: 'provider_unavailable', runId });
+        `update ap.ai_runs set status=$2,error_code=$3,finished_at=now(),provider_response_id=$4,input_tokens=$5,output_tokens=$6
+         where id=$1`, [runId,confirmed?'rejected':'failed',confirmed?'provider_output_rejected':'provider_unavailable',confirmed?error.receipt.responseId:null,confirmed?error.receipt.inputTokens:null,confirmed?error.receipt.outputTokens:null]);
+      return reply.code(confirmed?422:503).send({error:confirmed?'provider_output_rejected':'provider_unavailable',runId});
     }
+    await settleAi(runtime.pool,runId,generated);
+    const receipt=validAiReceipt(generated);
     const output = outputFrom(generated.output);
     const supported = new Set(facts.map(fact => fact.id));
     const evidence = output?.evidenceIds ?? [];
-    const error = !output || !Number.isSafeInteger(generated.inputTokens)
-        || !Number.isSafeInteger(generated.outputTokens) || generated.inputTokens < 0
-        || generated.outputTokens < 0 || !text(generated.responseId, 200, true)
+    const error = !output || !receipt
       ? 'invalid_model_output'
       : evidence.some(id => !supported.has(id)) || (output.answer && evidence.length === 0)
         ? 'unsupported_evidence'
@@ -242,7 +255,7 @@ export function registerAgentRoutes(app: FastifyInstance, runtime: BusinessRunti
       await runtime.pool.query(
         `update ap.ai_runs set status = 'rejected', error_code = $2,
           provider_response_id = $3, input_tokens = $4, output_tokens = $5, finished_at = now()
-         where id = $1`, [runId, error, generated.responseId, generated.inputTokens, generated.outputTokens]);
+         where id = $1`, [runId, error, receipt?generated.responseId:null, receipt?generated.inputTokens:null, receipt?generated.outputTokens:null]);
       return reply.code(422).send({ error, runId });
     }
     const afterGeneration = evidence.some(id => id.startsWith('field:'))
@@ -254,6 +267,13 @@ export function registerAgentRoutes(app: FastifyInstance, runtime: BusinessRunti
     const committed = await runtime.pool.connect();
     try {
       await committed.query('begin');
+      await committed.query('select id from ap.organizations where id=$1 for update',[organization.id]);
+      const actor=await runtime.resolveUserId(request.headers);
+      const owner=actor===organization.userId&&(await committed.query("select 1 from ap.memberships where organization_id=$1 and user_id=$2 and role='owner' for share",[organization.id,actor])).rowCount;
+      const access=await aiEntitlement(committed,organization.id);
+      const source=await latestAgentRelease(runtime,organization.id);
+      const currentKnowledge=(await committed.query('select id from ap.knowledge_releases where organization_id=$1 order by revision desc limit 1',[organization.id])).rows[0];
+      if(!owner||!access.access.canStartNew||source?.id!==release.id||currentKnowledge?.id!==knowledge.rows[0].id){await committed.query("update ap.ai_runs set status='rejected',error_code='ai_access_ended',provider_response_id=$2,input_tokens=$3,output_tokens=$4,finished_at=now() where id=$1",[runId,generated.responseId,generated.inputTokens,generated.outputTokens]);await committed.query('commit');return reply.code(409).send({error:'ai_access_ended',runId});}
       await committed.query(
         `update ap.ai_runs set status = 'completed', answer = $2::jsonb,
           provider_response_id = $3, input_tokens = $4, output_tokens = $5, finished_at = now()

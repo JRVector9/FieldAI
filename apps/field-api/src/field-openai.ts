@@ -15,6 +15,11 @@ export type FieldSiteGenerator = {
   }>;
 };
 
+export type FieldModelUsage = { responseId: string; inputTokens: number; outputTokens: number };
+export class FieldSiteProviderResultError extends Error {
+  constructor(code: string, readonly usage: FieldModelUsage) { super(code); }
+}
+
 const schema = {
   type: 'object', additionalProperties: false, required: ['template', 'palette', 'pages'],
   properties: {
@@ -48,20 +53,27 @@ export function createFieldOpenAIProvider(): FieldSiteGenerator | undefined {
     const raw: unknown = await response.json();
     if (!raw || typeof raw !== 'object') throw new Error('provider_invalid_response');
     const result = raw as Record<string, unknown>;
-    if (result.status !== 'completed' || !Array.isArray(result.output)) throw new Error('provider_incomplete');
-    const content = result.output.flatMap(item => {
+    const rawUsage = result.usage && typeof result.usage === 'object' ? result.usage as Record<string, unknown> : {};
+    const validUsage = typeof result.id === 'string' && result.id.length > 0 && result.id.length <= 200
+      && Number.isSafeInteger(rawUsage.input_tokens) && Number(rawUsage.input_tokens) >= 0 && Number(rawUsage.input_tokens) <= 2147483647
+      && Number.isSafeInteger(rawUsage.output_tokens) && Number(rawUsage.output_tokens) >= 0 && Number(rawUsage.output_tokens) <= 2147483647;
+    const usage: FieldModelUsage | null = validUsage ? { responseId: result.id as string,
+      inputTokens: rawUsage.input_tokens as number, outputTokens: rawUsage.output_tokens as number } : null;
+    const refuse = (code: string): never => { if (usage) throw new FieldSiteProviderResultError(code, usage); throw new Error(code); };
+    if (result.status !== 'completed' || !Array.isArray(result.output)) refuse('provider_incomplete');
+    const content = (result.output as unknown[]).flatMap(item => {
       const message = item && typeof item === 'object' ? item as Record<string, unknown> : null;
       return message?.type === 'message' && Array.isArray(message.content) ? message.content : [];
     });
     if (content.some(item => item && typeof item === 'object' && (item as Record<string, unknown>).type === 'refusal'))
-      throw new Error('provider_refusal');
+      refuse('provider_refusal');
     const output = content.filter(item => item && typeof item === 'object' && (item as Record<string, unknown>).type === 'output_text')
       .map(item => (item as Record<string, unknown>).text).filter((item): item is string => typeof item === 'string').join('');
-    if (!output || output.length > 20_000) throw new Error('provider_empty_output');
-    const usage = result.usage && typeof result.usage === 'object' ? result.usage as Record<string, unknown> : {};
-    if (typeof result.id !== 'string' || !Number.isSafeInteger(usage.input_tokens) || !Number.isSafeInteger(usage.output_tokens))
-      throw new Error('provider_missing_usage');
-    return { plan: JSON.parse(output) as SiteGenerationPlan, inputTokens: usage.input_tokens as number,
-      outputTokens: usage.output_tokens as number, responseId: result.id };
+    if (!output || output.length > 20_000) refuse('provider_empty_output');
+    if (!usage) throw new Error('provider_missing_usage');
+    let plan: SiteGenerationPlan;
+    try { plan = JSON.parse(output) as SiteGenerationPlan; }
+    catch { return refuse('provider_invalid_plan'); }
+    return { plan, ...usage };
   } };
 }

@@ -24,6 +24,7 @@ export type FieldBusinessRuntime = {
   inquiryMedia?: FieldSiteMediaStore;
   apConnector?: ApConnectorConfig;
   revocationJournal?: Pick<FieldRevocationJournal, 'append'>;
+  oauthLifecycleGuard?: () => Promise<void>;
 };
 
 type Service = {

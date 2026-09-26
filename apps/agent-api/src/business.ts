@@ -15,6 +15,7 @@ export type BusinessRuntime = {
   billing?: BillingContext;
   pool: Pool;
   revocationJournal?: Pick<AgentRevocationJournal, 'read' | 'append'>;
+  oauthLifecycleGuard?: () => Promise<void>;
   resolveUserId: (headers: IncomingHttpHeaders) => Promise<string | null>;
   resolveSession?: (headers: IncomingHttpHeaders) => Promise<{ id: string; userId: string } | null>;
   modelProvider?: AgentModelProvider;

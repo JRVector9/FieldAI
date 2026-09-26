@@ -13,6 +13,10 @@ export async function integratorGrant(request: FastifyRequest, reply: FastifyRep
     | 'ap.deployments.manage', db: Pool | PoolClient = runtime.pool, lock = false): Promise<Grant | null> {
   const bearer = /^Bearer ([A-Za-z0-9_-]{20,512})$/.exec(request.headers.authorization ?? '')?.[1];
   if (!bearer) { reply.code(401).send({ error: 'invalid_access_token' }); return null; }
+  if (runtime.oauthLifecycleGuard) {
+    try { await runtime.oauthLifecycleGuard(); }
+    catch { reply.code(503).send({ error: 'oauth_lifecycle_unavailable' }); return null; }
+  }
   const digest = createHash('sha256').update(bearer).digest('base64url');
   if (lock) {
     // Native selection revoke locks selection before token/consent. Use the same order.

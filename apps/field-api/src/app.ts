@@ -29,6 +29,8 @@ import { registerFieldUsageRoutes } from './usage.js';
 import { registerFieldSubscriptionRoutes } from './subscription.js';
 import { registerFieldBillingRoutes } from './billing-routes.js';
 import { registerBillingRefundRoutes } from './billing-refund-routes.js';
+import { registerAdminBillingRoutes } from './admin-billing-routes.js';
+import { registerApRouteKeyLifecycleRoutes } from './ap-route-key-lifecycle.js';
 import { registerExternalRequestAttachmentRoutes } from './external-request-attachments.js';
 import { registerFieldAdminRoutes } from './admin.js';
 import { registerFieldModerationRoutes } from './site-moderation.js';
@@ -84,6 +86,8 @@ export function createFieldApp(
     registerFieldSubscriptionRoutes(app, businessRuntime);
     registerFieldBillingRoutes(app, businessRuntime);
     registerBillingRefundRoutes(app, businessRuntime);
+    registerAdminBillingRoutes(app, businessRuntime);
+    registerApRouteKeyLifecycleRoutes(app, businessRuntime);
     registerFieldBillingConsentRoutes(app, businessRuntime);
   }
   if (authHandler) {
