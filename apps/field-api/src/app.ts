@@ -23,6 +23,7 @@ import { registerExternalReservationContactRoutes } from './external-reservation
 import { registerExternalReservationNotificationRoute } from './external-reservation-notification-route.js';
 import { registerFieldUsageRoutes } from './usage.js';
 import { registerFieldSubscriptionRoutes } from './subscription.js';
+import { registerFieldBillingRoutes } from './billing-routes.js';
 import { registerExternalRequestAttachmentRoutes } from './external-request-attachments.js';
 import { registerFieldAdminRoutes } from './admin.js';
 import { registerFieldModerationRoutes } from './site-moderation.js';
@@ -73,6 +74,7 @@ export function createFieldApp(
     registerExternalReservationNotificationRoute(app, businessRuntime);
     registerFieldUsageRoutes(app, businessRuntime);
     registerFieldSubscriptionRoutes(app, businessRuntime);
+    registerFieldBillingRoutes(app, businessRuntime);
   }
   if (authHandler) {
     app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_request, body, done) => {
