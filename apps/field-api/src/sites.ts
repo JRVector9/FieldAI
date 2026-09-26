@@ -4,6 +4,7 @@ import type { FieldBusinessRuntime } from './business.js';
 import { normalizeSiteImage } from './site-media.js';
 import { authorizedApDeployments } from './ap-connector.js';
 import { rejectExpiredTrial } from './trial-access.js';
+import { activeSiteOrigin, primarySiteOrigin, resolvedCustomHost } from './custom-domains.js';
 
 type Section = { id: string; kind: 'hero' | 'text' | 'service_list' | 'faq'; heading: string; body: string; assetId?: string; alt?: string };
 type Page = { id: string; slug: string; title: string; sections: Section[] };
@@ -137,9 +138,13 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
       ap_public_id: string; site_origin: string; mode: string; status: string }>(
       'select connection_id, ap_deployment_id, ap_public_id, site_origin, mode, status from field.site_ap_installations where site_id = $1',
       [site.id]);
-    const row = found.rows[0];
-    return reply.header('Cache-Control', 'private, no-store').send({ siteOrigin: publicSiteOrigin(site.slug),
+    const origin = await primarySiteOrigin(runtime.pool, site.id, publicSiteOrigin(site.slug));
+    const row = found.rows.find(item => item.site_origin === origin);
+    return reply.header('Cache-Control', 'private, no-store').send({ siteOrigin: origin,
+      defaultOrigin: publicSiteOrigin(site.slug),
       published: release.rows[0]?.published ?? false,
+      installations: found.rows.map(item => ({ connectionId: item.connection_id, deploymentId: item.ap_deployment_id,
+        publicId: item.ap_public_id, origin: item.site_origin, mode: item.mode, status: item.status })),
       installation: row ? { connectionId: row.connection_id, deploymentId: row.ap_deployment_id,
         publicId: row.ap_public_id, origin: row.site_origin, mode: row.mode, status: row.status } : null });
   });
@@ -156,8 +161,10 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
       return reply.code(400).send({ error: 'invalid_installation' });
     const site = await siteFor(runtime, organization.organization_id);
     if (!site) return reply.code(404).send({ error: 'site_not_found' });
-    const origin = publicSiteOrigin(site.slug);
-    if (!origin) return reply.code(503).send({ error: 'site_origin_not_configured' });
+    const origin = await activeSiteOrigin(runtime.pool, site.id, object(request.body)?.origin, publicSiteOrigin(site.slug));
+    if (!origin) return reply.code(409).send({ error: 'site_origin_not_allowed' });
+    if (origin !== publicSiteOrigin(site.slug) && request.headers.origin !== (process.env.FIELD_PUBLIC_WEB_ORIGIN ?? 'http://localhost:3002'))
+      return reply.code(403).send({ error: 'invalid_origin' });
     const published = await runtime.pool.query(
       'select 1 from field.site_releases where site_id = $1 limit 1', [site.id]);
     if (!published.rowCount) return reply.code(409).send({ error: 'site_not_published' });
@@ -169,10 +176,13 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     const db = await runtime.pool.connect();
     try {
       await db.query('begin');
+      if (!await activeSiteOrigin(db, site.id, origin, publicSiteOrigin(site.slug), true)) {
+        await db.query('rollback'); return reply.code(409).send({ error: 'site_origin_not_allowed' });
+      }
       const current = await db.query<{ connection_id: string; ap_deployment_id: string; mode: string;
         status: string; site_origin: string }>(
-        'select connection_id, ap_deployment_id, mode, status, site_origin from field.site_ap_installations where site_id = $1 for update',
-        [site.id]);
+        'select connection_id, ap_deployment_id, mode, status, site_origin from field.site_ap_installations where site_id = $1 and site_origin=$2 for update',
+        [site.id, origin]);
       const old = current.rows[0];
       if (old?.connection_id === body.connectionId && old.ap_deployment_id === body.deploymentId
         && old.mode === body.mode && old.status === 'active' && old.site_origin === origin) {
@@ -182,7 +192,7 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
       await db.query(`insert into field.site_ap_installations
         (site_id,connection_id,ap_deployment_id,ap_public_id,site_origin,mode,status,installed_by)
         values ($1,$2,$3,$4,$5,$6,'active',$7)
-        on conflict (site_id) do update set connection_id = excluded.connection_id,
+        on conflict (site_id,site_origin) do update set connection_id = excluded.connection_id,
           ap_deployment_id = excluded.ap_deployment_id, ap_public_id = excluded.ap_public_id,
           site_origin = excluded.site_origin, mode = excluded.mode, status = 'active',
           installed_by = excluded.installed_by, updated_at = now()`,
@@ -225,32 +235,41 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     if (!organization) return reply;
     const site = await siteFor(runtime, organization.organization_id);
     if (!site) return reply.code(404).send({ error: 'site_not_found' });
-    const origin = publicSiteOrigin(site.slug);
-    if (!origin) return reply.code(503).send({ error: 'site_origin_not_configured' });
+    const origin = await activeSiteOrigin(runtime.pool, site.id, object(request.body)?.origin, publicSiteOrigin(site.slug));
+    if (!origin) return reply.code(409).send({ error: 'site_origin_not_allowed' });
+    if (origin !== publicSiteOrigin(site.slug) && request.headers.origin !== (process.env.FIELD_PUBLIC_WEB_ORIGIN ?? 'http://localhost:3002'))
+      return reply.code(403).send({ error: 'invalid_origin' });
     const proof = object(request.body)?.proof;
     if (typeof proof !== 'string' || !proofPattern.test(proof))
       return reply.code(400).send({ error: 'invalid_verification_proof' });
     const db = await runtime.pool.connect();
     try {
       await db.query('begin');
+      if (!await activeSiteOrigin(db, site.id, origin, publicSiteOrigin(site.slug), true)) {
+        await db.query('rollback'); return reply.code(409).send({ error: 'site_origin_not_allowed' });
+      }
       const published = await db.query(
         'select 1 from field.site_releases where site_id = $1 limit 1', [site.id]);
       if (!published.rowCount) {
         await db.query('rollback');
         return reply.code(409).send({ error: 'site_not_published' });
       }
+      const custom = origin === publicSiteOrigin(site.slug) ? null : await resolvedCustomHost(db, new URL(origin).hostname, true);
       const current = await db.query<{ proof: string; expires_at: Date }>(
-        'select proof, expires_at from field.site_verification_proofs where site_id = $1 for update', [site.id]);
+        custom ? 'select proof,expires_at from field.custom_domain_ap_proofs where domain_id=$1 for update'
+          : 'select proof,expires_at from field.site_verification_proofs where site_id=$1 for update', [custom?.id ?? site.id]);
       if (current.rows[0]?.proof === proof && current.rows[0].expires_at.getTime() > Date.now()) {
         await db.query('commit');
         return reply.header('Cache-Control', 'private, no-store').code(200).send({ origin, expiresAt: current.rows[0].expires_at });
       }
-      const saved = await db.query<{ expires_at: Date }>(
-        `insert into field.site_verification_proofs(site_id,proof,created_by,expires_at)
-         values ($1,$2,$3,now() + interval '1 day')
-         on conflict (site_id) do update set proof = excluded.proof,
-           created_by = excluded.created_by, expires_at = excluded.expires_at, updated_at = now()
-         returning expires_at`, [site.id, proof, userId]);
+      const saved = await db.query<{ expires_at: Date }>(custom
+        ? `insert into field.custom_domain_ap_proofs(domain_id,site_id,proof,created_by,expires_at)
+          values($4,$1,$2,$3,now()+interval '1 day') on conflict(domain_id) do update
+          set proof=excluded.proof,created_by=excluded.created_by,expires_at=excluded.expires_at,updated_at=now() returning expires_at`
+        : `insert into field.site_verification_proofs(site_id,proof,created_by,expires_at)
+          values($1,$2,$3,now()+interval '1 day') on conflict(site_id) do update
+          set proof=excluded.proof,created_by=excluded.created_by,expires_at=excluded.expires_at,updated_at=now() returning expires_at`,
+        custom ? [site.id,proof,userId,custom.id] : [site.id,proof,userId]);
       await db.query(`insert into field.outbox(id,organization_id,event_type,aggregate_id,payload)
         values ($1,$2,'field.site.verification.updated',$3,$4::jsonb)`, [randomUUID(),
         organization.organization_id, site.id, JSON.stringify({ siteId: site.id, origin })]);
@@ -260,14 +279,18 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
   });
 
-  app.get<{ Params: { slug: string } }>('/v1/public/site-verification/:slug', async (request, reply) => {
-    const origin = publicSiteOrigin(request.params.slug);
+  app.get<{ Params: { slug: string }; Querystring: { host?: string } }>('/v1/public/site-verification/:slug', async (request, reply) => {
+    const fallback = publicSiteOrigin(request.params.slug);
+    const custom = request.query.host === undefined ? null : await resolvedCustomHost(runtime.pool, request.query.host);
+    if (request.query.host !== undefined && custom?.slug !== request.params.slug) return reply.code(404).send({ error: 'site_not_found' });
+    const origin = custom ? `https://${custom.hostname}` : fallback;
     if (!origin) return reply.code(404).send({ error: 'site_not_found' });
-    const found = await runtime.pool.query<{ proof: string }>(
-      `select p.proof from field.sites s join field.site_verification_proofs p on p.site_id = s.id
-       where s.slug = $1 and p.expires_at > now()
-         and exists (select 1 from field.site_releases r where r.site_id = s.id)`,
-      [request.params.slug]);
+    const found = await runtime.pool.query<{ proof: string }>(custom
+      ? `select p.proof from field.custom_domain_ap_proofs p where p.domain_id=$1 and p.expires_at>now()
+          and exists(select 1 from field.site_releases r where r.site_id=p.site_id)`
+      : `select p.proof from field.sites s join field.site_verification_proofs p on p.site_id=s.id
+          where s.slug=$1 and p.expires_at>now() and exists(select 1 from field.site_releases r where r.site_id=s.id)`,
+      [custom?.id ?? request.params.slug]);
     if (!found.rows[0]) return reply.code(404).send({ error: 'verification_not_found' });
     return reply.header('Cache-Control', 'no-store').send({ origin, proof: found.rows[0].proof });
   });
@@ -551,7 +574,7 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     } finally { client.release(); }
   });
 
-  app.get<{ Params: { slug: string } }>('/v1/public/sites/:slug', async (request, reply) => {
+  app.get<{ Params: { slug: string }; Querystring: { host?: string } }>('/v1/public/sites/:slug', async (request, reply) => {
     if (!siteSlugPattern.test(request.params.slug)) return reply.code(404).send({ error: 'site_not_found' });
     const result = await runtime.pool.query<{
       site_id: string; organization_id: string; revision: number; catalog_revision: number;
@@ -568,15 +591,19 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     if ((await runtime.pool.query('select 1 from field.site_visibility_holds where site_id=$1 and released_at is null',
       [result.rows[0].site_id])).rowCount) return reply.header('Cache-Control', 'no-store').code(404).send({ error: 'site_visibility_restricted', organizationId: result.rows[0].organization_id });
     const row = result.rows[0];
-    const siteOrigin = publicSiteOrigin(request.params.slug);
-    const installation = siteOrigin && await runtime.pool.query<{ ap_public_id: string; mode: 'inline' | 'floating' }>(
+    const defaultOrigin = publicSiteOrigin(request.params.slug);
+    const custom = request.query.host === undefined ? null : await resolvedCustomHost(runtime.pool, request.query.host);
+    if (request.query.host !== undefined && custom?.site_id !== row.site_id) return reply.code(404).send({ error: 'site_host_not_found' });
+    const requestOrigin = custom ? `https://${custom.hostname}` : defaultOrigin;
+    const siteOrigin = await primarySiteOrigin(runtime.pool, row.site_id, defaultOrigin);
+    const installation = requestOrigin && await runtime.pool.query<{ ap_public_id: string; mode: 'inline' | 'floating' }>(
       `select i.ap_public_id, i.mode from field.site_ap_installations i
        join field.ap_connections c on c.id = i.connection_id
        where i.site_id = $1 and i.site_origin = $2 and i.status = 'active'
-         and c.status = 'review_required' limit 1`, [row.site_id, siteOrigin]);
+         and c.status = 'review_required' limit 1`, [row.site_id, requestOrigin]);
     const sdkSrc = runtime.apConnector && new URL('/sdk/v1.js', runtime.apConnector.issuer).toString();
     return { siteId: row.site_id, organizationId: row.organization_id, slug: request.params.slug,
-      siteOrigin, siteRevision: row.revision,
+      siteOrigin, defaultOrigin, requestOrigin, siteRevision: row.revision,
       catalogRevision: row.catalog_revision, latestCatalogRevision: row.latest_catalog_revision,
       stale: row.catalog_revision < row.latest_catalog_revision, ...row.content, catalog: row.catalog,
       apWidget: installation && installation.rows[0] && sdkSrc

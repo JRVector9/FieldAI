@@ -1,3 +1,4 @@
+import { subscriptionAccess } from './subscription-access.js';
 import type { Pool, PoolClient } from 'pg';
 
 export type BillingPlan = {
@@ -33,7 +34,7 @@ export async function billingSnapshot(db: Pool | PoolClient, organizationId: str
      from ap.billing_transactions t join ap.billing_periods p on p.id=t.period_id
      join ap.paid_subscriptions s on s.id=p.subscription_id where s.organization_id=$1
      order by t.created_at desc,t.id desc limit 100`, [organizationId]);
-  return { product: 'agent', organizationId, subscription: current ? { id: current.id, planId: current.plan_id,
+  return { product: 'agent', organizationId, access:await subscriptionAccess(db,organizationId),subscription: current ? { id: current.id, planId: current.plan_id,
     state: current.state, anchorAt: current.anchor_at, cancelRequestedAt: current.cancel_requested_at,
     terminatedAt: current.terminated_at } : null, periods: periods.rows, transactions: transactions.rows };
 }

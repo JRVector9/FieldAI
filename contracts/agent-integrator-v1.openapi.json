@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Agent Platform delegated integrator API",
-    "version": "1.0.0-preview.8",
-    "description": "AP bearer reads, selected deployment discovery, delegated conversation replies and source refresh requests, action-bound authorized attachment bytes, signed Field reservation/facts event inbox, signed connection revoke, post-revoke event status recovery, and durable reservation notification route closure. Deployment mutation is pending."
+    "version": "1.0.0-preview.9",
+    "description": "AP bearer reads, selected deployment discovery, delegated conversation replies and source refresh requests, action-bound authorized attachment bytes, signed Field reservation/facts event inbox, signed connection revoke, post-revoke event status recovery, and durable reservation notification route closure. Adds consent-bound installation-only public connections and origin-verified owned_embed preparation and management; native Field bidirectional bindings and selected conversation resources remain unchanged."
   },
   "servers": [{ "url": "/" }],
   "components": {
@@ -34,13 +34,262 @@
               "ap.agent.read": "Read the selected approved AI's minimal identity and revision",
               "ap.conversations.read": "Read consented conversations on explicitly selected active deployments",
               "ap.conversations.reply": "Write a human reply as the delegated AP owner",
-              "ap.sources.refresh": "Request a review-only refresh of this connection's approved Field source"
+              "ap.sources.refresh": "Request a review-only refresh of this connection's approved Field source",
+              "ap.connections.create": "Create/read this client and consent grant installation-only binding; no Field data or booking access",
+              "ap.deployments.manage": "Prepare, verify, activate and pause only owned_embed deployments created through this installation binding"
             }
           }
         }
       }
     },
     "schemas": {
+      "PublicConnectionCreate": {
+        "type": "object",
+        "required": [
+          "organizationId",
+          "agentId",
+          "externalOrganizationId",
+          "origin"
+        ],
+        "properties": {
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalOrganizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "origin": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Exact HTTPS origin without path, port or credentials. Only mock permits a scoped *.localhost HTTP origin with a port."
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicInstallationConnection": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "agentId",
+          "externalOrganizationId",
+          "origin",
+          "revision",
+          "createdAt",
+          "request_id",
+          "operation_id",
+          "state",
+          "retryable"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalOrganizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "origin": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Exact HTTPS origin without path, port or credentials. Only mock permits a scoped *.localhost HTTP origin with a port."
+          },
+          "revision": {
+            "type": "integer",
+            "const": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string",
+            "const": "installation_only"
+          },
+          "retryable": {
+            "type": "boolean",
+            "const": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicDeploymentCreate": {
+        "type": "object",
+        "required": [
+          "connectionId",
+          "organizationId",
+          "agentId",
+          "kind",
+          "origin"
+        ],
+        "properties": {
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "const": "owned_embed"
+          },
+          "origin": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Exact HTTPS origin without path, port or credentials. Only mock permits a scoped *.localhost HTTP origin with a port."
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicManagedDeployment": {
+        "type": "object",
+        "required": [
+          "id",
+          "publicId",
+          "connectionId",
+          "organizationId",
+          "agentId",
+          "kind",
+          "origin",
+          "verificationProof",
+          "verifiedAt",
+          "knowledgeRevision",
+          "revision",
+          "createdAt",
+          "request_id",
+          "operation_id",
+          "state",
+          "retryable"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "publicId": {
+            "type": "string",
+            "pattern": "^dep_[A-Za-z0-9_-]{20,50}$"
+          },
+          "connectionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "const": "owned_embed"
+          },
+          "origin": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "Exact HTTPS origin without path, port or credentials. Only mock permits a scoped *.localhost HTTP origin with a port."
+          },
+          "verificationProof": {
+            "type": "string"
+          },
+          "verifiedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "knowledgeRevision": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "active",
+              "paused"
+            ]
+          },
+          "retryable": {
+            "type": "boolean",
+            "const": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublicWriteError": {
+        "type": "object",
+        "required": [
+          "error",
+          "request_id",
+          "state",
+          "retryable"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "const": "rejected"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "FieldEventEnvelope": {
         "type": "object",
         "required": ["spec_version", "event_id", "event_type", "source_product", "connection_id", "aggregate_type", "aggregate_id", "aggregate_version", "occurred_at", "correlation_id", "notification_owner_product", "route_generation", "data"],
@@ -249,6 +498,811 @@
     }
   },
   "paths": {
+    "/integrations/v1/connections": {
+      "post": {
+        "operationId": "createPublicInstallationConnection",
+        "security": [
+          {
+            "apOAuth": [
+              "ap.connections.create"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current resource or committed same-key replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicInstallationConnection"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Committed new result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicInstallationConnection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Stable UUID. Scoped by client, grant, operation and target; body/If-Match reuse with different values returns409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicConnectionCreate"
+              }
+            }
+          }
+        },
+        "description": "Binds only the AP owner selected grant, client, organization and AI to a caller-side external organization UUID and exact origin. No second-product consent, login, facts access, source publishing, booking tool or billing is granted. UUID response-loss replay is durable. Existing native Field bindings are unaffected."
+      }
+    },
+    "/integrations/v1/connections/{id}": {
+      "get": {
+        "operationId": "getPublicInstallationConnection",
+        "security": [
+          {
+            "apOAuth": [
+              "ap.connections.create"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current resource or committed same-key replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicInstallationConnection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/integrations/v1/deployments/{id}": {
+      "get": {
+        "operationId": "getPublicManagedDeployment",
+        "security": [
+          {
+            "apOAuth": [
+              "ap.deployments.manage"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current resource or committed same-key replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicManagedDeployment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/integrations/v1/deployments/{id}/verify": {
+      "post": {
+        "operationId": "verifyPublicOwnedDeployment",
+        "security": [
+          {
+            "apOAuth": [
+              "ap.deployments.manage"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current resource or committed same-key replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicManagedDeployment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Stable UUID. Scoped by client, grant, operation and target; body/If-Match reuse with different values returns409."
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"[1-9][0-9]*\"$"
+            },
+            "description": "Quoted revision from management GET/previous successful write. Successful same-key replay precedes stale revision checks."
+          }
+        ],
+        "description": "Applies only to the deployment created by this client and current grant. Origin ownership, current approval/moderation, subscription access and optimistic revision are checked before changes. Verification is actual DNS/origin proof; failure leaves pending."
+      }
+    },
+    "/integrations/v1/deployments/{id}/activate": {
+      "post": {
+        "operationId": "activatePublicOwnedDeployment",
+        "security": [
+          {
+            "apOAuth": [
+              "ap.deployments.manage"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current resource or committed same-key replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicManagedDeployment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Stable UUID. Scoped by client, grant, operation and target; body/If-Match reuse with different values returns409."
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"[1-9][0-9]*\"$"
+            },
+            "description": "Quoted revision from management GET/previous successful write. Successful same-key replay precedes stale revision checks."
+          }
+        ],
+        "description": "Applies only to the deployment created by this client and current grant. Origin ownership, current approval/moderation, subscription access and optimistic revision are checked before changes. Verification is actual DNS/origin proof; failure leaves pending."
+      }
+    },
+    "/integrations/v1/deployments/{id}/pause": {
+      "post": {
+        "operationId": "pausePublicOwnedDeployment",
+        "security": [
+          {
+            "apOAuth": [
+              "ap.deployments.manage"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current resource or committed same-key replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicManagedDeployment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Stable UUID. Scoped by client, grant, operation and target; body/If-Match reuse with different values returns409."
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\"[1-9][0-9]*\"$"
+            },
+            "description": "Quoted revision from management GET/previous successful write. Successful same-key replay precedes stale revision checks."
+          }
+        ],
+        "description": "Stops this client/grant deployment without deleting data, canceling subscriptions, or changing other deployments. Cleanup operation remains available after subscription expiry."
+      }
+    },
     "/integrations/v1/action-requests/{actionId}/attachments/{attachmentId}": {
       "get": {
         "operationId": "getConsentedActionAttachment",
@@ -465,6 +1519,141 @@
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" }
         }
+      },
+      "post": {
+        "operationId": "preparePublicOwnedDeployment",
+        "security": [
+          {
+            "apOAuth": [
+              "ap.deployments.manage"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current resource or committed same-key replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicManagedDeployment"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Committed new result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicManagedDeployment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Explicit authentication, scope, resource or write condition failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicWriteError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Stable UUID. Scoped by client, grant, operation and target; body/If-Match reuse with different values returns409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicDeploymentCreate"
+              }
+            }
+          }
+        },
+        "description": "Creates pending owned_embed for the exact origin of this client/grant public installation connection. Cannot reuse or mutate another client or native deployment. Does not add the deployment to conversation-read selections. Verification and explicit activation are separate."
       }
     },
     "/integrations/v1/conversations": {

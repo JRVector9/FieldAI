@@ -25,7 +25,7 @@ type Deployment = { id: string; organization_id: string; public_id: string; kind
   allowed_origin: string | null; verification_proof: string | null; verified_at: string | null;
   status: 'pending' | 'active' | 'paused'; moderation_restricted: boolean;
   knowledge_revision: number | null; created_at: string };
-function originHost(value: unknown): string | null {
+export function originHost(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > 253) return null;
   try {
     const parsed = new URL(value);
@@ -39,7 +39,7 @@ function originHost(value: unknown): string | null {
     return parsed.hostname.toLowerCase();
   } catch { return null; }
 }
-async function defaultVerifyDomain(host: string, proof: string, origin?: string): Promise<boolean> {
+export async function defaultVerifyDomain(host: string, proof: string, origin?: string): Promise<boolean> {
   try {
     if (process.env.AP_PROFILE === 'mock' && origin?.startsWith(`http://${host}:`)) {
       const response = await fetch(`${origin}/.well-known/ap-site-verification`, {

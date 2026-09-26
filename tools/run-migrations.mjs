@@ -3,8 +3,13 @@ import { runner } from 'node-pg-migrate';
 
 const product = process.argv[2];
 if (product !== 'agent' && product !== 'field') throw new Error('usage: node tools/run-migrations.mjs agent|field');
+const ownKey = product === 'agent' ? 'AP_DATABASE_URL' : 'FIELD_DATABASE_URL';
+const peerKey = product === 'agent' ? 'FIELD_DATABASE_URL' : 'AP_DATABASE_URL';
+if (!process.env[ownKey] && process.env[peerKey]) {
+  throw new Error('explicit own database URL is required when the peer database is configured');
+}
 process.loadEnvFile(resolve(`infra/${product}/.env`));
-const databaseUrl = process.env[product === 'agent' ? 'AP_DATABASE_URL' : 'FIELD_DATABASE_URL'];
+const databaseUrl = process.env[ownKey];
 if (!databaseUrl) throw new Error(`${product} database URL is required`);
 await runner({
   databaseUrl,

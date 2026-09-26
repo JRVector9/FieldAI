@@ -18,6 +18,7 @@ export type SiteDraft = {
 export type SiteRelease = Omit<SiteDraft, "revision"> & {
   organizationId: string;
   siteOrigin: string | null;
+  requestOrigin?: string | null;
   apWidget: { publicId: string; mode: "inline" | "floating"; sdkSrc: string } | null;
   siteRevision: number;
   catalogRevision: number;
@@ -32,7 +33,8 @@ function ApWidget({ site }: { site: SiteRelease }) {
   useEffect(() => {
     const target = container.current;
     const widget = site.apWidget;
-    if (!target || !widget || !site.siteOrigin || window.location.origin !== site.siteOrigin) return;
+    const origin = site.requestOrigin === undefined ? site.siteOrigin : site.requestOrigin;
+    if (!target || !widget || !origin || window.location.origin !== origin) return;
     const script = document.createElement("script");
     script.src = widget.sdkSrc;
     script.dataset.deployment = widget.publicId;
@@ -40,7 +42,7 @@ function ApWidget({ site }: { site: SiteRelease }) {
     script.addEventListener("error", () => setError("AI 상담을 열 수 없습니다. 직접 문의를 이용해 주세요."));
     target.append(script);
     return () => target.replaceChildren();
-  }, [site.apWidget, site.siteOrigin]);
+  }, [site.apWidget, site.siteOrigin, site.requestOrigin]);
   return <div ref={container} aria-label="AI 상담 위젯">{error && <p role="status">{error}</p>}</div>;
 }
 

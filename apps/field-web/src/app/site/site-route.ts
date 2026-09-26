@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import type { SiteRelease } from "../../field-site";
+import { customHostMapping, platformHost } from "../../custom-domain-host";
 
 export async function publishedSite(slug: string, pageSlug: string): Promise<SiteRelease> {
   const host = (await headers()).get("host") ?? "";
@@ -8,7 +9,16 @@ export async function publishedSite(slug: string, pageSlug: string): Promise<Sit
   if (domain && host.endsWith(`.${domain}`) && host !== `${slug}.${domain}`) notFound();
 
   const api = process.env.FIELD_API_BASE_URL ?? "http://127.0.0.1:4321";
-  const response = await fetch(new URL(`/v1/public/sites/${encodeURIComponent(slug)}`, api), { cache: "no-store" });
+  const tenant = domain && host === `${slug}.${domain}`;
+  let customHost = "";
+  if (!tenant && !platformHost(host)) {
+    const mapping = await customHostMapping(host);
+    if (!mapping || mapping.slug !== slug) notFound();
+    customHost = host;
+  }
+  const address = new URL(`/v1/public/sites/${encodeURIComponent(slug)}`, api);
+  if (customHost) address.searchParams.set("host", customHost);
+  const response = await fetch(address, { cache: "no-store" });
   if (response.status === 404) notFound();
   if (!response.ok) throw new Error(`Field public site API failed (${response.status})`);
   const site = await response.json() as SiteRelease;

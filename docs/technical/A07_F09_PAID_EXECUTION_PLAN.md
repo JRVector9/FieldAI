@@ -1,6 +1,6 @@
 # A07.F09.PAID 독립 유료 구독 구현 계획
 
-> For agentic workers: 기존 사용자 지시대로 이 세션에서 execute-plan/TDD를 순차 적용한다. 매 작업 전 TASKS 완료 체크를 읽고 해당 하위 단계 완료 즉시 체크한다. 별도 에이전트나 새 승인 단계는 요청하지 않았다.
+> For agentic workers: 기존 사용자 지시대로 이 세션에서 execute-plan/TDD를 순차 적용한다. 매 작업 전 TASKS 완료 체크를 읽고 해당 하위 단계 완료 즉시 체크한다. 현재 사용자가 병렬 에이전트를 명시 승인했으며 root가 파일 소유 범위와 통합을 조율한다.
 
 **Goal:** AP와 Field 각각 승인된 가격 버전·명시 동의·월 구독 거래·갱신/해지/유예/환불·기능 제한·사업자/관리자 UI를 자체 DB/API/worker에 연결한다. 실 공급사 키/계약 없는 환경은 blocked_integration이며 유료 성공을 모의하지 않는다.
 
@@ -56,6 +56,17 @@ assert.equal(response.statusCode, 201, response.body);
 ```
 
 ## 2. 실제 provider port/거래 실행·미상 복구·갱신/해지
+
+### 현재 선택 — A07.F09.RENEW-CANCEL-ACCESS (2026-09-27)
+
+- 착수 HEADfc10170/clean·TASKS36[x]/7[ ]·managed65775 live. 직전 체크 정합성 commit은 progress. FIRST-CHARGE00c3e0d의 완료를 보존하며 실제 period0 전용 claim/paid 미반영 trial-access에 갱신·시간 기반 접근을 추가한다.
+- Files: AP000073_billing_lifecycle.sql/Field000067_billing_lifecycle.sql; 각 billing-charge-execution/worker·billing-consent-routes·billing·subscription·trial-access, 새 subscription-access.ts·test/billing-lifecycle.db.test.ts. 기존 적용72/66와 공개 cross-product 계약은 변경하지 않는다.
+- Requirements/QA: B01~B04/B10~B12·AP PRD2.8/Field3.8·보안5.4/5.5·QA43~46/113/126/146 해당 내부 부분. 제품별 own worker/DB/권한만 사용. 가격 판매 중지도 기존 동의 갱신을 바꾸지 않는다.
+- Decisions: 원래 anchor+index의 다음 한 기간만 생성하고 기간 전체가 지난 미수금은 자동 몰아 청구하지 않는다. grace는 예정 period start+동의 graceDays로 고정해 worker 부재/재시도로 연장하지 않는다. 결제 승인시각은 거래에 보존하되 갱신으로 anchor/기간을 이동하지 않는다. owner/current session·Origin·UUID idempotency·org→sub/tx lock 해지로 미시작 원장을 취소하고 시작한 processing/unknown은 같은 주문 대조로 유지한다. 남은 paid 기간/기존 업무/확인키/export는 보존한다. 종료된 paid나 nonmock 미구독은 신규 업무만 거절하며 유효 paid/grace는 과거 trial 만료보다 우선한다. mock 체험 미시작의 기존 로컬 동작은 유지한다.
+- Verification: 새 native 파일을 각 fixture own UUID PG17에 실행한다. 실패 먼저 확인 후 월말/동시/응답 유실·같은order·해지 선후·늦은 승인·고정grace/worker부재·미수기간/원장불변·권한/Origin/멱등을 구현한다. 직접 확장한 first-charge 파일만 관련 회귀에 포함한다. `node /tmp/{ap,field}-billing-lifecycle-run-db.mjs`, 각 API typecheck/build, `pnpm lint`, 좁은 read-only CLI 검토. tests는 synthetic provider, 실 PG/전체 QA/시안/UI는 미실행.
+- Failure/rollback: 실패/unknown은 기존 transaction/request를 유지하고 새 주문을 생성하지 않는다. 적용 migration을 되돌리거나 원장을 삭제하지 않는다. 다음 HTTP 확정거절/환불/AI 제공량/SDK·UI 단계와 실 PG gate는 미완료로 남긴다.
+- Review repair 추가 근거: CLI21200 P1(0.96) lookup 중 해지 뒤 POST 경합은 native3calls≠2로 재현해 구독별 send/cancel gate로 직렬화했다. 후속85028 P2(0.94)는 claim 뒤 실제 POST 전에 해지된 **미발송** 거래를 unknown으로 영구 보존해 새 가입을 막는 경우다. native81822/44662 unknown≠canceled를 재현했다. 아직 미커밋/managed 미적용인 새73/67에 dispatch tracking version/호출 직전 marker와 불변 guard를 추가한다. 기존72/66 원장의 version0은 이미 호출됐을 수 있어 unknown을 유지하고, version1+marker 없음의 중지 거래만 로컬 미발송 실패/기간 취소로 닫는다. 외부 응답 불확실을 확정 실패로 바꾸지 않는다.
+- [ ] native 갱신/해지/시간 기반 접근 구현·검수·runtime 반영·완료 체크.
 
 ### 완료 이력 — A07.F09.FIRST-CHARGE (2026-09-27)
 
@@ -131,3 +142,10 @@ pnpm build:web:field
 ```
 
 아직 실행하지 않은 명령을 pass로 표시하지 않는다. 실결제·실 공급사 callback/계약·가격/세금/법무·G-A1/F3/L1은 후속 blocked_integration/미승인이다.
+
+### 갱신/해지 추가 증거 보완 (2026-09-27, 진행 중)
+
+- CLI85028 P2 confidence0.94와 실제81822/44662 red로 확인한 claim→POST 전 해지 경합: 새 추적 원장만 실제 dispatch 직전 증거를 기록하고 확실한 미발송은 취소/종료한다. 기존 worker started 원장은 version0으로 유지/unknown 조회한다. 양제품 own UUID PG17 focused35546/9335 exit0 각27/27 fail0/skip0. 최종 repair audit/중앙 UI/runtime 검수는 아직이다.
+- AP73은 own mock에 이미 적용되어 동결. 뒤에 추가한 dispatch schema는 새AP76으로 분리했다. Field67은 own mock 미적용이므로 원본에 추가 유지. AP74/75도 적용돼 보완은 delivery78/public77로 분리한다. UI는 고정 시안, 새 기능만 `(추가)`이며 배치/스타일 재설계하지 않는다.
+
+- CLI11284 terminalexit0/P2 confidence0.94: 기간 종료 직전 시작한 lookup이 종료 후 빈 결과를 반환하면 시작snapshot now로 갱신POST 가능. 새 native에서 실제 lookup 기다림 중 종료경계를 넘는 추가red를 재현하고 send gate에서 원래기간/15일멱등창을 현재elapsed clock으로 재확인한다. 양제품28/28은 이 새경계추가 전 검수이며 최종repair는 아직이다.

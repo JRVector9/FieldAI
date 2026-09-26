@@ -1,18 +1,25 @@
 import { createHash } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { Pool, PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
 
-type Grant = { id: string; token_id: string; organization_id: string; agent_id: string; actor_user_id: string;
+export type Grant = { id: string; token_id: string; organization_id: string; agent_id: string; actor_user_id: string;
   client_id: string; allowed_deployment_ids: string[]; requested_scopes: string[];
   token_scopes: string[]; token_resources: string[]; consent_scopes: string[] };
 
 export async function integratorGrant(request: FastifyRequest, reply: FastifyReply,
   runtime: BusinessRuntime, requiredScope?: 'ap.agent.read' | 'ap.conversations.read'
-    | 'ap.conversations.reply' | 'ap.sources.refresh'): Promise<Grant | null> {
+    | 'ap.conversations.reply' | 'ap.sources.refresh' | 'ap.connections.create'
+    | 'ap.deployments.manage', db: Pool | PoolClient = runtime.pool, lock = false): Promise<Grant | null> {
   const bearer = /^Bearer ([A-Za-z0-9_-]{20,512})$/.exec(request.headers.authorization ?? '')?.[1];
   if (!bearer) { reply.code(401).send({ error: 'invalid_access_token' }); return null; }
   const digest = createHash('sha256').update(bearer).digest('base64url');
-  const found = await runtime.pool.query<Grant>(
+  if (lock) {
+    // Native selection revoke locks selection before token/consent. Use the same order.
+    await db.query(`select s.id from ap.oauth_selections s join "oauthAccessToken" t
+      on t."referenceId"=s.id::text where t.token=$1 for share of s`, [digest]);
+  }
+  const found = await db.query<Grant>(
     `select s.id, t.id as token_id, s.organization_id, s.agent_id, s.actor_user_id, s.client_id,
        s.allowed_deployment_ids, s.requested_scopes,
        t.scopes as token_scopes, t.resources as token_resources,
@@ -31,7 +38,7 @@ export async function integratorGrant(request: FastifyRequest, reply: FastifyRep
        and exists (select 1 from ap.agent_releases a where a.organization_id = s.organization_id
          and a.agent_id = s.agent_id and a.id = (select id from ap.agent_releases
            where organization_id = s.organization_id order by revision desc limit 1))
-     limit 1`, [digest],
+     limit 1${lock ? ' for share of t,c,s,oc,m' : ''}`, [digest],
   );
   const grant = found.rows[0];
   const resource = process.env.AP_AUTH_BASE_URL

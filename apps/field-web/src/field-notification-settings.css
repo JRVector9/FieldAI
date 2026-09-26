@@ -1,0 +1,53 @@
+/* ownerNotifications3 / field_ui_prototype_v3.html values, scoped to this component. */
+.field-notification-settings{--ink:#1d1d1f;--muted:#63636a;--line:#e9e9ed;--blue:#0066cc;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans CJK KR','Noto Sans KR','Segoe UI',sans-serif;font-size:16px;min-width:0}
+.field-notification-settings *{box-sizing:border-box}
+.field-notification-settings h1,.field-notification-settings h2,.field-notification-settings h3,.field-notification-settings p{margin:0}
+.field-notification-settings h1{font-size:36px;letter-spacing:-1.6px;line-height:1.25}
+.field-notification-settings h2{font-size:24px;letter-spacing:-.7px;line-height:1.4}
+.field-notification-settings h3{font-size:19px;letter-spacing:-.4px;line-height:1.4}
+.field-notification-settings p{line-height:1.65}
+.field-notification-settings button,.field-notification-settings input{font:inherit;-webkit-tap-highlight-color:transparent}
+.field-notification-settings button{cursor:pointer;touch-action:manipulation}
+.field-notification-settings button:disabled{cursor:not-allowed;opacity:.43}
+.field-notification-settings button:focus-visible,.field-notification-settings input:focus-visible{outline:3px solid #88b7ee;outline-offset:3px}
+.field-notification-settings .page-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:26px}
+.field-notification-settings .page-heading h1{font-size:34px;letter-spacing:-1.3px}
+.field-notification-settings .page-heading p{font-size:15px;color:var(--muted);margin-top:9px}
+.field-notification-settings .v3-grid2{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,1fr);gap:24px;align-items:start}
+.field-notification-settings .v3-card{background:white;border:1px solid #e7eaf0;border-radius:23px;padding:26px;min-width:0}
+.field-notification-settings .v3-card h2{font-size:21px;margin-bottom:8px}
+.field-notification-settings .v3-card h3{font-size:18px}
+.field-notification-settings .v3-card p{font-size:15px;color:var(--muted)}
+.field-notification-settings .v3-form-stack{display:flex;flex-direction:column;gap:21px}
+.field-notification-settings .field{display:flex;flex-direction:column;gap:8px}
+.field-notification-settings .field label{font-size:15px;font-weight:600}
+.field-notification-settings .input{width:100%;border:1px solid #dcdce2;border-radius:12px;padding:12px 14px;min-height:46px;background:#fff;color:var(--ink);font-size:16px;line-height:1.5}
+.field-notification-settings .input::placeholder{color:#73757d}
+.field-notification-settings .input:focus{border-color:var(--blue);outline:3px solid #0066cc15}
+.field-notification-settings .field-note{font-size:14px;color:var(--muted);line-height:1.6}
+.field-notification-settings .v3-check{font-size:14px;line-height:1.7;display:flex;align-items:flex-start;gap:10px}
+.field-notification-settings .v3-check input{margin-top:5px;width:18px;height:18px;flex-shrink:0}
+.field-notification-settings .v3-soft{padding:17px 19px;background:#f4f6f9;border-radius:14px;color:#626e7f;font-size:14px;line-height:1.65}
+.field-notification-settings .v3-note-plain{font-size:14px;color:#78808b;line-height:1.7;margin-top:18px}
+.field-notification-settings .btn{border:1px solid transparent;min-height:44px;border-radius:12px;padding:10px 17px;font-size:15px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px;line-height:1.4;transition:background .15s,box-shadow .15s;white-space:nowrap}
+.field-notification-settings .btn-primary{background:var(--blue);color:#fff}
+.field-notification-settings .btn-primary:hover{background:#0059b3}
+.field-notification-settings .btn-secondary{background:#fff;color:var(--ink);border-color:#dfdfe5}
+.field-notification-settings .btn-secondary:hover{background:#f8f8fa}
+.field-notification-settings .btn-small{min-height:36px;padding:7px 12px;font-size:14px}
+.field-notification-settings .v3-list-row{display:flex;align-items:center;gap:15px;padding:21px 0;border-top:1px solid #e9edf2}
+.field-notification-settings .v3-list-row:first-child{border:0}
+.field-notification-settings .v3-list-row p{font-size:14px;margin-top:6px}
+.field-notification-settings .v3-list-row strong{font-size:16px}
+.field-notification-settings .grow{flex:1;min-width:0}
+.field-notification-settings .row-between{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.field-notification-settings .muted{color:var(--muted)}
+.field-notification-settings .mt8{margin-top:8px}
+.field-notification-settings .mt16{margin-top:16px}
+.field-notification-settings .mt24{margin-top:24px}
+.field-notification-settings .mb24{margin-bottom:24px}
+.field-notification-settings .additional-settings{margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}
+@media(max-width:1100px){.field-notification-settings .v3-grid2{grid-template-columns:minmax(0,1.25fr) minmax(280px,1fr)}}
+@media(max-width:850px){.field-notification-settings .v3-grid2{grid-template-columns:1fr}}
+@media(max-width:720px){.field-notification-settings .page-heading{margin-bottom:23px;flex-wrap:wrap;gap:14px}.field-notification-settings .page-heading h1{font-size:28px;letter-spacing:-1.1px}.field-notification-settings .page-heading p{font-size:14px;line-height:1.65;max-width:100%}}
+@media(max-width:520px){.field-notification-settings .v3-card{padding:20px;border-radius:18px}.field-notification-settings .v3-list-row{flex-wrap:wrap}}

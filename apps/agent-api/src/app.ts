@@ -1,3 +1,5 @@
+import { registerIntegratorPublicWriteRoutes } from './integrator-public-write.js';
+import { registerAgentDeliveryRoutes } from './notification-delivery-routes.js';
 import { registerAgentBillingConsentRoutes } from './billing-consent-routes.js';
 import Fastify from 'fastify';
 import { fromNodeHeaders } from 'better-auth/node';
@@ -64,6 +66,7 @@ export function createAgentApp(
     registerAgentReceiptRotationRoutes(app, businessRuntime);
     registerBusinessRoutes(app, businessRuntime);
     registerAgentInquiryRoutes(app, businessRuntime);
+    registerAgentDeliveryRoutes(app, businessRuntime, businessRuntime.notification);
     registerInquiryArchiveRoutes(app, businessRuntime);
     registerAgentRoutes(app, businessRuntime);
     registerDeploymentRoutes(app, businessRuntime);
@@ -74,6 +77,7 @@ export function createAgentApp(
     registerPlacementRoutes(app, businessRuntime);
     registerDistributionMetricsRoutes(app, businessRuntime);
     registerIntegratorRoutes(app, businessRuntime);
+    registerIntegratorPublicWriteRoutes(app, businessRuntime);
     registerSourceRefreshRoutes(app, businessRuntime);
     registerFieldConnectorRoutes(app, businessRuntime);
     registerFieldSourceRoutes(app, businessRuntime);

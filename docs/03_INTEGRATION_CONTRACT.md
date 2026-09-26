@@ -61,8 +61,9 @@ IntegrationBinding
 | Scope | 허용 | 추가 경계 |
 |---|---|---|
 | ap.agent.read | 선택한 AI의 공개·상태 정보 | AP 전체 조직 조회 불가 |
+| ap.connections.create | 선택한 AP 조직·AI와 외부 사이트의 설치 전용 연결 생성/조회 | 상대 로그인·정보·예약·결제 권한을 만들지 않음 |
 | ap.sources.refresh | 이 연결의 승인 정보 갱신 요청 | 임의 source/지식 공개 금지 |
-| ap.deployments.manage | 검증된 Field 사이트의 배포 생성·중지 | 다른 외부 사이트 배포 삭제 불가 |
+| ap.deployments.manage | Field 및 일반 외부 client의 정확 origin owned_embed 준비·소유 검증·활성·중지 | 현재 client+grant가 만든 설치만 허용, 다른 native/client 배포 조작 불가 |
 | ap.conversations.read | 이 연결·배포 또는 넘겨받은 업무에 관련된 대화 | AI의 다른 사이트 대화를 전부 조회하지 않음 |
 | ap.conversations.reply | 연결 대화에 동의한 사업자의 직접 답변 | 설치용 백그라운드 credential에는 넣지 않음 |
 | ap.events.read | 이 연결 사건·실패 메타데이터 | 매체/타 연결 이벤트 조회 불가 |
@@ -317,11 +318,14 @@ Field source가 해제되면 그 값의 AP 사용을 중단한다. 데이터가 
 | 경로 | 권한/필수 입력 | 결과 |
 |---|---|---|
 | GET /integrations/v1/me | AP 위임 token | 허용 조직·AI·scope·grant 상태 |
-| POST /integrations/v1/connections | 동의 transaction, 선택 AI | binding, 허용 기능 |
+| POST /integrations/v1/connections | ap.connections.create, 현재 owner 위임/선택 조직·AI·client·grant, 외부 조직 UUID·정확 origin | installation_only binding, UUID 멱등 영수증 |
+| GET /integrations/v1/connections/{id} | ap.connections.create, 같은 client·grant·조직·AI | 설치 전용 연결 상태 |
 | GET /integrations/v1/connections/{id}/source | ap.sources.refresh, 현재 연결 | AP 저장/승인 source 버전·검토 상태 |
 | POST /integrations/v1/connections/{id}/source-refreshes | ap.sources.refresh, 예상 source 버전 |202 sync_job |
 | GET /integrations/v1/connections/{id}/source-refreshes/{operationId} | ap.sources.refresh, 현재 연결 | 갱신 작업 상태·결과 |
-| POST /integrations/v1/deployments | ap.deployments.manage, owned origin·agent | 설치 준비; 검증 후 활성 |
+| POST /integrations/v1/deployments | ap.deployments.manage, 자기 public 연결·정확 origin·선택 조직/AI, UUID key | owned_embed pending 준비; 검증/명시 활성은 별도 |
+| GET /integrations/v1/deployments/{id} | ap.deployments.manage, 이 client+grant가 만든 배포 | 상태·소유 proof·revision/ETag |
+| POST /integrations/v1/deployments/{id}/verify / activate / pause | ap.deployments.manage, 자기 배포·UUID key·If-Match | 실제 소유 검증/명시 활성/중지, 충돌409·조건 누락428 |
 | GET /integrations/v1/conversations | read, 연결 제한 cursor | 최소 목록·출처·remote 상태 |
 | GET /integrations/v1/conversations/{id}/messages | read, 범위·cursor | 원본 sequence |
 | POST /integrations/v1/conversations/{id}/replies | user reply, message·revision·idempotency | 원본 message ID·저장/알림 상태 |
@@ -347,6 +351,12 @@ Field source가 해제되면 그 값의 AP 사용을 중단한다. 데이터가 
 | POST /v1/customer-handoffs/exchange | 1회 고엔트로피 코드 | Field 예약 확인키 발급·이전 키 폐기 |
 | POST /integrations/v1/connections/{id}/revoke | 현재 연결별 HMAC 서명; 범용 manage 동의는 후속 | Field 로컬 회수·서명 영수증 |
 | POST /integrations/v1/webhooks/agent | 등록 서명 |202 durable inbox receipt |
+
+AP 설치 쓰기의 고정 계약은 `agent-integrator-v1.openapi.json` **1.0.0-preview.9**다. `ap.connections.create`/`ap.deployments.manage`는 client 등록과 AP owner의 조직·AI 선택, 실제 OAuth 동의/token 모두에 명시해야 한다. `externalOrganizationId`는 caller-side 설치 식별값이며 Field actor/조직 동의나 양방향 정보·예약 binding의 증거가 아니다. Field와 일반 외부 client는 같은 경로·scope·origin proof·권한을 사용한다. 현재 Field HTTP consumer 모듈은 이 계약을 소비하지만 사업자 새 BFF/화면 호출과 새 scope 재동의 사용자 흐름은 후속이다.
+
+신규 public 설치 write는 UUID `Idempotency-Key`를 쓰며 기존 reply/source refresh의 43자 base64url key는 유지한다. 같은 client+grant+operation+target/key와 정규 요청 본문/If-Match는 저장된 결과로200 복구하고, 변경 내용 재사용은409 `retryable:false`다. 배포 변경은 quoted revision `If-Match`를 사용하며 native 상태 변경도 revision을 진행한다. owner 위임/token 만료·회수 또는 현재 membership 상실은401, 누락 scope403, 다른 조직/AI/client/grant/native 배포는 안전한404다. 관리 API는 pending·verifiedAt·active·paused를 구분하고 실제 origin 검증 없이 active를 만들지 않는다. 성공 응답은 `request_id`, `operation_id`, `state`, `retryable`을 포함하고 오류는 `request_id`·rejected 상태·재시도 가능 여부를 구분한다. 저장 뒤 응답 유실/형상 오류는 같은 UUID로 복구하고 새 연결/key로 우회하지 않는다.
+
+배포 생성은 기존 `allowed_deployment_ids`와 대화 읽기 권한을 자동 확장하지 않는다. 새 배포 상담 원문은 AP owner의 별도 선택/재동의가 필요하다. 기존 native selection 회수는 해당 grant의 새 public 설치만 paused로 전환하며 다른 native 배포·예약·구독·원본을 보존한다. 이 설치 전용 경로는 기존 양방향 Field bind나 후속 범용 OAuth revoke를 대신하지 않는다.
 
 write의 Idempotency-Key는 제품+client+connection+operation 범위다. 같은 키·다른 body는409. 변경 객체에는 If-Match/expected_revision을 쓴다.400 입력,401 인증,403 권한,404 안전한 미존재,409 충돌/조건 변경,410 해제/만료,429 사용량,503 일시 장애를 명확히 반환한다. 응답은 `request_id`, `operation_id`(비동기), `state`, `retryable`을 포함하고 개인정보를 오류 문구에 넣지 않는다.
 

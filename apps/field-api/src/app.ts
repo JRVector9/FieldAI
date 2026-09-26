@@ -1,3 +1,5 @@
+import { registerCustomDomainRoutes } from './custom-domain-routes.js';
+import { registerFieldDeliveryRoutes } from './notification-delivery-routes.js';
 import { registerFieldBillingConsentRoutes } from './billing-consent-routes.js';
 import Fastify from 'fastify';
 import { fromNodeHeaders } from 'better-auth/node';
@@ -57,7 +59,9 @@ export function createFieldApp(
     registerInquiryRoutes(app, businessRuntime);
     registerInquiryAttachmentRoutes(app, businessRuntime);
     registerFieldNotificationRoutes(app, businessRuntime);
+    registerFieldDeliveryRoutes(app, businessRuntime, businessRuntime.notification);
     registerSiteRoutes(app, businessRuntime);
+    registerCustomDomainRoutes(app, businessRuntime, businessRuntime.customDomain);
     registerSiteGenerationRoutes(app, businessRuntime);
     registerBookingRoutes(app, businessRuntime);
     registerReservationAttachmentRoutes(app, businessRuntime);

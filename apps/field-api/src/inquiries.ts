@@ -43,10 +43,10 @@ async function replayMessage(client: PoolClient, inquiryId: string, currentState
       delivery: row.delivery_state }
     : { error: 'idempotency_conflict' };
 }
-async function outbox(client: PoolClient, organizationId: string, eventType: string, aggregateId: string) {
+async function outbox(client: PoolClient, organizationId: string, eventType: string, aggregateId: string, sourceMessageId?: string) {
   await client.query(
     'insert into field.outbox(id, organization_id, event_type, aggregate_id, payload) values ($1, $2, $3, $4, $5::jsonb)',
-    [randomUUID(), organizationId, eventType, aggregateId, JSON.stringify({ inquiryId: aggregateId })],
+    [randomUUID(), organizationId, eventType, aggregateId, JSON.stringify({ inquiryId: aggregateId, ...(sourceMessageId ? { sourceMessageId } : {}) })],
   );
 }
 async function ownerUser(request: FastifyRequest, reply: FastifyReply, runtime: FieldBusinessRuntime) {
@@ -612,7 +612,7 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
       if (visibility === 'customer') {
         await client.query("update field.inquiries set state = 'waiting_customer', revision = revision + 1, updated_at = now() where id = $1", [request.params.id]);
         if (!inquiry.rows[0].is_test)
-          await outbox(client, inquiry.rows[0].organization_id, 'field.inquiry.owner_reply', request.params.id);
+          await outbox(client, inquiry.rows[0].organization_id, 'field.inquiry.owner_reply', request.params.id, messageId);
       } else await client.query('update field.inquiries set revision = revision + 1, updated_at = now() where id = $1', [request.params.id]);
       await client.query('commit');
       return reply.code(201).send({ messageId,

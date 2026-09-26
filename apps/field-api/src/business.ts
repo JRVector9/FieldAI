@@ -1,3 +1,5 @@
+import type { CustomDomainContext } from './custom-domains.js';
+import type { NotificationContext } from './notification-context.js';
 import type { BillingContext } from './billing-context.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { IncomingHttpHeaders } from 'node:http';
@@ -10,6 +12,8 @@ import { rejectExpiredTrial } from './trial-access.js';
 import type { FieldRevocationJournal } from './revocation-journal.js';
 
 export type FieldBusinessRuntime = {
+  notification?: NotificationContext;
+  customDomain?: CustomDomainContext;
   billing?: BillingContext;
   pool: Pool;
   resolveUserId: (headers: IncomingHttpHeaders) => Promise<string | null>;

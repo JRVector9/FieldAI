@@ -1,3 +1,4 @@
+import { subscriptionAccess } from './subscription-access.js';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { BusinessRuntime } from './business.js';
@@ -45,8 +46,8 @@ export function registerAgentSubscriptionRoutes(app: FastifyInstance, runtime: B
   app.get('/v1/subscription', async (request, reply) => {
     const member = await organizationFor(request, reply, false);
     if (!member) return reply;
-    return result(member.organizationId, await getTrial(member.organizationId),
-      process.env.AP_PROFILE === 'mock', member.canManage);
+    return {...result(member.organizationId, await getTrial(member.organizationId),
+      process.env.AP_PROFILE === 'mock', member.canManage),access:await subscriptionAccess(runtime.pool,member.organizationId)};
   });
 
   app.post('/v1/subscription/trial', async (request, reply) => {

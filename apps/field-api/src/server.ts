@@ -1,3 +1,5 @@
+import { customDomainContextFromEnvironment } from './custom-domains.js';
+import { notificationContextFromEnvironment } from './notification-context.js';
 import { billingContextFromEnvironment } from './billing-context.js';
 import { Pool } from 'pg';
 import { fromNodeHeaders } from 'better-auth/node';
@@ -21,6 +23,8 @@ const siteQueue = process.env.FIELD_VALKEY_URL ? new FieldSiteQueue(process.env.
 const runtime = {
   pool,
   billing: billingContextFromEnvironment(),
+  notification: notificationContextFromEnvironment(),
+  customDomain: customDomainContextFromEnvironment(),
   resolveUserId: async (headers: import('node:http').IncomingHttpHeaders) =>
     (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
   resolveSession: async (headers: import('node:http').IncomingHttpHeaders) => {

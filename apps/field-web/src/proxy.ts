@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { customHostMapping, customHostResource, platformHost } from "./custom-domain-host";
 
 const siteSlug = /^field-[0-9a-f]{12}$/;
 const sitePage = /^\/site\/([^/]+)(?:\/[^/]+)?\/?$/;
@@ -14,7 +15,36 @@ export async function proxy(request: NextRequest) {
   const domain = process.env.APP_PROFILE === "live" ? process.env.FIELD_SITE_BASE_DOMAIN : "localhost:3002";
   const host = (request.headers.get("host") ?? "").toLowerCase();
   const suffix = domain ? `.${domain.toLowerCase()}` : "";
-  if (!suffix || !host.endsWith(suffix)) return NextResponse.next();
+  if (!suffix || !host.endsWith(suffix)) {
+    if (platformHost(host)) return NextResponse.next();
+    try {
+      const mapping = await customHostMapping(host);
+      if (!mapping) return notFound();
+      const path = request.nextUrl.pathname;
+      if (path.startsWith("/_next/") || path === "/favicon.ico" || path === "/.well-known/ap-site-verification") return NextResponse.next();
+      const site = sitePage.exec(path);
+      if (site) return site[1] === mapping.slug ? NextResponse.next() : notFound();
+      const catalog = /^\/(?:public|v1\/public\/catalog)\/([^/]+)(?:\/(?:availability|inquiries(?:\/recover)?|reservations(?:\/recover)?))?\/?$/.exec(path);
+      if (catalog) return catalog[1] === mapping.organizationId ? NextResponse.next() : notFound();
+      const report = /^\/v1\/public\/sites\/([^/]+)\/reports$/.exec(path);
+      if (report) return report[1] === mapping.slug ? NextResponse.next() : notFound();
+      const receipt = /^\/(inquiry|reservation)\/([^/]+)\/?$/.exec(path);
+      const workApi = /^\/v1\/(inquiries|reservations)\/([^/]+)(?:\/.*)?$/.exec(path);
+      const asset = /^\/v1\/public\/site-assets\/([^/]+)$/.exec(path);
+      if (receipt || workApi || asset) {
+        const kind = receipt ? receipt[1] === "inquiry" ? "inquiries" : "reservations" : workApi ? workApi[1]! as "inquiries" | "reservations" : "site-assets";
+        const id = receipt?.[2] ?? workApi?.[2] ?? asset![1]!;
+        return await customHostResource(host, kind, id) ? NextResponse.next() : notFound();
+      }
+      if (path === "/" || /^\/[a-z0-9][a-z0-9-]{0,39}\/?$/.test(path)
+        && !["workspace", "admin", "login", "signup", "start", "api", "v1", "integrations"].includes(path.replaceAll("/", ""))) {
+        const target = request.nextUrl.clone();
+        target.pathname = `/site/${mapping.slug}${path === "/" ? "" : path.replace(/\/$/, "")}`;
+        return NextResponse.rewrite(target);
+      }
+      return notFound();
+    } catch { return unavailable(); }
+  }
 
   const tenantSlug = host.slice(0, -suffix.length);
   if (!siteSlug.test(tenantSlug)) return notFound();

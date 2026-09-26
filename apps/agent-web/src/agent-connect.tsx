@@ -18,6 +18,11 @@ async function request(path: string, method = "GET", body?: unknown) {
   return { status: response.status, data: await response.json().catch(() => ({})) as Record<string, unknown> };
 }
 
+function scopeLabel(scope: string) {
+  return scope === "ap.connections.create" ? "외부 사이트 설치 연결 생성 (추가)"
+    : scope === "ap.deployments.manage" ? "이 외부 서비스가 만든 상담 설치 관리 (추가)" : scope;
+}
+
 function oauthQuery() { return window.location.search.slice(1); }
 function requestedScopes() {
   return [...new Set((new URLSearchParams(window.location.search).get("scope") ?? "")
@@ -113,7 +118,7 @@ export function ConnectSelect() {
           <span>{item.kind === "link" ? "상담 링크"
             : item.kind === "placement_embed" ? "매체 승인 카드" : "외부 위젯"} · {item.publicId}{item.origin ? ` · ${item.origin}` : ""}</span>
         </label>) : <p>활성 배포가 없습니다.</p>}</fieldset>}
-      <section aria-label="요청 접근 범위"><h2>요청 접근 범위</h2><ul>{requestedScopes().map(scope => <li key={scope}>{scope}</li>)}</ul></section>
+      <section aria-label="요청 접근 범위"><h2>요청 접근 범위</h2><ul>{requestedScopes().map(scope => <li key={scope}>{scopeLabel(scope)}</li>)}</ul></section>
       <button type="submit" disabled={busy || !selected}>선택하고 동의 내용 확인</button>
     </form></>}</Shell>;
 }
@@ -146,8 +151,10 @@ export function ConnectConsent() {
   return <Shell title="외부 서비스 접근 동의" status={status}>{selection && <div className="ap-connect-form">
     <p><strong>{selection.clientName}</strong>에 다음 AP 자원 접근을 허용하시겠습니까?</p>
     {selection.scopes.includes("ap.sources.refresh") && <p>정보 갱신 범위는 이 연결의 Field 승인 정보를 AP 검토 대기로 가져올 수 있습니다. AP 사업자 승인 없이 고객 AI나 지식을 공개하지 않습니다.</p>}
+    {selection.scopes.includes("ap.connections.create") && <p>외부 사이트 설치 연결 (추가): 선택한 AP 조직·AI를 외부 조직과 연결합니다. 상대 서비스 로그인·결제·예약 권한은 포함하지 않습니다.</p>}
+    {selection.scopes.includes("ap.deployments.manage") && <p>상담 설치 관리 (추가): 이 외부 서비스가 만든 동일 주소의 설치만 준비·소유 확인·활성화·중지할 수 있습니다. 새 설치의 대화 접근은 별도로 선택해 승인해야 합니다.</p>}
     <dl><dt>조직</dt><dd>{selection.organizationName}</dd><dt>승인 AI</dt><dd>{selection.agentName}</dd>
-      <dt>상담 배포</dt><dd>{selection.deploymentIds.length}개</dd><dt>접근 범위</dt><dd>{selection.scopes.join(", ")}</dd></dl>
+      <dt>상담 배포</dt><dd>{selection.deploymentIds.length}개</dd><dt>접근 범위</dt><dd>{selection.scopes.map(scopeLabel).join(", ")}</dd></dl>
     <p>동의 후에도 연결 권한을 철회할 수 있습니다. AP 원본과 고객 접근은 AP에 남습니다.</p>
     <div className="ap-connect-actions"><button type="button" disabled={busy} onClick={() => void decide(true)}>접근 허용</button>
       <button type="button" disabled={busy} onClick={() => void decide(false)}>거부</button></div>

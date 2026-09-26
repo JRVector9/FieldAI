@@ -13,9 +13,10 @@
     "retention:restore": "node dist/retention-restore-cli.js --offline-restored",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test:unit": "tsx --test test/health.test.ts test/billing-period.test.ts test/toss-billing.adapter.test.ts",
+    "test:unit": "tsx --test test/health.test.ts test/billing-period.test.ts test/toss-billing.adapter.test.ts test/notification-delivery.adapter.test.ts",
     "start:billing-authorization": "node dist/billing-authorization-worker.js",
-    "start:billing-charge": "node dist/billing-charge-worker.js"
+    "start:billing-charge": "node dist/billing-charge-worker.js",
+    "start:notifications": "node dist/notification-delivery-worker.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1139.0",
@@ -23,6 +24,10 @@
     "better-auth": "1.7.5",
     "fastify": "5.12.5",
     "pg": "8.23.0",
-    "sharp": "0.35.4"
+    "sharp": "0.35.4",
+    "web-push": "3.6.7"
+  },
+  "devDependencies": {
+    "@types/web-push": "3.6.4"
   }
 }

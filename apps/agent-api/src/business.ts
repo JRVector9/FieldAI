@@ -1,3 +1,4 @@
+import type { NotificationContext } from './notification-context.js';
 import type { BillingContext } from './billing-context.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { IncomingHttpHeaders } from 'node:http';
@@ -10,6 +11,7 @@ import type { AgentRevocationJournal } from './revocation-journal.js';
 import { rejectExpiredTrial } from './trial-access.js';
 
 export type BusinessRuntime = {
+  notification?: NotificationContext;
   billing?: BillingContext;
   pool: Pool;
   revocationJournal?: Pick<AgentRevocationJournal, 'read' | 'append'>;

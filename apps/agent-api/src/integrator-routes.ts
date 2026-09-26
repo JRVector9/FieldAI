@@ -7,7 +7,7 @@ import { insertMessage, messageReplay, recordInquiryEvent } from './inquiries.js
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const allowedScopes = new Set(['ap.agent.read', 'ap.conversations.read',
-  'ap.conversations.reply', 'ap.sources.refresh']);
+  'ap.conversations.reply', 'ap.sources.refresh', 'ap.connections.create', 'ap.deployments.manage']);
 const idempotencyKey = /^[A-Za-z0-9_-]{43}$/;
 const object = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;

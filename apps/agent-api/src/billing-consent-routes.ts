@@ -164,4 +164,39 @@ export function registerAgentBillingConsentRoutes(app: FastifyInstance, runtime:
       await db.query('commit');return {...view(row),state:'canceled'};
     }catch(e){await db.query('rollback');throw e;}finally{db.release();}
   });
+  app.post('/v1/subscription/billing/cancel',async(request,reply)=>{
+    const a=await ownerFor(request,reply,runtime);if(!a)return reply;
+    if(!a.session)return fail(reply,401,'current_session_required');
+    const b=object(request.body),rawKey=request.headers['idempotency-key'];
+    if(!uuid.test(String(b.subscriptionId))||typeof rawKey!=='string'||!uuid.test(rawKey))return fail(reply,400,'invalid_cancel_request');
+    const key=hash(rawKey),digest=hash(JSON.stringify(['paid-cancel',a.org,b.subscriptionId]));
+    const db=await runtime.pool.connect();
+    try {
+      await db.query('begin');await db.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[`ap-billing-send:${b.subscriptionId}`]);if(!await lockOwner(db,a)){await db.query('rollback');return fail(reply,403,'owner_required');}
+      await db.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[`ap-billing:${a.user}:${key}`]);
+      const old=(await db.query('select request_hash,result from ap.billing_requests where actor_user_id=$1 and key_hash=$2',[a.user,key])).rows[0];
+      if(old) {
+        if(old.request_hash!==digest){await db.query('rollback');return fail(reply,409,'idempotency_conflict');}
+        await db.query('commit');return old.result;
+      }
+      const s=(await db.query('select * from ap.paid_subscriptions where id=$1 and organization_id=$2 for update',[b.subscriptionId,a.org])).rows[0];
+      if(!s){await db.query('rollback');return fail(reply,404,'subscription_not_found');}
+      if(!s.cancel_requested_at) {
+        await db.query("update ap.paid_subscriptions set cancel_requested_at=now(),cancel_requested_by=$2,state='canceled' where id=$1",[s.id,a.user]);
+        await db.query(`update ap.billing_transactions t set state='canceled',claim_token=null,lease_expires_at=null
+          where t.period_id in(select id from ap.billing_periods where subscription_id=$1)
+          and t.started_at is null and t.state in ('pending','blocked_integration')`,[s.id]);
+        await db.query(`update ap.billing_periods p set state='canceled' where subscription_id=$1 and state='pending'
+          and exists(select 1 from ap.billing_transactions t where t.period_id=p.id and t.state='canceled')`,[s.id]);
+        await db.query(`update ap.billing_authorizations set state='canceled',callback_token_ciphertext=null,auth_key_ciphertext=null
+          where subscription_id=$1 and started_at is null and state in ('awaiting','pending','blocked_integration','failed')`,[s.id]);
+        await db.query(`insert into ap.billing_events(organization_id,subscription_id,plan_id,actor_user_id,event_type,payload)
+          values($1,$2,$3,$4,'subscription_cancel_requested','{}')`,[a.org,s.id,s.plan_id,a.user]);
+      }
+      const result={subscriptionId:s.id,state:'canceled',renewalStopped:true};
+      await db.query('insert into ap.billing_requests(actor_user_id,key_hash,request_hash,result) values($1,$2,$3,$4::jsonb)',[a.user,key,digest,JSON.stringify(result)]);
+      await db.query('commit');return result;
+    }catch(error){await db.query('rollback');throw error;}finally{db.release();}
+  });
+
 }

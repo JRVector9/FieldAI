@@ -23,7 +23,8 @@ Toss4항목이 모두 없으면 native API는 정상 부팅하고 checkout503/bl
 - SDK 준비 정보의 customerKey는 임의 UUID다. callback state는 암호화해 저장하고 계정·세션·조직·provider mode/MID에 묶는다. browser secret key/원시 카드 정보는 반환하거나 받지 않는다.
 - POST `/v1/subscription/authorizations/:id/confirm`: 원래 계정/세션·state/customerKey·현재 PG binding/만료를 확인하고 authKey를 암호화해 pending/202로 저장한다. 동일 authKey retry는 같은 상태를 반환한다. **pending은 카드 인증 발급/실제 결제 성공이 아니다.**
 - GET `/v1/subscription/authorizations/:id`: 자체 조직 owner에게 비밀값 없는 상태를 반환한다.
-- POST `/v1/subscription/authorizations/:id/cancel`: 아직 발급을 시작하지 않은 인증을 중지하고 callback/auth ciphertext를 폐기하며 동의/감사 metadata를 보존한다. 이미 processing/unknown/completed인 인증은 이 경로에서 삭제하지 않는다. 전체 유료 해지는 다음 worker/구독 단계에서 별도 연결한다.
+- POST `/v1/subscription/authorizations/:id/cancel`: 아직 발급을 시작하지 않은 인증을 중지하고 callback/auth ciphertext를 폐기하며 동의/감사 metadata를 보존한다. 이미 processing/unknown/completed인 인증은 이 경로에서 삭제하지 않는다.
+- POST `/v1/subscription/billing/cancel`: own organization의 현재 owner/session·Origin·UUID Idempotency-Key와 subscriptionId를 확인해 다음 갱신을 중지한다. 아직 시작하지 않은 원장만 취소하고 이미 processing/unknown은 같은 주문 조회 대상으로 보존한다. 해지와 실제 청구 POST는 제품/구독별 gate로 직렬화하며, 진행 중인 POST가 있으면 해지는 그 호출 종료를 기다린다. 남은 paid 기간과 기존 업무/확인키/export는 유지한다. 환불은 별도 미완료 기능이다.
 
 인증 worker는 조직→구독/인증 순서로 잠그고 공급사 호출 전에 원래 request_key·첫 시작 시각·120초 lease/claim token을 저장한다. 응답 유실/만료 lease는 unknown으로 복구하고 같은 request_key·authKey·customerKey로만 발급을 재요청한다. 원래 첫 시작 시각은 변경할 수 없으며 15일 멱등창 종료 1분 전부터 자동 발급을 중단하고 reconciliation_required로 보존한다. settings/MID/암호화 key가 없거나 달라졌을 때 미시작만 blocked_integration이고 시작한 요청은 unknown이다. 늦게 돌아온 이전 claim의 결과는 폐기한다. 성공 시 billingKey는 제품/구독 purpose로 암호화해 저장하고 authKey/callback ciphertext를 폐기한다. authorization completed는 구독 active/paid나 실제 청구 성공이 아니다.
 
@@ -37,7 +38,11 @@ node --env-file=infra/field/.env apps/field-api/dist/billing-authorization-worke
 
 첫 청구 worker는 인증 발급 완료 뒤 period0/transaction/order/request를 저장하고, 날짜는 실제 승인까지 null로 유지한다. 첫 시작·MID·서버 API key의 비가역 fingerprint·customer/orderName·암호화 billingKey snapshot을 호출 전에 기록한다. 180초 lease는 조회와 청구의65초 timeout 두 번을 포함한다. 응답 유실/만료 lease는 같은 order를 GET으로 조회하고, 없음이 확인되면 원래 fingerprint/본문/멱등키로만 재요청한다. 키 변경·미시작 중지·멱등창 종료2분 전에는 새 POST를 하지 않는다. 조회는 이후에도 가능하며 기존 미상 원장을 초기화하지 않는다.
 
-현재 `DONE`·원래 order/금액/잔액/면세/부가세·승인시각 검증 후에만 period0를 실제 approvedAt 기준으로 확정하고 paymentKey를 암호화해 저장한다. 먼저 시작한 원장이 없는 공급사 성공을 모의하지 않는다. 조회된 ABORTED/EXPIRED는 해당 시도를 실패로 확정한다. 다른 HTTP 공급사 오류는 보수적으로 unknown이며 확정 거절 분류/유예와 환불은 후속이다. HTTP fixture/provider는 테스트 주입이며 runtime fallback이 아니다.
+현재 `DONE`·원래 order/금액/잔액/면세/부가세·승인시각 검증 후에만 period0를 실제 approvedAt 기준으로 확정하고 paymentKey를 암호화해 저장한다. 먼저 시작한 원장이 없는 공급사 성공을 모의하지 않는다. 조회된 ABORTED/EXPIRED는 해당 시도를 실패로 확정한다. 다른 HTTP 공급사 오류는 보수적으로 unknown이며 확정 거절 분류와 환불은 후속이다. HTTP fixture/provider는 테스트 주입이며 runtime fallback이 아니다.
+
+동일 charge worker가 이후 월 갱신도 처리한다. 원래 KST anchor+period index와 동의 snapshot을 보존하며 최신 paid 기간 다음 한 기간만 생성한다. 한 기간 전체가 지나도록 처리하지 못한 미수금은 `renewal_confirmation_required`로 남겨 자동 몰아 청구하지 않는다. 미시작 갱신이 예정 기간을 넘으면 자동 POST를 중단하고, 이미 시작한 미상 거래는 조회만으로 복구한다. 늦은 원격 승인은 paid_at에 저장하지만 원래 period/anchor를 이동하지 않는다.
+
+유예는 다음 예정 기간 시작+동의 graceDays이며 다음 기간 종료를 넘지 않는다. 재시도/worker 부재가 기간을 연장하지 않는다. `/v1/subscription`과 `/v1/subscription/billing`의 `access`가 paid/grace/trial/cleanup_only를 구분하며, 유효 paid는 만료된 mock 체험보다 우선한다. nonmock은 승인된 해당 test/live paid 또는 유예가 없으면 신규 업무만 차단한다. 기존 업무/내보내기 경로와 다른 제품은 유지한다. 환불된 paid를 mock 미설정으로 바꾸거나 test 가격으로 live 접근을 제공하지 않는다. AI 제공량 제한과 실제 SDK/결제 화면은 후속이다.
 
 ```bash
 node --env-file=infra/agent/.env apps/agent-api/dist/billing-charge-worker.js

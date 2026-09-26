@@ -1,3 +1,4 @@
+import { notificationContextFromEnvironment } from './notification-context.js';
 import { billingContextFromEnvironment } from './billing-context.js';
 import { Pool } from 'pg';
 import { fromNodeHeaders } from 'better-auth/node';
@@ -25,6 +26,7 @@ const app = createAgentApp(
   {
     pool,
     billing: billingContextFromEnvironment(),
+    notification: notificationContextFromEnvironment(),
     revocationJournal,
     resolveUserId: async (headers) =>
       (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,

@@ -186,10 +186,20 @@ async function main() {
         environment, managed, error => {
           process.stderr.write(`${error.message}; ${prefix} core remains ready, billing authorization is unavailable\n`);
         }, root, false);
-      start(`${prefix} first charge worker`, process.execPath,
+      start(`${prefix} billing charge worker`, process.execPath,
         [`--env-file=infra/${product}/.env`, `apps/${product}-api/dist/billing-charge-worker.js`],
         environment, managed, error => {
-          process.stderr.write(`${error.message}; ${prefix} core remains ready, first charge processing is unavailable\n`);
+          process.stderr.write(`${error.message}; ${prefix} core remains ready, billing charge processing is unavailable\n`);
+        }, root, false);
+      start(`${prefix} notification worker`, process.execPath,
+        [`--env-file=infra/${product}/.env`, `apps/${product}-api/dist/notification-delivery-worker.js`],
+        environment, managed, error => {
+          process.stderr.write(`${error.message}; ${prefix} core remains ready, notification processing is unavailable\n`);
+        }, root, false);
+      if (!isAgent) start('Field custom domain worker', process.execPath,
+        ['--env-file=infra/field/.env', 'apps/field-api/dist/custom-domain-worker.js'],
+        environment, managed, error => {
+          process.stderr.write(`${error.message}; Field core remains ready, custom domain processing is unavailable\n`);
         }, root, false);
       if (isAgent) {
         start('AP retention worker', process.execPath,

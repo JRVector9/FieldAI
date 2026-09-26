@@ -86,8 +86,10 @@ export function registerFieldNotificationRouteClose(app: FastifyInstance, runtim
         return reply.header('Cache-Control', 'no-store').send(response(row));
       }
       const mirror = await db.query<{ id: string; revision: number; event_type: string;
-        notification_state: string | null }>(
-        `select e.field_event_id as id,e.revision,e.event_type,n.state as notification_state
+        notification_state: string | null; delivery_unresolved: boolean }>(
+        `select e.field_event_id as id,e.revision,e.event_type,n.state as notification_state,
+           exists(select 1 from ap.notification_deliveries d where d.notification_id=n.id
+             and d.started_at is not null and d.state not in ('sent','failed')) as delivery_unresolved
          from ap.field_reservation_events e
          left join ap.notification_events n on n.field_reservation_event_id = e.id
            and n.audience = 'customer'
@@ -101,7 +103,7 @@ export function registerFieldNotificationRouteClose(app: FastifyInstance, runtim
       const complete = mirror.rows.length === body.latestRevision + 1
         && mirror.rows.every((row, index) => row.revision === index
           && (noticeEvents.has(row.event_type)
-            ? row.notification_state === 'blocked_integration' || row.notification_state === 'not_applicable'
+            ? !row.delivery_unresolved && ['blocked_integration','not_applicable','blocked_limit','sent','failed'].includes(row.notification_state ?? '')
             : row.notification_state === null))
         && mirror.rows.at(-1)?.id === body.latestEventId;
       const pending = await db.query<{ count: string }>(

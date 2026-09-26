@@ -10,6 +10,10 @@
 
 완료 표시 정합성 점검(2026-09-27, verified): 사용자 필수 지침/AGENTS.md6.1에 따라 이 원장·paid/phase 계획·coverage·잔여 audit·인계를 대조했다. 해당7문서만 수정했고 코드/API/schema 변경은 없다. paid 계획의 완료 동의/최초 청구가 미완료와 묶인 체크박스와 phase의 오래된 “owner 동의부터” 지시를 분리하고, 과거 착수 기록은 이력으로 표시했다. 근거는 기존 구현 commit/현재 native 테스트 소스와 보존된 검수 로그다. 실제 Python 문서 대조 exit0: 완료36/미완료7·세부 ID 중복0·완료4개 commit/남은 기능 체크/시안 경로 유지. 문서 diff 확인·`git diff --check` exit0. 서비스 테스트는 재실행하지 않았고 새 기능 완료를 추가한 것은 아니다.
 
+**고정 디자인 지침(2026-09-27):** `reference/field_ui_prototype_v3.html` 디자인 자체는 고정한다. 기존 배치·색·글자·메뉴·반응형 규칙을 재설계하거나 반복 조정하지 않는다. 시안에 없는 새 기능만 기존 디자인 안에 넣고 **`(추가)`**로 표시한다. AGENTS.md6.0 및 인계 상단을 따른다. root가 중앙 UI와 통합을 소유하고 병렬 에이전트는 지정된 backend/Host 연결 범위만 수정한다. 이번 지침 기록은 새 기능 완료 체크가 아니다.
+
+**C02.LOCAL 추가 오류 재개(2026-09-27, 기존[x] 유지):** delivery Field fixture가 peer 제품의 migration 인자를 넘겼고 `tools/run-migrations.mjs`의 무조건 own .env fallback으로 AP mock에73~75가 적용됐다. 실제 own pgmigrations/catalog 조회와 Public Agent 호출부 read-only 조사로 확인했다. 변경 전 추가 범위는 `.env` 읽기 전에 own URL 부재+peer URL 명시를 거부하는 최소 guard와 새 `tools/test/migration-selection.test.mjs`다. 양URL 부재인 정상 managed는 기존 fallback 유지, own UUID 명시도 유지. 양URL 모두 명시된 잘못된 product는 이 guard만으로 구별하지 못한다. 검수는 실제 runner를 child에서 import하고 loadEnvFile canary로 DB에 접근하지 않은 채 잘못된제품이 먼저 거부되는지 확인한다. 기존 환경/DB/서버를 재구현하거나 완료 체크를 되돌리지 않는다.
+
 ### 완료된 내부 세부 작업 — 같은 범위를 다시 구현하지 않는다
 
 - [x] **C02.LOCAL** 제품별 API/웹·PG17/migration/키·Field Valkey·managed mock 실행/정상 종료·DB 볼륨 유지. `tools/mock-run.mjs`, 양제품 health 실제ready. 운영 ACL/CI는 별도다.
@@ -51,6 +55,12 @@
 - [x] **A05.WIDGET-END** native iframe 보존 종료/입력 잠금·명시 새 상담·현재 종료 ID 확인·유실 응답 재조회·늦은 AI/조회 오류 폐기·과거 전달 ticket 만료/직렬화·기존 receipt 분리. 코드 **fe6a524**, 집중 native DB79104 exit0 2/2·Chromium320 native6355 exit0 2/2·API type14816/lint45013·최종 repair review16296 exit0/추가 P1/P2 없음. managed48590 최신 양제품build/ready·웹200 반영. 전체 시안 인수/실 공급사/전체 E2E·QA/G는 별도다.
 
 ### 남은 작업 — 여기서 다음 세부 ID를 선택한다
+
+**2026-09-27 사용자 승인 병렬 실행/Coordinator=root:** 구독 RENEW-CANCEL-ACCESS는 root가 기존 billing/subscription/trial-access·AP73/Field67을 소유한다. Delivery Agent는 A06.F08.DELIVERY의 신규 provider/발송 worker/별도 실행·콜백 모듈과 AP74/Field68만, Domain Agent는 F04.CUSTOM-DOMAIN의 신규 domain 모듈·Field69와 Field sites의 domain 연결부만, Public API Agent는 A09.PUBLIC-WRITE 계약/consumer·별도 public write 모듈과 필요 시 AP75/Field70만 소유한다. 각 Agent가 먼저 세부 파일/관련 요구/QA/명령을 기록한다. 공통 app.ts/server.ts/package.json/tools/mock-run.mjs·완료 원장·인계·runtime 재기동·git add/commit은 root만 변경한다. 다른 소유 파일 변경이 필요하면 Coordinator에 요청하고 먼저 덮어쓰지 않는다. 각 Agent는 자신의 scope 결과/실제검수/미검수/등록 patch를 제출하며 전체 출시 완료로 체크하지 않는다.
+
+**병렬 소유 추가/완료 ID 확장 근거:** Domain Agent는 Field sites.ts의 domain 연결부 및 field-web proxy.ts/site-route.ts/.well-known AP 검증 route의 custom Host resolver만 추가 소유한다. Public API Agent는 AP integrator-auth.ts/integrator-routes.ts/auth.ts의 신규 명시 공개write scope·grant 재검사와 deployments.ts의 origin 검증 helper export만 추가 소유한다. Delivery Agent는 기존 AP field-notification-route-close.ts의 발송 확정상태/해제 경합 분기 및 관련 native 검사만 추가 소유한다. 현재 route-close는 blocked/not_applicable만 종료 가능해 새 sent/failed 상태가 안전한 종료를 막고, claim/close 경합은 같은 action lock이 필요하다는 직접 증거다. A06.IN-APP/F08.IN-APP·I06.NATIVE-REVOKE의 기존 완료 이력은 유지하며 신규 외부 발송 상태 소비 범위만 확장한다. 각 계획에 구체 경로/원래 commit·추가 검수를 기록하고 타 소유 범위는 변경하지 않는다.
+
+**2026-09-27 현재 선택 — A07.F09.RENEW-CANCEL-ACCESS(in_progress):** HEADfc10170/clean·완료36/잔여7·managed65775 실제 live 확인. 기존 FIRST-CHARGE00c3e0d의[x]는 유지하고 period0 전용 실행기를 own 갱신 period에도 사용하는 추가 범위만 연다. 현재 claim은 `billing_period=0`이고 trial-access는 paid를 읽지 않아 유효한 결제도 expired trial로 거절하는 구체적 증거가 있다. AP73/Field67·각 charge-execution/worker·billing-consent-routes/billing/subscription/trial-access와 새 subscription-access/native lifecycle 검사를 수정한다. QA43~46/113/126/146 중 갱신/해지/시간 기반 접근을 own UUID PG17 fixture·관련 최초 청구 회귀·API type/lint/build·CLI 독립검토로 확인한다. 최초 동의/인증/가격을 재구현하지 않으며 확정 HTTP거절/환불/AI 제공량/실 SDK/UI는 별도 남는다. 상세 범위/복구/명령은 paid 실행 계획을 따른다.
 
 **2026-09-27 추가 범위 기록:** 미완료 A07.F09.FIRST-CHARGE를 선택했다. 기존 PLAN-BASIS(b639a4d)·CONSENT-BACKEND(1a04815)의[x]는 유지한다. 최초 청구 연결을 위해 면세 미지정 legacy 차단/명시 승인 taxFreeAmount snapshot·owner 대조와 Toss adapter API-key fingerprint metadata만 확장한다. 현재 원장에 면세값이 없고 공식 멱등키가 API key에도 묶이는 구체적 근거는 paid 실행 계획에 기록했다. 가격/동의/인증 backend 자체를 재구현하지 않는다.
 
