@@ -182,6 +182,11 @@ async function main() {
         resolve(root, `apps/${product}-web`));
       await ready(`http://127.0.0.1:${webPort}/`, product, managed);
       if (isAgent) {
+        start('AP retention worker', process.execPath,
+          ['--env-file=infra/agent/.env', 'apps/agent-api/dist/retention-purge-worker.js'],
+          environment, managed, error => {
+            process.stderr.write(`${error.message}; AP core remains ready, retention processing is unavailable\n`);
+          }, root, false);
         start('AP event worker', process.execPath,
           ['--env-file=infra/agent/.env', 'apps/agent-api/dist/field-event-worker.js'],
           environment, managed, error => {

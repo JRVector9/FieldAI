@@ -1,5 +1,9 @@
 # 개발 진행 상태 — 2026-09-26
 
+## 최신 C03/A08 AP 실제 정리·독립 worker·복원
+
+AP 정리 요청/다른 승인/취소·독립 worker·실제 파일/원문/AI/자체 사본 정리·usage/ID 보존·DB 재저장 차단, 고객 종료/명시적 새 상담을 연결했다. AP migration65/66·Field migration62의 제품별 immutable journal receipt와 signed 원장 대조로 유실·대체·변조/실행 중 폴더 부재 뒤 추가 정리를 차단한다. JSON/사진/archive/지원 읽기는 응답 종료까지 보호하며 photo-only 첨부 목록은 현재 ready ID와 재대조한다. 열린 고객 follow-up410은 원본 재조회/기존 시도 폐기로 종료 안내를 반영한다. AP DB89449 28/28·Field DB17798 30/30 fail0/skip0 exit0, type18900/lint7378 exit0, native HTTP/320px6968 1/1 exit0. 독립 CLI13308 재리뷰 exit0에서 추가 지적 없음. 최신 mock68922 양제품 build/migrate/ready·독립 worker ready와 양 health를 확인했다. AP revoke 독립 원장/복원·Field route key/legacy·전체 문서 기능/QA/G·운영 RPO/RTO·실 공급사/MFA/사용자 최종 화면·동선은 남아 전체/C03 in_progress다.
+
 ## 최신 C03/A08 AP 자체 보존·종결·분쟁 보류
 
 AP native 익명30/정식 문의180/사진90 제안 정책의 요청·다른 operator 승인/중단, 실제 종결 clock/재개·근거 있는 legacy 이관, 불변 보류/다른 operator 해제·기한 지난 보류 유지, metadata preview/관리자 audit 화면을 연결했다. AI/발송 pending·현재 승인 지원·외부 업무 미확인/미래 예약은 정리 가능으로 처리하지 않는다. migration64, AP 내부만 변경. 실제 AP DB **1325 27/27**, legacy migration **1/1**, type **61572**/lint **53746 exit0**, 새 mock **92132**의 native HTTP/320px **71697 1/1**(ACK 유실/동일 요청·별도 승인/해제·503 복구/조작 잠금·가로 넘침/pageerror0). 양제품 API/웹 build/ready이며 시안 admin/audit를 다시 실제 확인했다. 실제 AP 정리 job/worker·원문/사진/AI·전달 payload 제거/복원, Field route key/legacy·전체 PRD/QA/G/최종 사용자 인수/실 공급사는 남고 C03/A08/전체 기능은 in_progress다.

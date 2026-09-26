@@ -15,6 +15,8 @@
   word-break:break-all;
   white-space:normal;
 }
+.receipt-key-rotation button{min-height:44px;padding:9px 14px;border:1px solid #c7d9ed;border-radius:10px;background:#fff;color:#24568d;font:inherit;cursor:pointer}
+.receipt-key-rotation button:disabled{opacity:.6;cursor:not-allowed}
 .inquiry-photo-label{display:block;max-width:100%;min-width:0}
 .inquiry-photo-label input[type=file]{display:block;box-sizing:border-box;width:100%;max-width:100%;min-width:0;font-size:16px}
 .inquiry-private-photo{max-width:100%;margin:12px 0}

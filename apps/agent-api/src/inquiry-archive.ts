@@ -1,12 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { BusinessRuntime } from './business.js';
+import { retainReadGuardThroughResponse } from './retention-read-guard.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const maxArchiveBytes = 64 * 1024 * 1024;
 const sha256 = (value: Buffer) => createHash('sha256').update(value).digest('hex');
 
 type InquiryRow = { id: string; state: string; customer_name: string; customer_phone: string;
+  retention_work_purged_at: Date | null; retention_photos_purged_at: Date | null;
   service_snapshot: unknown; knowledge_revision: number; consent_at: Date; created_at: Date };
 type MessageRow = { id: string; inquiry_id: string; sequence: string; actor: string;
   visibility: string; body: string; delivery_state: string; created_at: Date };
@@ -105,7 +107,7 @@ export function registerInquiryArchiveRoutes(app: FastifyInstance, runtime: Busi
       }
       inquiries = (await db.query<InquiryRow>(
         `select id, state, customer_name, customer_phone, service_snapshot, knowledge_revision,
-           consent_at, created_at from ap.inquiries where organization_id = $1 and consent_at is not null
+           consent_at, created_at, retention_work_purged_at, retention_photos_purged_at from ap.inquiries where organization_id = $1 and consent_at is not null
          order by created_at, id limit 501`, [organizationId])).rows;
       if (inquiries.length > 500) {
         await db.query('rollback');
@@ -196,6 +198,8 @@ export function registerInquiryArchiveRoutes(app: FastifyInstance, runtime: Busi
       inquiries: inquiries.map(row => ({
         id: row.id, state: row.state, customerName: row.customer_name,
         customerPhone: row.customer_phone, serviceSnapshot: row.service_snapshot,
+        retention: { workPurgedAt: row.retention_work_purged_at?.toISOString() ?? null,
+          photosPurgedAt: row.retention_photos_purged_at?.toISOString() ?? null },
         knowledgeRevision: row.knowledge_revision, consentAt: row.consent_at, createdAt: row.created_at,
         messages: (messageGroups.get(row.id) ?? []).map(message => ({
           id: message.id, sequence: message.sequence, actor: message.actor,
@@ -217,6 +221,22 @@ export function registerInquiryArchiveRoutes(app: FastifyInstance, runtime: Busi
     }));
     if (archive.length > maxArchiveBytes)
       return reply.code(413).send({ error: 'archive_too_large', limit: '64 MiB' });
+    const guard = await runtime.pool.connect();
+    let retained = false;
+    try {
+      await guard.query('begin');
+    // File reads can outlive a cleanup transaction; never send its earlier private snapshot.
+    const current = await guard.query<Pick<InquiryRow, 'id' | 'retention_work_purged_at' | 'retention_photos_purged_at'>>(
+      `select id,retention_work_purged_at,retention_photos_purged_at from ap.inquiries
+       where organization_id=$1 and id=any($2::uuid[]) order by id for share`,
+      [organizationId,inquiries.map(row=>row.id)]);
+    const original = new Map(inquiries.map(row=>[row.id,row]));
+    if (current.rows.length !== inquiries.length || current.rows.some(row=>{
+      const before=original.get(row.id)!;
+      return row.retention_work_purged_at?.getTime() !== before.retention_work_purged_at?.getTime()
+        || row.retention_photos_purged_at?.getTime() !== before.retention_photos_purged_at?.getTime();
+    })) return reply.header('Cache-Control','private, no-store').code(409).send({error:'archive_changed_retry'});
+    await guard.query("select 1 from ap.memberships where organization_id=$1 and user_id=$2 and role='owner' for share",[organizationId,userId]);
     const recorded = await runtime.pool.query(
       `insert into ap.inquiry_archive_audit
        (id, organization_id, actor_user_id, inquiry_count, attachment_count, byte_size, sha256)
@@ -226,9 +246,11 @@ export function registerInquiryArchiveRoutes(app: FastifyInstance, runtime: Busi
       [randomUUID(), organizationId, userId, inquiries.length, attachments.length,
         archive.length, sha256(archive)]);
     if (!recorded.rowCount) return reply.code(404).send({ error: 'organization_not_found' });
+    retainReadGuardThroughResponse(reply,guard); retained=true;
     return reply.header('Cache-Control', 'private, no-store')
       .header('X-Content-Type-Options', 'nosniff')
       .header('Content-Disposition', `attachment; filename="ap-inquiries-${organizationId}.json"`)
       .type('application/json; charset=utf-8').send(archive);
+    } finally { if (!retained) { try { await guard.query('rollback'); } finally { guard.release(); } } }
   });
 }

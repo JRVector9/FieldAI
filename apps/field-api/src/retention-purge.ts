@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { FieldSiteMediaStore } from './site-media.js';
 import type { FieldRetentionJournal } from './retention-journal.js';
+import { appendFieldRetentionEntry, verifyFieldRetentionJournal } from './retention-journal-integrity.js';
 import { lockRetentionTarget, retentionBasisHash, type RetentionJob } from './retention-purge-routes.js';
 import { previewRetention, RETENTION_TABLES, type RetentionKind } from './work-retention.js';
 
@@ -24,7 +25,8 @@ export async function removeRetainedPayload(db: PoolClient, kind: RetentionKind,
   await db.query("update field.outbox set payload=jsonb_build_object('retention','purged') where aggregate_id=$1", [id]);
 }
 
-export async function runFieldRetentionJobOnce(runtime: { pool: Pool; media?: FieldSiteMediaStore; journal?: Pick<FieldRetentionJournal, 'append'> }): Promise<'empty' | 'completed' | 'blocked' | 'retry' | 'receipt_pending'> {
+export async function runFieldRetentionJobOnce(runtime: { pool: Pool; media?: FieldSiteMediaStore; journal?: Pick<FieldRetentionJournal, 'read' | 'append'> }): Promise<'empty' | 'completed' | 'blocked' | 'retry' | 'receipt_pending'> {
+  if (runtime.journal) await verifyFieldRetentionJournal(runtime.pool,runtime.journal);
   const db = await runtime.pool.connect(); let job: RetentionJob | undefined;
   const journalBase = () => ({ jobId: job!.id, organizationId: job!.organization_id, targetKind: job!.target_kind, targetId: job!.target_id, scope: job!.scope });
   try {
@@ -34,7 +36,7 @@ export async function runFieldRetentionJobOnce(runtime: { pool: Pool; media?: Fi
     if (!job) { await db.query('commit'); return 'empty'; }
     if (job.state === 'completed') {
       if (!runtime.journal) throw new Error('journal_unavailable');
-      await runtime.journal.append({ ...journalBase(), action: 'completed' });
+      await appendFieldRetentionEntry(runtime.pool,runtime.journal,{ ...journalBase(), action: 'completed' });
       await db.query('update field.work_retention_jobs set last_error=null where id=$1', [job.id]);
       await db.query('commit'); return 'completed';
     }
@@ -57,10 +59,10 @@ export async function runFieldRetentionJobOnce(runtime: { pool: Pool; media?: Fi
       where ${source.column}=$1 and organization_id=$2 and state=$3 order by id for update`, [job.target_id, job.organization_id, source.ready])).rows;
     for (const photo of photos) {
       // 삭제 전에 의도를 독립 원장에 남긴다. prepared는 파일 부재 확인 증빙이 아니다.
-      await runtime.journal!.append({ ...journalBase(), action: 'file_prepared', attachmentId: photo.id, objectKey: photo.object_key });
+      await appendFieldRetentionEntry(runtime.pool,runtime.journal!,{ ...journalBase(), action: 'file_prepared', attachmentId: photo.id, objectKey: photo.object_key });
       await runtime.media!.delete(photo.object_key);
       if (await runtime.media!.get(photo.object_key) !== null) throw new Error('file_delete_unconfirmed');
-      await runtime.journal!.append({ ...journalBase(), action: 'file_deleted', attachmentId: photo.id, objectKey: photo.object_key });
+      await appendFieldRetentionEntry(runtime.pool,runtime.journal!,{ ...journalBase(), action: 'file_deleted', attachmentId: photo.id, objectKey: photo.object_key });
       await db.query('insert into field.work_retention_job_audit(job_id,action,reason,attachment_id) values($1,$2,$3,$4)', [job.id, 'file_deleted', 'file_absence_confirmed', photo.id]);
     }
     const at = (await db.query<{ now: Date }>('select clock_timestamp() as now')).rows[0]!.now;
@@ -71,11 +73,11 @@ export async function runFieldRetentionJobOnce(runtime: { pool: Pool; media?: Fi
       await removeRetainedPayload(db, job.target_kind, job.target_id, at);
     }
     // 파일 부재와 SQL 정리 준비 뒤 commit 전 기록한다. 사진 없는 업무도 복원 대상이다.
-    await runtime.journal!.append({ ...journalBase(), action: 'purge_prepared' });
+    await appendFieldRetentionEntry(runtime.pool,runtime.journal!,{ ...journalBase(), action: 'purge_prepared' });
     await db.query("update field.work_retention_jobs set state='completed',completed_at=$2,last_error='completion_receipt_pending',attempt_count=attempt_count+1 where id=$1", [job.id, at]);
     await db.query("insert into field.work_retention_job_audit(job_id,action,reason) values($1,'completed','native_retention_completed')", [job.id]);
     await db.query('commit');
-    await runtime.journal!.append({ ...journalBase(), action: 'completed' });
+    await appendFieldRetentionEntry(runtime.pool,runtime.journal!,{ ...journalBase(), action: 'completed' });
     await runtime.pool.query("update field.work_retention_jobs set last_error=null where id=$1 and state='completed'", [job.id]);
     return 'completed';
   } catch {

@@ -6,4 +6,5 @@
 .agent-retention-panel .form-fields{margin:20px 0;grid-template-columns:minmax(0,1fr)}.agent-retention-panel :is(input,textarea,select){font-size:16px;min-width:0;max-width:100%;width:100%;box-sizing:border-box}
 .agent-retention-panel textarea{min-height:100px;padding:12px;border:1px solid #d8d9df;border-radius:11px;resize:vertical}.agent-retention-panel .form-fields>div>label{display:block;margin-bottom:8px}
 .agent-retention-panel article{border:1px solid #dce1e9;border-radius:14px;padding:18px;margin:16px 0;min-width:0}.agent-retention-work{background:#f7faff}
+.agent-retention-panel input[type=checkbox]{width:18px;height:18px;flex-shrink:0}.agent-retention-job{background:#f8fafc}
 @media(max-width:600px){.agent-retention-panel{padding:18px}.agent-retention-panel article{padding:14px}}

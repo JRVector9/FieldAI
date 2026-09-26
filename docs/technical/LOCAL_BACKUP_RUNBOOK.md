@@ -27,6 +27,36 @@ node tools/verify-product-backup.mjs field /absolute/protected/path/field-backup
 
 이 명령은 실제 운영 S3/DB 백업, 주기적 보존, 삭제·revoke 원장 재적용, 실 RPO/RTO 또는 서비스 복원 명령이 아니다. 운영 복구에는 별도 환경/권한·보존 정책·실측 검수와 승인된 절차가 필요하다. 백업 파일을 버전 관리에 넣지 않는다.
 
+## AP 문의·익명 AI 삭제 원장 재적용 — 로컬 격리 복원
+
+AP worker는 `AP_DATABASE_URL`, AP 비공개 사진 저장소, `AP_RETENTION_JOURNAL_DIRECTORY`, 별도 `AP_RETENTION_JOURNAL_SECRET`만 사용한다. Field 설정·DB·서버·Valkey에 의존하지 않는다. 서명 키와 삭제 원장은 DB 백업과 별도로 보관하며, 기존 키를 새로 생성해 대체하지 않는다. `pnpm mock:run`은 AP/Field의 각 worker를 관리한다.
+
+AP 삭제 원장의 모든 작성자를 중단한 뒤 최신 전체 checkpoint를 원장 밖의 보호된 새 파일로 내보낸다. `--quiesced`는 작성자를 자동 중단하는 옵션이 아니다. 원장 전체 directory/entry 누락, 추가 미대조 entry, 서명 변조, 미확인 파일 삭제 의도는 복원 성공이 아니며 파일/DB 변경 전에 거절한다. 원장과 checkpoint를 함께 과거로 교체한 경우의 탐지·운영 보관 증빙은 별도다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+# AP_PROFILE=mock, 기존 AP_RETENTION_JOURNAL_DIRECTORY/SECRET,
+# AP_RETENTION_CHECKPOINT_OUTPUT=/absolute/protected/separate/ap-deletions-latest.json
+# 모든 AP 삭제 원장 작성자가 중단된 상태에서 실행한다.
+node --env-file=/absolute/protected/path/ap-journal.env \
+  apps/agent-api/dist/retention-checkpoint-cli.js --quiesced
+```
+
+복원 CLI는 현재 AP DB를 식별하되 그 DB를 정리 대상으로 사용하지 않는다. 별도 로컬 `fieldai_agent_restore_<hex>` DB(127.0.0.1/localhost:55431, agent_local)와 별도 실제 파일 디렉터리만 허용한다. AP namespace가 있어야 하고 Field namespace가 있으면 거절한다. 삭제 의도만 있는 파일·job/사진 binding 불일치·사진 누락은 재적용 실패다. 원장에는 고객 원문/연락처/사진 bytes를 기록하지 않으며 파일 키/조직/업무/job/사진 ID·단계만 남긴다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+# 보호된 env에 AP_PROFILE=mock, AP_DATABASE_URL(현재 DB 식별),
+# AP_INQUIRY_MEDIA_DIRECTORY(현재 파일 식별), 기존 AP_RETENTION_JOURNAL_DIRECTORY/SECRET,
+# AP_RETENTION_RESTORE_DATABASE_URL(별도 복원 DB),
+# AP_RETENTION_RESTORE_MEDIA_DIRECTORY(별도 복원 파일),
+# AP_RETENTION_RESTORE_CHECKPOINT_FILE(따로 보관한 최신 checkpoint)를 지정한다.
+node --env-file=/absolute/protected/path/ap-restored.env \
+  apps/agent-api/dist/retention-restore-cli.js --offline-restored
+```
+
+`pnpm test:db:agent`에서 실제 격리 PG17 dump/restore 후 원문/사진 정리와 반복0, 원장 directory/entry 누락·추가/변조·미확인 의도 거절, checkpoint export/restore CLI 및 현재 DB localhost 별칭·현재 파일 경로·원장 내부 출력 거절을 확인했다. 사진 scope 정리 후 새로 업로드한 사진은 기존 정리 job의 cutoff 밖이므로 복원 재적용에서도 유지하며, 이 경로를 실제 AP DB 검사에 포함했다. 이 결과는 모든 namespace/경로 별칭 부정 사례나 운영 RPO/RTO 검수의 완료 근거가 아니다. AP 연결/OAuth revoke 원장 재적용은 아직 별도 후속이며, 전체 복구 검수 전 운영 서비스 재개를 승인하지 않는다.
+
 ## Field 업무 삭제 원장 재적용 — 로컬 격리 복원
 
 Field 보존 처리기는 `FIELD_RETENTION_JOURNAL_DIRECTORY`와 별도 `FIELD_RETENTION_JOURNAL_SECRET`을 사용한다. 실제 원문·전화·사진 bytes를 저장하지 않고 Field 업무/조직/job/사진 ID·범위·단계와 immutable 파일 키만 HMAC 서명·파일/디렉터리 fsync로 남긴다. 이 디렉터리와 서명 키는 DB 백업과 별도로 보호·보관해야 한다. 키를 새로 만들면 기존 원장을 검증할 수 없다.
@@ -96,3 +126,9 @@ node --env-file=/absolute/protected/path/field-restored.env \
 checkpoint 출력은 원장 디렉터리 밖의 새 파일(0600)이어야 한다. CLI는 현재 DB 이름의 localhost/127.0.0.1·URL escape 별칭을 거절하고, 분리된 로컬 Field 복원 DB만 대상으로 한다. 원격 운영 복구 명령이 아니다. 복원 함수는 전체 검증 후 한 transaction으로 연결/설치·선택/access/refresh token·동의를 차단하고 `field.revocation_restore_audit`에 entry ID/결과를 남긴다. 기존 업무·고객 확인키·예약/구독을 삭제하지 않는다. 원격 ACK를 새로 만들거나 자동 네트워크 발송을 시작하지 않으며 기존 미완료 회수 행은 재대조 필요 상태로 막는다. 새 덤프에서 아직 없던 대상은 `target_absent`로 기록한다. 삭제 재적용과 회수 재적용 모두 성공하고 추가 복구 검수를 마친 뒤 서비스 재개를 판단한다.
 
 실제 격리 DB 검사는 해제 전 PG17 dump→별도 restore→기존 bearer 200 확인→원장/CLI 적용→bearer 401·토큰 회수/비밀값 null·재활성화 거절·반복0, 기존 고객 문의/확인키 유지, 원장 누락/변조/미대조/전체 디렉터리 없음·AP namespace 혼합·binding 오류의 전체 rollback을 검사한다. 이는 실 공급사 보관·원장/신뢰 checkpoint 동시 rollback 방지·기존 회수 baseline·운영 RPO/RTO 인증을 대신하지 않는다.
+
+## 정리 worker의 원장 연속성
+
+AP migration66와 Field migration62의 제품별 `retention_journal_receipts`는 signed entry ID/내용 SHA-256만 기록하며 조직·업무 삭제에 종속되지 않는다. update/delete는 DB에서 거절한다. 두 worker는 startup/다음 job/각 append 전에 이 기록과 기존 completed job/file-deleted 감사 사실을 자체 signed journal과 대조한다. 폴더가 있어도 기록이 없거나 내용이 바뀌면 정리를 진행하지 않는다. read/append는 없는 폴더를 빈 성공이나 신규 초기화로 바꾸지 않는다.
+
+최초 로컬 설정은 `node tools/setup-mock-env.mjs agent field`로 각 제품의 최초 key 생성 때만 빈 directory를 만든다. 기존 key가 있는 환경의 directory를 잃었다면 자동 초기화하지 말고 원래 signed journal을 보호된 보관본에서 복구한다. 기존 완료/파일 감사 사실이 원장과 맞아야 최초 receipt baseline도 기록할 수 있다. 파일 fsync 뒤 DB receipt 저장이 실패한 signed entry는 다음 대조에서 보존하며 없애지 않는다. DB 백업을 복원한 뒤에는 공개 서비스/worker를 재개하기 전에 해당 제품의 최신 별도 checkpoint와 삭제·revoke 원장을 검증·재적용해야 한다. DB와 journal/checkpoint를 함께 과거로 교체한 상황이나 baseline 이전에 원래부터 없던 기록의 운영 보장은 별도다.

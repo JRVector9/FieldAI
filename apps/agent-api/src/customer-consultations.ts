@@ -73,16 +73,17 @@ type Conversation = {
   revision: number; next_sequence: string; knowledge_release_id: string;
   agent_release_id: string; public_id: string; placement_id: string | null;
   distribution_traffic_class: DistributionTrafficClass;
+  retention_work_purged_at:Date|null;
 };
 async function session(pool: Pool | PoolClient, request: FastifyRequest, id?: string, lock = false,
-  requireActive = true, allowRestricted = false): Promise<Conversation | null> {
+  requireActive = true, allowRestricted = false, allowEnded = false): Promise<Conversation | null> {
   if (id && !uuid.test(id)) return null;
   const bearer = /^Bearer ([A-Za-z0-9_-]{40,64})$/.exec(request.headers.authorization ?? '')?.[1];
   const secret = request.headers.authorization ? null : sessionSecret(request);
   if (!bearer && !secret) return null;
   const result = await pool.query<Conversation>(bearer
     ? `select i.id, i.organization_id, i.state, i.mode, i.automation_paused, i.placement_id,
-       i.distribution_traffic_class,
+       i.distribution_traffic_class,i.retention_work_purged_at,
        i.revision, i.next_sequence, i.knowledge_release_id, i.agent_release_id, d.public_id
      from ap.embed_sessions s join ap.inquiries i on i.id = s.conversation_id
      join ap.deployments d on d.id = s.deployment_id
@@ -92,7 +93,7 @@ async function session(pool: Pool | PoolClient, request: FastifyRequest, id?: st
        and ($2::uuid is null or i.id = $2)
      ${lock ? 'for update of i' : ''}`
     : `select i.id, i.organization_id, i.state, i.mode, i.automation_paused, i.placement_id,
-       i.distribution_traffic_class,
+       i.distribution_traffic_class,i.retention_work_purged_at,
        i.revision, i.next_sequence, i.knowledge_release_id, i.agent_release_id, d.public_id
      from ap.inquiries i join ap.deployments d on d.id = i.deployment_id
      where i.consult_session_hash = $1 and i.consult_session_expires_at > now()
@@ -101,7 +102,7 @@ async function session(pool: Pool | PoolClient, request: FastifyRequest, id?: st
     [hash((bearer ?? secret)!), id ?? null],
   );
   const row = result.rows[0];
-  if (!row || (requireActive && (row.state !== 'ai_assisting' || row.mode !== 'ai'
+  if (!row || (requireActive && !(allowEnded&&row.retention_work_purged_at) && (row.state !== 'ai_assisting' || row.mode !== 'ai'
       || row.automation_paused))) return null;
   if (lock && row.placement_id) await pool.query('select id from ap.placements where id = $1 for share', [row.placement_id]);
   return !requireActive || await activeDeployment(pool, row.public_id, undefined, allowRestricted) ? row : null;
@@ -303,7 +304,7 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
   });
 
   app.get<{ Params: { publicId: string } }>('/v1/public/deployments/:publicId/engagements/current', async (request, reply) => {
-    const row = await session(runtime.pool, request, undefined, false, true, true);
+    const row = await session(runtime.pool, request, undefined, false, true, true, true);
     if (!row || row.public_id !== request.params.publicId)
       return reply.header('Cache-Control', 'no-store').send({ engagement: null });
     const deployment = (await runtime.pool.query<{ moderation_restricted: boolean }>(
@@ -314,7 +315,7 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
   });
 
   app.get<{ Params: { id: string } }>('/v1/engagements/:id', async (request, reply) => {
-    const row = await session(runtime.pool, request, request.params.id, false, true, true);
+    const row = await session(runtime.pool, request, request.params.id, false, true, true, true);
     if (!row) return reply.code(401).send({ error: 'consult_session_required' });
     return reply.header('Cache-Control', 'no-store').send({ id: row.id, state: row.state,
       messages: await publicMessages(runtime.pool, row.id) });

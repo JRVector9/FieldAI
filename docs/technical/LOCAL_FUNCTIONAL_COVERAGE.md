@@ -1,5 +1,9 @@
 # 로컬 기능 검수 현황 — 2026-09-26
 
+## 최신 AP 실제 정리 — e89bf2a 이후 작업트리
+
+AP 정리 요청/다른 승인/취소·독립 worker·실제 파일/원문/AI/자체 사본 정리·usage/ID 보존·DB 재저장 차단, 고객 종료/명시적 새 상담을 연결했다. AP migration65/66·Field migration62의 제품별 immutable journal receipt와 signed 원장 대조로 유실·대체·변조/실행 중 폴더 부재 뒤 추가 정리를 차단한다. JSON/사진/archive/지원 읽기는 응답 종료까지 보호하며 photo-only 첨부 목록은 현재 ready ID와 재대조한다. 열린 고객 follow-up410은 원본 재조회/기존 시도 폐기로 종료 안내를 반영한다. AP DB89449 28/28·Field DB17798 30/30 fail0/skip0 exit0, type18900/lint7378 exit0, native HTTP/320px6968 1/1 exit0. 독립 CLI13308 재리뷰 exit0에서 추가 지적 없음. 최신 mock68922 양제품 build/migrate/ready·독립 worker ready와 양 health를 확인했다. AP revoke 독립 원장/복원·Field route key/legacy·전체 문서 기능/QA/G·운영 RPO/RTO·실 공급사/MFA/사용자 최종 화면·동선은 남아 전체/C03 in_progress다.
+
 ## 최신 AP 자체 보존 기반 — d717532 이후 작업트리
 
 - AP 자체 migration64/API/domain/관리자 UI: 승인 정책·불변 보류, 실제 종결/재개·legacy 이관, 익명 활동30/문의180/사진90 preview·AI/발송·지원·외부 미확인/미래 예약·기간과 hold를 구분한다. Field 내부/DB를 조회하지 않는다.

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parseEnv } from 'node:util';
 
 const requested = process.argv.slice(2);
 if (requested.some(product => product !== 'agent' && product !== 'field'))
@@ -40,7 +41,16 @@ for (const product of requested.length ? [...new Set(requested)] : ['agent', 'fi
   if (!isAgent && !content.includes('FIELD_RETENTION_JOURNAL_DIRECTORY=')) {
     appendFileSync(path, 'FIELD_RETENTION_JOURNAL_DIRECTORY=infra/field/retention-journal\n', { mode: 0o600 });
   }
+  function initializeFreshRetentionJournal() {
+    const directory = parseEnv(readFileSync(path, 'utf8'))[`${upper}_RETENTION_JOURNAL_DIRECTORY`];
+    if (!directory) throw new Error(`${upper} mock journal directory is required before first initialization`);
+    const root = resolve(directory);
+    if (existsSync(root) && readdirSync(root).length)
+      throw new Error(`${upper} existing journal requires its original key; first setup cannot replace it`);
+    mkdirSync(root, { recursive: true, mode: 0o700 });
+  }
   if (!isAgent && !content.includes('FIELD_RETENTION_JOURNAL_SECRET=')) {
+    initializeFreshRetentionJournal();
     appendFileSync(path, `FIELD_RETENTION_JOURNAL_SECRET=${randomBytes(32).toString('base64url')}\n`, { mode: 0o600 });
   }
   if (!isAgent && !content.includes('FIELD_REVOCATION_JOURNAL_DIRECTORY=')) {
@@ -48,6 +58,13 @@ for (const product of requested.length ? [...new Set(requested)] : ['agent', 'fi
   }
   if (!isAgent && !content.includes('FIELD_REVOCATION_JOURNAL_SECRET=')) {
     appendFileSync(path, `FIELD_REVOCATION_JOURNAL_SECRET=${randomBytes(32).toString('base64url')}\n`, { mode: 0o600 });
+  }
+  if (isAgent && !content.includes('AP_RETENTION_JOURNAL_DIRECTORY=')) {
+    appendFileSync(path, 'AP_RETENTION_JOURNAL_DIRECTORY=infra/agent/retention-journal\n', { mode: 0o600 });
+  }
+  if (isAgent && !content.includes('AP_RETENTION_JOURNAL_SECRET=')) {
+    initializeFreshRetentionJournal();
+    appendFileSync(path, `AP_RETENTION_JOURNAL_SECRET=${randomBytes(32).toString('base64url')}\n`, { mode: 0o600 });
   }
   if (isAgent && !content.includes('AP_INQUIRY_MEDIA_DIRECTORY=')) {
     appendFileSync(path, 'AP_INQUIRY_MEDIA_DIRECTORY=infra/agent/inquiry-media\n', { mode: 0o600 });

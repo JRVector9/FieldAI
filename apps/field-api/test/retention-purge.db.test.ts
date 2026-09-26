@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rename, rm, symlink, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
@@ -79,6 +79,7 @@ test('Field executes only separately approved retention jobs and confirms file a
     const originalPhoto = (await media.get(key))!;
     const purgeModule = await import('../src/retention-purge.js');
     const journalModule = await import('../src/retention-journal.js');
+    await mkdir(resolve(root,'journal'));
     const journal = new journalModule.FieldRetentionJournal(resolve(root, 'journal'), 'synthetic-field-journal-secret');
     let failure = true, receiptFailure = true;
     let releaseDeletion!: () => void, enteredDeletion!: () => void;
@@ -129,11 +130,27 @@ test('Field executes only separately approved retention jobs and confirms file a
       purpose: 'security_incident', reference: 'SYNTHETIC-ENDED', reason: '이미 정리된 합성 업무 접근 차단 검수입니다.', minutes: 15, scopes: ['conversation'], minimumNecessary: true });
     assert.equal(support.statusCode, 410);
     assert.equal(await purgeModule.runFieldRetentionJobOnce(runtime), 'empty');
+    await assert.rejects(pool.query("update field.retention_journal_receipts set sha256=repeat('0',64)"),{code:'PJR01'});
+  await assert.rejects(pool.query('delete from field.retention_journal_receipts'),{code:'PJR01'});
+  const ledgerPath=resolve(root,'journal'), ledgerBackup=resolve(root,'journal-backup');
+    const lostName=(await readdir(ledgerPath)).find(name=>name.endsWith('.json'))!;
+    const lostFile=resolve(ledgerPath,lostName), lostBytes=await readFile(lostFile);
+    await rm(lostFile);
+    try { await assert.rejects(purgeModule.runFieldRetentionJobOnce(runtime), /journal_continuity/); }
+    finally { await writeFile(lostFile,lostBytes); }
+    await rename(ledgerPath,ledgerBackup); await mkdir(ledgerPath);
+    try { await assert.rejects(purgeModule.runFieldRetentionJobOnce(runtime), /journal_continuity/); }
+    finally { await rm(ledgerPath,{recursive:true}); await rename(ledgerBackup,ledgerPath); }
+    await rename(ledgerPath,ledgerBackup);
+    try { await assert.rejects(journal.append({jobId:job,organizationId:org,targetKind:'inquiry',targetId:inquiry.id,scope:'work',action:'completed'}),{code:'ENOENT'}); }
+    finally { await rename(ledgerBackup,ledgerPath); }
+
     const queue = await app.inject({ url: '/v1/admin/retention/jobs', headers: headers(auditor) });
     assert.equal(queue.statusCode, 200); assert.match(queue.body, /completed/); assert.doesNotMatch(queue.body, /PRIVATE_PURGE|object_key|sha256/);
     const proof = await journal.read(); assert.ok(proof.length); assert.equal(proof[0]!.product, 'field');
     const checkpoint = await journal.checkpoint();
     assert.ok(proof.some(p => p.action === 'file_prepared')); assert.ok(proof.some(p => p.action === 'purge_prepared'));
+    await mkdir(resolve(root,'unconfirmed-journal'));
     const uncertainJournal = new journalModule.FieldRetentionJournal(resolve(root, 'unconfirmed-journal'), 'synthetic-field-journal-secret');
     await uncertainJournal.append({ jobId: randomUUID(), organizationId: org, targetKind: 'inquiry', targetId: inquiry.id,
       scope: 'photos', action: 'file_prepared', attachmentId: photoId, objectKey: key });
@@ -206,7 +223,7 @@ test('Field executes only separately approved retention jobs and confirms file a
       await assert.rejects(uncertainJournal.read(), /signature mismatch/);
     } finally {
       await restored?.end();
-      await admin.query(`drop database if exists "${restoreDatabase}" with (force)`); await admin.end();
+      await admin.query(`drop database if exists "${restoreDatabase}"`); await admin.end();
     }
     const requestTarget = async (kind: string, id: string, scope = 'work') => {
       const candidate = (await app.inject({ url: `/v1/admin/retention/preview?organizationId=${org}&policyId=${policy}`, headers: headers(auditor) })).json().items
@@ -291,6 +308,12 @@ test('Field executes only separately approved retention jobs and confirms file a
         FIELD_RETENTION_JOURNAL_SECRET: 'synthetic-field-journal-secret' }, timeout: 10000,
     });
     assert.match(worker.stdout, /field retention worker ready/); assert.match(worker.stdout, /empty/);
+    await assert.rejects(promisify(execFile)(process.execPath, ['--import','tsx','src/retention-purge-worker.ts','--once'], {
+      env:{PATH:process.env.PATH,FIELD_PROFILE:'mock',FIELD_DATABASE_URL:process.env.FIELD_DATABASE_URL,
+        FIELD_INQUIRY_MEDIA_DIRECTORY:resolve(root,'photos'),FIELD_RETENTION_JOURNAL_DIRECTORY:resolve(root,'missing-startup-journal'),
+        FIELD_RETENTION_JOURNAL_SECRET:'synthetic-field-journal-secret'},timeout:10000,
+    }),/ENOENT/);
+
   } finally {
     process.env.FIELD_PROFILE = previous; await app.close();
     await pool.query('delete from field.organizations where owner_user_id=any($1::text[])', [users]);

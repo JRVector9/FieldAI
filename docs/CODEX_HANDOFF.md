@@ -1,11 +1,78 @@
 # CODEX 인수인계 — 2026-09-26
 
-## 사용자 지정 기준 시안 — 작업 재개 시 확인
+## 사용자 지정 기준 시안 — 작업 재개 시 필수 확인
 
 - **사용자 지정 화면·기능·동선 구현 기준 시안(필수 참조):** `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
 - 저장소 기준 경로: [reference/field_ui_prototype_v3.html](../reference/field_ui_prototype_v3.html). 후속 에이전트도 이 파일을 화면·동선 구현 기준으로 사용하며, 인수인계 갱신 시 이 시안 경로를 상단에 유지한다.
 - 화면·기능 구현 중에도 해당 역할의 시안을 수시로 다시 확인한다. 경로 기록만으로 시안을 확인했다고 보고하지 말고, 실제 열어 본 화면과 비교 범위를 작업 기록에 남긴다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
+- **사용자 요청:** `CODEX_HANDOFF.md`에 위 시안 경로를 계속 남긴다. 이 섹션은 인계파일 상단에 유지하고, 화면 구현을 재개할 때 `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`을 직접 연 뒤 해당 화면·기능·동선을 비교한다.
+
+## 현재 인수인계 — AP 실제 정리·양제품 원장 연속성 단계 (2026-09-26)
+
+- **현재 목표/상태:** C03 전체 기능을 독립 AP/Field 로컬 서비스로 끝까지 연결한다. 이번 보존 실행/복원·소비자 오류 상태는 구현과 부분 검수를 마친 단계이며 전체/C03/A08/F09는 `in_progress`다. 출시/사용자 최종 인수 완료를 주장하지 않는다. 직전 HEAD `e89bf2a`, 단계 커밋은 `git log -1 --oneline`으로 확인한다. 시안 경로는 상단에 유지한다.
+- **완료/설계:** AP 자체 정책/org/업무/scope/revision/anchor/digest·UUID 멱등 요청→다른 운영자 승인→승인 전 취소→실행 직전 정책/현재 권한/hold/지원/AI/발송·외부 미확인/기한 재검사를 연결했다. AP private 파일 delete/부재 확인과 HMAC/fsync 원장 뒤 원문/연락/AI/자체 외부 제출 사본/outbox payload를 제거하고 사용량/감사/기존 ID/확인키를 유지한다. 미확인은 retry, DB 완료 후 증빙 실패는 receipt_pending이다. 사진-only는 업무/새 사진/대화를 유지한다. DB tombstone이 원문 재저장을 거절한다. 제품별 immutable signed entry ID/SHA-256 receipt와 native completed/file-deleted 감사 대조로 원장 일부/전체 유실·폴더 대체/실행 중 부재를 다음 job/각 append 전 차단한다. 원장 read/append는 없는 directory를 자동 초기화하지 않는다. 초기 mock 설정의 최초 key 생성만 빈 directory를 만든다. 복원에는 별도 최신 protected checkpoint가 계속 필수다.
+- **변경 경로:** AP migration65/66, 새 retention purge routes/purge/worker/journal/journal-integrity/consumers/read-guard/restore/restore-cli/checkpoint-cli와 native purge DB 검사; app/customer-consultations/customer-support/inquiry-attachments/inquiry-archive/work-retention/API package. AP 웹 새 AgentRetentionNotice, 기존 AgentRetentionAdmin/agent-retention·workspace·agent-public·consult.css. Field migration62·각 자체 retention-journal/journal-integrity/purge/worker와 retention-purge DB 검사, revocation restore 검사의 자기 DB 정리. mock-run/setup-mock-env·새 mock-retention-initialization 검사·기존 AP retention HTTP/browser·gitignore·진행/계획/TASKS/coverage/runbook/이 인계. Field/AP domain·DB·key·journal은 공유하지 않는다. 공개 요청 DTO/scope/token 추가는 없지만 AP 공개 읽기의 종료 metadata/410은 소비자에게 적용된다.
+- **UI/소비자:** JSON·사진·전체 archive·승인 지원 사진의 read lock을 응답 finish/close/error까지 유지한다. 정리 경합 때 원문/사진 응답을 막으며 photo-only에서는 현재 ready 사진 ID만 남긴다. 고객/사업자 종료 안내·추가 입력/사진/전달 차단, 익명 명시적 새 상담과 이전 receipt 분리, 열린 고객 follow-up410 뒤 draft/retry 폐기·실제 문의 재조회, 관리자 ACK 유실 동일 UUID/본문 복구·503 metadata 유지/조작 잠금·취소/다른 승인을 연결했다. 실제320px에서 확인키 교체 버튼의 기본 browser 크기를 발견해 그 패널에만 본문16px 상속/44px 높이·기존 색/테두리를 적용했다.
+- **실제 검수:** Node24.18.0/로컬 mock PG17·HEAD e89bf2a 이후 작업 트리. AP **89449 28/28 fail0/skip0 exit0** `/tmp/ap-retention-fifth-fixes-db.log`, Field **17798 30/30 fail0/skip0 exit0** `/tmp/field-retention-graceful-cleanup-db.log`; 각 test/restore DB는 자신의 UUID만 정리했다. 실제 PG17 dump/별도 restore·삭제 재적용/repeat0·누락/추가/변조/미확인 의도·CLI 현재 DB/media alias/원장 내부 출력 거절, 새 사진 유지, job/권한/보류/stale/retry/증빙 재시도·사용량·DB 재저장 차단, response pause에서 NOWAIT55P03/worker 대기, JSON·파일·사진 metadata 경합, own-env worker를 확인했다. 전체 type **18900**, lint **7378 exit0** `/tmp/retention-fifth-fixes-{type,lint}.log`, 최초 mock 초기화 **1/1 exit0**. 이 type/lint 뒤의 최종 패널 CSS/class는 아래 실제 mock build와 독립 CLI 검토에 포함했다.
+- **실제 환경/브라우저:** 최종 managed **mock68922** `/tmp/ap-retention-final-style-runtime.log`의 양 API/웹 build/migrate/ready·AP/Field retention worker ready와 양 health/ready를 확인했다. 직전37513은 생존 확인 후 정상 종료130했다. 이전8177/7002/75895/92132/44087/77527도 종료됐고 다시 사용하지 않는다. AP http://localhost:3001/workspace, Field http://localhost:3002/workspace. native HTTP/Chromium320 **6968 1/1 exit0** `/tmp/ap-retention-sixth-http.log`: 실제 요청/다른 승인/worker completed·파일 부재·ACK 복구/취소/jobs503·열린 고객410 뒤 종료 안내/입력 비노출·익명 종료/새 ID·pageerror0/가로 넘침 없음. 이는 마지막 패널 CSS 전37513의 기능 결과이며 CSS 변경으로 전 기능 검사를 반복하지 않았다. 최신 build는 CSS를 반영했다. 제작 LLM model 미설정은 `blocked_integration`이며 내부 개발 중단 사유가 아니다.
+- **시안/실패:** 기준 HTML `#admin/audit`를 실제 Chromium320으로 열고 `/tmp/ap-retention-execution-prototype-320.png`와 실제 policy/고객 화면을 비교한 이번 단계 기록을 유지한다. 최종 열린 고객의 종료 전환 screenshot `/tmp/ap-retention-ended-customer-320.png`도 직접 열었다. 전체 시각 동일/사용자 최종 인수는 미완료다. photo/archive 원본 경합19995/92857·새 사진 복원71397·JSON 경합75337·원장 부재85541/67300·일부 기록 유실97265·사진 metadata17577(1≠0)·열린 고객 UI66912(종료 안내 없음)를 실제 red→수정/검수했다. Field50168은29/30, revocation restore의 administrator command57P01 실패였다. 두 테스트의 자기 UUID restore DB FORCE DROP을 제거한 뒤 위17798이30/30 통과했다. server 종료 경합은 가설이며 간헐적 종료의 모든 원인을 입증했다고 주장하지 않는다. 실패/미실행을 pass로 바꾸지 않았다.
+- **독립 검토:** `ak` 지정 gpt-5.6/high은 계정 미지원400으로28153 exit1이며 성공이 아니다. 기존 CLI 설정 gpt-6-sol/high으로 검토했다. 여섯 번째 **13308 exit0**, `/tmp/ap-retention-execution-sixth-review.log`: **No actionable regressions were found**. 원문 raw confidence는 미출력이다.
+
+| 검토 발견 | level / raw confidence | 반영/근거 |
+|---|---|---|
+| 사진-only 이후 새 사진의 복원 coverage | P1 / 미출력 | cutoff를 구분하고 새 사진 유지 actual DB 확인 |
+| 사진/archive 응답 전 lock 해제·JSON 경합 | P1/P2 / 미출력 | response 종료까지 lock·실제 느린 읽기/55P03 검수 |
+| bearer embed 종료 metadata·새 상담의 이전 receipt | P2 / 미출력 | native bearer read/새 상담 UI, 활성 receipt와 이전 접근 분리 |
+| 원장 부재/비워짐/append 재생성 | P1 / 미출력 | 제품별 immutable receipt와 완료/파일 감사 대조·strict FS, actual red→양제품 green |
+| photo-only stale 사진 목록·고객410 뒤 stale UI | P2 / 미출력 | ready ID 대조·원본 재조회/시도 폐기, actual API/UI red→green |
+| completed proof의 반복 전체 journal 탐색 | P2 / 미출력 | 작업별 index, 양제품 native DB·type/lint 검수 |
+
+- **남음/미검수/복구:** AP 자체 connection/OAuth revoke 독립 원장·복원, Field route key 수명/legacy 회수 baseline·미확인 대조, embed 위젯 보존 종료/새 상담의 실제 UI, 이전 receipt가 있는 동일 페이지의 별도 UI 경우, 전체 PRD/역할/QA/G·전체 표준 E2E/security/independence, protected proof/DB/journal 동시 과거 교체·운영 RPO/RTO·실 공급사/MFA·최종 사용자 화면/동선은 남는다. 정리 원문을 rollback으로 되살리지 않으며 tombstone/원장/ID를 유지한다. 이번 검사는 합성 자료만 사용했고 실제 운영 삭제/고객 발송/청구/배포는 하지 않았다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -1 --oneline
+sed -n '1,60p' docs/CODEX_HANDOFF.md
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+rg --files apps/agent-api/src apps/agent-api/migrations | rg 'revoke|connection|oauth|integrator'
+cat apps/agent-api/src/field-connection-revoke.ts
+cat apps/agent-api/src/field-connection-revoke-worker.ts
+cat apps/agent-api/src/integrator-routes.ts
+cat docs/technical/LOCAL_BACKUP_RUNBOOK.md
+```
+
+현재68922를 실제 확인해 유지한다. 새 build가 필요한 경우에만 확인된 managed process를 정상 종료하고 `pnpm mock:run`을 실행한다. 관찰 timeout은 재시작 근거가 아니다. native 검수는 `pnpm test:db:agent`, `pnpm test:db:field`, `pnpm typecheck`, `pnpm lint`, `AP_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python node --test tools/spikes/agent-retention-http.test.mjs`이며 이미 끝난 검사를 무관하게 반복하지 않는다. AP migration65/66·Field62는 적용됐으므로 새 schema 변경은 다음 migration으로 만든다. 추정했던 Field000061_connection_revocation_facts.sql은 없고 실제 파일은000061_revocation_restore.sql이다.
+
+## 최신 인수인계 — C03/A08 AP 실제 정리·독립 worker·복원 (2026-09-26)
+
+- **목표/상태:** 시안과 v3.0 전체 기능의 독립 AP/Field 로컬 서비스 구현을 계속한다. `e89bf2a` 이후 AP 실제 정리 단계의 코드/부분 검수이며 C03/전체 목표는 `in_progress`다. 최종 커밋은 `git log -1 --oneline`으로 확인한다. 시안 경로는 위 상단에 유지한다.
+- **완료된 부분/설계:** immutable policy/org/inquiry/scope/revision/anchor/digest 요청·UUID 멱등 재요청→다른 운영자 승인→승인 전 취소, 현재 정책/운영 권한/분쟁 보류·지원/AI/발송·외부 미확인/기한의 실행 직전 재검사, AP 자체 PG/private file/독립 HMAC 원장 worker를 연결했다. 파일 삭제와 부재 확인 뒤 원문·연락처·AI 질문/답변·AP 자체 외부 제출 사본/outbox payload를 정리하고 사용량·접수번호·감사·확인키 권한을 유지한다. 파일 미확인은 retry, DB 완료 뒤 증빙 실패는 receipt_pending이다. 사진만 정리한 문의에는 원문/새 대화를 유지한다. 종료 원문 재저장은 native DB에서 거절한다. 다른 제품 자료를 직접 읽거나 지우지 않는다.
+- **변경 파일:** AP migration65, 새 `src/retention-{purge-routes,purge,purge-worker,journal,consumers,restore,restore-cli,checkpoint-cli,read-guard}.ts`와 `test/retention-purge.db.test.ts`; 기존 AP `app.ts`, `customer-consultations.ts`, `work-retention.ts`, `inquiry-attachments.ts`, `inquiry-archive.ts`, package. AP 웹 새 `AgentRetentionNotice.tsx`, 기존 `AgentRetentionAdmin.tsx`, `agent-public.tsx`, `agent-retention.{ts,css}`, `workspace.tsx`; mock-run/setup-mock-env·gitignore·기존 AP retention HTTP/browser, phase plan/진행/coverage/backup runbook/TASKS/이 인계. Field domain/DB·공개 연동 계약 변경 없음.
+- **실제 검수:** 리뷰 수정 후 최종 `pnpm test:db:agent` **50658 28/28 fail0/skip0**, `/tmp/ap-retention-review-fixes-db.log`, 격리 PG17 test/restore DB 제거. 실제 파일 삭제·사진 scope/추가 대화·승인 후 hold·기준 변경 stale·파일 미확인 retry·증빙 실패 재시도·익명 AI 원문 제거/토큰 사용량 유지·종료 조회/POST410·명시적 새 상담을 확인했다. 실제 PG17 dump/restore 후 원문/파일 정리 재적용/반복0, directory/entry 누락·미대조 추가·checkpoint 변조·미확인 의도 거절, checkpoint export/restore CLI 반복0·현재 DB localhost alias/현재 파일 경로/원장 내부 출력 거절, AP 설정만 있는 별도 worker `--once` 실행을 확인했다. 리뷰 수정 후 전체 typecheck **53402**, lint **2230 exit0**(`/tmp/ap-retention-review-fixes-{type,lint}.log`).
+- **실제 UI/환경:** 확인된 mock92132를 정상 종료130한 뒤 **75895**(`/tmp/ap-retention-execution-managed-runtime.log`)로 양 API/웹 build/migrate/ready·AP/Field retention worker ready를 확인했다. focused native HTTP/Chromium320 **25823 1/1**, `/tmp/ap-retention-execution-browser.log`: 정책/hold 기존 흐름, 정리 요청 ACK 유실 같은UUID/본문 복구·단일 요청, 승인 전 취소·다른 운영자 승인·관리 worker 실제 completed/파일 부재, jobs503 목록 보존/조작 잠금/복구·고객 종료 안내/추가 질문 비노출·pageerror0/가로 넘침 없음. AP http://localhost:3001/workspace, Field http://localhost:3002/workspace. 제작 LLM은 model 미설정 `blocked_integration`이다.
+- **시안 확인:** 실제 기준 HTML `#admin/audit`의 `신고·권한·감사`를 Chromium320으로 다시 열었다. `/tmp/ap-retention-execution-prototype-320.png`, 실제 `/tmp/ap-retention-ended-customer-320.png`와 `/tmp/ap-retention-policy-320.png`를 직접 열어 비교했다. 정리 UI는 PRD/보안5.5에 필요한 추가 기능이며 전체 시각 일치/사용자 최종 동선 인수 완료를 주장하지 않는다.
+- **실패/복구:** 최초 정리 API404·restore 모듈 부재·정리 익명 GET401 red를 구현했다. 같은 전화 fixture429는 고유 번호로 수정했다. 느린 파일 조회가 정리 완료 뒤 원 사진200을 반환하던 red19995와 전체 archive가 원문/사진200을 내보내던 red92857을 실제 재현해 최종 authority/tombstone 조회·archive 변경409 재시도로 수정했다. 새 schema/UI의 HTTP 부재 red를 새 managed build로 반영했다. 롤백으로 정리된 원문을 되살리지 않으며 tombstone/독립 원장/기존 ID를 보존한다. 실제 운영 자료 삭제·배포/청구/고객 발송 없음; 합성 fixture만 정리했다.
+- **리뷰:** `ak` 지정 `gpt-5.6/high` CLI 검토28153은 계정 모델 미지원400으로 exit1(`/tmp/ap-retention-execution-codex-review.log`)이며 검토 성공이 아니다. 기존 설정 `gpt-6-sol/high` 독립 검토41770(`/tmp/ap-retention-execution-default-review.log`)는 P1 1개/P2 2개를 보고했다(raw confidence 미출력). 사진 scope 후 새 사진의 복원 coverage, 응답 전 사진/전체 archive 잠금 해제를 모두 반영했다. 실제 새 사진 경로 red71397→수정 후 새 사진 유지·onSend 지연에서 parent NOWAIT55P03/worker 대기·응답 완료 후 정리 완료를 DB50658에서 확인했다. 응답 finish/close/error까지 read transaction을 유지하는 AP 자체 helper를 추가했다. 재검토91495(`/tmp/ap-retention-execution-rereview.log`) 진행 중이며 clean 결과는 아직 기록하지 않는다.
+- **리뷰 수정 반영 환경:** mock75895를 실제 생존 확인 후 정상 종료130하고 **7002**(`/tmp/ap-retention-execution-reviewed-runtime.log`)로 양제품 build/ready·AP/Field 정리 worker를 반영했다. 후속 인계는7002를 현재 환경으로 사용한다. 이전75895/92132를 다시 poll하거나 중복 시작하지 않는다.
+- **남은 작업/미검수:** AP 자체 연결/OAuth revoke 독립 원장·복원 재적용, Field route key 종료 수명/legacy 회수 baseline·신뢰 proof 동시 과거 교체/운영 RPO/RTO, 전체 PRD/역할/QA/G 요구 대조와 전체 표준 E2E/security/independence, 외부 업무 종결의 공개 계약 한계, 실 공급사/MFA/최종 사용자 인수는 남는다. 본문 사용량/개인정보 정리 검사가 법무·운영 인증을 대체하지 않는다. 외부 미연결은 내부 개발 중단 사유가 아니다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -1 --oneline
+sed -n '1,45p' docs/CODEX_HANDOFF.md
+cat docs/technical/LOCAL_BACKUP_RUNBOOK.md
+rg --files apps/agent-api/src apps/agent-api/migrations | rg 'revoke|connection|oauth|integrator'
+cat apps/agent-api/src/field-connection-revoke.ts
+cat apps/agent-api/src/integrator-routes.ts
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+mock7002의 생존을 실제 확인해 유지한다. 새 build 반영이 필요한 경우에만 확인된 프로세스를 정상 종료 후 `pnpm mock:run`으로 반영한다. 관찰 timeout은 중복 기동 근거가 아니다. 변경 검수 명령은 `pnpm test:db:agent`, `pnpm typecheck`, `pnpm lint`, `AP_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python node --test tools/spikes/agent-retention-http.test.mjs`이며 현재 결과로 전체 C03 완료를 주장하지 않는다.
 
 ## 최신 인수인계 — C03/A08 AP 자체 보존 기반 (2026-09-26)
 

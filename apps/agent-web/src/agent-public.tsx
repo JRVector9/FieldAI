@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
+import { AgentRetentionNotice } from './AgentRetentionNotice';
+import type { WorkRetention } from './agent-retention';
 import { AgentDeploymentReport } from './AgentDeploymentReport';
 import { PrivateInquiryPhoto } from "./private-inquiry-photo";
 import { AgentFieldAction } from "./agent-field-action";
@@ -23,6 +25,7 @@ type Knowledge = {
   faqs: { question: string; answer: string }[];
 };
 type Inquiry = {
+  retention?:WorkRetention;
   id: string;
   state: string;
   service: { name: string } | null;
@@ -30,7 +33,7 @@ type Inquiry = {
   attachments: { id: string; messageId: string; contentType: "image/webp";
     byteSize: number; width: number; height: number; createdAt: string }[];
 };
-type Engagement = { id: string; state: string; messages: { id: string; actor: string; body: string }[] };
+type Engagement = { retention?:WorkRetention;id: string; state: string; messages: { id: string; actor: string; body: string }[] };
 function engagementFrom(value: unknown, id: string): Engagement | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<Engagement>;
@@ -102,7 +105,7 @@ function ReceiptRotationPanel({ inquiryId, currentKey, onRotated }: {
     } catch { setNotice("응답을 받지 못했습니다. 새 키를 보관하고 같은 버튼으로 다시 요청하거나 새 키로 문의를 열어 확인해 주세요."); }
     finally { setBusy(false); }
   }
-  return <div className="customer-banner"><h3>접수 확인키 교체</h3>
+  return <div className="customer-banner receipt-key-rotation"><h3>접수 확인키 교체</h3>
     <p>새 키를 먼저 보관한 뒤 교체해 주세요. 교체되면 이전 키로 문의·사진을 열 수 없습니다.</p>
     <button type="button" disabled={busy} onClick={() => {
       setCandidate(randomSubmissionKey()); setCopied(false); setDone(false); setNotice(""); pending.current = null;
@@ -146,6 +149,7 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
   const [fieldReadinessRevision, setFieldReadinessRevision] = useState(0);
   const [consent, setConsent] = useState(false);
   const [receipt, setReceipt] = useState<{ id: string; receiptKey: string; state?: string } | null>(null);
+  const [previousReceipt, setPreviousReceipt] = useState<{id:string;receiptKey:string;state?:string}|null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
   const pendingSubmission = useRef<PendingPublicSubmission | null>(null);
   const [hasPending, setHasPending] = useState(false);
@@ -154,6 +158,31 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
   const pendingScope = publicId ? `consult:${id}:${publicId}` : `inquiry:${id}`;
   const aiScope = publicId ? `${id}:${publicId}` : "";
   const [busy, setBusy] = useState(false);
+  function acceptEngagement(current: Engagement | null) {
+    engagementRef.current = current;
+    setEngagement(current);
+    if (!current?.retention?.workPurgedAt) return;
+    clearPendingAiSubmission(aiScope); setPendingAiAttempt(null); setUnlistedAiAnswer(null);
+    clearPendingPublicSubmission(pendingScope); pendingSubmission.current = null; setHasPending(false);
+    setAiQuestion(""); updateHumanMessage(""); setOverflowAiQuestion(null);
+    setName(""); setPhone(""); setPhoto(null); setConsent(false);
+    setAiStatus("보존 기간이 종료되었습니다. 새 상담을 시작하면 별도 대화로 접수됩니다.");
+  }
+  async function startNewConversation() {
+    if (!publicId || aiBusy || aiRecoveryBusy || busy) return;
+    setAiBusy(true);
+    try {
+      const result = await requestJson(`/v1/public/deployments/${publicId}/engagements`, "POST");
+      if (result.status !== 201) {
+        setAiStatus(`새 상담을 시작하지 못했습니다 (${result.status}). 다시 시도해 주세요.`); return;
+      }
+      if (receipt) setPreviousReceipt(receipt);
+      setReceipt(null);
+      acceptEngagement({id:(result.data as {id:string}).id,state:'ai_assisting',messages:[]});
+      setAiStatus("새 상담을 시작했습니다. 이전 대화와 별도로 저장됩니다.");
+    } catch { setAiStatus("새 상담 응답을 확인하지 못했습니다. 다시 조회해 주세요."); }
+    finally { setAiBusy(false); }
+  }
   function updateHumanMessage(value: string) {
     messageRef.current = value;
     setMessage(value);
@@ -243,8 +272,7 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
     const loading = requestJson(`/v1/public/deployments/${publicId}/engagements/current`).then(result => {
       if (active && result.status === 200 && !engagementRef.current) {
         const current = (result.data as { engagement: Engagement | null }).engagement;
-        engagementRef.current = current;
-        setEngagement(current);
+        acceptEngagement(current);
       }
     }).catch(() => { if (active) setAiStatus("이전 AI 대화 상태를 읽지 못했습니다. 사람 문의는 사용할 수 있습니다."); });
     engagementLoad.current = loading;
@@ -275,8 +303,7 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
           error: (started.data as { error?: string }).error };
         const current: Engagement = { id: (started.data as { id: string }).id,
           state: "ai_assisting", messages: [] };
-        engagementRef.current = current;
-        setEngagement(current);
+        acceptEngagement(current);
         return { status: 201, engagement: current };
       } catch { return { status: 0, engagement: null, error: "network_error" }; }
       finally { engagementStart.current = null; }
@@ -287,10 +314,10 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
     try {
       const result = await requestJson(`/v1/engagements/${id}`);
       const loaded = result.status === 200 ? engagementFrom(result.data, id) : null;
+      if (loaded?.retention?.workPurgedAt) { acceptEngagement(loaded); return true; }
       if (!loaded || (expected && !loaded.messages.some(item => item.actor === (expected.answer ? 'assistant' : 'customer')
           && item.body === (expected.answer || expected.question)))) return false;
-      engagementRef.current = loaded;
-      setEngagement(loaded);
+      acceptEngagement(loaded);
       setUnlistedAiAnswer(null);
       return true;
     } catch { return false; }
@@ -304,6 +331,9 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
     try {
       const result = await requestJson(`/v1/engagements/${attempt.engagementId}/messages/recover`,
         "GET", undefined, undefined, { "idempotency-key": attempt.idempotencyKey });
+      if (result.status === 410) {
+        await refreshAiTranscript(attempt.engagementId); clearAiAttempt(attempt); return true;
+      }
       if (result.status === 200) {
         const recovered = result.data as { state?: string; question?: string; answer?: string;
           error?: string; handoffRecommended?: boolean };
@@ -368,7 +398,7 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
   async function askAi(event?: FormEvent<HTMLFormElement>, selectedQuestion?: string) {
     event?.preventDefault();
     const question = (selectedQuestion ?? aiQuestion).trim();
-    if (!publicId || !question || unlistedAiAnswer || deploymentRestricted) return;
+    if (!publicId || !question || unlistedAiAnswer || deploymentRestricted || engagementRef.current?.retention?.workPurgedAt) return;
     const preserveQuestion = () => preserveQuestionForHuman(question);
     let attempt: PendingAiSubmission | null = null;
     setAiBusy(true); setAiStatus("승인된 정보로 답변을 확인하고 있습니다.");
@@ -430,6 +460,7 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
         }
       } else {
         await refreshAiTranscript(currentId);
+        if (engagementRef.current?.retention?.workPurgedAt) { clearAiAttempt(attempt); return; }
         preserveQuestion();
         if (result.status >= 500 && !(result.status === 503 && ['blocked_integration',
           'budget_not_configured', 'provider_unavailable'].includes(
@@ -456,7 +487,9 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
     finally { setAiBusy(false); }
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setStatus("문의 접수 중입니다.");
+    event.preventDefault();
+    if (engagementRef.current?.retention?.workPurgedAt) { setStatus("새 상담을 시작한 뒤 문의해 주세요."); return; }
+    setBusy(true); setStatus("문의 접수 중입니다.");
     const selectedDestination = (event.nativeEvent as SubmitEvent).submitter instanceof HTMLButtonElement
       && ((event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement).value === 'field'
       ? 'field' : 'human';
@@ -552,10 +585,11 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
   return <div className={publicId ? "site-shell agent-public-shell" : "site-shell"}><header className="site-header"><a href="/"><Brand product="Agent Platform" /></a>{publicId && <div className="agent-public-header-business"><span className="agent-public-symbol" aria-hidden="true">✦</span><span><strong>{knowledge?.businessName ?? "사업자 AI 상담"}</strong><small>사업자 공식 AI 안내</small></span></div>}</header><main className={publicId ? "feature-section agent-public-main" : "feature-section"}><div className={publicId ? "feature-heading agent-public-heading" : "feature-heading"}><p className="eyebrow">{publicId ? "어디에서 오셨든, 여기서 이어가세요." : "Agent Platform · 상담"}</p>{!publicId && <><h1>{knowledge?.businessName ?? "사업 정보"}</h1><p>{knowledge?.introduction}</p>{businessDetails}</>}
     {placementId && <p>광고 · 매체에서 승인한 {initialServiceName} 안내를 보고 오셨습니다. 연락처는 AP에서만 접수합니다.</p>}</div>{status && <p role="status" className="state-message">{status}</p>}
     {knowledgeLoadState === "failed" && <button type="button" onClick={() => setKnowledgeReload(value => value + 1)}>사업 정보 다시 불러오기</button>}
-    {deploymentRestricted && <p role="status" className="customer-banner">상담 배포 제한 중 · 기존 대화와 사람 문의는 유지됩니다.</p>}
-    {publicId && <section className="special-panel agent-public-chat"><div className="agent-public-chat-top"><span>사업자 AI 안내</span><span>{knowledge?.businessName ?? "사업 정보 확인 중"}</span></div><div className="agent-public-chat-body"><div className="agent-public-intro"><span className="agent-public-symbol" aria-hidden="true">✦</span><div><strong>{knowledge?.businessName ?? "사업자 AI 상담"}</strong><small>{knowledge?.services[0]?.name ?? "승인된 사업 정보 안내"}</small></div></div><h1>궁금한 점을 바로 물어보세요.</h1><p>{knowledge?.introduction || "승인된 사업 정보를 바탕으로 안내합니다."}</p>{businessDetails}{engagement?.messages.length ? <ol className="agent-public-messages" aria-label="AI 상담 대화">{engagement.messages.map(item => <li key={item.id} className={item.actor === "assistant" ? "agent-public-message-ai" : "agent-public-message-customer"}><strong>{item.actor === "assistant" ? "AI 안내" : "나"}</strong><p>{item.body}</p></li>)}</ol> : null}{knowledge?.faqs.length ? <div className="agent-public-quick" aria-label="빠른 질문">{knowledge.faqs.slice(0, 3).map(faq => <button key={faq.question} type="button" disabled={deploymentRestricted || !!receipt || aiBusy || aiRecoveryBusy || !!unlistedAiAnswer} onClick={() => { setAiQuestion(faq.question); void askAi(undefined, faq.question); }}>{faq.question}</button>)}</div> : null}{pendingAiAttempt && !unlistedAiAnswer && <div className="customer-banner"><p>이전 AI 질문 결과를 보관 중입니다. 같은 질문을 다시 보내면 동일 실행을 조회합니다. 다른 질문 전에 결과를 확인해 주세요.</p><button type="button" disabled={aiRecoveryBusy || aiBusy} onClick={() => void recoverAiAttempt(pendingAiAttempt)}>AI 요청 상태 다시 확인</button></div>}{unlistedAiAnswer && <div className="customer-banner"><strong>서버가 수락한 AI 답변</strong><p>{unlistedAiAnswer.answer || "확인된 답변이 없습니다. 담당자에게 문의해 주세요."}</p><p>대화 목록을 읽지 못했습니다. 새 질문을 보내기 전에 원본 대화를 다시 확인해 주세요.</p><button type="button" disabled={aiTranscriptBusy} onClick={() => void retryAiTranscript()}>AI 대화 다시 불러오기</button></div>}</div><div className="agent-public-chat-actions"><form className="form-fields agent-public-composer" onSubmit={event => void askAi(event)}><label>질문<textarea required maxLength={1000} rows={1} placeholder="궁금한 내용을 물어보세요" value={aiQuestion} onChange={event => setAiQuestion(event.target.value)} /></label><button type="submit" disabled={deploymentRestricted || aiBusy || aiRecoveryBusy || !knowledge || !!receipt || !!unlistedAiAnswer}>AI에 질문 <span aria-hidden="true">→</span></button>{!knowledge && <p>{knowledgeLoadState === "loading" ? "승인된 사업 정보를 불러오는 동안 질문할 수 없습니다." : knowledgeLoadState === "missing" ? "공개된 사업 정보가 없어 질문할 수 없습니다." : "사업 정보를 다시 불러온 뒤 질문할 수 있습니다."}</p>}</form>{aiStatus && <p role="status" className="state-message">{aiStatus}</p>}<a className="agent-public-human-link" href="#human-inquiry">사장님께 문의하기 <span aria-hidden="true">→</span></a></div><p className="agent-public-chat-bottom">AI 답변은 안내이며 예약 확정이 아닙니다. 연락처는 다음 접수 화면에서만 받습니다.</p></section>}
+    <AgentRetentionNotice retention={engagement?.retention}/>{engagement?.retention?.workPurgedAt && <button type="button" disabled={deploymentRestricted || aiBusy || aiRecoveryBusy || busy} onClick={() => void startNewConversation()}>새 상담 시작</button>}{deploymentRestricted && <p role="status" className="customer-banner">상담 배포 제한 중 · 기존 대화와 사람 문의는 유지됩니다.</p>}
+    {publicId && <section className="special-panel agent-public-chat"><div className="agent-public-chat-top"><span>사업자 AI 안내</span><span>{knowledge?.businessName ?? "사업 정보 확인 중"}</span></div><div className="agent-public-chat-body"><div className="agent-public-intro"><span className="agent-public-symbol" aria-hidden="true">✦</span><div><strong>{knowledge?.businessName ?? "사업자 AI 상담"}</strong><small>{knowledge?.services[0]?.name ?? "승인된 사업 정보 안내"}</small></div></div><h1>궁금한 점을 바로 물어보세요.</h1><p>{knowledge?.introduction || "승인된 사업 정보를 바탕으로 안내합니다."}</p>{businessDetails}{engagement?.messages.length ? <ol className="agent-public-messages" aria-label="AI 상담 대화">{engagement.messages.map(item => <li key={item.id} className={item.actor === "assistant" ? "agent-public-message-ai" : "agent-public-message-customer"}><strong>{item.actor === "assistant" ? "AI 안내" : "나"}</strong><p>{item.body}</p></li>)}</ol> : null}{knowledge?.faqs.length ? <div className="agent-public-quick" aria-label="빠른 질문">{knowledge.faqs.slice(0, 3).map(faq => <button key={faq.question} type="button" disabled={Boolean(engagement?.retention?.workPurgedAt) || deploymentRestricted || !!receipt || aiBusy || aiRecoveryBusy || !!unlistedAiAnswer} onClick={() => { setAiQuestion(faq.question); void askAi(undefined, faq.question); }}>{faq.question}</button>)}</div> : null}{pendingAiAttempt && !unlistedAiAnswer && <div className="customer-banner"><p>이전 AI 질문 결과를 보관 중입니다. 같은 질문을 다시 보내면 동일 실행을 조회합니다. 다른 질문 전에 결과를 확인해 주세요.</p><button type="button" disabled={aiRecoveryBusy || aiBusy} onClick={() => void recoverAiAttempt(pendingAiAttempt)}>AI 요청 상태 다시 확인</button></div>}{unlistedAiAnswer && <div className="customer-banner"><strong>서버가 수락한 AI 답변</strong><p>{unlistedAiAnswer.answer || "확인된 답변이 없습니다. 담당자에게 문의해 주세요."}</p><p>대화 목록을 읽지 못했습니다. 새 질문을 보내기 전에 원본 대화를 다시 확인해 주세요.</p><button type="button" disabled={aiTranscriptBusy} onClick={() => void retryAiTranscript()}>AI 대화 다시 불러오기</button></div>}</div><div className="agent-public-chat-actions"><form className="form-fields agent-public-composer" onSubmit={event => void askAi(event)}><label>질문<textarea disabled={Boolean(engagement?.retention?.workPurgedAt)} required maxLength={1000} rows={1} placeholder="궁금한 내용을 물어보세요" value={aiQuestion} onChange={event => setAiQuestion(event.target.value)} /></label><button type="submit" disabled={Boolean(engagement?.retention?.workPurgedAt) || deploymentRestricted || aiBusy || aiRecoveryBusy || !knowledge || !!receipt || !!unlistedAiAnswer}>AI에 질문 <span aria-hidden="true">→</span></button>{!knowledge && <p>{knowledgeLoadState === "loading" ? "승인된 사업 정보를 불러오는 동안 질문할 수 없습니다." : knowledgeLoadState === "missing" ? "공개된 사업 정보가 없어 질문할 수 없습니다." : "사업 정보를 다시 불러온 뒤 질문할 수 있습니다."}</p>}</form>{aiStatus && <p role="status" className="state-message">{aiStatus}</p>}<a className="agent-public-human-link" href="#human-inquiry">사장님께 문의하기 <span aria-hidden="true">→</span></a></div><p className="agent-public-chat-bottom">AI 답변은 안내이며 예약 확정이 아닙니다. 연락처는 다음 접수 화면에서만 받습니다.</p></section>}
+    {previousReceipt && <section className="special-panel" aria-label="이전 문의 확인"><h2>이전 문의 확인</h2><p>새 상담과 별도로 기존 접수번호·처리 이력을 확인할 수 있습니다.</p><a href={`/inquiry/${previousReceipt.id}`}>이전 문의 열기</a><div className="customer-banner"><p>기존 접수 확인키</p><code>{previousReceipt.receiptKey}</code></div></section>}
     {publicId && <p className="agent-public-privacy">일반 질문은 연락처 없이 이용합니다. 실제 문의·예약 요청 때만 이름과 연락처를 남깁니다.</p>}
-    <div className={publicId ? "special-grid agent-public-detail-grid" : "special-grid"}><section className="special-panel agent-public-facts"><h2>승인된 안내</h2>{knowledge ? <><h3>서비스</h3>{knowledge.services.length ? <ul>{knowledge.services.map(service => <li key={service.name}><strong>{service.name}</strong><p>{service.description}</p></li>)}</ul> : <p>등록된 서비스가 없습니다.</p>}<h3>자주 묻는 질문</h3>{knowledge.faqs.length ? <dl>{knowledge.faqs.map(faq => <div key={faq.question}><dt>{faq.question}</dt><dd>{faq.answer}</dd></div>)}</dl> : <p>등록된 질문이 없습니다.</p>}</> : <p>{knowledgeLoadState === "loading" ? "사업 정보를 불러오는 중입니다." : knowledgeLoadState === "missing" ? "공개된 사업 정보가 없습니다." : "사업 정보를 확인하지 못했습니다. 위에서 다시 불러와 주세요."}</p>}<p>확인되지 않은 내용은 사람에게 문의할 수 있습니다.</p></section><section id="human-inquiry" className="special-panel agent-public-human"><h2>{receipt?.state === 'external_ready' ? 'Field 요청 준비' : '사람에게 문의'}</h2>{receipt ? <div className="customer-banner"><strong>접수 확인키</strong><p>이 키는 AP 대화 원문을 다시 열 때 필요합니다. 전화번호나 알림 링크만으로 열 수 없습니다.</p><code>{receipt.receiptKey}</code><p><a href={`/inquiry/${receipt.id}`}>후속 대화 열기</a></p>{receipt.state === 'external_ready' && <p>Field에 전달되지 않았다면 후속 대화에서 사람에게 직접 문의할 수 있습니다.</p>}</div> : <form className="form-fields" onSubmit={event => void submit(event)}>
+    <div className={publicId ? "special-grid agent-public-detail-grid" : "special-grid"}><section className="special-panel agent-public-facts"><h2>승인된 안내</h2>{knowledge ? <><h3>서비스</h3>{knowledge.services.length ? <ul>{knowledge.services.map(service => <li key={service.name}><strong>{service.name}</strong><p>{service.description}</p></li>)}</ul> : <p>등록된 서비스가 없습니다.</p>}<h3>자주 묻는 질문</h3>{knowledge.faqs.length ? <dl>{knowledge.faqs.map(faq => <div key={faq.question}><dt>{faq.question}</dt><dd>{faq.answer}</dd></div>)}</dl> : <p>등록된 질문이 없습니다.</p>}</> : <p>{knowledgeLoadState === "loading" ? "사업 정보를 불러오는 중입니다." : knowledgeLoadState === "missing" ? "공개된 사업 정보가 없습니다." : "사업 정보를 확인하지 못했습니다. 위에서 다시 불러와 주세요."}</p>}<p>확인되지 않은 내용은 사람에게 문의할 수 있습니다.</p></section><section id="human-inquiry" className="special-panel agent-public-human"><h2>{receipt?.state === 'external_ready' ? 'Field 요청 준비' : '사람에게 문의'}</h2>{receipt ? <div className="customer-banner"><strong>접수 확인키</strong><p>이 키는 AP 대화 원문을 다시 열 때 필요합니다. 전화번호나 알림 링크만으로 열 수 없습니다.</p><code>{receipt.receiptKey}</code><p><a href={`/inquiry/${receipt.id}`}>후속 대화 열기</a></p>{receipt.state === 'external_ready' && <p>Field에 전달되지 않았다면 후속 대화에서 사람에게 직접 문의할 수 있습니다.</p>}</div> : engagement?.retention?.workPurgedAt ? <p>기존 대화의 접수가 종료되었습니다. 위에서 새 상담을 시작해 주세요.</p> : <form className="form-fields" onSubmit={event => void submit(event)}>
       {hasPending && <div className="customer-banner"><p>이전 제출 시도를 보관 중입니다. 같은 내용을 다시 입력하면 같은 문의로 재시도합니다. 다른 내용을 보내려면 기존 결과를 먼저 확인해 주세요.</p>
         <button type="button" disabled={busy || recovering} onClick={() => setRecoveryRevision(value => value + 1)}>이전 문의 조회</button>
         <button type="button" disabled={busy || recovering} onClick={() => {
@@ -582,8 +616,8 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
       <label>문의 내용<textarea required maxLength={5000} value={message} onChange={event => updateHumanMessage(event.target.value)} /></label>
       <div className="agent-public-photo"><label className="inquiry-photo-label">문의 사진 (선택, 최대 8MB)<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label><p>사진은 AP 대화 원본을 저장한 뒤 비공개로 첨부합니다. AI 분석에 사용하지 않습니다. Field로 보내려면 별도로 선택하고 동의해야 합니다.</p></div>
       <label><input type="checkbox" required checked={consent} onChange={event => setConsent(event.target.checked)} /> AP 대화와 요청 준비에 필요한 연락처 저장에 동의합니다.</label>
-      <button type="submit" value="human" disabled={busy || recovering || !knowledge}>사람 문의 제출</button>
-      {publicId && engagement && <><button type="submit" value="field" disabled={busy || recovering || !knowledge || fieldReadiness !== "ready"}>Field 요청 준비</button><p>요청 준비만으로 Field에 전달되지 않습니다. 현재 서비스·가격·시간과 수신 사업자를 확인한 뒤 별도로 동의해야 합니다.</p></>}
+      <button type="submit" value="human" disabled={busy || recovering || !knowledge || Boolean(engagement?.retention?.workPurgedAt)}>사람 문의 제출</button>
+      {publicId && engagement && <><button type="submit" value="field" disabled={busy || recovering || !knowledge || Boolean(engagement?.retention?.workPurgedAt) || fieldReadiness !== "ready"}>Field 요청 준비</button><p>요청 준비만으로 Field에 전달되지 않습니다. 현재 서비스·가격·시간과 수신 사업자를 확인한 뒤 별도로 동의해야 합니다.</p></>}
       {!knowledge && <p>승인된 사업 정보를 불러온 뒤 문의를 접수할 수 있습니다.</p>}
       <p>회원가입·OTP 없이 접수하며, 번호 소유 확인 상태로 표시하지 않습니다.</p></form>}</section></div>
     {receipt?.state === 'external_ready' && <section className="special-panel"><label className="inquiry-photo-label">AP 대화 사진 추가 (선택, 최대 8MB)<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label><p>사진을 AP 원본에 첨부해도 Field에는 자동 전달되지 않습니다. 아래에서 전달 사진을 따로 선택하고 동의해 주세요.</p></section>}
@@ -621,6 +655,12 @@ export function InquiryPage({ id }: { id: string }) {
     setKey(attempt.receiptKey);
     void recoverPendingMessage(attempt);
   }, [id]);
+  useEffect(() => {
+    if (!inquiry?.retention?.workPurgedAt) return;
+    clearPendingMessageSubmission(id); pendingMessage.current = null; setHasPendingMessage(false);
+    setBody(""); clearPhotoSelection(); setPendingPhotoMessageId(null);
+    setStatus("보존 기간이 종료되어 추가 질문과 사진 첨부는 종료되었습니다.");
+  }, [id, inquiry?.retention?.workPurgedAt]);
   async function recoverPendingMessage(attempt: PendingMessageSubmission) {
     setRecoveringMessage(true);
     setKey(attempt.receiptKey);
@@ -748,6 +788,10 @@ export function InquiryPage({ id }: { id: string }) {
           if (messageId) { setPendingPhotoMessageId(messageId); await attachPhoto(messageId, photo); }
           else setStatus("질문은 저장됐지만 사진을 연결할 메시지를 찾지 못했습니다. 아래에서 다시 첨부해 주세요.");
         }
+      } else if (result.status === 410) {
+        pendingMessage.current=null;clearPendingMessageSubmission(id);setHasPendingMessage(false);
+        setInquiry(null);setBody("");clearPhotoSelection();setPendingPhotoMessageId(null);
+        await refreshInquiry();
       } else if (result.status === 409 && (result.data as { error?: string }).error === 'idempotency_conflict')
         setStatus("이 제출 키로 저장된 질문이 다릅니다. 내용을 확인해 주세요.");
       else setStatus(`추가 질문을 저장하지 못했습니다 (${result.status}).`);
@@ -757,7 +801,7 @@ export function InquiryPage({ id }: { id: string }) {
     finally { setBusy(false); }
   }
   return <div className="site-shell"><header className="site-header"><a href="/"><Brand product="Agent Platform" /></a></header><main className="feature-section"><div className="feature-heading"><p className="eyebrow">Agent Platform · 비회원 후속 대화</p><h1>내 문의 확인</h1><p>접수 때 받은 별도 확인키를 입력해 주세요. 번호나 알림 링크로는 원문을 열 수 없습니다.</p></div>{status && <p role="status" className="state-message">{status}</p>}<section className="special-panel"><form className="form-fields" onSubmit={event => void open(event)}><label>접수 확인키<input required value={key} onChange={event => { setKey(event.target.value); setInquiry(null); clearPhotoSelection(); setPendingPhotoMessageId(null); setRefreshNeeded(false); }} /></label><button type="submit" disabled={busy || recoveringMessage}>문의 열기</button></form>
-    {hasPendingMessage && <div className="customer-banner"><p>이전 추가 질문 제출 시도를 보관 중입니다. 같은 내용을 다시 입력하면 같은 메시지로 재시도합니다.</p>
+    {hasPendingMessage&&!inquiry?.retention?.workPurgedAt && <div className="customer-banner"><p>이전 추가 질문 제출 시도를 보관 중입니다. 같은 내용을 다시 입력하면 같은 메시지로 재시도합니다.</p>
       <button type="button" disabled={busy || recoveringMessage} onClick={() => {
         if (pendingMessage.current) void recoverPendingMessage(pendingMessage.current);
       }}>이전 추가 질문 조회</button>
@@ -765,11 +809,11 @@ export function InquiryPage({ id }: { id: string }) {
         pendingMessage.current = null; clearPendingMessageSubmission(id); setHasPendingMessage(false);
         setStatus("이전 시도를 포기했습니다. 이미 저장됐을 수 있으므로 새 질문 전에 대화 내용을 확인해 주세요.");
       }}>이전 시도 포기하고 새 질문</button></div>}
-    {inquiry && <div><h2>{inquiry.service?.name ?? "일반 문의"} · {inquiryStateLabel(inquiry.state)}</h2>{inquiry.state === 'closed' && <p>처리 완료된 문의도 추가 질문을 남기면 다시 사업자 확인 필요로 열립니다.</p>}{inquiry.state === 'spam' && <p>이 문의는 알림 중단 상태입니다. 추가 메시지는 보존되며 사업자 알림은 발송하지 않습니다.</p>}{refreshNeeded && <button type="button" disabled={busy} onClick={() => void refreshInquiry()}>문의 내용 다시 확인</button>}{hasPendingMessage ? <p>이전 추가 질문 결과를 확인한 뒤 확인키를 교체할 수 있습니다.</p> : <ReceiptRotationPanel inquiryId={id} currentKey={key} onRotated={onReceiptRotated} />}<ol>{inquiry.messages.map(message => <li key={message.id}><strong>{message.actor === "owner" ? "사업자" : message.actor === "assistant" ? "AI" : "고객"}</strong> {message.body} <small>알림 {deliveryLabel(message.delivery_state)}</small>
+    {inquiry && <div><h2>{inquiry.service?.name ?? "일반 문의"} · {inquiryStateLabel(inquiry.state)}</h2><AgentRetentionNotice retention={inquiry.retention}/>{inquiry.state === 'closed'&&!inquiry.retention?.workPurgedAt && <p>처리 완료된 문의도 추가 질문을 남기면 다시 사업자 확인 필요로 열립니다.</p>}{inquiry.state === 'spam' && <p>이 문의는 알림 중단 상태입니다. 추가 메시지는 보존되며 사업자 알림은 발송하지 않습니다.</p>}{refreshNeeded && <button type="button" disabled={busy} onClick={() => void refreshInquiry()}>문의 내용 다시 확인</button>}{hasPendingMessage ? <p>이전 추가 질문 결과를 확인한 뒤 확인키를 교체할 수 있습니다.</p> : <ReceiptRotationPanel inquiryId={id} currentKey={key} onRotated={onReceiptRotated} />}<ol>{inquiry.messages.map(message => <li key={message.id}><strong>{message.actor === "owner" ? "사업자" : message.actor === "assistant" ? "AI" : "고객"}</strong> {message.body} <small>알림 {deliveryLabel(message.delivery_state)}</small>
     {inquiry.attachments.filter(item => item.messageId === message.id).map((attachment, index) =>
-      <PrivateInquiryPhoto key={attachment.id} inquiryId={id} attachmentId={attachment.id} receiptKey={key} label={`고객 첨부 사진 ${index + 1}`} />)}</li>)}</ol><form className="form-fields" onSubmit={event => void followup(event)}><label>추가 질문<textarea required maxLength={5000} value={body} onChange={event => setBody(event.target.value)} /></label><button type="submit" disabled={busy || recoveringMessage}>추가 질문 저장</button></form>
-    <div className="knowledge-source"><label className="inquiry-photo-label">문의 사진 첨부 (선택, 최대 8MB)<input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label>{photo && <><p>선택한 사진: {photo.name}</p><button type="button" disabled={busy} onClick={() => void retryPhoto()}>사진만 첨부 또는 재시도</button></>}</div>
-    </div>}</section>{inquiry && <AgentFieldAction key={`${inquiry.state}:${fieldAttachmentRevision}`}
+      <PrivateInquiryPhoto key={attachment.id} inquiryId={id} attachmentId={attachment.id} receiptKey={key} label={`고객 첨부 사진 ${index + 1}`} />)}</li>)}</ol>{!inquiry.retention?.workPurgedAt&&<><form className="form-fields" onSubmit={event => void followup(event)}><label>추가 질문<textarea required maxLength={5000} value={body} onChange={event => setBody(event.target.value)} /></label><button type="submit" disabled={busy || recoveringMessage}>추가 질문 저장</button></form>
+    <div className="knowledge-source"><label className="inquiry-photo-label">문의 사진 첨부 (선택, 최대 8MB)<input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label>{photo && <><p>선택한 사진: {photo.name}</p><button type="button" disabled={busy} onClick={() => void retryPhoto()}>사진만 첨부 또는 재시도</button></>}</div></>}
+    </div>}</section>{inquiry&&!inquiry.retention?.workPurgedAt && <AgentFieldAction key={`${inquiry.state}:${fieldAttachmentRevision}`}
       inquiryId={id} receiptKey={key} externalReady={inquiry.state === 'external_ready'}
       initialSummary={inquiry.state === 'external_ready'
         ? inquiry.messages.filter(item => item.actor === 'customer').at(-1)?.body ?? '' : ''} />}</main></div>;

@@ -5,12 +5,12 @@ export const RETENTION_TABLES = { inquiry: 'ap.inquiries' };
 export type RetentionPolicy = { id:string; anonymous_days:number; work_days:number; photo_days:number; reference:string; reason:string;
   requested_by:string; request_hash:string; created_at:Date; approved_by:string|null; approved_at:Date|null;
   approval_reason:string|null; retired_at:Date|null };
-type RetentionWork = { target_id:string; organization_id:string; state:string; mode:string; revision:number; closed_at:Date|null;
+type RetentionWork = { target_id:string; organization_id:string; state:string; mode:string; revision:number; closed_at:Date|null;work_purged_at:Date|null;
   activity_at:Date; created_at:Date; cursor_at:string; anonymous:boolean; pending:boolean; external_pending:boolean;
   future_at:Date|null; held:boolean; supported:boolean };
 
 // AP 자체 원장만 사용한다. 외부 업무 상태는 AP가 검증해 받은 사건이며 Field DB를 조회하지 않는다.
-export const RETENTION_WORK_QUERY = `select i.id as target_id,i.organization_id,i.state,i.mode,i.revision,i.retention_closed_at as closed_at,i.created_at,
+export const RETENTION_WORK_QUERY = `select i.id as target_id,i.organization_id,i.state,i.mode,i.revision,i.retention_closed_at as closed_at,i.created_at,i.retention_work_purged_at as work_purged_at,
   greatest(i.created_at,(select max(m.created_at) from ap.inquiry_messages m where m.inquiry_id=i.id),
     (select max(a.created_at) from ap.inquiry_attachments a where a.inquiry_id=i.id),
     (select max(r.started_at) from ap.ai_runs r where r.inquiry_id=i.id),
@@ -42,7 +42,7 @@ export async function previewRetention(db:Pool|PoolClient,organizationId:string,
     const anchor=row.anonymous?row.activity_at:row.closed_at?new Date(Math.max(row.closed_at.getTime(),row.activity_at.getTime())):null;
     const workDueAt=anchor&&policy?new Date(anchor.getTime()+(row.anonymous?policy.anonymous_days:policy.work_days)*86400000):null;
     const photoDueAt=anchor&&policy?new Date(anchor.getTime()+(row.anonymous?policy.anonymous_days:policy.photo_days)*86400000):null;
-    const reason=!policy?.approved_at||policy.retired_at?'policy_not_approved':row.external_pending?'external_work_unresolved'
+    const reason=row.work_purged_at?'work_already_purged':!policy?.approved_at||policy.retired_at?'policy_not_approved':row.external_pending?'external_work_unresolved'
       :!row.anonymous&&row.state!=='closed'?'active_work':!anchor?'unknown_closure':row.future_at&&row.future_at>now?'future_schedule'
         :row.held?'active_hold':row.pending?'pending_delivery':row.supported?'active_support'
           :workDueAt!<=now||photoDueAt!<=now?'due':'not_due';

@@ -2,6 +2,8 @@ import Fastify from 'fastify';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { Pool } from 'pg';
 import { registerAgentRetentionRoutes } from './retention-routes.js';
+import { registerAgentRetentionPurgeRoutes } from './retention-purge-routes.js';
+import { registerAgentRetentionConsumers } from './retention-consumers.js';
 import { registerEmbedSpikeRoutes } from './embed.js';
 import { registerConversationSpikeRoutes } from './conversation-spike.js';
 import { registerBusinessRoutes, type BusinessRuntime } from './business.js';
@@ -54,6 +56,8 @@ export function createAgentApp(
   }
   if (businessRuntime) {
     registerAgentRetentionRoutes(app, businessRuntime);
+    registerAgentRetentionPurgeRoutes(app, businessRuntime);
+    registerAgentRetentionConsumers(app, businessRuntime);
     registerAgentReceiptAbuseGuard(app, businessRuntime);
     registerAgentReceiptRotationRoutes(app, businessRuntime);
     registerBusinessRoutes(app, businessRuntime);

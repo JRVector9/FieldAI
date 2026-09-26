@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
+import { retainReadGuardThroughResponse } from './retention-read-guard.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
@@ -196,7 +197,16 @@ export function registerCustomerSupportRoutes(app: FastifyInstance, runtime: Bus
     if (!bytes || bytes.length !== row.byte_size || hash(bytes) !== row.sha256) {
       await audit(runtime.pool, access, user, 'photo_unavailable', attachmentId); return fail(reply, 503, 'media_unavailable');
     }
-    await audit(runtime.pool, access, user, 'photo_read', attachmentId);
-    return reply.header('X-Content-Type-Options', 'nosniff').type('image/webp').send(bytes);
+    const guard=await runtime.pool.connect();let retained=false;
+    try {
+      await guard.query('begin');
+      const current=await guard.query(`select a.id from ap.inquiry_attachments a join ap.inquiries i on i.id=a.inquiry_id
+        where a.id=$1 and a.inquiry_id=$2 and a.organization_id=$3 and a.state='ready'
+          and i.retention_work_purged_at is null for share of i,a`,[attachmentId,id,access.organization_id]);
+      if(!current.rowCount||!await allowed(guard,request,user,id,'photos')) return fail(reply,403,'support_access_required');
+      await audit(runtime.pool, access, user, 'photo_read', attachmentId);
+      retainReadGuardThroughResponse(reply,guard);retained=true;
+      return reply.header('X-Content-Type-Options', 'nosniff').type('image/webp').send(bytes);
+    } finally {if(!retained){try{await guard.query('rollback');}finally{guard.release();}}}
   });
 }

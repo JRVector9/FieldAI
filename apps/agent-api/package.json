@@ -6,6 +6,9 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "start:field-events": "node dist/field-event-worker.js",
+    "start:retention": "node dist/retention-purge-worker.js",
+    "retention:checkpoint": "node dist/retention-checkpoint-cli.js --quiesced",
+    "retention:restore": "node dist/retention-restore-cli.js --offline-restored",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:unit": "tsx --test test/health.test.ts"

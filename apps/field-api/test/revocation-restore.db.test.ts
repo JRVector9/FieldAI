@@ -190,7 +190,7 @@ test('Field revocations survive a real pre-revoke PG17 restore without reviving 
     assert.equal(receipt.statusCode, 200); assert.match(receipt.body, /PRESERVED_REVOKE_CUSTOMER|PRESERVED_REVOKE_MESSAGE/);
   } finally {
     await restoredApp?.close(); await restored?.end(); await app.close();
-    await admin.query(`drop database if exists "${restoreDb}" with (force)`); await admin.end();
+    await admin.query(`drop database if exists "${restoreDb}"`); await admin.end();
     await pool.query('delete from field.organizations where id=$1', [org]);
     await pool.query('delete from "oauthClient" where "clientId"=$1', [client]);
     await pool.query('delete from "user" where id=any($1::text[])', [[owner, outsider]]);

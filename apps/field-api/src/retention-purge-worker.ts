@@ -1,7 +1,9 @@
+import { readdir } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { createFieldInquiryMediaStore } from './inquiry-media.js';
 import { FieldRetentionJournal } from './retention-journal.js';
+import { verifyFieldRetentionJournal } from './retention-journal-integrity.js';
 import { runFieldRetentionJobOnce } from './retention-purge.js';
 
 if (process.env.NODE_ENV === 'production' && process.env.FIELD_PROFILE === 'mock')
@@ -13,12 +15,15 @@ const media = createFieldInquiryMediaStore();
 if (!databaseUrl || !directory || !secret || !media)
   throw new Error('Field retention requires its database, private media store and separate journal configuration');
 const journal = new FieldRetentionJournal(directory, secret);
+// First local setup creates the empty journal. Never recreate a lost existing journal.
+await readdir(directory);
 await journal.read();
 const pool = new Pool({ connectionString: databaseUrl });
 const controller = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => controller.abort());
 try {
   await pool.query('select 1 from field.work_retention_jobs limit 1');
+  await verifyFieldRetentionJournal(pool,journal);
   process.stdout.write('field retention worker ready\n');
   do {
     try {

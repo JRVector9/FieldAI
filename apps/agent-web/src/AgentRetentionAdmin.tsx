@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { retentionRequest, RETENTION_REASONS, RETENTION_ACTIONS,
-  type RetentionPolicy, type RetentionHold, type RetentionAudit, type RetentionPreview } from './agent-retention';
+import { retentionRequest, RETENTION_REASONS, RETENTION_ACTIONS, RETENTION_JOB_STATES,
+  type RetentionPolicy, type RetentionHold, type RetentionAudit, type RetentionPreview, type RetentionJob } from './agent-retention';
 import './agent-retention.css';
 
 function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
@@ -14,8 +14,21 @@ function ActionForm({ id, label, button, locked, send }: { id: string; label: st
     <Field id={id} label={label}><textarea id={id} required minLength={10} maxLength={500} readOnly={locked}
       value={reason} onChange={event => setReason(event.target.value)} /></Field><button type="submit" disabled={locked}>{button}</button></form>;
 }
+function PurgeForm({ work, locked, send }: { work: RetentionPreview['items'][number]; locked: boolean;
+  send: (scope: 'photos' | 'work', reason: string) => void }) {
+  const [scope, setScope] = useState<'photos' | 'work'>(work.photosDue ? 'photos' : 'work'), [reason, setReason] = useState('');
+  return <form className="form-fields" aria-label={`정리 요청 ${work.targetId}`} onSubmit={event => { event.preventDefault(); send(scope, reason); }}>
+    <Field id={`agent-retention-purge-scope-${work.targetId}`} label="정리 범위"><select id={`agent-retention-purge-scope-${work.targetId}`} disabled={locked} value={scope} onChange={event => setScope(event.target.value as 'photos' | 'work')}>
+      {work.photosDue && <option value="photos">기한이 지난 고객 사진</option>}{work.workDue && <option value="work">고객 사진과 업무 개인정보·원문</option>}
+    </select></Field><Field id={`agent-retention-purge-reason-${work.targetId}`} label="정리 요청 사유"><textarea id={`agent-retention-purge-reason-${work.targetId}`} required minLength={10} maxLength={500} readOnly={locked} value={reason} onChange={event => setReason(event.target.value)} /></Field>
+    <label><input type="checkbox" required disabled={locked} /> 선택한 자료는 다른 운영자 승인 후 제거되며 기존 접수번호·처리 이력은 유지됨을 확인했습니다.</label>
+    <button type="submit" disabled={locked}>정리 실행 요청</button>
+  </form>;
+}
+
 export function AgentRetentionAdmin({ actorUserId, role }: { actorUserId: string; role: string }) {
   const [policies, setPolicies] = useState<RetentionPolicy[]>([]), [holds, setHolds] = useState<RetentionHold[]>([]), [events, setEvents] = useState<RetentionAudit[]>([]);
+  const [jobs,setJobs]=useState<RetentionJob[]>([]);
   const [loadState, setLoadState] = useState('loading'), [busy, setBusy] = useState(false), [status, setStatus] = useState('');
   const [uncertain, setUncertain] = useState(false), pending = useRef<{ path: string; body: unknown; key: string } | null>(null);
   const [anonymousDays, setAnonymousDays] = useState(30);
@@ -29,14 +42,15 @@ export function AgentRetentionAdmin({ actorUserId, role }: { actorUserId: string
   const load = useCallback(async () => {
     clearPreview(); setLoadState('loading');
     try {
-      const [p, h, a] = await Promise.all([
+      const [p, h, a, j] = await Promise.all([
         retentionRequest<{ policies: RetentionPolicy[] }>('/v1/admin/retention/policies'),
         retentionRequest<{ holds: RetentionHold[] }>('/v1/admin/retention/holds'),
         retentionRequest<{ events: RetentionAudit[] }>('/v1/admin/retention/audit'),
+        retentionRequest<{jobs:RetentionJob[]}>('/v1/admin/retention/jobs'),
       ]);
       if (p.status !== 200 || h.status !== 200 || a.status !== 200 || !Array.isArray(p.data.policies)
-        || !Array.isArray(h.data.holds) || !Array.isArray(a.data.events)) throw new Error('unavailable');
-      setPolicies(p.data.policies); setHolds(h.data.holds); setEvents(a.data.events); setLoadState('ready');
+        || !Array.isArray(h.data.holds) || !Array.isArray(a.data.events) || j.status!==200 || !Array.isArray(j.data.jobs)) throw new Error('unavailable');
+      setPolicies(p.data.policies); setHolds(h.data.holds); setEvents(a.data.events); setJobs(j.data.jobs); setLoadState('ready');
     } catch { setLoadState('failed'); setStatus('보존 원장을 확인하지 못했습니다. 기존 목록을 유지하며 조작을 잠급니다. 다시 조회해 주세요.'); }
   }, [clearPreview]);
   useEffect(() => { void load(); return () => { previewSequence.current++; }; }, [load]);
@@ -122,9 +136,26 @@ export function AgentRetentionAdmin({ actorUserId, role }: { actorUserId: string
       {preview.items.map(w => <article className="agent-retention-work" key={`${w.targetKind}:${w.targetId}`}><h4>{w.classification === 'anonymous' ? '익명 대화' : '정식·외부 업무'} · {w.state}</h4><p>업무 ID {w.targetId}</p><p>{RETENTION_REASONS[w.reason] ?? w.reason}</p><p>종결 기준 {w.closedAt ? new Date(w.closedAt).toLocaleString('ko-KR') : '미확인'}</p>
         {w.workDueAt && <p>업무 기한 {new Date(w.workDueAt).toLocaleString('ko-KR')} · 사진 기한 {new Date(w.photoDueAt!).toLocaleString('ko-KR')}</p>}
         {w.reason === 'due' && <p>{w.workDue ? '업무 정리 검토 대상' : '업무 보존 기간 유지'} · {w.photosDue ? '사진 정리 검토 대상' : '사진 보존 기간 유지'}</p>}
+        {role==='operator'&&w.reason==='due'&&<PurgeForm work={w} locked={locked} send={(scope,reason)=>void send('/v1/admin/retention/jobs',{
+          organizationId:org,targetKind:w.targetKind,targetId:w.targetId,policyId,scope,expectedRevision:w.revision,expectedAnchorAt:w.anchorAt,reason,
+        })} />}
       </article>)}
       {preview.nextCursor && <button type="button" disabled={previewBusy || busy || uncertain} onClick={() => void showPreview(preview.nextCursor!)}>다음 업무 100개</button>}
     </section>}
+    <section aria-label="정리 실행 원장"><h3>최근 정리 실행 · 최대 100개</h3>
+      <p>요청과 다른 운영자의 승인이 모두 있어야 처리합니다. 실행 직전 보존·보류·권한을 다시 확인하며, 파일 제거 결과가 불확실하면 완료로 표시하지 않습니다. 사유에는 고객 개인정보를 넣지 마세요.</p>
+      {loadState === 'ready' && !jobs.length && <p>등록된 정리 실행 요청이 없습니다.</p>}
+      {jobs.map(j => <article className="agent-retention-job" key={j.id}><h4>{RETENTION_JOB_STATES[j.state] ?? j.state}</h4>
+        <p>정리 ID {j.id}</p><p>{j.targetKind} · 업무 ID {j.targetId}</p><p>조직 {j.organizationId}</p>
+        <p>{j.scope === 'work' ? '고객 사진과 문의 개인정보·원문' : '고객 사진'} · 기준 revision {j.revision} · 처리 시도 {j.attemptCount}회</p><p>{j.reason}</p>
+        {j.error && <p role="status">{RETENTION_REASONS[j.error] ?? j.error}</p>}
+        {j.completedAt && <p>정리 시각 {new Date(j.completedAt).toLocaleString('ko-KR')}</p>}
+        {j.state === 'pending' && j.requestedBy === actorUserId && <p>다른 운영자가 동일한 업무·범위를 확인한 뒤 승인해야 합니다.</p>}
+        {role === 'operator' && j.state === 'pending' && j.requestedBy !== actorUserId && <ActionForm id={`agent-retention-job-approve-${j.id}`} label="정리 승인 사유" button="정리 실행 승인" locked={locked} send={reason => void send(`/v1/admin/retention/jobs/${j.id}/approve`, { reason })} />}
+        {role === 'operator' && !['completed','canceled'].includes(j.state) && [j.requestedBy,j.approvedBy].includes(actorUserId) && <ActionForm id={`agent-retention-job-cancel-${j.id}`} label="정리 취소 사유" button="정리 요청 취소" locked={locked} send={reason => void send(`/v1/admin/retention/jobs/${j.id}/cancel`, { reason })} />}
+        {['blocked','stale'].includes(j.state) && <p>차단 원인을 해결한 뒤 새 미리보기와 새 요청으로 검토해 주세요. 이전 승인을 다른 기준에 재사용하지 않습니다.</p>}
+      </article>)}
+    </section>
     <details><summary>최근 보존 감사 · 최대 100개</summary>{events.map(e => <article key={e.id}><h4>{RETENTION_ACTIONS[e.action] ?? e.action}</h4><p>{e.reason}</p><p>{new Date(e.createdAt).toLocaleString('ko-KR')}{e.targetId ? ` · 업무 ${e.targetId}` : ''}</p></article>)}</details>
   </section>;
 }

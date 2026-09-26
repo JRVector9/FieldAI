@@ -4,6 +4,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
 import { normalizeInquiryImage } from './inquiry-media.js';
 import { integratorGrant } from './integrator-auth.js';
+import { retainReadGuardThroughResponse } from './retention-read-guard.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
@@ -30,14 +31,20 @@ function photoReceipt(row: ExistingPhotoRow, messageId: string) {
   return { id: row.id, messageId, state: 'ready', contentType: 'image/webp',
     byteSize: row.byte_size, width: row.width, height: row.height };
 }
-async function sendPhoto(reply: FastifyReply, runtime: BusinessRuntime, row: PhotoRow) {
+async function sendPhoto(reply: FastifyReply, runtime: BusinessRuntime, row: PhotoRow, stillAllowed: (db: PoolClient) => Promise<boolean>) {
   if (!runtime.inquiryMedia) return reply.code(503).send({ error: 'blocked_integration' });
+  let db: PoolClient | undefined, retained = false;
   try {
     const image = await runtime.inquiryMedia.get(row.object_key);
     if (!image || hash(image) !== row.sha256) return reply.code(503).send({ error: 'media_unavailable' });
+    db = await runtime.pool.connect();
+    await db.query('begin');
+    if (!await stillAllowed(db)) return reply.sent ? reply : reply.code(404).send({ error: 'attachment_not_found' });
+    retainReadGuardThroughResponse(reply, db); retained = true;
     return reply.header('Cache-Control', 'private, no-store')
       .header('X-Content-Type-Options', 'nosniff').type('image/webp').send(image);
   } catch { return reply.code(503).send({ error: 'media_unavailable' }); }
+  finally { if (db && !retained) { try { await db.query('rollback'); } finally { db.release(); } } }
 }
 
 export function registerInquiryAttachmentRoutes(app: FastifyInstance, runtime: BusinessRuntime) {
@@ -49,7 +56,7 @@ export function registerInquiryAttachmentRoutes(app: FastifyInstance, runtime: B
       const { actionId, attachmentId } = request.params;
       if (!uuidPattern.test(actionId) || !uuidPattern.test(attachmentId))
         return reply.code(404).send({ error: 'attachment_not_found' });
-      const selected = await runtime.pool.query<PhotoRow>(
+      const selectPhoto = (db: Pool | PoolClient = runtime.pool) => db.query<PhotoRow>(
         `select p.object_key,p.sha256 from ap.field_action_requests a
          join ap.inquiries i on i.id = a.inquiry_id and i.organization_id = a.organization_id
          join ap.field_connections c on c.id = a.connection_id
@@ -64,13 +71,19 @@ export function registerInquiryAttachmentRoutes(app: FastifyInstance, runtime: B
            and i.deployment_id = any($7::uuid[])
            and a.field_request_body->'attachmentRefs' ? $2::text
            and a.field_request_body->'consent'->'items' ? 'attachments'
-           and p.state = 'ready' and m.actor = 'customer'
+           and i.retention_work_purged_at is null and p.state = 'ready' and m.actor = 'customer'
            and m.visibility = 'customer'
-           and m.delivery_state in ('blocked_integration','not_applicable')`,
+           and m.delivery_state in ('blocked_integration','not_applicable') for share of i,p,c`,
         [actionId, attachmentId, grant.organization_id, grant.id, grant.agent_id,
           grant.actor_user_id, grant.allowed_deployment_ids]);
+      const selected = await selectPhoto();
       if (!selected.rows[0]) return reply.code(404).send({ error: 'attachment_not_found' });
-      return sendPhoto(reply, runtime, selected.rows[0]);
+      return sendPhoto(reply, runtime, selected.rows[0], async db => {
+        const currentGrant = await integratorGrant(request, reply, runtime, 'ap.conversations.read');
+        if (!currentGrant || currentGrant.id !== grant.id) return false;
+        const current = (await selectPhoto(db)).rows[0];
+        return current?.object_key === selected.rows[0]!.object_key && current.sha256 === selected.rows[0]!.sha256;
+      });
     },
   );
   app.post<{ Params: { id: string; messageId: string } }>(
@@ -173,13 +186,17 @@ export function registerInquiryAttachmentRoutes(app: FastifyInstance, runtime: B
       const { id, attachmentId } = request.params;
       if (!uuidPattern.test(id) || !uuidPattern.test(attachmentId))
         return reply.code(404).send({ error: 'attachment_not_found' });
-      const result = await runtime.pool.query<PhotoRow>(
+      const selectPhoto = (db: Pool | PoolClient = runtime.pool) => db.query<PhotoRow>(
         `select a.object_key, a.sha256 from ap.inquiry_attachments a
          join ap.inquiries i on i.id = a.inquiry_id
-         where a.id = $1 and a.inquiry_id = $2 and i.visitor_key_hash = $3 and a.state = 'ready'`,
+         where a.id = $1 and a.inquiry_id = $2 and i.visitor_key_hash = $3 and a.state = 'ready' and i.retention_work_purged_at is null for share of i,a`,
         [attachmentId, id, keyHash]);
+      const result = await selectPhoto();
       if (!result.rows[0]) return reply.code(401).send({ error: 'invalid_receipt_key' });
-      return sendPhoto(reply, runtime, result.rows[0]);
+      return sendPhoto(reply, runtime, result.rows[0], async db => {
+        const current = (await selectPhoto(db)).rows[0];
+        return current?.object_key === result.rows[0]!.object_key && current.sha256 === result.rows[0]!.sha256;
+      });
     },
   );
 
@@ -190,15 +207,19 @@ export function registerInquiryAttachmentRoutes(app: FastifyInstance, runtime: B
       const { id, attachmentId } = request.params;
       if (!uuidPattern.test(id) || !uuidPattern.test(attachmentId))
         return reply.code(404).send({ error: 'attachment_not_found' });
-      const result = await runtime.pool.query<PhotoRow>(
+      const selectPhoto = (db: Pool | PoolClient = runtime.pool) => db.query<PhotoRow>(
         `select a.object_key, a.sha256 from ap.inquiry_attachments a
          join ap.memberships m on m.organization_id = a.organization_id
          join ap.inquiries i on i.id = a.inquiry_id and i.organization_id = a.organization_id
          where a.id = $1 and a.inquiry_id = $2 and m.user_id = $3
-           and m.role in ('owner', 'editor') and a.state = 'ready' and i.mode = 'human'`,
+           and m.role in ('owner', 'editor') and a.state = 'ready' and i.mode = 'human' and i.retention_work_purged_at is null for share of i,a,m`,
         [attachmentId, id, userId]);
+      const result = await selectPhoto();
       if (!result.rows[0]) return reply.code(404).send({ error: 'attachment_not_found' });
-      return sendPhoto(reply, runtime, result.rows[0]);
+      return sendPhoto(reply, runtime, result.rows[0], async db => {
+        const current = (await selectPhoto(db)).rows[0];
+        return current?.object_key === result.rows[0]!.object_key && current.sha256 === result.rows[0]!.sha256;
+      });
     },
   );
 }

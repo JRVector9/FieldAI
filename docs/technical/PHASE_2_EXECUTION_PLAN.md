@@ -1,5 +1,37 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/A08·F09 다섯 번째 리뷰 보완 — 2026-09-26
+
+- 최종 부분 결과: AP89449 28/28·Field17798 30/30/type18900/lint7378 exit0, native 열린 고객410 전환/익명 새 상담 HTTP6968 1/1 exit0. Sixth CLI13308 exit0 추가 지적 없음. 최종 패널 스타일을 포함한 mock68922 양제품 build/ready·각 worker ready/양 health. 최종 결과/실패/남은 전체 목표와 review 표는 CODEX_HANDOFF 상단에 기록했다.
+
+- 범위/요구: CLI97207 P2 3개(AP photo-only JSON 첨부 목록 경합, AP/Field journal completed 검사의 작업별 index, 열린 고객 화면 follow-up410 뒤 실제 종료 재조회). QA47/57/58/119/157/159, 공개 요청/schema/migration 변경 없음.
+- 변경 경로/검수: 실제320px 종료 화면에서 확인키 교체 버튼이 browser 기본 크기로 표시된 것을 확인해 해당 패널에만 16px 상속/44px 버튼을 적용한다(consult.css/agent-public). 간헐적 Field revocation restore의 administrator 종료57P01을 함께 조사한다. 각 테스트가 자기 UUID restore DB만 제거하는 것은 확인했으며 client pool 종료 뒤 FORCE DROP의 서버 종료 경합을 가정해 강제 삭제 없는 정리로 재현한다. Field 두 restore DB 검수의 cleanup만 수정하며 실패를 무시하지 않는다. AP retention-consumers·native DB 경합 fixture, 각 retention-journal-integrity, AP agent-public·기존 native retention HTTP/browser. 실제 photo-only 경합과 이미 열린 고객 화면의 추가 질문410을 재현하고 수정한다. native DB 양제품/type/lint·필요 mock 반영/기존 focused HTTP·독립 재리뷰로 확인한다. 전체 UI 인수/운영 출시 게이트는 남긴다.
+
+### C03/A08·F09 정리 원장 연속성 — 2026-09-26 작업 시작
+
+- 실제 결과: AP 원장 entry 제거가 거절되지 않던 red97265(AP27/28)→각 제품의 불변 ID/hash receipt·완료/파일 감사 대조와 strict append/read로 수정했다. AP DB43247 28/28·Field DB86585 30/30 exit0, type84294/lint38233 exit0, 최초 mock 초기화1/1 exit0. 명시적 folder 초기화·일부/빈 folder/실행 중 유실·receipt UPDATE/DELETE PJR01과 복구 뒤 retry/증빙 재시도·PG17 restore·독립 worker를 확인했다. 최신 mock77527 양제품/worker ready·HTTP72837 1/1 exit0다. 다섯 번째 CLI97207 검토 중이며 clean/전체 C03 완료는 아직 아니다.
+
+- Task/Product/Owner: C03/A08·F09 / 각각 독립 AP와 Field / 순차 실행, in_progress. 네 번째 독립 리뷰28623의 P1: 폴더만 확인하면 비워진 원장/실행 중 directory 유실 뒤 재생성을 발견하지 못한다.
+- 요구/QA: 보안5.5·QA47/119/157/159. 제품별 DB에 signed journal entry ID/canonical hash를 org 삭제와 독립된 불변 기록으로 보관한다. 기존 completed job/file-deleted audit도 native 원장과 대조하고 실제 처리 전/각 append 전 확인한다. 원장 부재를 append가 자동 초기화하지 않는다. 최초 mock 설정과 테스트가 자기 빈 directory를 명시 생성한다. DB와 독립 원장이 동시에 과거로 바뀐 운영 상황의 검증은 별도 gate다.
+- 범위: AP 다음 migration66·Field 다음 migration62(목록 확인 후), 각 retention-journal/purge/worker·새 integrity helper, 양제품 native retention DB 검사/기존 journal fixture 초기화, mock setup·진행/인계/runbook. 제품 내부 DB만 조회하고 다른 제품 import/DB 접근·공개 계약·실 운영 삭제/청구/발송은 없다.
+- 검수/명령: native 이전 정리 완료 뒤 원장 일부/전부 제거·같은 directory 대체·startup 후 원장 부재가 다음 정리를 거절하는 실제 red→green, 원장 복구 후 retry·completion receipt 재시도 유지. `pnpm test:db:agent`, `pnpm test:db:field`, `pnpm typecheck`, `pnpm lint`, 최초 mock journal 검사, build/ready·기존 focused HTTP. 실제 clean 독립 재리뷰 후 단계 커밋. AP revoke/전체 문서 기능 완료는 별도 남는다.
+
+### C03/A08·F09 리뷰 후 기존 원장 부재의 worker 시작 차단 — 2026-09-26
+
+- 범위/요구: 보안5.5·QA47/119/157/159. AP·Field 각 retention-purge-worker의 원장 부재 시작, 제품별 native retention-purge DB 검사, mock-env 최초 원장 초기화만 수정한다. Field 파일 변경은 이 시작 게이트와 해당 검사에 한정하며 AP/Field domain·DB·비밀값은 각각 유지한다.
+- 기존 키가 있는데 원장 경로가 없으면 복원 증빙 유실로 시작을 거절한다. 새 local mock 키를 최초 발급할 때만 빈 원장을 명시 초기화하며 기존 원장을 새 키로 대체하지 않는다. `pnpm test:db:agent`, `pnpm test:db:field`, typecheck/lint·관리 mock ready를 실제 검사한다. AP missing startup은85541에서 reject 부재 red를 확인했다. Field에도 같은 원인을 native 독립 프로세스로 확인한다.
+
+### C03/A08 AP 실제 정리·독립 worker·소비자·복원 — 2026-09-26 작업 시작
+
+- 현재 결과: AP migration65·job/다른 승인/취소·독립 worker/private file/원문/AI 제거·usage/접수 ID 유지·native 재저장 차단/소비자 종료 안내·checkpoint/실제 격리 복원을 연결했다. 최종 AP DB50658 28/28, type53402/lint2230 exit0, mock7002 양제품 build/migrate/ready·AP/Field retention worker ready, native HTTP/320px25823 1/1. 삭제 결과 미확인 retry·증빙 재시도·느린 사진/전체 archive 정리 경합·원장 누락/추가/변조·CLI 별도 대상/출력/반복0·AP-only 별도 worker를 실제 검사했다. 시안 admin/audit/실제 고객 종료 캡처를 열었다. 독립 리뷰는 ak 지정 gpt-5.6 계정 미지원으로 실패했고 기본 gpt-6-sol/high가 보고한 P1 1개/P2 2개는 새 사진 복원 범위·응답 handoff까지 read lock 유지로 반영했다. 실제 red71397와 수정 후 DB50658/type53402/lint2230을 확인했으며 재검토91495는 진행 중이다. AP revoke/Field 후속·전체 PRD/QA/G/사용자 인수·실 공급사는 남는다.
+
+- Task/Product/Owner: C03/A08 / AP / 순차 실행, in_progress. e89bf2a 보존 기반은 검수된 부분 progress이며 전체 기능 목표를 유지한다.
+- 요구/QA/Gate: AP PRD2.5/2.7·보안5.5, QA46/47/49/119/157/159. 승인 정책·현재 업무/권한·hold/support·AI/발송/외부 미확인/기한을 실행 직전에 재확인한다. 원문·연락·사진·AI 질문/답변·외부 제출 사본을 정리하고 usage/감사/확인키/법정 별도 원장 ID를 유지한다. 상대 Field 자료는 직접 지우지 않는다.
+- 파일 범위: 새 AP migration65, retention-purge-routes/purge/worker/journal/consumers/restore/CLI·DB 검사, 기존 app/business/work-retention/inquiries/customer-consultations/attachments/support/field-actions/archive 소비자와 웹 AgentRetentionAdmin/Notice·AP 타입/고객/사업자 흐름, mock-run/setup/env/E2E/기존 retention HTTP/browser와 진행/인계 문서. 변경 전 native schema·각 reader/late writer를 조사했다. Field domain/DB/실 운영 자료·공개 integration 계약 변경은 하지 않는다.
+- 설계: policy/org/inquiry/scope/revision/anchor/digest를 묶은 불변 요청→다른 operator 승인→취소, AP PG/private file/독립 서명 원장만 쓰는 worker. 실제 파일 부재 확인→SQL tombstone·원문 제거→독립 완료 증빙, 결과 미상은 retry/receipt pending이다. 익명 AI 대화도 별도 접수 없이 자체 기간으로 정리하며 종료 뒤 새 AI/지원/전달·원문 재저장을 차단한다. 사진 scope는 문의 원문·새 대화를 유지한다. 복원에는 별도 보관한 최신 전체 checkpoint/실제 삭제 증빙이 필요하다.
+- 순서/명령: native 정리 endpoint404 실제 red→job/domain/DB/권한/worker·소비자/파일/서명 증빙→isolated PG17 dump/restore·재적용/누락/미확인 삭제 거절→UI/ACK/조회 복구·mock 반영. `pnpm test:db:agent`, `pnpm typecheck`, `pnpm lint`, `pnpm build:agent`, focused AP HTTP/320px·실제 별도 worker --once. ak 독립 codex review는 코드 작성/실검수 후 실행하고 결과를 그대로 기록한다. 전체 E2E/QA/G·사용자 최종 시각/공급사/MFA/운영 RPO/RTO는 별도다.
+- 실패 탐색: Field migration의 추정 이름000060_work_retention_purge.sql은 없으며 실제 목록의000060_work_retention_execution.sql을 읽었다. 기존 코드를 AP가 import하지 않고 AP 자체 schema/타입/키로 구현한다. 현재 runtime92132은 생존 확인 후 유지하고 새 반영 필요 시에만 정상 재기동한다.
+
 ### C03/A08 AP 자체 보존·종결·보류 — 2026-09-26 작업 시작
 
 - 결과(부분 progress): AP migration64·native 종결/재개·근거 있는 legacy 이관·불변 정책/보류·별도 승인/해제·AP 원장만 쓰는 preview와 관리자 audit UI를 연결했다. AP DB **1325 27/27**, legacy63→64 **1/1**, type **61572**/lint **53746 exit0**, 새 mock **92132**의 native HTTP/320px **71697 1/1**. 정책 ACK 유실/동일 키·본문 재확인·단일 정책, 다른 운영자 승인/보류 해제, preview503 폐기/원장503 목록 유지·잠금/복구·가로 넘침 없음/pageerror0을 확인했다. 기존 runtime21041을 생존 확인 후 정상 종료130하고 새 관리 build/migration을 반영했다. 기준 HTML `#admin/audit`를 Chromium320으로 열어 `/tmp/ap-retention-prototype-320.png`, 실제 `/tmp/ap-retention-basis-320.png`를 열었다.
