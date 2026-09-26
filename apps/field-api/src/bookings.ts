@@ -7,6 +7,7 @@ import { fieldIntegratorGrant } from './integrator-auth.js';
 import { rejectExpiredTrial } from './trial-access.js';
 import { reservationAttachments } from './reservation-attachments.js';
 import { decodeOwnerListCursor, encodeOwnerListCursor } from './owner-list-cursor.js';
+import { parseRequestFallback, requestFallback, reviewRequestFallback, type FallbackRow } from './public-request-fallback.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -20,7 +21,7 @@ type Policy = {
 };
 type Service = { id: string; name: string; description: string; bookingMode: 'request' | 'slot'; durationMinutes: number; priceAmount: number | null };
 type Release = { revision: number; content: { services: Service[] } };
-type Reservation = {
+type Reservation = FallbackRow & {
   id: string; organization_id: string; catalog_revision: number; service_id: string;
   service_snapshot: Service; booking_mode: 'request' | 'slot'; customer_name: string;
   customer_phone: string; visitor_key_hash: string | null; preferred_time_text: string | null;
@@ -130,6 +131,7 @@ function publicReservation(row: Reservation) {
     service: row.service_snapshot, bookingMode: row.booking_mode, name: row.customer_name,
     phone: row.customer_phone, preferredTimeText: row.preferred_time_text,
     requestMessage: row.request_message, visitRegion: row.visit_region,
+    fallback: requestFallback(row),
     requestedStartAt: iso(row.requested_start_at), confirmedStartAt: iso(row.confirmed_start_at),
     confirmedEndAt: iso(row.confirmed_end_at), proposalStartAt: iso(row.proposal_start_at),
     proposalEndAt: iso(row.proposal_end_at), proposalAcceptedAt: iso(row.proposal_accepted_at),
@@ -686,6 +688,24 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
     });
   });
 
+  app.get<{ Params: { id: string } }>('/v1/owner/external-requests/:id', async (request, reply) => {
+    const operator = await operatorOrganization(request, reply, runtime);
+    if (!operator) return reply;
+    if (!uuid.test(request.params.id)) return reply.code(404).send({ error: 'external_request_not_found' });
+    const result = await runtime.pool.query<{ id: string; service_snapshot: Service;
+      customer_snapshot: { name: string; phone: string; verified: boolean };
+      summary: string; status: string; received_at: Date; is_test: boolean }>(
+      `select id,service_snapshot,customer_snapshot,summary,status,received_at,is_test
+       from field.external_work_requests where organization_id=$1 and id=$2 and kind='inquiry'`,
+      [operator.id, request.params.id]);
+    const row = result.rows[0];
+    if (!row) return reply.code(404).send({ error: 'external_request_not_found' });
+    return reply.header('Cache-Control', 'private, no-store').send({ id: row.id, service: row.service_snapshot,
+      customerName: row.customer_snapshot.name, customerPhone: row.customer_snapshot.phone,
+      customerVerified: row.customer_snapshot.verified, summary: row.summary,
+      status: row.status, receivedAt: row.received_at.toISOString(), isTest: row.is_test });
+  });
+
   app.get('/v1/booking-policy', async (request, reply) => {
     const owner = await ownerOrganization(request, reply, runtime);
     if (!owner) return reply;
@@ -763,6 +783,8 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
   app.post<{ Params: { id: string } }>('/v1/public/catalog/:id/reservations', async (request, reply) => {
     const organizationId = request.params.id;
     const body = obj(request.body);
+    const fallback = parseRequestFallback(body?.fallback);
+    if (fallback === undefined) return reply.code(400).send({ error: 'invalid_fallback' });
     if (!uuid.test(organizationId) || !body || typeof body.serviceId !== 'string' || !uuid.test(body.serviceId)
         || !text(body.name, 80) || !text(body.phone, 30)
         || !/^[+\d()\-\s]{9,30}$/.test(body.phone as string)
@@ -789,6 +811,7 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
         ? null : (body.preferredTimeText as string).trim() };
     if (body.requestMessage !== undefined) requestPayload.requestMessage = requestMessage;
     if (body.visitRegion !== undefined) requestPayload.visitRegion = visitRegion;
+    if (fallback) requestPayload.fallback = fallback;
     const requestHash = hasSubmissionKey ? hash(JSON.stringify(requestPayload)) : null;
     const replay = async () => {
       const existing = await runtime.pool.query<Reservation>(
@@ -838,12 +861,14 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
         `insert into field.reservations (id, organization_id, catalog_revision, service_id, service_snapshot,
           booking_mode, customer_name, customer_phone, visitor_key_hash, preferred_time_text,
           requested_start_at, timezone, state, consent_at, submission_key_hash, submission_request_hash,
-          request_message, visit_region)
-         values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, 'requested', now(), $13, $14, $15, $16)
+          request_message, visit_region, fallback_origin, fallback_action_request_id, fallback_declared_at)
+         values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, 'requested', now(), $13, $14, $15, $16,
+           $17, $18, case when $17::text is null then null else now() end)
          on conflict (organization_id, submission_key_hash) do nothing returning *`,
         [id, organizationId, release.revision, service.id, JSON.stringify(service), service.bookingMode,
           body.name.trim(), body.phone.trim(), hash(receiptKey), preferred, start, policy.timezone,
-          submissionKeyHash, requestHash, requestMessage, visitRegion],
+          submissionKeyHash, requestHash, requestMessage, visitRegion, fallback?.origin ?? null,
+          fallback?.actionRequestId ?? null],
       );
       if (!created.rows[0]) {
         await client.query('rollback');
@@ -1031,6 +1056,7 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
     if (!row) return reply.code(404).send({ error: 'reservation_not_found' });
     reply.header('Cache-Control', 'no-store');
     return { ...publicReservation(row), events: await eventsFor(runtime.pool, row.id),
+      fallbackReview: await reviewRequestFallback(runtime.pool, row.organization_id, row),
       messages: row.source === 'public' ? await messagesFor(runtime.pool, row.id) : [],
       attachments: await reservationAttachments(runtime.pool, row.id) };
   });

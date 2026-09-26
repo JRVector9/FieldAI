@@ -3,7 +3,33 @@
 ## 화면 시안 원본 — 작업 재개 시 확인
 
 - 시안 파일: `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
+- 저장소 기준 경로: `reference/field_ui_prototype_v3.html`. 후속 에이전트도 이 파일을 화면·동선 구현 기준으로 사용하며, 인수인계 갱신 시 이 시안 경로를 상단에 유지한다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
+
+## 최신 인수인계 — C03/F05·F06·F07/I06 AP 대체 직접 요청 (2026-09-26)
+
+- **현재 목표:** 시안 v3와 전체 v3.0 문서의 실제 기능을 완성하고 AP/Field 독립 로컬 환경을 유지한다. 사용자 최종 디자인/동선과 실 공급사 연결은 이후다. 전체 목표/C03 완료는 미증명이다.
+- **완료 작업:** Field 공개 문의·두 예약 방식에 고객이 명시한 AP 재접수 출처/선택적 기존 요청 ID/선언 시각을 저장한다. 기존 원문·확인키를 복사하지 않고 새 요청·알림 사건으로 처리한다. 사업자만 같은 조직의 Field 수신 기록에서 ID 기반 중복 후보를 보고 기존 문의/예약 상세로 이동한다. 공개 고객 조회에는 후보가 없고 개별/사업장 내보내기에 선언을 보존한다. AP 전달 기록은 참고할 요청 ID를 표시한다.
+- **수정 파일:** Field migration `000055_public_request_fallback.sql`; 새 API `src/public-request-fallback.ts`, 새 DB `test/public-request-fallback.db.test.ts`; API `src/{inquiries,bookings,reservation-export,operations-archive}.ts`; Field 웹 `src/{field-api,field-public,field-booking,field-workspace,field-owner-reservation-inbox}.ts/tsx`, 새 `src/{FieldRequestFallback,FieldFallbackReview}.tsx`, `src/site.css`; AP 웹 `src/agent-field-action.tsx`, `src/agent-public.css`; `tools/spikes/{field-request-fallback-browser,field-action-browser}.py`; 계획/현황/검수/이 파일. AP DB/제품 간 공개 계약 변경 없음.
+- **핵심 설계:** `fallback.origin='ap_customer_reported'`는 고객 제공 정보다. AP 장애·접수·동일 고객·중복 확정이 아니다. 요청 ID만으로 고객 권한을 주지 않는다. Field의 own `external_work_requests` 조직+ID 인덱스만 사용하고 AP DB/network 조회 없이 후보를 만든다. 전화번호로 병합하지 않는다. 기존 fallback 없는 payload hash는 유지하고 같은 키의 선언/ID 변경은 409다. nullable 새 DB 컬럼은 코드 롤백 시 남겨 기록을 보존한다.
+- **실제 검사:** 작업트리(`d3a44aa` 기반), 로컬 PG17/Field Valkey/mock/Chromium. 새 DB 3개가 저장/검증/후보 부재 red→`pnpm test:db:field` 24/24(별도 임시 DB 제거). Field 재접수 폼과 AP 요청 ID 표시 부재를 320px red로 확인. 새 mock **45321** 양 API/웹 build/ready에서 `/tmp/fieldai-ui-venv/bin/python tools/spikes/field-request-fallback-browser.py` 최종 exit 0(문의·두 예약·기존 후보 문의/예약 이동·503 재시도, 가로 넘침/pageerror 0). `pnpm test:e2e:field` 3/3, `FIELD_EVENT_WORKERS_RUNNING=1 FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python pnpm test:spike:ap-field:http` 1/1, `pnpm typecheck`, `pnpm lint`, 변경 Python 구문, diff exit 0. 양 웹 200·양 API ready를 확인했다. 시안 320px 고객 문의/사업자 문의함과 새 캡처를 열었다.
+- **실패한 접근:** 최초 합성 후보 fixture는 같은 연결+action ID에 두 종류를 넣어 기존 unique 제약으로 거부됐고 별도 합성 연결로 수정했다. 새 검사 select의 정확 라벨/옛 하단 메뉴 클래스/모바일 목록에 바로 클릭은 현재 DOM·목록 복귀 동선과 달랐으며 조사 후 검사 선택자를 고쳤다. AP HTTP 명령에 `FIELD_BROWSER_PYTHON`을 생략한 첫 실행은 HTTP만 검사했으므로 브라우저 증거로 쓰지 않는다.
+- **남은 작업:** 마지막 화면 캡처에서 후보 버튼이 기본 브라우저 스타일인 것을 보고 44px 높이·테두리·키보드 초점 CSS를 추가했다. 이 CSS는 다음 mock build에서 반영한다. 다음 확인된 내부 누락은 AP PRD 2.5 상담 링크 QR 공유(`agent-deploy.tsx`는 URL만 표시, QR 코드 없음). 그 외 전체 PRD/역할 화면 대조, 사용자 최종 시각·동선·정식 QA/G는 미완료다. 실 인증/LLM/알림/결제/DNS/TLS/저장소/백업은 `blocked_integration` 또는 미검수; 운영 배포·청구·고객 발송·운영 삭제 없음.
+- **다음 에이전트 정확한 명령:**
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -1 --oneline
+sed -n '1,32p' docs/CODEX_HANDOFF.md
+sed -n '69,78p' docs/01_AGENT_PLATFORM_PRD.md
+sed -n '90,97p' apps/agent-web/src/agent-deploy.tsx
+rg -n 'QR|qrCode|qrcode|qr-code' apps/agent-web/src apps/agent-api/src
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+`rg` 매치 없음은 QR 미구현 확인이다. QR 작업의 파일 범위·요구/QA·명령을 먼저 계획에 기록한다. mock **45321**가 실제 live이면 코드 반영 재시작 때 해당 세션을 정상 종료한 뒤 `pnpm mock:run`으로 빌드한다. timeout만으로 중복 실행하지 않는다. 로컬 AP `http://localhost:3001/workspace`, Field `http://localhost:3002/workspace`; 위 시안 경로를 유지한다.
 
 ## 최신 인수인계 — C03 로컬 핵심 기능 회귀 감사 (2026-09-26)
 

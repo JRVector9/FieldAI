@@ -1,5 +1,15 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/F05·F06·F07/I06 AP 대체 직접 요청의 출처·관계 — 2026-09-26
+
+- 상태: `in_progress`. Field PRD 3.8, B02/B04/B07/B08, QA05/57/119/139/143/153/155/159의 관련 로컬 부분.
+- 파일 범위: Field migration `000055_public_request_fallback.sql`, 새 `src/public-request-fallback.ts`와 `test/public-request-fallback.db.test.ts`, `src/{inquiries,bookings,reservation-export,operations-archive}.ts`; Field 웹 `src/{field-api,field-public,field-booking,field-workspace,field-owner-reservation-inbox}.tsx/ts`, 새 `src/{FieldRequestFallback,FieldFallbackReview}.tsx`, `src/site.css`, 새 `tools/spikes/field-request-fallback-browser.py`; AP 웹 `src/agent-field-action.tsx`, `src/agent-public.css`, `tools/spikes/field-action-browser.py`; 계획·현황·검수·인계 문서. 제품 간 계약·AP DB는 변경하지 않는다.
+- 설계: 고객이 직접 AP 이용 후 새 요청임을 표시할 때만 선택적인 `fallback: {origin: 'ap_customer_reported', actionRequestId?: UUID}`를 받는다. Field 문의/예약에 출처·고객 제공 ID·선언 시각을 같은 트랜잭션으로 저장한다. 고객 제공 ID는 접근 권한이나 AP 장애/중복 확인 증거가 아니다. 원문·미전송 내용·확인키를 자동 복사하지 않고, 전화번호만 병합하지 않는다.
+- 후보: 인증된 사업자에게만 자기 Field 조직의 `external_work_requests`를 고객 제공 ID로 대조한 후보를 표시한다. AP 서버/DB 조회 없이 기존 수신 snapshot과 예약 원장을 유지한다. 후보 문의는 권한 검사된 단건 조회로 기존 문의함에 열고, 후보 예약은 기존 예약 상세로 이동한다. 후보 0건은 미접수 확인이 아니다. 공개 고객 API에는 후보/다른 요청 정보를 반환하지 않는다.
+- DB 영향: 기존 행은 nullable 새 컬럼으로 유지하고 필드 일관성 CHECK를 추가한다. AP ActionRequest는 외부 ID이므로 FK를 만들지 않는다. 후보 조회는 조직+action_request_id 인덱스를 사용한다. 기존 멱등 payload hash는 fallback이 없는 경우 그대로 유지하고, fallback 변경은 기존 키 재사용 409로 거부한다. 개별/사업장 내보내기에 관계를 보존한다. 코드 롤백 시 nullable 컬럼은 남겨 기록 손실을 피한다.
+- 순서/검수: (1) 실제 PG17 DB/API 검사에서 저장 누락·잘못된 선언·멱등 충돌을 red 확인. (2) migration·Field 내부 API·권한/내보내기 구현. (3) 320px 고객 문의/두 예약·사업자 후보 UI의 red→green 확인. 시안 HTML의 기존 폼/문의함/예약 동선을 유지한다. (4) `pnpm test:db:field`, `pnpm typecheck`, `pnpm lint`, `pnpm mock:run` 양제품 build/ready, `/tmp/fieldai-ui-venv/bin/python tools/spikes/field-request-fallback-browser.py`, 필요한 기존 `pnpm test:e2e:field`, `git diff --check`. 실제 실행 결과만 기록한다. 실 공급사·운영 배포·사용자 최종 시각 검수는 이 작업의 완료로 대체하지 않는다.
+- 결과: 새 DB 검사 3개가 출처 누락/잘못된 선언 수락/후보 누락으로 red, 구현 뒤 격리 Field DB 24/24 green. 새 고객 폼의 재접수 입력 부재와 AP 전달 기록의 요청 ID 부재를 320px red로 확인했다. 새 mock **45321**의 재접수 브라우저는 문의·두 예약·사업자 후보 문의/예약 열기·후보 조회 503 후 원본 유지/재시도·가로 넘침/pageerror 0을 확인했다. 기존 Field E2E 3/3, `FIELD_EVENT_WORKERS_RUNNING=1 FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python pnpm test:spike:ap-field:http` 1/1, typecheck/lint/Python 구문/diff exit 0. 시안 고객 문의·문의함 320px 원본과 새 화면 캡처를 열었다. 새 검사의 select 라벨 정확 일치/하단 메뉴 클래스/모바일 목록 복귀 선택자는 실제 DOM/동선에 맞춰 수정했다. 마지막 캡처에서 기본 브라우저 스타일인 후보 버튼에 기존 화면과 맞는 테두리·44px 높이·키보드 초점 CSS를 추가했으며 다음 mock 빌드에서 반영한다. C03 전체/실 공급사/사용자 최종 인수는 미완료다. AP PRD 2.5의 상담 링크 QR은 실제 배포 화면/코드에 없어 다음 내부 구현으로 확인했다.
+
 ### C03 로컬 핵심 기능 회귀 감사 — 2026-09-26
 
 - 파일 범위: 먼저 `package.json`의 검수 명령과 AP/Field/매체 실제 브라우저 경로를 실행해 결과를 기록한다. 실패가 확인되면 해당 제품 코드·검사 파일의 정확한 범위를 추가 기록한 뒤 수정한다. 완료 기록은 `docs/technical/PHASE_2_EXECUTION_PLAN.md`, `TASKS.md`, `DEVELOPMENT_STATUS.md`, `docs/CODEX_HANDOFF.md`에 남긴다.

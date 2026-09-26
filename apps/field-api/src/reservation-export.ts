@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
+import { requestFallback, type FallbackRow } from './public-request-fallback.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const hash = (value: Buffer) => createHash('sha256').update(value).digest('hex');
 
-type ReservationRow = {
+type ReservationRow = FallbackRow & {
   id: string; organization_id: string; catalog_revision: number; service_snapshot: unknown;
   booking_mode: string; customer_name: string; customer_phone: string;
   preferred_time_text: string | null; request_message: string | null; visit_region: string | null;
@@ -34,7 +35,8 @@ export function registerReservationExportRoute(app: FastifyInstance, runtime: Fi
           r.visit_region, r.requested_start_at,
           r.confirmed_start_at, r.confirmed_end_at, r.proposal_start_at, r.proposal_end_at,
           r.proposal_accepted_at, r.change_preferred_text, r.source, r.timezone, r.state,
-          r.revision, r.consent_at, r.created_at, r.updated_at
+          r.revision, r.consent_at, r.created_at, r.updated_at,
+          r.fallback_origin,r.fallback_action_request_id,r.fallback_declared_at
          from field.reservations r
          join field.memberships m on m.organization_id = r.organization_id
          where r.id = $1 and m.user_id = $2 and m.role = 'owner'
@@ -113,6 +115,7 @@ export function registerReservationExportRoute(app: FastifyInstance, runtime: Fi
             customerName: row.customer_name, customerPhone: row.customer_phone,
             preferredTimeText: row.preferred_time_text, requestMessage: row.request_message,
             visitRegion: row.visit_region, requestedStartAt: row.requested_start_at,
+            fallback: requestFallback(row),
             confirmedStartAt: row.confirmed_start_at, confirmedEndAt: row.confirmed_end_at,
             proposalStartAt: row.proposal_start_at, proposalEndAt: row.proposal_end_at,
             proposalAcceptedAt: row.proposal_accepted_at, changePreferredText: row.change_preferred_text,

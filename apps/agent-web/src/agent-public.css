@@ -69,3 +69,5 @@
   .agent-public-shell .site-header .brand-mark{width:26px;height:26px}
   .agent-public-composer>button span{display:none}
 }
+.agent-action-request-id{overflow-wrap:anywhere;font-size:16px}
+.agent-action-request-id code{font-size:14px;overflow-wrap:anywhere}

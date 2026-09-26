@@ -273,6 +273,7 @@ export function AgentFieldAction({ inquiryId, receiptKey, initialSummary = '', e
     {notice && <p role="status" className="state-message">{notice}</p>}
     {actions.length > 0 && <div className="knowledge-source"><h3>전달 기록</h3><ul>{actions.map(action =>
       <li key={action.actionRequestId}><strong>{action.serviceName}</strong> · {actionLabel(action.state, action.error, action.kind)}
+        <p className="agent-action-request-id">AP 요청 ID: <code>{action.actionRequestId}</code></p>
         {reservationFeeds[action.actionRequestId] && <p>Field 현재 상태: {reservationLabel(reservationFeeds[action.actionRequestId]!.state)}
           {reservationFeeds[action.actionRequestId]!.events.some(event => event.notificationState === "blocked_integration")
             ? " · AP 고객 외부 알림 미발송" : ""}</p>}

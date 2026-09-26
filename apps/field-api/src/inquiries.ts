@@ -6,6 +6,7 @@ import { inquiryAttachments } from './inquiry-attachments.js';
 import { consumePublicSubmission } from './public-submission-limit.js';
 import { rejectExpiredTrial } from './trial-access.js';
 import { decodeOwnerListCursor, encodeOwnerListCursor } from './owner-list-cursor.js';
+import { parseRequestFallback, requestFallback, reviewRequestFallback, type FallbackRow } from './public-request-fallback.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function object(value: unknown): Record<string, unknown> | null {
@@ -208,6 +209,8 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
         && (typeof body.visitRegion !== 'string' || body.visitRegion.length > 200))
       return reply.code(400).send({ error: 'invalid_inquiry' });
     const visitRegion = body?.visitRegion === undefined ? null : body.visitRegion.trim() || null;
+    const fallback = parseRequestFallback(body?.fallback);
+    if (fallback === undefined) return reply.code(400).send({ error: 'invalid_fallback' });
     const serviceId = body?.serviceId;
     if (!name || !phone || !/^[+\d()\-\s]{9,30}$/.test(phone) || phone.replace(/\D/g, '').length < 9
         || !message || body?.consent !== true || typeof serviceId !== 'string' || !uuidPattern.test(serviceId)) {
@@ -222,6 +225,7 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
     const submissionKeyHash = hasSubmissionKey ? receiptHash(submittedKey as string) : null;
     const requestPayload: Record<string, unknown> = { serviceId, name, phone, message };
     if (body?.visitRegion !== undefined) requestPayload.visitRegion = visitRegion;
+    if (fallback) requestPayload.fallback = fallback;
     const requestHash = hasSubmissionKey ? receiptHash(JSON.stringify(requestPayload)) : null;
     const replay = async () => {
       if (!submissionKeyHash) return null;
@@ -266,11 +270,14 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
         `insert into field.inquiries
           (id, organization_id, catalog_revision, service_id, service_snapshot,
            customer_name, customer_phone, visitor_key_hash, state, consent_at,
-           submission_key_hash, submission_request_hash, visit_region)
-         values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, 'needs_owner', now(), $9, $10, $11)
+           submission_key_hash, submission_request_hash, visit_region,
+           fallback_origin, fallback_action_request_id, fallback_declared_at)
+         values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, 'needs_owner', now(), $9, $10, $11,
+           $12, $13, case when $12::text is null then null else now() end)
          on conflict (organization_id, submission_key_hash) do nothing returning id`,
         [id, request.params.id, catalog.rows[0].revision, serviceId, JSON.stringify(service),
-          name, phone, receiptHash(key), submissionKeyHash, requestHash, visitRegion],
+          name, phone, receiptHash(key), submissionKeyHash, requestHash, visitRegion,
+          fallback?.origin ?? null, fallback?.actionRequestId ?? null],
       );
       if (!inserted.rows[0]) {
         await client.query('rollback');
@@ -301,13 +308,14 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
     const key = receiptKey(request);
     if (!key) return reply.code(401).send({ error: 'receipt_key_required' });
     if (!uuidPattern.test(request.params.id)) return reply.code(404).send({ error: 'inquiry_not_found' });
-    const inquiry = await runtime.pool.query<{
+    const inquiry = await runtime.pool.query<FallbackRow & {
       id: string; state: string; organization_id: string; business_name: string;
       customer_name: string; service_snapshot: unknown; catalog_revision: number;
       visit_region: string | null;
     }>(
       `select i.id, i.state, i.organization_id, coalesce(r.content->>'businessName', o.name) as business_name,
-              i.customer_name, i.service_snapshot, i.catalog_revision, i.visit_region
+              i.customer_name, i.service_snapshot, i.catalog_revision, i.visit_region,
+              i.fallback_origin,i.fallback_action_request_id,i.fallback_declared_at
        from field.inquiries i
        join field.organizations o on o.id = i.organization_id
        left join field.catalog_releases r on r.organization_id = i.organization_id and r.revision = i.catalog_revision
@@ -324,6 +332,7 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
       customerName: inquiry.rows[0].customer_name,
       service: inquiry.rows[0].service_snapshot, catalogRevision: inquiry.rows[0].catalog_revision,
       visitRegion: inquiry.rows[0].visit_region,
+      fallback: requestFallback(inquiry.rows[0]),
       messages: messages.rows, attachments: await inquiryAttachments(runtime.pool, request.params.id) };
   });
 
@@ -433,13 +442,15 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
     const userId = await ownerUser(request, reply, runtime);
     if (!userId) return reply;
     if (!uuidPattern.test(request.params.id)) return reply.code(404).send({ error: 'inquiry_not_found' });
-    const inquiry = await runtime.pool.query<{
+    const inquiry = await runtime.pool.query<FallbackRow & {
       id: string; state: string; revision: number; customer_name: string; customer_phone: string; service_snapshot: unknown;
+      organization_id: string;
       catalog_revision: number; is_test: boolean; test_site_revision: number | null;
       visit_region: string | null;
     }>(
       `select i.id, i.state, i.revision, i.customer_name, i.customer_phone, i.service_snapshot, i.catalog_revision,
-          i.is_test, i.test_site_revision, i.visit_region
+          i.is_test, i.test_site_revision, i.visit_region, i.organization_id,
+          i.fallback_origin,i.fallback_action_request_id,i.fallback_declared_at
        from field.inquiries i join field.memberships m on m.organization_id = i.organization_id
        where i.id = $1 and m.user_id = $2 and m.role in ('owner', 'editor')`,
       [request.params.id, userId],
@@ -455,6 +466,8 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
       visitRegion: inquiry.rows[0].visit_region,
       catalogRevision: inquiry.rows[0].catalog_revision, isTest: inquiry.rows[0].is_test,
       testSiteRevision: inquiry.rows[0].test_site_revision, messages: messages.rows,
+      fallback: requestFallback(inquiry.rows[0]),
+      fallbackReview: await reviewRequestFallback(runtime.pool, inquiry.rows[0].organization_id, inquiry.rows[0]),
       attachments: await inquiryAttachments(runtime.pool, request.params.id) };
   });
 
@@ -503,7 +516,7 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
     const client = await runtime.pool.connect();
     try {
       await client.query('begin isolation level repeatable read read only');
-      const found = await client.query<{
+      const found = await client.query<FallbackRow & {
         id: string; organization_id: string; state: string; customer_name: string; customer_phone: string;
         service_snapshot: unknown; catalog_revision: number; consent_at: Date | null;
         is_test: boolean; test_site_revision: number | null; created_at: Date;
@@ -511,7 +524,7 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
       }>(
         `select i.id, i.organization_id, i.state, i.customer_name, i.customer_phone,
            i.service_snapshot, i.catalog_revision, i.consent_at, i.is_test, i.test_site_revision,
-           i.visit_region, i.created_at
+           i.visit_region, i.created_at, i.fallback_origin,i.fallback_action_request_id,i.fallback_declared_at
          from field.inquiries i join field.memberships m on m.organization_id = i.organization_id
          where i.id = $1 and m.user_id = $2 and m.role in ('owner', 'editor')`,
         [request.params.id, userId],
@@ -540,6 +553,7 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
           inquiry: { id: row.id, organizationId: row.organization_id, state: row.state,
             customerName: row.customer_name, customerPhone: row.customer_phone,
             visitRegion: row.visit_region,
+            fallback: requestFallback(row),
             serviceSnapshot: row.service_snapshot, catalogRevision: row.catalog_revision,
             consentAt: row.consent_at, isTest: row.is_test,
             testSiteRevision: row.test_site_revision, createdAt: row.created_at },

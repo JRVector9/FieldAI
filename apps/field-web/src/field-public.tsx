@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
-import { requestJson, type Catalog, type Inquiry } from "./field-api";
+import { requestJson, type Catalog, type FallbackInput, type Inquiry } from "./field-api";
+import { FieldRequestFallback, fallbackSubmission } from "./FieldRequestFallback";
 import { PublicBookingPanel } from "./field-booking";
 import { FieldReceipt } from "./field-receipt";
 import { consumeReceiptHandoff } from "./receipt-handoff";
@@ -74,6 +75,7 @@ export function PublicCatalogPage({ id }: { id: string }) {
   const [message, setMessage] = useState("");
   const [visitRegion, setVisitRegion] = useState("");
   const [consent, setConsent] = useState(false);
+  const [fallback, setFallback] = useState<FallbackInput | null>(null);
   const [receipt, setReceipt] = useState<{ id: string; receiptKey: string } | null>(null);
   const [bookingReceipt, setBookingReceipt] = useState<{ id: string; receiptKey: string } | null>(null);
   const [photos, setPhotos] = useState<File[]>([]);
@@ -195,7 +197,7 @@ export function PublicCatalogPage({ id }: { id: string }) {
     let canRecoverAfterReload = false;
     try {
       const payload = { serviceId, name, phone, message,
-        ...(visitRegion.trim() ? { visitRegion: visitRegion.trim() } : {}), consent };
+        ...(visitRegion.trim() ? { visitRegion: visitRegion.trim() } : {}), ...fallbackSubmission(fallback), consent };
       const path = `/v1/public/catalog/${id}/inquiries`;
       const digest = await publicSubmissionFingerprint({ path, payload });
       const fingerprint = digest ?? JSON.stringify({ path, payload });
@@ -318,6 +320,7 @@ export function PublicCatalogPage({ id }: { id: string }) {
                   setPhotos(result.selected); setStatus("");
                 }} /><small>{photos.length > 0 ? `${photos.length}장 선택됨 · 본문 저장 후 비공개 첨부` : "눌러서 사진을 선택하세요. 본문 저장 후 비공개 첨부합니다."}</small></label>}
                 {!ownerTest && <SelectedInquiryPhotos photos={photos} />}
+                {!ownerTest && <FieldRequestFallback value={fallback} onChange={setFallback} />}
                 {!ownerTest && <label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} required /> 문의 처리에 필요한 연락처 저장에 동의합니다.</label>}
                 <button type="submit" disabled={busy || recovering || !serviceId}>{ownerTest ? "테스트 문의 제출" : "문의 제출"}</button>
                 <p>{ownerTest ? "이 입력은 테스트 원장에만 저장됩니다. 실제 고객 문의를 보려면 공개 고객 주소를 사용하세요." : "회원가입 없이 접수합니다. 번호 소유를 확인한 상태로 표시하지 않습니다."}</p>

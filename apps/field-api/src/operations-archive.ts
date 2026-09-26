@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { PoolClient } from 'pg';
 import type { FieldBusinessRuntime } from './business.js';
+import { requestFallback, type FallbackRow } from './public-request-fallback.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const maxBytes = 64 * 1024 * 1024;
@@ -9,7 +10,7 @@ const hash = (value: Buffer) => createHash('sha256').update(value).digest('hex')
 
 type MediaRow = { id: string; inquiry_id?: string; message_id?: string; reservation_id?: string; object_key: string;
   byte_size: number; width: number; height: number; sha256: string; created_at: Date };
-type InquiryRow = { id: string; state: string; customer_name: string; customer_phone: string;
+type InquiryRow = FallbackRow & { id: string; state: string; customer_name: string; customer_phone: string;
   service_snapshot: unknown; catalog_revision: number; consent_at: Date | null;
   is_test: boolean; test_site_revision: number | null; visit_region: string | null; created_at: Date };
 type MessageRow = { id: string; inquiry_id: string; sender: string; visibility: string;
@@ -18,7 +19,7 @@ type InquiryResolutionRow = { inquiry_id: string; event_type: string; revision: 
   actor_user_id: string | null; source_message_id: string | null; created_at: Date };
 type ReservationMessageRow = { id: string; reservation_id: string; sender: string;
   actor_user_id: string | null; body: string; created_at: Date };
-type ReservationRow = { id: string; catalog_revision: number; service_snapshot: unknown; booking_mode: string;
+type ReservationRow = FallbackRow & { id: string; catalog_revision: number; service_snapshot: unknown; booking_mode: string;
   customer_name: string; customer_phone: string; preferred_time_text: string | null;
   request_message: string | null; visit_region: string | null;
   requested_start_at: Date | null; confirmed_start_at: Date | null; confirmed_end_at: Date | null;
@@ -109,13 +110,14 @@ async function collect(db: PoolClient, organizationId: string) {
     [organizationId])).rows;
   const inquiries = (await db.query<InquiryRow>(
     `select id,state,customer_name,customer_phone,service_snapshot,catalog_revision,consent_at,
-       is_test,test_site_revision,visit_region,created_at
+       is_test,test_site_revision,visit_region,created_at,fallback_origin,fallback_action_request_id,fallback_declared_at
      from field.inquiries where organization_id=$1 order by created_at,id limit 501`, [organizationId])).rows;
   const reservations = (await db.query<ReservationRow>(
     `select id,catalog_revision,service_snapshot,booking_mode,customer_name,customer_phone,
        preferred_time_text,request_message,visit_region,requested_start_at,confirmed_start_at,confirmed_end_at,
        proposal_start_at,proposal_end_at,proposal_accepted_at,change_preferred_text,
-       source,timezone,state,revision,consent_at,created_at,updated_at
+       source,timezone,state,revision,consent_at,created_at,updated_at,
+       fallback_origin,fallback_action_request_id,fallback_declared_at
      from field.reservations where organization_id=$1 order by created_at,id limit 501`,
     [organizationId])).rows;
   if ([memberships, apConnections, catalogReleases, siteReleases, siteAssets, manualBlocks, inquiries, reservations]
@@ -292,6 +294,7 @@ export function registerOperationsArchiveRoute(app: FastifyInstance, runtime: Fi
         customerName: row.customer_name, customerPhone: row.customer_phone,
         serviceSnapshot: row.service_snapshot, catalogRevision: row.catalog_revision,
         consentAt: row.consent_at, isTest: row.is_test, visitRegion: row.visit_region,
+        fallback: requestFallback(row),
         testSiteRevision: row.test_site_revision, createdAt: row.created_at,
         messages: (byInquiryMessages.get(row.id) ?? []).map(message => ({ id: message.id,
           sender: message.sender, visibility: message.visibility, body: message.body,
@@ -311,6 +314,7 @@ export function registerOperationsArchiveRoute(app: FastifyInstance, runtime: Fi
         bookingMode: row.booking_mode, customerName: row.customer_name, customerPhone: row.customer_phone,
         preferredTimeText: row.preferred_time_text, requestMessage: row.request_message,
         visitRegion: row.visit_region, requestedStartAt: row.requested_start_at,
+        fallback: requestFallback(row),
         confirmedStartAt: row.confirmed_start_at, confirmedEndAt: row.confirmed_end_at,
         proposalStartAt: row.proposal_start_at, proposalEndAt: row.proposal_end_at,
         proposalAcceptedAt: row.proposal_accepted_at, changePreferredText: row.change_preferred_text,

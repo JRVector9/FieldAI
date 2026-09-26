@@ -33,6 +33,7 @@ async def main(inquiry_id: str):
             await panel.get_by_text("Field 연결 정보를 불러오지 못했습니다.", exact=False).wait_for()
             assert failed_once
             await panel.get_by_role("button", name="Field 예약 상태 확인").first.wait_for()
+            await panel.get_by_text("AP 요청 ID:", exact=False).first.wait_for()
             assert await panel.get_by_role("button", name="현재 가격·시간 확인").count() == 0
             failed_history = False
 

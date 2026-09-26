@@ -24,6 +24,11 @@ export type DraftCatalog = Omit<Catalog, "services" | "defaultBookingMode"> & {
   defaultBookingMode: "request" | "slot";
   services: DraftService[];
 };
+export type FallbackInput = { origin: "ap_customer_reported"; actionRequestId?: string };
+export type RequestFallback = { origin: "ap_customer_reported"; actionRequestId: string | null; declaredAt: string };
+export type FallbackCandidate = { externalRequestId: string; kind: "inquiry" | "reservation_request";
+  reservationId: string | null; state: string; serviceName: string; receivedAt: string };
+export type FallbackReview = { candidates: FallbackCandidate[]; hasMore: boolean };
 export type Inquiry = {
   id: string;
   state: string;
@@ -35,6 +40,8 @@ export type Inquiry = {
   customerName: string;
   customerPhone?: string;
   visitRegion?: string | null;
+  fallback?: RequestFallback | null;
+  fallbackReview?: FallbackReview;
   service: Service;
   messages: { id: string; sender: "customer" | "owner"; visibility: "customer" | "internal";
     body: string; delivery_state: string }[];
@@ -49,6 +56,8 @@ export type BookingPolicy = {
 export type Reservation = {
   id: string; organizationId: string; catalogRevision: number; service: Service;
   businessName?: string;
+  fallback?: RequestFallback | null;
+  fallbackReview?: FallbackReview;
   bookingMode: "request" | "slot"; name: string; phone: string;
   preferredTimeText: string | null; requestMessage: string | null; visitRegion: string | null;
   requestedStartAt: string | null;

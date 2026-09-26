@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
 import { requestJson, type BookingPolicy, type Catalog, type Reservation,
-  type ReservationEventDeliveries, type ManualReservationContacts, type Service } from "./field-api";
+  type ReservationEventDeliveries, type ManualReservationContacts, type Service, type FallbackCandidate, type FallbackInput } from "./field-api";
+import { FieldRequestFallback, fallbackSubmission } from "./FieldRequestFallback";
+import { FieldFallbackReview } from "./FieldFallbackReview";
 import { ReceiptRotationPanel } from "./receipt-rotation";
 import { PrivateReservationPhoto } from "./private-reservation-photo";
 import { FieldReceipt } from "./field-receipt";
@@ -134,6 +136,7 @@ export function PublicBookingPanel({ catalog, onServiceChange, onTimeChange, onR
   const [visitRegion, setVisitRegion] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [consent, setConsent] = useState(false);
+  const [fallback, setFallback] = useState<FallbackInput | null>(null);
   const [receipt, setReceipt] = useState<{ id: string; receiptKey: string } | null>(null);
   const [status, setStatus] = useState("");
   const [slotConflict, setSlotConflict] = useState(false);
@@ -234,6 +237,7 @@ export function PublicBookingPanel({ catalog, onServiceChange, onTimeChange, onR
       const payload = {
         serviceId, name, phone, requestMessage: requestMessage.trim(), visitRegion: visitRegion.trim(), consent,
         ...(service.bookingMode === "slot" ? { startAt } : { preferredTimeText }),
+        ...fallbackSubmission(fallback),
       };
       const path = `/v1/public/catalog/${catalog.organizationId}/reservations`;
       const digest = await publicSubmissionFingerprint({ path, payload });
@@ -321,6 +325,7 @@ export function PublicBookingPanel({ catalog, onServiceChange, onTimeChange, onR
           setPhotos(result.selected); setStatus("");
         }} /><small>{photos.length > 0 ? `${photos.length}장 선택됨 · 예약 저장 후 비공개 첨부` : "눌러서 사진을 선택하세요. 예약 저장 후 비공개 첨부합니다."}</small></label>
         <SelectedBookingPhotos photos={photos} />
+        <FieldRequestFallback value={fallback} onChange={setFallback} />
         <label><input required type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /> 예약 처리에 필요한 연락처 저장에 동의합니다.</label>
         <button type="submit" disabled={busy || recovering || !service || (service.bookingMode === "slot" && (availabilityState !== "ready" || !startAt))}>예약 요청 제출</button>
         <p>회원가입 없이 접수합니다. 연락처 소유 확인이나 예약 확정을 뜻하지 않습니다.</p>
@@ -329,11 +334,12 @@ export function PublicBookingPanel({ catalog, onServiceChange, onTimeChange, onR
   </section>;
 }
 
-export function OwnerBookingPanel({ organizationId, releaseRevision, releaseState, focusReservationId, focusReservationToken, manualDialogToken, onReservationsLoaded, onReservationsLoadFailed }: {
+export function OwnerBookingPanel({ organizationId, releaseRevision, releaseState, focusReservationId, focusReservationToken, manualDialogToken, onReservationsLoaded, onReservationsLoadFailed, onOpenFallbackCandidate }: {
   organizationId: string; releaseRevision: number | null; releaseState: "loading" | "ready" | "failed"; focusReservationId?: string | null;
   focusReservationToken?: string; manualDialogToken?: string | null;
   onReservationsLoaded?: (reservations: Reservation[], nextCursor: string | null) => void;
   onReservationsLoadFailed?: () => void;
+  onOpenFallbackCandidate: (candidate: FallbackCandidate) => void;
 }) {
   const [policy, setPolicy] = useState<BookingPolicy | null>(null);
   const [closedText, setClosedText] = useState("");
@@ -842,7 +848,7 @@ export function OwnerBookingPanel({ organizationId, releaseRevision, releaseStat
       {reservations.length === 0 ? <p>아직 예약 요청이 없습니다.</p> : <ul>{reservations.map(item => <li key={item.id}><button type="button" data-reservation-id={item.id} onClick={() => void selectReservation(item.id)}>{item.name} · {item.service.name} · {stateLabel(item.state)}</button></li>)}</ul>}
       {nextReservationsCursor && <button type="button" disabled={olderReservationsState === "loading"} onClick={() => void loadOlderReservations()}>{olderReservationsState === "loading" ? "이전 예약 불러오는 중" : "이전 예약 더 보기"}</button>}
       {olderReservationsState === "failed" && <p role="alert">이전 예약을 불러오지 못했습니다. 위 버튼으로 다시 시도할 수 있습니다.</p>}
-      {selected && <div id="owner-reservation-detail" className="knowledge-source form-fields"><h4>{selected.name} · {selected.service.name}</h4><p>연락처: {selected.phone}</p><p>상태: {stateLabel(selected.state)} · {selected.source === "owner_manual" ? "전화 수동 등록" : selected.source === "external_ap" ? "AP에서 전달된 예약" : "고객 직접 신청"} · 접수 카탈로그 {selected.catalogRevision}번</p><p><a href={`/v1/owner/reservations/${selected.id}/export`}>이 예약 기록 JSON 다운로드</a></p><p>접수 가격: {selected.service.priceAmount === null ? "미정" : `${selected.service.priceAmount.toLocaleString("ko-KR")}원`}</p><p>{selected.bookingMode === "slot" ? `요청 시간: ${selected.requestedStartAt ? formatTime(selected.requestedStartAt, selected.timezone) : "없음"}` : `희망 시간: ${selected.preferredTimeText}`}</p>{selected.requestMessage && <p>고객 요청 내용: {selected.requestMessage}</p>}{selected.visitRegion && <p>지역·이용 장소: {selected.visitRegion}</p>}
+      {selected && <div id="owner-reservation-detail" className="knowledge-source form-fields"><h4>{selected.name} · {selected.service.name}</h4><p>연락처: {selected.phone}</p><p>상태: {stateLabel(selected.state)} · {selected.source === "owner_manual" ? "전화 수동 등록" : selected.source === "external_ap" ? "AP에서 전달된 예약" : "고객 직접 신청"} · 접수 카탈로그 {selected.catalogRevision}번</p><p><a href={`/v1/owner/reservations/${selected.id}/export`}>이 예약 기록 JSON 다운로드</a></p><p>접수 가격: {selected.service.priceAmount === null ? "미정" : `${selected.service.priceAmount.toLocaleString("ko-KR")}원`}</p><p>{selected.bookingMode === "slot" ? `요청 시간: ${selected.requestedStartAt ? formatTime(selected.requestedStartAt, selected.timezone) : "없음"}` : `희망 시간: ${selected.preferredTimeText}`}</p>{selected.requestMessage && <p>고객 요청 내용: {selected.requestMessage}</p>}{selected.visitRegion && <p>지역·이용 장소: {selected.visitRegion}</p>}<FieldFallbackReview fallback={selected.fallback} review={selected.fallbackReview} onOpenCandidate={onOpenFallbackCandidate} />
         {selected.attachments?.map((attachment, index) => <PrivateReservationPhoto key={attachment.id} reservationId={selected.id} attachmentId={attachment.id} label={`예약 첨부 사진 ${index + 1}`} />)}
         {selected.changePreferredText && <p>변경 희망: {selected.changePreferredText}</p>}
         {selected.proposalStartAt && <p>제안 시간: {formatTime(selected.proposalStartAt, selected.timezone)} {selected.proposalAcceptedAt ? "· 고객 수락" : "· 고객 확인 전"}</p>}

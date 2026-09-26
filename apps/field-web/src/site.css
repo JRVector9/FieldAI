@@ -610,3 +610,14 @@
 .field-reservation-tools .field-reservation-key-form button{min-height:48px}
 @media(max-width:760px){.field-reservation-main{margin:24px auto 60px}.field-reservation-summary{margin:16px;padding:17px}.field-reservation-log{padding:8px 18px 23px;min-height:250px}.field-reservation-message-log{padding:18px}.field-reservation-event{max-width:90%}.field-reservation-composer{padding:12px 15px}.field-reservation-tools>.special-panel{padding:18px}.field-reservation-tools .field-reservation-key-form{grid-template-columns:1fr}}
 @media(max-width:380px){.field-reservation-card .field-conversation-title h1{font-size:18px}.field-reservation-card .field-conversation-title>span{padding-inline:7px}.field-reservation-summary dl>div{display:block}.field-reservation-summary dd{text-align:left;margin-top:3px}}
+/* AP 재접수 관계는 기존 고객 양식과 사업자 상세 안에서 표시한다. */
+.field-request-fallback,.field-fallback-review{border:1px solid var(--line,#dfe5e1);border-radius:12px;padding:16px;margin:12px 0;min-width:0;font-size:16px;line-height:1.6;overflow-wrap:anywhere}
+.field-request-fallback summary{cursor:pointer;font-size:16px;font-weight:600}
+.field-request-fallback label{display:block;margin-top:12px}
+.field-request-fallback input:not([type=checkbox]){display:block;width:100%;min-width:0;font-size:16px}
+.field-fallback-review h4{font-size:16px;margin:0 0 8px}
+.field-fallback-review code{font-size:14px;overflow-wrap:anywhere}
+.field-fallback-review ul{padding-left:20px}
+.field-fallback-review li{margin:12px 0}
+.field-fallback-review button{min-height:44px;padding:10px 12px;border:1px solid #cad5e0;border-radius:10px;background:#fff;color:#234a73;font-size:14px;cursor:pointer}
+.field-fallback-review button:focus-visible{outline:2px solid #1762a6;outline-offset:3px}
