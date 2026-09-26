@@ -1,6 +1,10 @@
 # 개발 진행 상태 — 2026-09-26
 
-## 현재 checkpoint — 5ceec42 / 고정 디자인·네 내부 기능 통합
+## 현재 checkpoint — a974b90 / 제공량·관리자·OAuth backend·홈 진입
+
+기존44[x]를 보존하고 새5범위만 체크해 **49[x]/9[ ]**다. 디자인 원본 고정·완료 화면 반복 조정 금지·새 기능만 `(추가)`. whole type/lint와 집중검수·독립보완검토를 마쳤고 최신 managed83305에 양API/web build·AP81/Field73·compiled 기준선/Field routekey worker를 반영해 ready/페이지200·보호API401을 확인했다. 최초 mock profile 전달 누락31268 exit1은 CLIguard 유지/명시profile 전달로 수정했다. 다음 내부는 Field 허용폰트·AP정보 sync 상태/실제시각·기존 연결 key 상태/종료UI다. 실 공급사/사용자최종UI·기기/전체QA/운영 출시는 미검수다. 정확한 근거·실패·다음 명령은 TASKS와 CODEX_HANDOFF 상단을 따른다.
+
+## 직전 checkpoint — 5ceec42 / 고정 디자인·네 내부 기능 통합
 
 TASKS44[x]/7[ ] 유지. 양제품 owner billing/callback·환불/확정거절 backend·고객채널/SW 내부·Field 공개설치 BFF/UI를 저장했다. whole type/lint와집중검수·독립repair 통과, managed43912에최신 양build/migrate/ready 반영. 원본시안변경없고 새기능만 `(추가)`. 전체서비스/출시/실공급사/사용자최종테스트는미완료다. 다음은AI제공량·admin가격/환불UI·일반OAuth수명이다. 상세근거/실패/정확명령은TASKS 및 docs/CODEX_HANDOFF 상단.
 

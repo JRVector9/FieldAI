@@ -112,7 +112,7 @@ assert.equal(response.statusCode, 201, response.body);
 
 - [x] **REFUND-DECLINE.BACKEND / 5ceec42:** 고객 요청→operator 검토/다른 승인→합성 provider cancel의 금액 상한/중복/timeout·동일 거래 조회를 own PG17에서 재현했다. 실환불은미실행이다.
 - [x] **REFUND-DECLINE.BACKEND / 5ceec42 내부:** 해지와 환불을 별도 기록한다. 완료 환불의 실제 provider transaction을 저장하며 기존 지불·환불을 덮어쓰지 않는다. 부분 환불 합계는 실제 paid 금액 이하, 미상 환불 중 추가 cancel은 차단한다. 불확실한 cancel를 다른 취소와 임의 매핑하지 않는다.
-- [ ] 승인된 제공량과 해당 paid period의 실제 소비/진행 중 예약을 제품별 원장으로 검사한다. 초과는 제한/경고이고 자동 추가 청구가 아니다. 기존 문의/예약 답변·확정·고객 확인키·export는 cleanup 상태에도 유지한다.
+- [x] **A07/F09.AI-ENTITLEMENT / a974b90 내부:** 승인된 제공량과 해당 paid period의 실제 소비/진행 중 예약을 제품별 원장으로 검사했다. 초과는 제한/경고이고 자동 추가 청구가 아니다. 기존 문의/예약 답변·확정·고객 확인키·export는 cleanup 상태에도 유지한다.
 - [x] **RENEW-CANCEL-ACCESS.BACKEND / ef0dfd3:** 저장된 환불 상태/유예 만료/worker 부재·mode의 시간 기반 접근 검수 각29/29. 실제 provider 환불 실행/대조는 위 미완료 항목에 남는다.
 
 ## 4. 시안 기반 owner/admin UI·runtime·단계 완료 체크
@@ -120,11 +120,12 @@ assert.equal(response.statusCode, 201, response.body);
 **Files:** 각 web/src/*-subscription.tsx·새 *Billing.tsx/*BillingAdmin.tsx·admin.tsx/admin-sections.ts·CSS; 필요한 own HTTP/browser fixture와 tools/run-e2e.mjs; TASKS/coverage/audit/PHASE_2_EXECUTION_PLAN/인계/일지.
 
 - [x] **BILLING-UI-CALLBACK / 5ceec42 내부:** owner/billing의 승인 plan/금액·세금·제공량·별도 동의·현재 paid 기간·갱신중지·실패 유예·결제/환불 요청/내역/재조회를 own API에 연결했다.
-- [ ] admin/billing의 가격 요청/다른승인·판매중단·환불검토/다른승인화면은다음범위다.
+- [x] **BILLING-ADMIN-UI / a974b90 내부:** admin/billing의 가격 요청/다른승인·판매중단·환불검토/다른승인화면을 실제 own API에 연결했다.
 - [x] **BILLING-UI-CALLBACK / 5ceec42 내부:** 공급사/가격 부재는 실제사유/API거절과 신청제한으로 표시한다. mock fixture의 paid를 실 결제로 표시하지 않는다. 응답 유실은 저장한 request ID로 대조하고 재시도로 새 청구를 만들지 않는다.
-- [ ] 변경 범위 DB/unit·type/lint/build, 좁은 native HTTP/320px 흐름, CLI 독립 리뷰를 실행한다. 무관한 완료 기능/전체 Field/AP 회귀를 이유 없이 반복하지 않는다. 사용자 전체 시안/동선/실 공급사 테스트는 미완료로 구분한다.
+- [x] **a974b90 내부:** 변경 범위 focused DB/consumer·type/lint/build·좁은 HTTP ready/auth 경계·CLI 독립 리뷰를 실행했다.
+- [ ] 좁은 native browser/320px·전체 사용자 화면/동선은 사용자 최종 인수에 남긴다. 무관한 완료 기능/전체 Field/AP 회귀를 이유 없이 반복하지 않는다. 사용자 전체 시안/동선/실 공급사 테스트는 미완료로 구분한다.
 - [x] **FIRST-CHARGE까지 runtime/완료 기록:** managed65775에 최신 build/migrate/각 worker를 반영하고 TASKS/phase/handoff에 00c3e0d·실제 검수·미검수/남은 항목을 기록했다. 이번 완료 표시 점검에서도 같은 session의 생존을 확인했으며 재시작하지 않았다.
-- [ ] 남은 갱신/해지/환불/제공량/UI를 구현한 단계마다 해당 범위의 검수·runtime 반영·완료 체크를 추가한다. A07.F09.PAID 전체 체크는1~4 내부 완료 후에만 한다.
+- [x] **a974b90까지 내부:** 갱신/해지/환불/제공량/owner·admin UI의 각 범위 검수·runtime 반영·완료 체크를 추가했다. A07.F09.PAID 전체 체크는1~4 내부 완료 후에만 한다.
 
 ## 검수 명령
 
@@ -175,4 +176,11 @@ pnpm build:web:field
 - [x] BILLING-UI-CALLBACK 내부/API·metadata재시도: 양웹23/23(callback12+mutation11), own retiredplannative각1/1, rootwholetype73437/lint91115, final2382 noP1P2/.94. rootSDK/실기기/user최종미실행.
 - [x] REFUND-DECLINE.BACKEND 내부: native각11/11+adapter2/2, operator현재권한/다른승인/부분합계/timeout/원키회전/미상GET-only, owner요청UI/mutation소비. fullrefundlifecyclefixture는정당원장단일case각1/1 red→green, 원래기대값유지.
 - [x] 최신managed43912에양build/AP79·Field70+71 migrate/ready·ownrefundworker각1개·callback200/privacyheaders·protectedAPI401반영, TASKS44[x]와phase/coverage/audit/handoff/보고서증거기록. 코드5ceec42.
-- [ ] 다음: AI-ENTITLEMENT actualpaidperiod제공량/모델inflight·usage 및admin가격/환불UI. 새migrationAP80/Field72(기존Field71예약해제/public최종71적용). 실제공급사/최종사용자화면/320px/전체QA/G별도미검수.
+- [x] **a974b90 내부:** AI-ENTITLEMENT actualpaidperiod제공량/모델inflight·usage 및admin가격/환불UI 완료. AP80/Field72 실제적용·보존, 마지막schemaAP81/Field73.
+- [ ] 실제 SDK/PG/MFA·최종 사용자화면/320px·전체QA/G별도미검수. 해당 완료 내부 기능은 다시 구현하지 않는다.
+
+## 중앙 적용 완료 — a974b90 (2026-09-27)
+
+Root가 마지막 source의 whole type97507·lint58007 exit0 및 launcher최소repair scopedlint/syntax0을 확인했다. old43912 Ctrl+C terminalexit1, first31268의compiledCLI mockprofile 누락exit1을보존한다. 명시ownprofile전달 후 **managed83305** 최신 양API/webbuild·AP81/Field73마이그레이션·quiesced기준선·Fieldroute-keyworker local_reconciliation을반영했다. 실제runtime-evidence exit0: 양ready/workspace/admin200, 보호API401, AP SSR 두홈링크, ownbaseline각1·receiptAP3/Field1. controller35492/Fieldworker36190각1·같은parent 확인. 원장TASKS49[x]/9[ ]·인계/coverage/audit/phase에체크하고sourcecommit **a974b90**으로저장했다.
+
+전체LLM/PG/MFA/발송/DNS/TLS·운영restore·전체E2E·사용자최종UI/기기/동선/출시는미검수다. 고정reference변경없음. source미상원장을초기화하거나새UUID재발송하지않는다. 적용schemaAP81/Field73은동결하고필요한추가schema만AP82/Field74부터조율한다. 재현한새오류없이는이미끝난집중검수/구현을반복하지않는다.

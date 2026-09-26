@@ -1,9 +1,11 @@
 # 고정 시안 화면 구현 — 2026-09-27
 
 Task ID / Product / Owner: F04.CUSTOM-DOMAIN.UI / Field / Coordinator(root)
-State: in_progress
+State: implemented — 이 문서의 기존 내부 UI 범위는 ef0dfd3으로 완료했다. 사용자 최종 시각·동선 인수는 별도다.
 
 사용자 확정 디자인은 `reference/field_ui_prototype_v3.html`이다. 원본 파일은 수정하지 않는다. 디자인을 다시 제안하거나 반복 조정하지 않고 처음 연결하는 화면에 원본 구조/CSS 값을 사용한다. 새 기능만 `(추가)`로 표시한다. 기존 완료 UI는 이번 작업 범위 밖이다.
+
+**현재 후속 기준:** TASKS·CODEX_HANDOFF 상단을 따른다. 이후 고객 동의/서비스워커·Field 공개설치 BFF/UI는5ceec42의 완료 체크에 기록되어 있으므로 아래 과거 미완료 문구로 재작업하지 않는다. 제공량/관리자 등 새 기능도 기존 배치 안에 `(추가)`로 연결하며 완료 화면의 디자인을 다시 조정하지 않는다. 이번 문서 상태 정리는 새 UI 검수나 기능 완료 추가가 아니다.
 
 ## 이번 범위
 

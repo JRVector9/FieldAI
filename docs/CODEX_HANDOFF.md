@@ -9,7 +9,69 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
-## 현재 완료 checkpoint — 코드5ceec42 / 고정 화면 새 기능 통합 (2026-09-27)
+## 현재 완료 checkpoint — a974b90 / 고정 디자인의 내부 기능 통합 (2026-09-27)
+
+- **Current objective / State:** 전체 v3/C03 내부 기능과 독립 로컬 환경 목표는 active. 이번 5개 내부 범위는 implemented/local verified이고 source **a974b90**으로 저장했다. 기존44[x]를 보존해 TASKS **49[x]/9[ ]**다. 후속9는7개 부모/외부·인수 묶음과2개 새 내부 기능이며 작업량9개가 아니다. 전체서비스/출시/실공급사/QA160/사용자최종 인수 완료가 아니다. 사용자 확정 디자인 고정·완료 화면 반복 조정 금지·시안 밖 기능만 `(추가)`.
+- **Completed work:** A07.AI-ENTITLEMENT, F09.AI-ENTITLEMENT, A07.F09.BILLING-ADMIN-UI, I06.AUTH-LIFECYCLE.BACKEND, C03.AP-HOME-LINKS. AP/Field own periodquota와 실제 비용·unknown hold, 관리자 실제 가격/환불·별도승인·sessionfence, OAuth token/family·legacy cutoff·Field 원래route 조정 후 key 종료/별도복원·serving proof, 기존 홈의 설치/요금 진입. key 상태/명시종료 owner UI는 부모 I06에 남겼다.
+- **Modified files:** source apps/tools/package **67files,3501insert/129delete**. AP80/81·Field72/73, own entitlement/model/adapter/usage·lifecycle/provider/journal/restore/CLI/key helper/tests, 양 billing-admin routes/client/component/CSS/tests, 중앙 app/business/server/integrator/admin shell/billing-client/settings·AP home·mock-run/package/own runner. 문서는 TASKS·각5계획·paid·coverage·audit·phase·fixedUI·DEVELOPMENT_STATUS·인계·생성 마스터/HTML. reference 원본 변경없음; secret/env는 stage/commit하지 않았다.
+- **Key design decisions:** model_call_v1 실제 유효 ID/tokens=1unit, 고객/ownerTest·제품별 예산 분리, 승인 paid period·grace 잔량·확정 다음paid만충전·미상hold/no extra charge. raw job 삭제와 metadata 원장 수명 분리. known refusal도소비. legacyqueued는dispatch현재기간, backfill은paid_at이실호출이전. 관리자는현재actor/session+기존role/다른승인. OAuth 첫signedcutoff/유효fingerprint 유지, snapshot ID만삭제, 현재선택/owner직렬화. 키폐기는ACK/unknown/originalroute조건필수, 미조정oldrestore는원자rollback·offline/serving차단, 현재예약/원본/확인키 유지.
+- **Tests actually run / Environment / Commit:** Node24.18.0, own UUID PG17/합성 provider·in-process 표준OAuth+일부실HTTP/실dump·별도restore, a974b90에저장한소스의precommit검수. APnative58390 **14/14**, adapterf111cd **2/2**; Field98969 **15/15**; 관리자양웹 **12/12**·중앙양API **4/4**·AP61634 실제SQL **1/1**, FieldactualSQL은15/15에포함. OAuthAP34169 **11/11**·Field74877 **12/12** fail/skip0. exact명령/환경/실패는각phase. whole `pnpm typecheck`97507, `pnpm lint`58007 **exit0**; launcher profile 최소보완 syntax/scopedlint0, diffchecks0. 실제runtime-evidence Node명령exit0, 최신managed 양API/web build·마이그레이션·compiled CLI/worker 완료. 전체unit/DB/E2E/160QA/실UI를 실행한 것이 아니다.
+- **Independent review / Failed approaches:** AP9886 clean/.87·adapter99649 clean/.92, Field41684 clean/.90, admin69462 clean/.91, 홈42088 clean/.94, lifecycle39658 clean/.84. 정적읽기만이며 review의targeteddiff sandbox미가용/테스트직접미실행한계 유지. lifecycle첫38794 P1.96/.97/P2.94는실제200 lateissue/oldroutebackup/snapshotdelete red→green 보완, nativeactive주장부분만기존trigger증거로falsepositive/원본native보존. 신규교착API500≠409 red34466→connection/request순서보완, 재현안된21710은red로세지않음. Fieldsource삭제·latepaid·knownrefusal·감사23514/overview 등실패보존. old43912 Ctrl+C **exit1**, first31268은compiledbaseline AP_PROFILE 누락 **exit1**; guard유지/런처ownmockprofile 전달로회복. 실패를삭제/통과로승계하지않았다.
+- **Current runtime / Recovery:** **managed83305** live, `/tmp/c03-ai-admin-lifecycle-managed-repaired.log`. AP81/Field73 실제적용, own baseline각1·receiptAP3/Field1. runtime log `/tmp/c03-ai-admin-lifecycle-runtime-evidence.log`: 양ready/workspace/admin200, 보호새API401, AP홈두anchor 실제SSR확인. process log `/tmp/c03-ai-admin-lifecycle-process-evidence.log`: controller35492·Fieldroute-keyworker36190각1/동일parent, worker local_reconciliation. 공급사/모델은blocked_integration. 실제청구·환불·발송·DNS·운영삭제/배포없음. 이미적용schema 동결, 다음필요schemaAP82/Field74 조율. 원unknown ledger/UUID를초기화하지말고조회·원증거재조정. baseline은mock에명시quiesced로만, 운영auto채택없음.
+- **Remaining / Not tested:** 새내부 F03.ALLOWED-FONT(Field 허용목록→초안/공개JSON→기존선택패널/public렌더), I03.SOURCE-SYNC-STATUS(stale/review/current 표시·실제nullable syncedAt공개계약→consumer→구현), I06부모의기존연결 key상태GET/명시closePOST `(추가)` UI. AP홈누락은이번완료. owner비공개후보는B10역할명시없음+관리자독립hold구현으로확정누락제외. 실SDK/PG/MFA/메일/카카오/LLM/발송/VAPID/DNS/TLS/운영ACL·RPO/RTO/QA/G·모든역할/320px/기기/사용자최종 화면/동선 미검수는 후속. 다음신규범위는scope/요구QA/명령을먼저기록하고기존49[x]를기억부재로다시만들지않는다.
+- **Local URLs:** AP **http://localhost:3001/workspace**, Field **http://127.0.0.1:3002/workspace**(ownOrigin). 최신소스반영; ready/SSR만으로사용자최종UI/실공급사완료주장금지. fileURL시안정책거부를다른브라우저/HTTP/CDP로우회하지않는다.
+- **문서 검수 실제 완료:** Python 완료원장대조49[x]/9[ ]·완료ID중복0·고정시안/추가표시/5phase sourcecommit 유지 exit0. `/tmp/fieldai-report-venv/bin/python tools/build_report.py`와 `tools/check_package.py` 각각exit0. 마스터1869행/335889bytes·HTML382418bytes, DAG46/인수명세160/schema3는 document_package_only/service_tests_executed=false. 서비스QA160 통과가 아니다. source/문서diffchecks exit0, 실제 운영자료/비밀값을 문서에 복사하지 않았다.
+
+### Exact commands for next agent — 새 내부 범위만
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+sed -n '1,105p' TASKS.md
+sed -n '1,65p' docs/CODEX_HANDOFF.md
+git status --short
+git log -3 --oneline
+cat docs/technical/C03_REMAINING_INTERNAL_EXECUTION_PLAN.md
+rg -n 'SiteContent|template|palette|parse|font' apps/field-api/src/sites.ts apps/field-web/src/site-editor.tsx apps/field-web/src/field-site.tsx
+rg -n 'state|revision|sync' apps/field-api/src/ap-source-refresh.ts apps/field-web/src/field-source-refresh.tsx apps/agent-api/src/source-refreshes.ts
+rg -n 'route-key|closeId' apps/field-api/src/ap-route-key-lifecycle.ts
+rg --files apps/field-web/src | rg 'connection|connect|integration'
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+먼저새scope/권한/계약을계획에기록한다. source sync시각계약은계약→consumer→구현순서다. 현재83305는같은handle을poll하며필요없으면재기동하지않는다. 아래진행중/미커밋/44체크·과거handle은이력이고최신지시가아니다.
+
+## 이력 — 제공량·관리자·OAuth 수명 통합 착수 (2026-09-27)
+
+
+- **Current objective / State:** v3/C03 내부 기능과 독립 로컬 환경 목표는 in_progress. HEAD75ec07d, 기존 구현5ceec42와 완료44[x]/잔여7[ ] 유지. 사용자 재확인: 시안 디자인은 고정, 완료 화면 반복 조정 금지, 새 기능만 `(추가)`. AGENTS6.0/TASKS 상단이 동일 기준이다.
+- **Completed work:** AP AI entitlement는 담당 agent가 own PG17 native14/14·adapter2/2 및 독립 검토 clean 후 파일 동결했다. Field entitlement 현재 native15/15 exit0이며 관리자 실제 SQL/redaction/audit도 포함한다. 관리자 own 소비자 양12/12·권한 fence·AP 실제 SQL1/1 완료, 좁은 마지막 독립 검토 진행 중. 일반 OAuth/route key는 내부 구현 및 AP7/7·Field8/8 증거가 있지만 추가 복원/serving-proof 검수 중이다. 이 네 범위는 아직 중앙 runtime·commit·[x] 처리 전이다.
+- **Modified files:** 중앙 계획 `docs/technical/C03_REMAINING_INTERNAL_EXECUTION_PLAN.md` 및 네 전용 계획. AP80/Field72 entitlement와 own 모델/usage/adapter/tests, AP81/Field73 OAuth lifecycle/provider/journal/restore/CLI/tests, Field route-key lifecycle/worker, 양제품 admin billing routes/client/component/CSS/tests. Root는 양 app/admin shell, owner billing 제공량, Field usage, 양 billing-client의 정책 문구 줄바꿈 최소 보완을 통합한다. Git 상태가 정확한 경로 목록의 기준이다.
+- **Key decisions:** model_call_v1 실제 ID/tokens 확인=1unit, 승인 paid-period snapshot·grace 잔량·미상 hold·새 초과청구 없음. owner test와 고객 사용량, AP와 Field는 분리. 알려진 refusal/invalid 출력도 실제 비용 기록. raw job purge와 metadata 원장 수명을 분리. legacy queued는 dispatch 때 현재 기간, backfill paid_at은 실제 호출 이전이어야 한다. 관리자 현재 actor/session fence, 감사 범주 overview 유지. OAuth pre-cutover 이미 삭제된 token의 backup 복원은 metadata-only signed baseline cutoff/유효 fingerprint로 추가 보완 승인; 새 PKCE/명시동의는 허용한다.
+- **Tests actually run:** Node24.18.0, own UUID PG17/합성 provider. Field98969 exit0 **15/15 fail0 skip0**, `/tmp/field-ai-entitlement-repair15-current.log`; root scoped lint24471/build4249 terminalexit0(`/tmp/c03-root-ai-repair-lint.log`, `/tmp/c03-field-ai-repair-build.log`). AP58390 14/14, adapter2/2, type90391/build84268/lint40848 exit0; 마지막 독립99649 noP1/P2/confidence.92. Admin 양웹12/12·양API focused4/4·AP61634 native1/1·type/lint exit0는 전용 계획에 기록. 전체 마지막 type/build/runtime 검수는 미실행이다.
+- **Failed approaches:** Field 최초0/7→7/7, expanded13/14의 감사23514는 허용 overview로 회복. source 삭제 실적0≠1·late paid grace 귀속 오류·known refusal 소비0≠1을 재현한 뒤 보완, 최종15/15. 독립31725 P2 .96 legacy queue/.91 adapter usage loss 두 건 보완 후 좁은 재검토 예정. whole type9961은 병렬 미완성 parser field로 exit2, 최종 pass로 승계하지 않는다. 기존 완료 UI의 siteAi/ai 불일치와 multiline 정책은 TASKS에 재개 사유 먼저 기록했다.
+- **Remaining work / Recovery:** Field 보완41684 clean/noP1P2/.90, 관리자69462 clean/.91 확인. OAuth38794는 P1.96 late issue/P1.97 older route backup/P2.94 broaddelete 세 신규 경계를 지적했다. Native의 active-token 주장은 기존 trigger로 false positive여서 완료 native 파일은 보존했다. 실제 추가 red AP43816/Field33861 후 provider 현재승인 lock·snapshot ID 삭제·새 `ap-route-key-reconciliation.ts`의 복원 조건/rollback 보완으로 AP34169 **11/11**·Field36588 **12/12** exit0/noskip, repairtype75554/24012 exit0. 신규 API/worker lock 순서 검수와 좁은 마지막 재검토는 아직 진행 중이다. 중앙 business/integrator/server proof guard·package/단일worker·quiesced mock baseline 통합은 작성했고 scoped lint/syntax exit0. 첫 signed cutoff는 유지한다. 최종 리뷰 뒤 전체 type/lint→managed43912 동일 handle 종료 확인→최신 build/migrate/mock-run 1회→준비/권한/compiledworker 확인→commit 및 새 내부 ID만 체크. AP80/81·Field72/73은 아직 managed 미적용; 이전 적용 migration 수정 금지. Unknown ledger 초기화/새 외부 재발송 금지. 실 공급사·사용자 최종 UI/기기·전체 E2E/출시는 미검수다.
+- **읽기 전용 전체 기능 대조:** 별도 내부 미완료3개를 확인했다. C03.AP-HOME-LINKS(기존 AP 설치/요금 화면의 홈 진입), F03.ALLOWED-FONT(Field 허용폰트 JSON/선택/렌더), I03.SOURCE-SYNC-STATUS(기존 Field AP 정보 패널의 stale/review/current 및 실제 syncedAt 공식 계약/표시). 중앙 실행 계획 마지막 표의 요구 위치·현재 경로·최소 범위를 따른다. owner 비공개 후보는 역할 요구가 없고 관리자 독립 hold가 구현돼 확정 누락에서 제외했다. 기존44[x]를 재개한 것은 아니다.
+- **추가 홈 접점:** C03.AP-HOME-LINKS는 source를 기존 본문 안내의 두 `(추가)` 링크만으로 연결했다. src/app/workspace/{deployments,subscription}/page.tsx의 기존 own 인증 컴포넌트를 사용하고 CSS/header/reference 변경은 없다. 독립42088 terminalexit0 clean/noP1P2/.94, `/tmp/c03-ap-home-links-review-result.md`; 중앙 type/build/runtime/체크/commit은 대기다. Field font/sync 두 범위는 아직 코드 미착수다. I06의 owner route-key 종료 UI 역시 부모 잔여로 유지하며 이번 backend/worker 내부 완료와 구분한다.
+- **Current runtime:** managed43912와 `/tmp/fixed-design-new-functions-managed.log`는 직전5ceec42 서버이며 새 미커밋 기능은 반영 전. AP http://localhost:3001/workspace, Field http://127.0.0.1:3002/workspace. 공급사는 blocked_integration 유지. 살아 있는 handle을 timeout만으로 중복 기동하지 않는다.
+- **최신 중앙 gate:** 소스 lock 보완/홈 링크 포함 `pnpm typecheck` **97507 terminalexit0**(`/tmp/c03-ai-admin-lifecycle-final-typecheck.log`), `pnpm lint` **58007 terminalexit0**(`/tmp/c03-ai-admin-lifecycle-final-lint.log`), `git diff --check` exit0. OAuth 마지막 좁은 독립39658 및 최신 managed build/runtime은 아직 완료 전이다. Field 마지막 native74877 **12/12**·AP34169 **11/11** exit0/noskip. 34466의 API500≠409 교착을 connection→request 순서/currentowner share로 수정했고 교착이 재현되지 않은21710 exit0은 red 증거로 세지 않았다.
+
+### 이력 — 당시 Exact commands
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -3 --oneline
+sed -n '1,100p' TASKS.md
+cat docs/technical/C03_REMAINING_INTERNAL_EXECUTION_PLAN.md
+tail -n 25 /tmp/field-ai-entitlement-repair15-current.log
+cat docs/technical/F09_AI_ENTITLEMENT_EXECUTION_PLAN.md
+rg -n 'oauth|route-key|refund' tools/mock-run.mjs apps/field-api/package.json
+```
+
+담당 agents의 최종 결과를 받고 위 미완료 범위만 진행한다. 현재43912의 정지/재기동과 중앙 등록·환경·Git은 root가 담당한다.
+
+## 直前完了 checkpoint — コード5ceec42 / 고정 화면 새 기능 통합 (2026-09-27)
 
 - **Current objective / State:** 전체 v3/C03 내부 기능과 독립 로컬 환경 구현 목표는 active다. 이번 네 내부 세부 범위만 implemented 및 아래 범위 local verified다. 기존40[x]와ef0dfd3는 유지하고 새4개를체크해 **TASKS44[x]/7[ ]**다. 전체서비스/부모Task/출시/실외부/QA160/최종사용자 화면 인수 완료가 아니다. 원본reference변경없음, 디자인고정/새기능만 `(추가)`를3병렬agent에재전달했다.
 - **Completed / Modified paths:** 코드 **5ceec42**, apps/tools90files. Root는 양web billing-client/mutation/return/settings·subscription·app/billing/return·headers·billingSnapshot currentPlan과 app/site resolver/receipt guard/proxy/layout/package/mock-run 중앙통합. Refund는 양API refund domain/routes/execution/worker/Toss/확정charge오류·AP79/Field70/tests. Delivery는 own customer channel/receipt/push client/SW/manifest/owner설정/API/검사. Public은 Field own BFF/intent/execution/connector/installcomponent·Field71 및 ownrunner/HTTPconsumer. 소스gitcommit뒤doc원장/phase/coverage/audit/인계/보고서를갱신한다.

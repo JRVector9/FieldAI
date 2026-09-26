@@ -1,6 +1,19 @@
 # 개발 종료까지 남은 범위 — 2026-09-26 1차 코드 대조
 
-## 최신 내부 완료 checkpoint — 5ceec42 (2026-09-27)
+## 현재 내부 완료 checkpoint — a974b90 (2026-09-27)
+
+TASKS 상단 **49[x]/9[ ]**가 기준이다. 기존44[x] 유지 후 AP/Field AI 제공량·관리자 구독/청구·일반 OAuth/Field key backend·AP 홈 진입5범위를 추가했다. 디자인 reference/field_ui_prototype_v3.html은 고정하며 신규 요소만 `(추가)`다. 사용자 최종 화면/기기·실 공급사·전체QA/출시는 미검수다.
+
+- AP entitlement own PG17 14/14 + adapter2/2, Field15/15. knownusage/period quota·owner test 분리·unknown/latecost·refund/grace·legacy/source삭제를 연결했다. 독립 AP .87/.92, Field .90 clean. 마지막 Field15에는 실제 Field 관리자 SQL/redaction/allowedoverview 감사도 포함한다.
+- 관리자 양웹12/12·중앙양API4/4·AP actualSQL1/1, sessionfence·동일 요청 복구·멀티라인조건을 검수했다. final69462 P1/P2 없음/.91. 기존 고정집계 배치와 backend를 사용하며 가격/환불 신규 기능만 `(추가)`다.
+- 일반 lifecycle own AP11/11·Field12/12: token/family·currentowner/lateissue·snapshot삭제·signed cutoff·actual backup/별도restore·originalroute 조정 후 key 폐기·동시 lock 순서·missing proof503. final39658 clean/.84. 첫 review의 nativeactive 주장만 기존trigger 증거로 falsepositive, 새provider200 경계와 실제두발견/교착은 red→green 보완했다. 기존native 완료 파일은 유지했다.
+- AP 홈은 기존 안내 문단의 두 링크만 연결했다. static42088 clean/.94, 최신 SSR의 실제두 anchor 확인. CSS/header/reference 변경없음. 클릭/화면/기기 실행검수 아님.
+- 중앙 `pnpm typecheck`97507/`pnpm lint`58007 exit0, scoped mock-profile repair lint/syntax exit0·git diff check0. managed83305 최신 양API/web build·AP80/81와Field72/73 실제적용·compiledquiescedbaseline 성공·양ready/workspace/admin200·새보호API401, Field routekeyworker local_reconciliation1개/동일parent. logs /tmp/c03-ai-admin-lifecycle-{managed-repaired,runtime-evidence,process-evidence}.log.
+- 실패 보존: old43912 Ctrl+C exit1, first31268 APCLI에명시mockprofile 누락으로 exit1. CLIguard를완화하지않고런처의own profile전달만수정하여83305 기동완료. Field미적용부분을그첫실패에서통과라고기록하지않았다. 공급사/모델은blocked_integration, 실제청구·환불·발송·DNS·운영삭제/배포없음.
+- **현재 내부 다음:** Field 허용폰트·AP source의 실제sync 상태/시각 공식계약·기존 연결의route-key 상태/명시close UI. parent외부/최종인수와분리한다. 상세 file/요구/QA/실패/정확 명령은 C03_REMAINING_INTERNAL_EXECUTION_PLAN 및 CODEX_HANDOFF 상단. 이미적용AP81/Field73와이전migration 수정금지, 다음schema AP82/Field74는필요시Coordinator예약.
+
+
+## 이력 — 내부 완료 checkpoint 5ceec42 (2026-09-27)
 
 TASKS 상단 **44개[x]/7개[ ]**가 기준이다. 디자인 원본 reference/field_ui_prototype_v3.html은 그대로 유지하며 시안에 없는 기능만 `(추가)`다. 완료 기능을 기억 부재로 재작업하지 않는다.
 
