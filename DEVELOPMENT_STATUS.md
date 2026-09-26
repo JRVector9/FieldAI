@@ -1,5 +1,9 @@
 # 개발 진행 상태 — 2026-09-26
 
+## 최신 C03/I04 AP Field 전달 기록 부분 장애 복구 (2026-09-26)
+
+기존 Field 요청이 있는 AP 고객 320px 화면에서 전달 이력 GET 503 뒤 이미 확인한 기록이 사라지는 0/1 red를 재현했다. 같은 문의·확인키의 재조회에서는 마지막으로 확인한 전달 기록과 사진 목록을 유지하고, 다른 문의·확인키로 바뀌면 폐기한다. 서비스/가격/동의·사건 현황은 다시 확인해야 한다. 최종 `FIELD_EVENT_WORKERS_RUNNING=1 FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python pnpm test:spike:ap-field:http` 1/1(전달 화면·위젯·원본 답변·해제·알림), AP web typecheck·전체 lint·Python 구문 exit 0. 첫 green 시도는 실행 중인 mock worker와 수동 연결 해제 검사 경합으로 non-zero였으며 최종 실행에서 worker 상태를 명시해 통과했다. mock **7578** 양제품 build/ready·양 API/웹 HTTP 200. 사용자 최종 시각/동선·실 공급사·정식 QA/G는 남아 C03/I04 `in_progress`다.
+
 ## 최신 C03/A00/F00 로그인 진입·분배 E2E (2026-09-26)
 
 AP 홈 `로그인`이 가입 폼으로 향하는 320px red를 확인해 기존 `/workspace?mode=login` 분기로 연결했다. Field 홈은 이미 정상 분기였다. 새 320px 브라우저 검사는 두 제품 로그인/무료 시작 4개 진입 1/1. 현재 mock의 표준 AP 3/3·Field 3/3 E2E 통과 뒤, 분배 E2E의 오래된 화면 선택자를 실제 모바일 예약·문의/연결 해제·고객 접힘 도구 동선으로 수정해 최종 매체 복구+AP 배치→Field 업무 2/2 exit 0. 새 mock **1896** 양 API/웹 build/ready, AP web typecheck·전체 lint·Python 구문·diff 검사 exit 0. 기준 `reference/field_ui_prototype_v3.html`의 오늘 1440/320px을 실제 열어 캡처하고 Field 실제 업무·서비스·고객 예약 캡처와 다시 대조했다. 사용자 최종 디자인/동선 인수·실 인증 공급사·정식 QA/G는 남아 C03/A00/F00 `in_progress`다.

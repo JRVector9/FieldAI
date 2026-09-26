@@ -1,5 +1,12 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/I04 AP 고객 Field 전달 기록의 부분 조회 실패 복구 — 2026-09-26
+
+- 파일 범위: `apps/agent-web/src/agent-field-action.tsx`, 기존 320px 양제품 브라우저 검사 `tools/spikes/field-action-browser.py`, 계획·현황·인수인계 문서. 두 제품 API/DB/migration·공개 계약은 변경하지 않는다.
+- 요구/QA/게이트: AP 대화 확인키로 연 Field 전달 기록은 Field 서비스 또는 전달 이력의 일시 조회 실패 중에도 이미 확인한 같은 문의의 기록을 유지한다(I04, QA139~142·QA153/155, C03 모바일 320px·QA119). 새 서비스 선택·가격/시간/제출 동의는 실패한 조회로 진행하지 않는다. 다른 문의/확인키로 바뀌면 이전 고객 기록을 폐기한다.
+- 검사/구현 순서: 원본 시안 v3의 고객 후속/예약 화면과 실제 전달 영역을 대조하고, 기존 Field 요청이 있는 320px 브라우저에서 전달 이력 GET 503을 주입해 기록 유지 assertion을 먼저 red로 확인한다. 같은 문의의 재조회에서는 보존하되 새 문의에서는 초기화한다. 이후 같은 브라우저 흐름, AP web typecheck·lint, 새 mock build/ready를 확인한다. 사용자 최종 시각/동선 인수는 이후다.
+- 실행 결과: 시안 v3의 고객 후속·예약 경로와 실제 AP 전달 영역을 확인했다. 기존 Field 예약 요청이 있는 브라우저에서 서비스 조회 실패 뒤 재조회 시 전달 이력 GET 503을 주입하자, 이전 기록의 `Field 예약 상태 확인` 버튼이 사라져 0/1 red였다. 같은 문의·확인키의 재조회에서는 이미 읽은 전달 기록/사진 목록을 보존하고, 새 문의·확인키에서는 폐기한다. 서비스/가격/동의 초안과 Field 현재 사건 표시는 재조회 때 초기화하며, 사진 목록 GET 성공 시 선택한 사진 ID를 현재 목록과 다시 맞춘다. 새 mock **7578** 양제품 build/ready·네 HTTP 200, AP web typecheck·전체 lint·Python 구문 exit 0. `FIELD_EVENT_WORKERS_RUNNING=1 FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python pnpm test:spike:ap-field:http` 최종 1/1에서 320px 전달 이력 503 복구와 위젯/원본 답변/해제/알림 경로를 확인했다. 첫 green 시도는 실행 중인 mock worker를 검사에 알리지 않아 연결 해제 수동 전송이 이미 자동 처리된 `empty` 경합으로 non-zero였고, worker 실행 환경을 명시한 재실행은 통과했다. 실 공급사·사용자 최종 인수·정식 QA/G는 미실행이다.
+
 ### C03/A00/F00 홈 로그인·가입 진입 분리 및 연결 E2E 복구 — 2026-09-26
 
 - 파일 범위: `apps/agent-web/src/agent-home.tsx`, 신규 `tools/spikes/auth-entry-browser.py`, 오래된 Field 연결 브라우저 검사 8개, 계획/현황/화면 검토/인수인계 문서. 계정 API·DB·세션·제품 간 계약은 변경하지 않는다.

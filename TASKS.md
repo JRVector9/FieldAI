@@ -1,5 +1,7 @@
 # TASKS — 독립 제품 개발 작업 보드 v3.0
 
+최근 C03/I04 AP 고객 Field 전달 기록 부분 장애(2026-09-26): 기존 요청이 있는 320px 화면에서 전달 이력 GET 503 뒤 기록이 사라지는 0/1 red를 확인했다. 같은 문의·확인키의 재조회는 마지막으로 확인한 전달 기록/사진을 유지하고 새 문의·확인키는 초기화한다. 실패한 서비스 조회로 새 가격·시간·동의를 진행하지 않는다. 최종 양방향 연결 HTTP/브라우저 1/1, AP web typecheck·전체 lint·Python 구문 exit 0, 새 mock **7578** 네 HTTP 200. mock worker가 켜진 첫 green 실행의 수동 revoke `empty` 경합은 `FIELD_EVENT_WORKERS_RUNNING=1`로 실제 실행 환경을 명시한 최종 재실행에서 해소했다. 사용자 시각/동선·정식 QA/G·실 공급사는 남아 C03/I04 `in_progress`다.
+
 최근 C03/A00/F00 로그인 진입·분배 E2E(2026-09-26): AP 홈 로그인 링크가 가입 폼으로 열리는 실제 320px red를 `?mode=login` 연결로 수정했고 Field의 기존 진입도 함께 확인해 두 제품 로그인/가입 4경로 1/1. 표준 로컬 AP E2E 3/3·Field E2E 3/3, 예전 UI 선택자에 걸린 분배 E2E red들을 실제 모바일 메뉴·문의 목록·고객 관리 도구로 갱신한 최종 분배 2/2 exit 0. 새 mock **1896** 빌드/ready, AP web typecheck·lint·Python 구문 통과. `reference/field_ui_prototype_v3.html`의 오늘 1440/320px을 직접 열어 실제 업무·서비스·예약 화면 캡처와 대조했다. 사용자 시각/동선 인수·실 인증/알림/LLM·정식 QA/G는 남아 C03/A00/F00 `in_progress`다.
 
 최근 C03/F-O12 AP 연결 FAQ 화면(2026-09-26): Field 별도 동의→AP owner source 검토·승인→FAQ 선택·지식 공개·재진입 실제 양방향 브라우저 1/1. 1440px 검토 화면의 늘어난 시작 카드와 320px 44px 미만 버튼 red를 확인해 세로 카드/44px 버튼/FAQ 문답 카드를 정리했다. 새 mock **27712** 양제품 build/ready, 최종 320px 브라우저 1/1·1440/320px 캡처 시각 확인·가로 넘침/pageerror 0, AP web typecheck·전체 lint exit 0. 사용자 최종 인수·정식 QA/G·실 공급사는 남아 C03/F-O12 `in_progress`; API/DB/계약 변경 없음.

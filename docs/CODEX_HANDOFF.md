@@ -5,6 +5,29 @@
 - 시안 파일: `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03/I04 AP Field 전달 기록 부분 장애 복구 (2026-09-26)
+
+- **현재 목표:** 위 시안과 v3.0 문서대로 AP/Field 별도 제품의 기능을 로컬에서 끝까지 사용할 수 있게 한다. 사용자는 최종 화면 디자인·동선/외부 연동을 직접 확인할 예정이다. C03 전체/출시 승인은 아직 미증명이다. 로컬 mock PTY **7578**의 AP 웹 `http://localhost:3001/workspace`/API `127.0.0.1:4311`, Field 웹 `http://localhost:3002/workspace`/API `127.0.0.1:4321` 네 HTTP 200을 실제 확인했다.
+- **완료 작업:** AP 고객 확인키의 Field 전달 기록이 이력 GET 503 중에도 화면에 남도록 했다. 같은 문의·확인키 재조회는 마지막으로 읽은 기록/사진을 유지하고, 문의/확인키 변경은 폐기한다. 새 업무에 필요한 Field 서비스·가격/시간·동의와 사건 현황은 재조회 때 초기화하며, 사진 목록이 정상 응답하면 현재 ID에 남은 선택만 유지한다. 시안 v3의 고객 후속·예약 경로를 다시 확인했다.
+- **수정 파일:** `apps/agent-web/src/agent-field-action.tsx`, `tools/spikes/field-action-browser.py`, `docs/technical/PHASE_2_EXECUTION_PLAN.md`, `TASKS.md`, `DEVELOPMENT_STATUS.md`, 이 파일. API/DB/migration·제품 간 공개 계약 변경 없음.
+- **핵심 설계 결정:** 일시 실패는 이미 읽은 동일 고객 전달 기록을 지우는 근거가 아니다. 새 조건/동의는 이전 값으로 제출하지 못하게 초기화한다. 제품별 원본·권한 경계는 기존 그대로다.
+- **실제 검사/환경/커밋:** 로컬 PostgreSQL 17·Field Valkey·mock. 기존 요청이 있는 320px 브라우저에서 전달 이력 503 뒤 `Field 예약 상태 확인`이 사라져 0/1 red, 수정 뒤 최종 `FIELD_EVENT_WORKERS_RUNNING=1 FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python pnpm test:spike:ap-field:http` 1/1(전달 화면·외부 위젯·원본 답변·해제·알림). `pnpm --filter @fieldai/agent-web typecheck`, `pnpm lint`, 변경 Python `py_compile` exit 0. 새 `pnpm mock:run` PTY 7578 양제품 build/ready·네 HTTP 200. 이 변경 커밋은 `git log -1 --oneline`으로 확인한다. 앞선 로컬 `pnpm test:contracts`, `pnpm test:integration:faults`, `pnpm test:security`는 각각 exit 0이었으나 이번 UI 수정 뒤 재실행하지 않았다.
+- **실패한 접근:** 첫 전체 green 시도는 이미 실행 중인 mock Field 이벤트 worker를 검사에 알리지 않아 수동 revoke 함수가 자동 처리된 원장을 `empty`로 읽고 실패했다. 제품 오류가 아닌 검사 실행 환경 경합으로 확인하고 `FIELD_EVENT_WORKERS_RUNNING=1`을 명시한 최종 전체 검사를 통과했다.
+- **남은 작업:** C03의 다른 실제 기능/화면과 시안 대조, 200% 확대·전체 키보드/스크린리더, 사용자 최종 시각·동선 인수, 요구사항별 정식 QA/G. 실 인증·LLM·알림·결제·DNS/TLS·백업 공급사는 `blocked_integration`; 운영 배포·고객 발송·청구 없음. 독립성 전체 명령은 현재 두 로컬 서버를 유지하기 위해 이번 단계에서 실행하지 않았다.
+- **다음 에이전트 정확한 명령:**
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short --branch
+git log -2 --oneline
+sed -n '1,13p' docs/technical/PHASE_2_EXECUTION_PLAN.md
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+FIELD_EVENT_WORKERS_RUNNING=1 FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python pnpm test:spike:ap-field:http
+```
+
+서버가 종료됐으면 `pnpm mock:run`으로 재시작한 뒤 검사한다. 다음 기능 Task도 실행 계획 맨 위에 파일 범위·요구/QA·명령을 먼저 적는다.
+
 ## 최신 인수인계 — C03/A00/F00 홈 로그인 진입·분배 E2E (2026-09-26)
 
 - **현재 목표:** `reference/field_ui_prototype_v3.html`와 docs의 AP/Field 독립 제품 기능을 끝까지 구현해 로컬에서 사용할 수 있게 한다. 사용자는 최종 화면 디자인·동선/실 외부 연동을 직접 확인할 예정이다. C03 전체 완료와 출시 승인은 아직 미증명이다. 새 mock PTY **1896**: AP 웹 `http://localhost:3001/workspace`/API `127.0.0.1:4311`, Field 웹 `http://localhost:3002/workspace`/API `127.0.0.1:4321`; 양 API ready·양 웹 HTTP 200을 실제 재확인했다.

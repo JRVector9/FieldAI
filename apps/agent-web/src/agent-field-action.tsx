@@ -78,14 +78,19 @@ export function AgentFieldAction({ inquiryId, receiptKey, initialSummary = '', e
   const [handoff, setHandoff] = useState<Handoff | null>(null);
   const [reservationFeeds, setReservationFeeds] = useState<Record<string, ReservationFeed>>({});
   const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const loadedInquiry = useRef<{ inquiryId: string; receiptKey: string } | null>(null);
   const connection = connections.find(item => item.connectionId === connectionId);
   const service = connection?.services.find(item => item.id === serviceId);
 
   useEffect(() => {
     let active = true;
-    setConnections([]); setConnectionIssues([]); setConnectionId(""); setServiceId(""); setActions([]);
+    const inquiryChanged = loadedInquiry.current?.inquiryId !== inquiryId
+      || loadedInquiry.current?.receiptKey !== receiptKey;
+    loadedInquiry.current = { inquiryId, receiptKey };
+    setConnections([]); setConnectionIssues([]); setConnectionId(""); setServiceId("");
+    if (inquiryChanged) setActions([]);
     setPreview(null); setAvailability(null); setConsent(false); attempt.current = null;
-    setAttachments([]); setSelectedAttachmentIds([]);
+    if (inquiryChanged) { setAttachments([]); setSelectedAttachmentIds([]); }
     setHandoff(null);
     setReservationFeeds({});
     setLoadError("");
@@ -109,8 +114,11 @@ export function AgentFieldAction({ inquiryId, receiptKey, initialSummary = '', e
       }
       if (history?.status === 200)
         setActions((history.data as { actions?: Action[] }).actions ?? []);
-      if (inquiry?.status === 200)
-        setAttachments((inquiry.data as { attachments?: InquiryAttachment[] }).attachments ?? []);
+      if (inquiry?.status === 200) {
+        const current = (inquiry.data as { attachments?: InquiryAttachment[] }).attachments ?? [];
+        setAttachments(current);
+        setSelectedAttachmentIds(previous => previous.filter(id => current.some(item => item.id === id)));
+      }
       if (found?.status !== 200 || history?.status !== 200 || inquiry?.status !== 200)
         setLoadError("Field 연결 정보를 불러오지 못했습니다. 기존 전달 기록은 남아 있으며 다시 조회할 수 있습니다.");
     });
