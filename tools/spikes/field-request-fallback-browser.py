@@ -50,6 +50,67 @@ async def assert_width(page):
     assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth"), page.url
 
 
+async def assert_catalog_states(page, organization_id):
+    url = f"http://localhost:3002/v1/public/catalog/{organization_id}"
+    received = asyncio.Event()
+    release = asyncio.Event()
+
+    async def delayed(route):
+        received.set()
+        await release.wait()
+        await route.continue_()
+
+    await page.route(url, delayed)
+    await page.goto(f"http://localhost:3002/public/{organization_id}", wait_until="domcontentloaded")
+    await asyncio.wait_for(received.wait(), timeout=10)
+    header = page.locator(".field-public-header")
+    await header.get_by_text("승인 정보를 불러오는 중", exact=True).wait_for()
+    assert await header.get_by_role("link", name="사업 정보 보기", exact=True).count() == 0
+    assert await page.locator(".field-public-inquiry form").count() == 0
+    release.set()
+    await header.get_by_text("지역·운영시간 미등록", exact=True).wait_for()
+    await header.get_by_role("link", name="사업 정보 보기", exact=True).wait_for()
+    await page.unroute(url, delayed)
+
+    async def unpublished(route):
+        await route.fulfill(status=404, content_type="application/json", body='{"error":"not_found"}')
+
+    await page.route(url, unpublished)
+    await page.reload(wait_until="networkidle")
+    await header.get_by_text("공개된 사업 정보 없음", exact=True).wait_for()
+    assert await header.get_by_role("link", name="사업 정보 보기", exact=True).count() == 0
+    assert await page.locator(".field-public-inquiry form").count() == 0
+    assert await page.get_by_role("button", name="사업 정보 다시 불러오기", exact=True).count() == 0
+    await assert_width(page)
+    await page.unroute(url, unpublished)
+
+    for failure in ["http", "network"]:
+        attempts = 0
+
+        async def unavailable(route):
+            nonlocal attempts
+            attempts += 1
+            if attempts > 1:
+                await route.continue_()
+            elif failure == "network":
+                await route.abort("failed")
+            else:
+                await route.fulfill(status=503, content_type="application/json", body='{"error":"unavailable"}')
+
+        await page.route(url, unavailable)
+        await page.reload(wait_until="networkidle")
+        await header.get_by_text("사업 정보 확인 실패", exact=True).wait_for()
+        assert await header.get_by_role("link", name="사업 정보 보기", exact=True).count() == 0
+        assert await page.locator(".field-public-inquiry form").count() == 0
+        await assert_width(page)
+        await page.get_by_role("button", name="사업 정보 다시 불러오기", exact=True).click()
+        await header.get_by_text("지역·운영시간 미등록", exact=True).wait_for()
+        await page.locator(".field-public-inquiry form").wait_for()
+        await header.get_by_role("link", name="사업 정보 보기", exact=True).wait_for()
+        assert attempts == 2
+        await page.unroute(url, unavailable)
+
+
 async def main():
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
@@ -99,7 +160,8 @@ async def main():
             action_id = str(uuid.uuid4())
             seed_received_candidates(org, action_id, old_reservation)
 
-            await guest.goto(f"http://localhost:3002/public/{org}", wait_until="networkidle")
+            await assert_catalog_states(guest, org)
+            await guest.locator(".field-public-header").get_by_text("지역·운영시간 미등록", exact=True).wait_for()
             form = guest.locator(".field-public-inquiry form")
             await form.get_by_text("AP 이용 후 다시 접수하나요?", exact=False).click()
             await form.get_by_label("AP 이용 후 새 요청으로 제출합니다.", exact=True).check()

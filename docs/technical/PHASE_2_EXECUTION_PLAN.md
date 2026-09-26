@@ -1,5 +1,13 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/F-C04 공개 양식의 카탈로그 조회 상태 — 2026-09-26
+
+- 상태: `in_progress`. 파일: `apps/field-web/src/field-public.tsx`, `tools/spikes/field-request-fallback-browser.py`, 계획·상태·TASKS·coverage·인계. API/DB/계약 변경 없음.
+- 요구/QA: 정상 로드된 빈 지역/운영시간을 계속 로딩으로 표시하지 않는다. 조회 중/정상 미등록/공개 정보 없음(404)/조회 실패를 구분하고 실패는 재시도한다. 조회되지 않은 사업 정보로 향하는 헤더 링크를 노출하지 않는다. Field PRD 3.6/3.9의 비회원 직접 문의·예약, C03·QA57/119/143의 관련 상태 부분. 시안의 헤더/양식/모바일 동선 유지.
+- 순서/명령: 기존 320px 재접수 browser의 실제 빈 값 fixture에서 `지역·운영시간 미등록` 단언을 먼저 red 확인. 같은 검사에 대기 GET/404/503·재시도를 추가하고 상태 enum으로 표시를 연결한다. Field web typecheck·lint·Python 구문, mock 확인된 세션 정상 종료 후 `pnpm mock:run` build/ready, `/tmp/fieldai-ui-venv/bin/python tools/spikes/field-request-fallback-browser.py`로 신규 상태와 기존 문의·두 예약·후보/복구를 확인한다. 전체 사용자 시각/접근성·공급사/G는 미검수로 유지한다.
+
+- 결과: 빈 값 정상 카탈로그의 헤더 단언 red→mock **44403**의 320px 브라우저 exit 0. 지연 GET의 로딩·링크/폼 비노출, 정상 미등록, 404, HTTP 503/네트워크 실패 각각 재시도 복구, 기존 문의·두 예약·후보 이동/조회 장애 복구를 확인했다. Field web typecheck·lint·Python 구문·diff exit 0, 양제품 API/웹 build/ready. 수정 헤더 캡처를 열었다. API/DB 변경 없음; 전체 C03/사용자 최종 인수는 미완료다.
+
 ### C03/A05 AP 상담 링크 QR 공유 — 2026-09-26
 
 - 상태: `in_progress`. AP PRD 2.5의 대표 링크/QR, A05/C03, B01/B06/B07, QA57/119/127/159의 관련 로컬 부분.

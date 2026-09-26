@@ -65,7 +65,7 @@ export function PublicCatalogPage({ id }: { id: string }) {
   const [testStatus, setTestStatus] = useState("");
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [status, setStatus] = useState("승인된 사업 정보를 확인하고 있습니다.");
-  const [catalogLoadFailed, setCatalogLoadFailed] = useState(false);
+  const [catalogState, setCatalogState] = useState<"loading" | "ready" | "unpublished" | "failed">("loading");
   const [catalogReload, setCatalogReload] = useState(0);
   const [serviceId, setServiceId] = useState("");
   const [bookingServiceId, setBookingServiceId] = useState("");
@@ -129,23 +129,25 @@ export function PublicCatalogPage({ id }: { id: string }) {
       });
     }
     setCatalog(null);
-    setCatalogLoadFailed(false);
+    setCatalogState("loading");
     setStatus("승인된 사업 정보를 확인하고 있습니다.");
     void requestJson(`/v1/public/catalog/${id}`).then(result => {
       if (result.status === 200) {
         const value = result.data as Catalog;
         setCatalog(value);
+        setCatalogState("ready");
         setServiceId(value.services[0]?.id ?? "");
         setBookingServiceId(value.services[0]?.id ?? "");
         setStatus("");
-      } else if (result.status === 404)
+      } else if (result.status === 404) {
+        setCatalogState("unpublished");
         setStatus("공개된 사업 정보가 없습니다. 주소나 공개 상태를 확인해 주세요.");
-      else {
-        setCatalogLoadFailed(true);
+      } else {
+        setCatalogState("failed");
         setStatus("사업 정보를 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
       }
     }).catch(() => {
-      setCatalogLoadFailed(true);
+      setCatalogState("failed");
       setStatus("사업 정보를 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
     });
   }, [id, catalogReload]);
@@ -284,8 +286,12 @@ export function PublicCatalogPage({ id }: { id: string }) {
   const bookingService = catalog?.services.find(item => item.id === bookingServiceId);
   const summaryService = intakeView === "booking" ? bookingService : selectedService;
   const completed = !!receipt || !!bookingReceipt;
+  const businessSummary = catalogState === "ready"
+    ? [catalog?.region, catalog?.openingHours].filter(Boolean).join(" · ") || "지역·운영시간 미등록"
+    : catalogState === "unpublished" ? "공개된 사업 정보 없음"
+      : catalogState === "failed" ? "사업 정보 확인 실패" : "승인 정보를 불러오는 중";
   return <div className="site-shell field-public-shell">
-    <header className="field-public-header"><div><strong>{catalog?.businessName ?? "사업 정보"}</strong><p>{[catalog?.region, catalog?.openingHours].filter(Boolean).join(" · ") || "승인 정보를 불러오는 중"}</p></div><a href={completed ? `/public/${id}` : "#business-summary"}>{completed ? "홈페이지로" : "사업 정보 보기"}</a></header>
+    <header className="field-public-header"><div><strong>{catalog?.businessName ?? "사업 정보"}</strong><p>{businessSummary}</p></div>{completed ? <a href={`/public/${id}`}>홈페이지로</a> : catalog && ownerTest !== null && <a href="#business-summary">사업 정보 보기</a>}</header>
     <main className="field-public-main" data-intake-view={intakeView} data-owner-test={ownerTest ? "true" : "false"} data-complete={completed ? "true" : "false"}>
       <div className="field-public-lead">{!ownerTest && !completed && <nav className="field-public-tabs" aria-label="고객 접수 유형"><button type="button" aria-pressed={intakeView === "inquiry"} onClick={() => showIntake("inquiry")}>일반 문의</button><button type="button" aria-pressed={intakeView === "booking"} onClick={() => showIntake("booking")}>예약 요청</button></nav>}
         <h1>{ownerTest ? "사업자 첫 문의 테스트" : intakeView === "booking" ? "예약을 요청해 주세요." : "궁금한 내용을 남겨주세요."}</h1>
@@ -293,7 +299,7 @@ export function PublicCatalogPage({ id }: { id: string }) {
       </div>
       {status && !receipt && <p role="status" className="state-message">{status}</p>}
       {testStatus && <p role="status" className="state-message">{testStatus}</p>}
-      {catalogLoadFailed && <button type="button" onClick={() => setCatalogReload(value => value + 1)}>사업 정보 다시 불러오기</button>}
+      {catalogState === "failed" && <button type="button" onClick={() => setCatalogReload(value => value + 1)}>사업 정보 다시 불러오기</button>}
       {ownerTest && testGateFailed && <p><button type="button" onClick={() => setCatalogReload(value => value + 1)}>테스트 권한 다시 확인</button> <a href="/workspace">사업 운영으로 이동</a></p>}
       {ownerTest && !testGate && !testGateFailed && <p role="status">사업자 테스트 권한을 확인하고 있습니다.</p>}
       {catalog && ownerTest !== null && <><div className="field-public-intake-grid">

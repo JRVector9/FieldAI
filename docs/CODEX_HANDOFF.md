@@ -1,10 +1,19 @@
 # CODEX 인수인계 — 2026-09-26
 
-## 화면 시안 원본 — 작업 재개 시 확인
+## 사용자 지정 기준 시안 — 작업 재개 시 확인
 
-- 시안 파일: `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
+- 화면·기능·동선 구현 기준 시안: `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
 - 저장소 기준 경로: `reference/field_ui_prototype_v3.html`. 후속 에이전트도 이 파일을 화면·동선 구현 기준으로 사용하며, 인수인계 갱신 시 이 시안 경로를 상단에 유지한다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
+
+## 최신 인수인계 — C03/F-C04 공개 사업 정보 조회 상태 (2026-09-26)
+
+- **현재 목표:** 시안/v3.0 문서의 기능을 실제 AP/Field 독립 로컬 서비스로 끝까지 연결한다. C03 전체·사용자 최종 화면/동선·실 공급사/G는 미완료다.
+- **완료/수정:** `apps/field-web/src/field-public.tsx`의 조회 상태를 loading/ready/unpublished/failed로 구분했다. 정상 빈 지역/운영시간은 미등록, 404는 공개 정보 없음, 실패는 재시도다. 대상 없는 헤더 링크는 숨긴다. `tools/spikes/field-request-fallback-browser.py`와 실행 계획/현황/TASKS/coverage/이 파일을 갱신했다. API/DB/공개 계약 변경 없음.
+- **실제 검사:** 기존 빈 값 fixture 헤더 단언 red→mock **44403**의 320px 지연/404/503·네트워크 실패/재시도와 기존 문의·두 예약·후보 이동 exit 0. Field web typecheck·전체 lint·Python 구문·diff exit 0, 양제품 API/웹 build/ready. 캡처 `/tmp/field-fallback-customer-320.png`를 열었다. 이전 mock 1112는 확인 후 Ctrl+C로 정상 종료했다.
+- **실패/복구:** 기존 빈 문자열 fallback은 로딩 여부와 관계없이 로딩을 표시했다. 상태 분리로 수정; 코드 롤백만 필요하며 데이터 변경 없음.
+- **남은 내부 작업:** AP PRD 2.7의 spam 상태/발송 중단이 현재 CHECK/API/UI에 없다. 보존/원본·고객 추가 메시지는 유지하면서 사업자의 명시 분류·복구와 알림 중단을 구현한다. 실 공급사·운영 배포/청구/발송/삭제 없음.
+- **다음 명령:** `git status --short`, `sed -n '102,110p' docs/01_AGENT_PLATFORM_PRD.md`, `cat apps/agent-api/migrations/000006_inquiries.sql apps/agent-api/migrations/000013_notification_events.sql`, `rg -n 'recordInquiryEvent|ownerMessage' apps/agent-api/src/inquiries.ts`. 로컬 서버는 AP `http://localhost:3001/workspace`, Field `http://localhost:3002/workspace`; HTTP로 먼저 현재 상태를 확인한다. 상단 기준 시안 경로는 유지한다.
 
 ## 최신 인수인계 — C03/A05 AP 상담 링크 QR 공유 (2026-09-26)
 
