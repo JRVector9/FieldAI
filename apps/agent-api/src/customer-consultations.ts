@@ -252,8 +252,9 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
   app.post('/v1/embed/engagements', async (request, reply) => {
     const bearer = /^Bearer ([A-Za-z0-9_-]{40,64})$/.exec(request.headers.authorization ?? '')?.[1];
     if (!bearer) return reply.code(401).send({ error: 'invalid_embed_session' });
-    if (!runtime.modelProvider) return reply.code(503).send({ error: 'blocked_integration' });
-    if (!dailyLimit(runtime)) return reply.code(503).send({ error: 'budget_not_configured' });
+    const restartFrom = object(request.body)?.startNewFrom;
+    if (restartFrom !== undefined && (typeof restartFrom !== 'string' || !uuid.test(restartFrom)))
+      return reply.code(400).send({ error: 'invalid_previous_conversation' });
     const client = await runtime.pool.connect();
     try {
       await client.query('begin');
@@ -267,8 +268,27 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
       const embed = found.rows[0];
       const deployment = embed && await activeDeployment(client, embed.public_id);
       if (!embed || !deployment) { await client.query('rollback'); return reply.code(401).send({ error: 'invalid_embed_session' }); }
-      const id = embed.conversation_id ?? randomUUID();
-      if (!embed.conversation_id) {
+      if (restartFrom && embed.conversation_id !== restartFrom) {
+        await client.query('rollback'); return reply.code(409).send({ error: 'conversation_changed' });
+      }
+      const previous = embed.conversation_id ? (await client.query<{ retention_work_purged_at: Date | null }>(
+        'select retention_work_purged_at from ap.inquiries where id=$1 for share', [embed.conversation_id])).rows[0] : null;
+      if (restartFrom && !previous?.retention_work_purged_at) {
+        await client.query('rollback'); return reply.code(409).send({ error: 'conversation_not_ended' });
+      }
+      if (!restartFrom && previous?.retention_work_purged_at) {
+        await client.query('rollback'); return reply.code(410).send({ error: 'retention_work_ended',
+          id: embed.conversation_id, retention: { workPurgedAt: previous.retention_work_purged_at.toISOString() } });
+      }
+      if (!restartFrom && !runtime.modelProvider) {
+        await client.query('rollback'); return reply.code(503).send({ error: 'blocked_integration' });
+      }
+      if (!restartFrom && !dailyLimit(runtime)) {
+        await client.query('rollback'); return reply.code(503).send({ error: 'budget_not_configured' });
+      }
+      const created = !embed.conversation_id || !!restartFrom;
+      const id = created ? randomUUID() : embed.conversation_id!;
+      if (created) {
         if (await rejectExpiredTrial(reply, client, deployment.organization_id)) {
           await client.query('rollback'); return reply;
         }
@@ -295,10 +315,13 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
             hash(randomBytes(32).toString('base64url')), embed.distribution_traffic_class ?? 'unclassified']);
         await recordDistributionEvent(client, id, deployment.placement_id, 'engagement_started',
           embed.distribution_traffic_class ?? 'unclassified');
+        if (restartFrom) await client.query(
+          'update ap.embed_handoffs set expires_at=least(expires_at,now()) where session_id=$1 and consumed_at is null',
+          [embed.id]);
         await client.query('update ap.embed_sessions set conversation_id = $2 where id = $1', [embed.id, id]);
       }
       await client.query('commit');
-      return reply.header('Cache-Control', 'no-store').code(embed.conversation_id ? 200 : 201)
+      return reply.header('Cache-Control', 'no-store').code(created ? 201 : 200)
         .send({ id, state: 'ai_assisting', knowledgeRevision: deployment.knowledge_revision });
     } catch (error) { await client.query('rollback'); throw error; } finally { client.release(); }
   });
@@ -341,6 +364,7 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
       return reply.code(400).send({ error: 'invalid_idempotency_key' });
     const row = await session(runtime.pool, request, request.params.id, false, false);
     if (!row) return reply.code(401).send({ error: 'consult_session_required' });
+    if (row.retention_work_purged_at) return reply.code(410).send({ error: 'retention_work_ended' });
     const run = await customerAiRun(runtime.pool, row.id, hash(key));
     if (!run) return reply.code(404).send({ error: 'ai_attempt_not_found' });
     if (run.status === 'in_progress') reply.header('Retry-After', run.result_unknown ? '30' : '2');
@@ -359,8 +383,9 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
     if (key !== undefined && (typeof key !== 'string' || !idempotencyKey.test(key)))
       return reply.code(400).send({ error: 'invalid_idempotency_key' });
     const keyHash = typeof key === 'string' ? hash(key) : null;
-    const initial = await session(runtime.pool, request, request.params.id);
+    const initial = await session(runtime.pool, request, request.params.id, false, true, false, true);
     if (!initial) return reply.code(401).send({ error: 'consult_session_required' });
+    if (initial.retention_work_purged_at) return reply.code(410).send({ error: 'retention_work_ended' });
     if (keyHash) {
       const earlier = await customerAiRun(runtime.pool, initial.id, keyHash);
       if (earlier) return replayCustomerAiRun(reply, earlier, question);
@@ -380,8 +405,11 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
     try {
       await client.query('begin');
       await client.query('select id from ap.organizations where id = $1 for update', [initial.organization_id]);
-      const row = await session(client, request, request.params.id, true);
+      const row = await session(client, request, request.params.id, true, true, false, true);
       if (!row) { await client.query('rollback'); return reply.code(401).send({ error: 'consult_session_required' }); }
+      if (row.retention_work_purged_at) {
+        await client.query('rollback'); return reply.code(410).send({ error: 'retention_work_ended' });
+      }
       if (keyHash) {
         const earlier = await customerAiRun(client, row.id, keyHash);
         if (earlier) { await client.query('rollback'); return replayCustomerAiRun(reply, earlier, question); }

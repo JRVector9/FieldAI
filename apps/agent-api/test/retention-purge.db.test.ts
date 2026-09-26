@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes,randomUUID } from 'node:crypto';
+import { createHash,randomBytes,randomUUID } from 'node:crypto';
 import { execFile,spawn } from 'node:child_process';
 import { mkdtemp,rm,readFile,writeFile,readdir,mkdir,rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -12,6 +12,7 @@ import { createAgentApp } from '../src/app.js';
 import { createAgentInquiryMediaStore } from '../src/inquiry-media.js';
 import { runAgentRetentionJobOnce } from '../src/retention-purge.js';
 import { AgentRetentionJournal } from '../src/retention-journal.js';
+import type { BusinessRuntime } from '../src/business.js';
 
 process.loadEnvFile(resolve('../../infra/agent/.env'));
 
@@ -23,10 +24,11 @@ test('AP independently approves and executes retained inquiry cleanup with real 
  const media=createAgentInquiryMediaStore()!;
  const pool=new Pool({connectionString:process.env.AP_DATABASE_URL});
  const users=Array.from({length:3},()=>randomUUID()),[owner,operator,approver]=users as [string,string,string];
- const app=createAgentApp(async()=>undefined,undefined,undefined,undefined,{pool,inquiryMedia:media,
+ const runtime:BusinessRuntime={pool,inquiryMedia:media,
   verifyDomain:async()=>true,customerDailyLimit:10,
   modelProvider:{model:'synthetic-unused-retention-model',generate:async()=>{throw new Error('retention must not generate model answers');}},
-  resolveUserId:async headers=>typeof headers['x-test-user']==='string'?headers['x-test-user']:null});
+  resolveUserId:async headers=>typeof headers['x-test-user']==='string'?headers['x-test-user']:null};
+ const app=createAgentApp(async()=>undefined,undefined,undefined,undefined,runtime);
  const headers=(user=operator,key:string=randomUUID())=>({'x-test-user':user,'idempotency-key':key});
  const post=(url:string,payload:Record<string,unknown>,user=operator,key?:string)=>app.inject({method:'POST',url,payload,headers:headers(user,key)});
  let org:string|undefined;
@@ -277,11 +279,50 @@ test('AP independently approves and executes retained inquiry cleanup with real 
   const embedSession=(await post('/v1/embed/sessions',{nonce},owner)).json();
   const embedAuth={authorization:`Bearer ${embedSession.token}`};
   const begun=await app.inject({method:'POST',url:'/v1/embed/engagements',headers:embedAuth});assert.equal(begun.statusCode,201,begun.body);
-  const embedId=begun.json().id;await pool.query("update ap.inquiries set created_at=now()-interval '31 days' where id=$1",[embedId]);
+  const embedId=begun.json().id;
+  const oldHandoff=await app.inject({method:'POST',url:'/v1/embed/handoffs',headers:embedAuth,payload:{question:'이전 대화의 질문입니다.',conditions:'이전 희망 조건입니다.'}});
+  assert.equal(oldHandoff.statusCode,201,oldHandoff.body);
+  await pool.query("update ap.inquiries set created_at=now()-interval '31 days' where id=$1",[embedId]);
   const embedJob=await requestJob(embedId);await approveJob(embedJob);assert.equal(await runAgentRetentionJobOnce({pool,media,journal}),'completed');
   const embedCurrent=await app.inject({url:`/v1/public/deployments/${embed.publicId}/engagements/current`,headers:embedAuth});
   assert.equal(embedCurrent.statusCode,200,embedCurrent.body);assert.ok(embedCurrent.json().engagement.retention.workPurgedAt);
   assert.ok((await app.inject({url:`/v1/engagements/${embedId}`,headers:embedAuth})).json().retention.workPurgedAt);
+  const endedWidgetQuestion=await app.inject({method:'POST',url:`/v1/engagements/${embedId}/messages`,headers:embedAuth,payload:{question:'종료된 위젯에서 새 질문을 합니다.'}});
+  assert.equal(endedWidgetQuestion.statusCode,410,endedWidgetQuestion.body);
+  assert.equal(endedWidgetQuestion.json().error,'retention_work_ended');
+  const endedWidgetRecovery=await app.inject({url:`/v1/engagements/${embedId}/messages/recover`,headers:{...embedAuth,'idempotency-key':randomBytes(32).toString('base64url')}});
+  assert.equal(endedWidgetRecovery.statusCode,410,endedWidgetRecovery.body);
+  assert.equal(endedWidgetRecovery.json().error,'retention_work_ended');
+  const endedStart=await app.inject({method:'POST',url:'/v1/embed/engagements',headers:embedAuth});
+  assert.equal(endedStart.statusCode,410,endedStart.body);
+  assert.equal(endedStart.json().id,embedId);
+  assert.equal(endedStart.json().error,'retention_work_ended');
+  const priorProvider=runtime.modelProvider;
+  runtime.modelProvider=undefined;
+  assert.equal((await app.inject({method:'POST',url:'/v1/embed/engagements',headers:embedAuth})).statusCode,410);
+  runtime.modelProvider=priorProvider;runtime.customerDailyLimit=0;
+  assert.equal((await app.inject({method:'POST',url:'/v1/embed/engagements',headers:embedAuth})).statusCode,410);
+  runtime.customerDailyLimit=10;
+  const ticketsBefore=(await pool.query('select count(*)::int as count from ap.embed_handoffs where session_id=(select id from ap.embed_sessions where token_hash=$1)',[createHash('sha256').update(embedSession.token).digest('hex')])).rows[0].count;
+  const endedHandoff=await app.inject({method:'POST',url:'/v1/embed/handoffs',headers:embedAuth,payload:{question:'종료된 위젯에서 사람에게 문의합니다.'}});
+  assert.equal(endedHandoff.statusCode,410,endedHandoff.body);
+  assert.equal((await pool.query('select count(*)::int as count from ap.embed_handoffs where session_id=(select id from ap.embed_sessions where token_hash=$1)',[createHash('sha256').update(embedSession.token).digest('hex')])).rows[0].count,ticketsBefore);
+  assert.equal((await app.inject({method:'POST',url:'/v1/embed/engagements',headers:embedAuth,payload:{startNewFrom:'not-a-uuid'}})).statusCode,400);
+  assert.equal((await app.inject({method:'POST',url:'/v1/embed/engagements',headers:embedAuth,payload:{startNewFrom:randomUUID()}})).statusCode,409);
+  const countBefore=(await pool.query('select count(*)::int as count from ap.inquiries where deployment_id=$1',[embed.id])).rows[0].count;
+  const restarted=await app.inject({method:'POST',url:'/v1/embed/engagements',headers:embedAuth,payload:{startNewFrom:embedId}});
+  assert.equal(restarted.statusCode,201,restarted.body);assert.notEqual(restarted.json().id,embedId);
+  const newEmbedId=restarted.json().id;
+  const oldContinue=await app.inject({method:'POST',url:'/v1/embed/continue',headers:{origin:'http://localhost:3001'},payload:{ticket:oldHandoff.json().ticket}});
+  assert.equal(oldContinue.statusCode,410,oldContinue.body);
+  assert.equal(oldContinue.json().error,'ticket_expired_or_used');
+  assert.equal((await pool.query('select transferred_at from ap.embed_sessions where token_hash=$1',[createHash('sha256').update(embedSession.token).digest('hex')])).rows[0].transferred_at,null);
+  assert.equal((await app.inject({method:'POST',url:'/v1/embed/engagements',headers:embedAuth,payload:{startNewFrom:embedId}})).statusCode,409);
+  const restartedCurrent=await app.inject({url:`/v1/public/deployments/${embed.publicId}/engagements/current`,headers:embedAuth});
+  assert.equal(restartedCurrent.json().engagement.id,newEmbedId);
+  assert.deepEqual(restartedCurrent.json().engagement.messages,[]);
+  assert.equal((await pool.query('select count(*)::int as count from ap.inquiries where deployment_id=$1',[embed.id])).rows[0].count,countBefore+1);
+  assert.equal((await app.inject({method:'POST',url:'/v1/embed/engagements',headers:embedAuth,payload:{startNewFrom:newEmbedId}})).statusCode,409);
   const baseEnv=Object.fromEntries(['PATH','HOME','TMPDIR','LANG'].filter(key=>process.env[key]!==undefined).map(key=>[key,process.env[key]]));
   const independent=await promisify(execFile)('pnpm',['exec','tsx','src/retention-purge-worker.ts','--once'],{env:{...baseEnv,AP_PROFILE:'mock',AP_DATABASE_URL:source.toString(),
     AP_INQUIRY_MEDIA_DIRECTORY:resolve(root,'media'),AP_RETENTION_JOURNAL_DIRECTORY:resolve(root,'journal'),AP_RETENTION_JOURNAL_SECRET:journalSecret}});

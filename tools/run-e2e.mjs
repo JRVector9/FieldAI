@@ -14,6 +14,7 @@ const suites = {
     ['AP customer support scopes, private photos, and authority expiry', 'agent-customer-support-http.test.mjs'],
     ['AP retention legacy closure evidence migration', 'agent-retention-migration.test.mjs'],
     ['AP native retention policy approval, inquiry holds, and administrator recovery', 'agent-retention-http.test.mjs'],
+    ['AP native widget retention end, explicit new consultation and stale response isolation', 'ap-widget-ended-http.test.mjs'],
   ],
   field: [
     ['Field owner, public site, inquiry, and two booking modes', 'field-owner-flow-http.test.mjs'],

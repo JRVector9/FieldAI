@@ -287,16 +287,24 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
       const transcript = document.getElementById('transcript');
       const provisionalAnswer = document.getElementById('provisional-answer');
       const recoverAiButton = document.getElementById('recover-ai');
+      const newConversationButton = document.getElementById('new-conversation');
+      const endedNotice = document.getElementById('ended-notice');
       let sessionToken, conversationId, pendingTab, pendingTicket, tabReady = false, started = false;
       let pendingAiKey, pendingAiQuestion, pendingAiAnswer = null;
+      let ended = false, lifecycle = 0, newStartBusy = false;
       const newAiKey = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
         .replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
       const refresh = async expectedAnswer => {
         if (!conversationId) return;
+        const generation = lifecycle;
         const response = await fetch('/v1/engagements/' + conversationId, {
           headers: { authorization: 'Bearer ' + sessionToken } });
+        if (generation !== lifecycle) return false;
         if (!response.ok) throw new Error('conversation_unavailable');
         const result = await response.json();
+        if (generation !== lifecycle) return false;
+        // The registered retention-consumers preSerialization hook adds current tombstones to this authenticated GET.
+        if (result.retention?.workPurgedAt) { markEnded(result.id); return false; }
         if (!Array.isArray(result.messages) || (expectedAnswer && !result.messages.some(item =>
           item.actor === 'assistant' && item.body === expectedAnswer)))
           throw new Error('answer_not_in_conversation');
@@ -310,34 +318,90 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
           entry.append(actor, body);
           transcript.append(entry);
         }
+        return true;
       };
       const clearPendingAi = () => {
         pendingAiKey = undefined; pendingAiQuestion = undefined; pendingAiAnswer = null;
         provisionalAnswer.hidden = true; provisionalAnswer.textContent = '';
-        recoverAiButton.hidden = true; askButton.disabled = false;
+        recoverAiButton.hidden = true; recoverAiButton.disabled = false; askButton.disabled = ended || newStartBusy;
       };
+      const markEnded = id => {
+        if (typeof id === 'string') conversationId = id;
+        ended = true; lifecycle += 1;
+        clearPendingAi(); transcript.replaceChildren();
+        question.value = ''; question.disabled = true;
+        if (conditions) { conditions.value = ''; conditions.disabled = true; }
+        continueButton.disabled = true; pendingTicket = undefined;
+        endedNotice.hidden = false; newConversationButton.hidden = false;
+        status.textContent = '보존 기간이 종료되었습니다. 새 상담을 시작하면 별도 대화로 저장됩니다.';
+      };
+      const adoptNewConversation = id => {
+        lifecycle += 1; ended = false; newStartBusy = false; conversationId = id;
+        pendingTab = undefined; pendingTicket = undefined; tabReady = false;
+        clearPendingAi(); transcript.replaceChildren(); question.value = ''; question.disabled = false;
+        if (conditions) { conditions.value = ''; conditions.disabled = false; }
+        endedNotice.hidden = true; newConversationButton.hidden = true; continueButton.disabled = false;
+        status.textContent = '새 상담을 시작했습니다. 이전 대화와 별도로 저장됩니다.';
+      };
+      newConversationButton.addEventListener('click', async () => {
+        if (!ended || !sessionToken || !conversationId || newStartBusy) return;
+        const previous = conversationId, generation = lifecycle;
+        newStartBusy = true; newConversationButton.disabled = true;
+        const recoverNewConversation = async () => {
+          const response = await fetch('/v1/public/deployments/' + deploymentId + '/engagements/current', {
+            headers: { authorization: 'Bearer ' + sessionToken } });
+          if (!response.ok) return false;
+          const current = (await response.json()).engagement;
+          if (generation !== lifecycle || !current || typeof current.id !== 'string'
+              || current.id === previous || current.retention?.workPurgedAt || current.state !== 'ai_assisting') return false;
+          adoptNewConversation(current.id); return true;
+        };
+        try {
+          const response = await fetch('/v1/embed/engagements', { method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: 'Bearer ' + sessionToken },
+            body: JSON.stringify({ startNewFrom: previous }) });
+          const result = await response.json().catch(() => ({}));
+          if (generation !== lifecycle) return;
+          if (response.status === 201 && typeof result.id === 'string' && result.id !== previous)
+            adoptNewConversation(result.id);
+          else if (!await recoverNewConversation())
+            status.textContent = '새 상담을 시작하지 못했습니다. 기존 종료 상태를 유지합니다. 다시 시도하거나 직접 문의 링크를 이용해 주세요.';
+        } catch {
+          try {
+            if (!await recoverNewConversation()) status.textContent = '새 상담 결과를 확인하지 못했습니다. 다시 시도하면 현재 대화를 확인합니다.';
+          } catch { status.textContent = '새 상담 결과를 읽지 못했습니다. 연결을 확인하고 다시 시도해 주세요.'; }
+        } finally {
+          newConversationButton.disabled = false;
+          if (generation === lifecycle) newStartBusy = false;
+        }
+      });
       const recoverPendingAi = async () => {
-        if (!conversationId || !pendingAiKey) return;
+        if (ended || !conversationId || !pendingAiKey) return;
+        const generation = lifecycle;
         recoverAiButton.disabled = true;
         try {
           const response = await fetch('/v1/engagements/' + conversationId + '/messages/recover', {
             headers: { authorization: 'Bearer ' + sessionToken, 'idempotency-key': pendingAiKey } });
+          if (generation !== lifecycle) return;
+          if (response.status === 410) { markEnded(conversationId); return; }
           if (!response.ok) {
             status.textContent = 'AI 질문 결과를 확인하지 못했습니다. 같은 질문으로 재시도하거나 AP 상담 화면에서 사람에게 문의해 주세요.';
             return;
           }
           const run = await response.json();
+          if (generation !== lifecycle) return;
           if (run.state === 'completed') {
             if (typeof run.answer !== 'string') throw new Error('invalid_recovery_answer');
             pendingAiAnswer = run.answer;
             provisionalAnswer.textContent = pendingAiAnswer || '확인된 답변이 없습니다. 사람에게 문의해 주세요.';
             provisionalAnswer.hidden = false;
             try {
-              await refresh(pendingAiAnswer);
+              if (!await refresh(pendingAiAnswer)) return;
               if (question.value.trim() === run.question) question.value = '';
               clearPendingAi();
               status.textContent = 'AI 대화를 복구했습니다. 이어서 질문하거나 AP에서 사람에게 문의할 수 있습니다.';
             } catch {
+              if (generation !== lifecycle) return;
               status.textContent = 'AI 답변은 저장됐지만 대화 목록을 읽지 못했습니다. 상태를 다시 확인해 주세요.';
             }
           } else if (run.state === 'failed' || run.state === 'rejected') {
@@ -347,16 +411,18 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
             status.textContent = 'AI 실행 결과 미상입니다. 같은 요청 상태를 다시 확인하거나 AP 상담 화면에서 사람에게 문의해 주세요. 새 AI 질문은 기다려야 합니다.';
           } else status.textContent = 'AI 질문을 처리 중입니다. 잠시 뒤 상태를 다시 확인하거나 사람에게 문의해 주세요.';
         } catch {
-          status.textContent = 'AI 질문 결과를 확인하지 못했습니다. 네트워크 확인 뒤 같은 실행 상태를 다시 조회해 주세요.';
+          if (generation === lifecycle) status.textContent = 'AI 질문 결과를 확인하지 못했습니다. 네트워크 확인 뒤 같은 실행 상태를 다시 조회해 주세요.';
         } finally {
-          recoverAiButton.disabled = false;
-          if (pendingAiKey) recoverAiButton.hidden = false;
-          askButton.disabled = pendingAiAnswer !== null;
+          if (generation === lifecycle) {
+            recoverAiButton.disabled = false;
+            if (pendingAiKey) recoverAiButton.hidden = false;
+            askButton.disabled = ended || newStartBusy || pendingAiAnswer !== null;
+          }
         }
       };
       recoverAiButton.addEventListener('click', recoverPendingAi);
       const deliver = () => {
-        if (pendingTab && pendingTicket && tabReady) {
+        if (!ended && !newStartBusy && pendingTab && pendingTicket && tabReady) {
           pendingTab.postMessage({ type: 'fieldai:handoff-ticket', ticket: pendingTicket }, location.origin);
           pendingTicket = undefined;
         }
@@ -382,7 +448,8 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
       document.getElementById('ai-form').addEventListener('submit', async event => {
         event.preventDefault();
         const asked = question.value.trim();
-        if (!sessionToken || !asked || pendingAiAnswer !== null) return;
+        if (ended || newStartBusy || !sessionToken || !asked || pendingAiAnswer !== null) return;
+        const generation = lifecycle;
         if (pendingAiKey && pendingAiQuestion !== asked) {
           status.textContent = '이전 AI 질문 결과가 미확인입니다. 같은 질문을 다시 입력하거나 요청 상태를 먼저 확인해 주세요.';
           return;
@@ -393,30 +460,38 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
           if (!conversationId) {
             const started = await fetch('/v1/embed/engagements', { method: 'POST',
               headers: { authorization: 'Bearer ' + sessionToken } });
+            const result = await started.json().catch(() => ({}));
+            if (generation !== lifecycle) return;
+            if (started.status === 410 && result.error === 'retention_work_ended') { markEnded(result.id); return; }
             if (!started.ok) {
               status.textContent = started.status === 503
                 ? 'AI 공급사가 연결되지 않았습니다. AP 상담 화면에서 사람에게 문의할 수 있습니다.'
                 : '상담을 시작하지 못했습니다. AP 상담 화면에서 사람에게 문의할 수 있습니다.';
               return;
             }
-            conversationId = (await started.json()).id;
+            conversationId = result.id;
           }
           if (!pendingAiKey) { pendingAiKey = newAiKey(); pendingAiQuestion = asked; }
           const response = await fetch('/v1/engagements/' + conversationId + '/messages', { method: 'POST',
             headers: { 'content-type': 'application/json', authorization: 'Bearer ' + sessionToken,
               'idempotency-key': pendingAiKey },
             body: JSON.stringify({ question: asked }) });
+          if (generation !== lifecycle) return;
           if (response.status === 202) {
             recoverAiButton.hidden = false;
             const ongoing = await response.json().catch(() => ({}));
+            if (generation !== lifecycle) return;
             status.textContent = ongoing.state === 'result_unknown'
               ? 'AI 실행 결과 미상입니다. 같은 요청 상태를 다시 확인하거나 AP 상담 화면에서 사람에게 문의해 주세요. 새 AI 질문은 기다려야 합니다.'
               : 'AI 질문을 처리 중입니다. 같은 실행 상태를 다시 확인하거나 AP에서 사람에게 문의해 주세요.';
             return;
           }
           const result = await response.json().catch(() => ({}));
+          if (generation !== lifecycle) return;
           if (!response.ok) {
-            if (response.status === 429) {
+            if (response.status === 410 && result.error === 'retention_work_ended') {
+              markEnded(conversationId);
+            } else if (response.status === 429) {
               clearPendingAi();
               status.textContent = 'AI 질문 한도에 도달했습니다. 사람에게 문의할 수 있습니다.';
             } else if (response.status === 503 && ['blocked_integration', 'budget_not_configured',
@@ -438,23 +513,26 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
           provisionalAnswer.textContent = pendingAiAnswer || '확인된 답변이 없습니다. 사람에게 문의해 주세요.';
           provisionalAnswer.hidden = false;
           try {
-            await refresh(pendingAiAnswer);
+            if (!await refresh(pendingAiAnswer)) return;
             if (question.value.trim() === asked) question.value = '';
             clearPendingAi();
             status.textContent = result.handoffRecommended
               ? '확인이 필요한 내용입니다. AP 상담 화면에서 사람에게 문의해 주세요.'
               : 'AI 답변을 확인했습니다.';
           } catch {
+            if (generation !== lifecycle) return;
             recoverAiButton.hidden = false;
             status.textContent = 'AI 답변은 저장됐지만 대화 목록을 읽지 못했습니다. 상태를 다시 확인해 주세요.';
           }
         } catch {
+          if (generation !== lifecycle) return;
           if (pendingAiKey) await recoverPendingAi();
           else status.textContent = '답변을 받지 못했습니다. AP 상담 화면에서 사람에게 문의할 수 있습니다.';
-        } finally { askButton.disabled = pendingAiAnswer !== null; }
+        } finally { if (generation === lifecycle) askButton.disabled = ended || newStartBusy || pendingAiAnswer !== null; }
       });
       continueButton.addEventListener('click', async () => {
-        if (!sessionToken) return;
+        if (ended || newStartBusy || !sessionToken) return;
+        const generation = lifecycle;
         const tab = window.open('/embed/v1/wait', 'ap-handoff-' + crypto.randomUUID());
         if (!tab) { status.textContent = '새 창이 차단됐습니다. 직접 문의 링크를 이용해 주세요.'; return; }
         pendingTab = tab; pendingTicket = undefined; tabReady = false; continueButton.disabled = true;
@@ -462,17 +540,20 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
           const response = await fetch('/v1/embed/handoffs', { method: 'POST',
             headers: { 'content-type': 'application/json', authorization: 'Bearer ' + sessionToken },
             body: JSON.stringify({ question: question.value, conditions: conditions?.value || '' }) });
+          const result = await response.json().catch(() => ({}));
+          if (generation !== lifecycle) { tab.close(); return; }
+          if (response.status === 410 && result.error === 'retention_work_ended') { markEnded(result.id); tab.close(); return; }
           if (!response.ok) throw new Error('handoff_failed');
-          pendingTicket = (await response.json()).ticket;
+          pendingTicket = result.ticket;
           deliver();
           status.textContent = 'AP 상담 창으로 이동하고 있습니다.';
-        } catch { tab.close(); status.textContent = '연결에 실패했습니다. 직접 문의 링크를 이용해 주세요.'; continueButton.disabled = false; }
+        } catch { tab.close(); if (generation === lifecycle && !ended) { status.textContent = '연결에 실패했습니다. 직접 문의 링크를 이용해 주세요.'; continueButton.disabled = false; } }
       });`;
     return reply.headers({
       'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
       'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff',
       'Content-Security-Policy': `default-src 'none'; frame-ancestors ${row.allowed_origin}; style-src 'nonce-${scriptNonce}'; script-src 'nonce-${scriptNonce}'; connect-src 'self'`,
-    }).send(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>사업자 상담</title><style nonce="${scriptNonce}">body{font:16px system-ui,sans-serif;color:#17243a;background:#fff;padding:16px}p{line-height:1.5}textarea{box-sizing:border-box;width:100%;min-height:72px;font:inherit}button,a{display:inline-block;margin-top:12px;padding:12px 16px;border-radius:8px;font:inherit}button{border:0;background:#174f9f;color:#fff}a{color:#174f9f}button:disabled{opacity:.6}ol{padding-left:24px}li{margin:12px 0}li p{margin:4px 0}.ad-card{border:1px solid #dce5ef;border-radius:14px;padding:16px;background:#f8fbff}.ad-label{display:inline-block;padding:4px 8px;border-radius:6px;background:#eaf1f9;color:#235887;font-size:14px;font-weight:700}.ad-card h2{font-size:21px;margin:12px 0 8px}.ad-card p{margin:8px 0;white-space:pre-wrap}</style></head><body><main>${placement ? `<article class="ad-card"><span class="ad-label">광고</span><p>${safeName}</p><h2>${safeService}</h2><p>${safeDescription}</p></article>` : `<strong>${safeName}</strong>`}<p>승인된 사업 정보에 대해 AI에 질문할 수 있습니다. 연락처와 개인 정보는 입력하지 마세요. 사람 문의는 AP 상담 화면에서 접수합니다.</p><ol id="transcript" aria-label="AI 상담 대화"></ol><p id="provisional-answer" hidden></p><form id="ai-form"><label for="question">질문 또는 문의 초안 (연락처 제외)</label><textarea id="question" maxlength="1000" required></textarea><button id="ask" type="submit" disabled>AI에 질문</button></form><button id="recover-ai" type="button" hidden>AI 요청 상태 다시 확인</button>${placement ? '<label for="conditions">희망 조건 (선택, 연락처 제외)</label><textarea id="conditions" maxlength="1000"></textarea>' : ''}<p id="status" role="status">상담 연결 중</p><button id="continue" type="button" disabled>AP에서 이어가기</button><br><a href="${link}" target="_blank" rel="noopener noreferrer">직접 문의 링크</a></main><script nonce="${scriptNonce}">${script}</script></body></html>`);
+    }).send(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>사업자 상담</title><style nonce="${scriptNonce}">body{font:16px system-ui,sans-serif;color:#17243a;background:#fff;padding:16px}p{line-height:1.5}textarea{box-sizing:border-box;width:100%;min-height:72px;font:inherit}button,a{display:inline-block;margin-top:12px;padding:12px 16px;border-radius:8px;font:inherit}button{border:0;background:#174f9f;color:#fff}[hidden]{display:none!important}a{color:#174f9f}button:disabled{opacity:.6}ol{padding-left:24px}li{margin:12px 0}li p{margin:4px 0}.ad-card{border:1px solid #dce5ef;border-radius:14px;padding:16px;background:#f8fbff}.ad-label{display:inline-block;padding:4px 8px;border-radius:6px;background:#eaf1f9;color:#235887;font-size:14px;font-weight:700}.ad-card h2{font-size:21px;margin:12px 0 8px}.ad-card p{margin:8px 0;white-space:pre-wrap}</style></head><body><main>${placement ? `<article class="ad-card"><span class="ad-label">광고</span><p>${safeName}</p><h2>${safeService}</h2><p>${safeDescription}</p></article>` : `<strong>${safeName}</strong>`}<p>승인된 사업 정보에 대해 AI에 질문할 수 있습니다. 연락처와 개인 정보는 입력하지 마세요. 사람 문의는 AP 상담 화면에서 접수합니다.</p><ol id="transcript" aria-label="AI 상담 대화"></ol><p id="provisional-answer" hidden></p><form id="ai-form"><label for="question">질문 또는 문의 초안 (연락처 제외)</label><textarea id="question" maxlength="1000" required></textarea><button id="ask" type="submit" disabled>AI에 질문</button></form><button id="recover-ai" type="button" hidden>AI 요청 상태 다시 확인</button>${placement ? '<label for="conditions">희망 조건 (선택, 연락처 제외)</label><textarea id="conditions" maxlength="1000"></textarea>' : ''}<p id="ended-notice" hidden>이 대화는 보존 기간이 종료되어 추가 질문을 받지 않습니다. 이전 접수 확인키와 기록은 새 상담과 구분됩니다.</p><button id="new-conversation" type="button" hidden>새 상담 시작</button><p id="status" role="status">상담 연결 중</p><button id="continue" type="button" disabled>AP에서 이어가기</button><br><a href="${link}" target="_blank" rel="noopener noreferrer">직접 문의 링크</a></main><script nonce="${scriptNonce}">${script}</script></body></html>`);
   });
 
   app.post('/v1/embed/sessions', async (request, reply) => {
@@ -521,20 +602,32 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
       || typeof conditions !== 'string' || conditions.length > 1000
       || /(?:\+?\d[\d\s-]{8,}\d|[\w.+-]+@[\w.-]+\.[a-z]{2,})/i.test(question + '\n' + conditions))
       return reply.code(400).send({ error: 'question_contains_contact_or_invalid' });
-    const session = await runtime.pool.query<{ id: string; public_id: string; conversation_id: string | null }>(
-      `select s.id, d.public_id,s.conversation_id from ap.embed_sessions s join ap.deployments d on d.id = s.deployment_id
-       where s.token_hash = $1 and s.expires_at > now() and s.transferred_at is null
-         and d.status = 'active'`, [hash(bearer)]);
-    const current = session.rows[0];
-    const deployment = current && await active(current.public_id, undefined, !!current.conversation_id);
-    if (!current || !deployment || (deployment.kind !== 'owned_embed' && deployment.kind !== 'placement_embed'))
-      return reply.code(401).send({ error: 'invalid_embed_session' });
-    const ticket = secret();
-    await runtime.pool.query(
-      `insert into ap.embed_handoffs(ticket_hash, session_id, question, conditions, expires_at)
-       values ($1, $2, $3, $4, now() + interval '1 minute')`,
-      [hash(ticket), current.id, question.trim(), conditions.trim()]);
-    return reply.header('Cache-Control', 'no-store').code(201).send({ ticket });
+    const client = await runtime.pool.connect();
+    try {
+      await client.query('begin');
+      const session = await client.query<{ id: string; public_id: string; conversation_id: string | null }>(
+        `select s.id,d.public_id,s.conversation_id from ap.embed_sessions s join ap.deployments d on d.id=s.deployment_id
+         where s.token_hash=$1 and s.expires_at>now() and s.transferred_at is null and d.status='active'
+         for update of s`, [hash(bearer)]);
+      const current = session.rows[0];
+      const retained = current?.conversation_id ? (await client.query<{ retention_work_purged_at: Date | null }>(
+        'select retention_work_purged_at from ap.inquiries where id=$1 for share', [current.conversation_id])).rows[0] : null;
+      if (retained?.retention_work_purged_at) {
+        await client.query('rollback'); return reply.code(410).send({ error: 'retention_work_ended',
+          id: current!.conversation_id, retention: { workPurgedAt: retained.retention_work_purged_at.toISOString() } });
+      }
+      const deployment = current && await active(current.public_id, undefined, !!current.conversation_id, client);
+      if (!current || !deployment || (deployment.kind !== 'owned_embed' && deployment.kind !== 'placement_embed')) {
+        await client.query('rollback'); return reply.code(401).send({ error: 'invalid_embed_session' });
+      }
+      const ticket = secret();
+      await client.query(
+        `insert into ap.embed_handoffs(ticket_hash, session_id, question, conditions, expires_at)
+         values ($1,$2,$3,$4,now()+interval '1 minute')`,
+        [hash(ticket), current.id, question.trim(), conditions.trim()]);
+      await client.query('commit');
+      return reply.header('Cache-Control', 'no-store').code(201).send({ ticket });
+    } catch (error) { await client.query('rollback'); throw error; } finally { client.release(); }
   });
   app.get('/embed/v1/wait', async (_request, reply) => {
     const nonce = secret();
@@ -572,6 +665,10 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
     const client = await runtime.pool.connect();
     try {
       await client.query('begin');
+      // Restart, handoff creation and consumption all lock the session before a ticket.
+      await client.query(
+        `select id from ap.embed_sessions where id=(select session_id from ap.embed_handoffs where ticket_hash=$1) for update`,
+        [hash(ticket)]);
       const consumed = await client.query<{ deployment_id: string; public_id: string; question: string; conditions: string;
         session_id: string; placement_id: string | null; organization_id: string; agent_release_id: string;
         conversation_id: string | null;
