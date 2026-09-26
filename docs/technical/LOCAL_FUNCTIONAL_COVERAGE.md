@@ -8,6 +8,14 @@
 - **단독 실행 최신 결과:** 재리뷰88411 exit0/P2 1건은 independence launcher가 AP 회수 원장 설정을 누락하던 문제였다. tools/run-independence.mjs own AP 경로/키 allowlist·환경 단위검사 실제 undefined red→2/2, independence-flow의 실제 owner selection revoke/토큰200→401을 추가했다. managed92152 정상 종료130와 Field DB/Valkey compose stop33427 exit0 뒤 pnpm test:independence:agent **53496 exit0**(/tmp/ap-revocation-independent-standalone.log): 실제 Field API/web/DB/Valkey 미배포/포트 부재를 시작·종료 시 확인하고 AP 가입/승인/문의/답변/export/외부 widget/공개 이어가기·native 회수와 owner/guest browser1/1을 확인했다. 모든 AP 기능/실 공급사 완료를 주장하지 않는다. 후속 세 번째 독립 review62519(/tmp/ap-revocation-third-review.log)는 진행 중이며 clean/commit 미확인이다. 양제품 복구 mock36780(/tmp/ap-revocation-standalone-restored-runtime.log)가 현재 기동 중이다. 이전92152/46139/62510/68922는 종료됐고 독립 gate53496의 API/web도 정상 종료됐다.
 
 
+## 최신 A05.WIDGET-END — 코드 fe6a524 / 내부 세부 완료
+
+- TASKS A05.WIDGET-END를[x]로 기록했다. API 종료410/명시 startNewFrom·현재 종료 ID/활성·타ID409·응답 유실 현재 재조회/새 원본1개·과거 ticket410/S→ticket 잠금·기존 receipt 보존, iframe 입력/AI/조건 초기화·generation별 늦은 답변/조회 오류 폐기를 연결했다. DB migration/Field 코드/공개 cross-product 계약 변경 없음.
+- 실제 명령/환경: Node24.18.0·own 격리 PG17, `node /tmp/ap-widget-end-run-focused-db.mjs` **79104 exit0 2/2 fail0/skip0**, /tmp/ap-widget-end-gate-priority-green.log. 이는 변경한 retention-purge/deployments 두 native 파일이며 이전 전체 AP29/29·Field30/30을 재실행하거나 개수를 합산하지 않았다.
+- `node --test tools/spikes/ap-widget-ended-http.test.mjs` **6355 exit0 2/2**, /tmp/ap-widget-end-late-transcript-green.log: 실제 native SDK/iframe Chromium320·실제 정리 worker/원장·실제201 뒤 응답 유실·같은 ID 복구·늦은 answer와 transcript 네트워크 오류 두 경우·가로 넘침/pageerror0. 합성 provider·소유 verifier는 fixture이며 실 공급사/DNS 성공 증빙이 아니다. AP 표준 E2E8번째에 등록만 했으며 전체 E2E는 미실행.
+- API type14816/lint45013 및 마지막 UI build72657/type70754/lint29628 exit0. CLI gpt-6-sol/high 최종 repair16296 exit0/추가 P1/P2 없음; 리뷰 자체 테스트는 미실행. managed48590 최종 양제품 build/API ready·양웹200. 원 시안 agent/chat을 실제320으로 열어 prototype/native 캡처를 직접 확인했으며 사용자 전체 시각/동선 인수는 미검수다.
+- native widget 완료는 전체 C03/A05/QA160/출시 완료가 아니다. 다음 미완료는 유료 billing A07.F09.PAID이며 실 인증/공급사·최종 사용자 테스트/운영 gate는 후속이다. 완료를 기억 부재로 재개하지 않는다.
+
 ## 최신 AP native 회수·복원 — a5aee2b 이후 작업트리
 
 최신 리뷰 보완: 첫 독립93162 exit0 P2 3건(잠금40P01·UUID index·전체 원장 재읽기)을 migration68/증분 서명·DB proof cache로 보완했다. watcher 방식은 실제 same-size 변조 즉시200을 놓친98265/99027 red로 폐기했고, 현재 요청마다 전체 파일 inode/크기/mtime/ctime을 직접 대조한다. 변경 파일만 HMAC/hash를 다시 검사하며 checkpoint/restore는 항상 전체 재검증한다. 최종 AP74855 29/29 fail0/skip0 exit0, type/lint57153 exit0, metadata 읽기500entry/10회18.744ms 대 이전361.09ms(전체 서비스 latency 검수 아님). 최신 mock92152 양제품 build/migrate/ready와 retention worker ready. 재리뷰88411 실행 중으로 clean/commit은 아직 미확인이다. 전체 목표/C03는 in_progress다.

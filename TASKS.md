@@ -6,6 +6,8 @@
 
 근거 스냅샷: AP 실제29/29(`/tmp/ap-revocation-metadata-cache-db.log`)·Field30/30(`/tmp/ap-revocation-runner-field.log`), Node24.18.0/제품별 mock PG17, AP 단독 실행 실제통과(`/tmp/ap-revocation-independent-standalone.log`). 코드가 포함된 최신 commit **eab1d30** 및 이전 원본 구현 commit, `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`의 범위별 실제 결과. 아래 해당 native 테스트 파일과 현재 구현도 직접 대조했다. 이번 체크 정리는 테스트 재실행이 아니다.
 
+최신 추가 완료: **A05.WIDGET-END / fe6a524**. 현재 내부 세부32개[x]/남은7개[ ]이며 상세 실제 검수/현재 환경은 인계 상단을 따른다. 부모 전체 출시 완료로 해석하지 않는다.
+
 ### 완료된 내부 세부 작업 — 같은 범위를 다시 구현하지 않는다
 
 - [x] **C02.LOCAL** 제품별 API/웹·PG17/migration/키·Field Valkey·managed mock 실행/정상 종료·DB 볼륨 유지. `tools/mock-run.mjs`, 양제품 health 실제ready. 운영 ACL/CI는 별도다.
@@ -14,7 +16,7 @@
 - [x] **A04.ADAPTER** AP 모델 adapter·승인 근거 검증·테스트와 고객 업무 분리·예산/실패 차단. `openai.ts/agents.ts`, `agents.db.test.ts`. 실 LLM 결과 검수는 별도다.
 - [x] **A02.INTAKE** AP 익명 상담→명시 동의 사람 접수·확인키/후속 대화·재시도 원장·비공개 사진. `customer-consultations/inquiries/inquiry-attachments.db.test.ts`. 실 발송은 별도다.
 - [x] **A03.REPLY** AP 사업자 문의 목록/답변·내부 메모 분리·mode·종결/재개·스팸 발송 중단. `inquiries/inquiry-spam.db.test.ts`, 스팸06e7314.
-- [x] **A05.INSTALL** AP 상담 링크·QR·정확한 own origin 소유 확인·기본 floating/inline SDK·1회 first-party handoff. `deployments.db.test.ts`, QR f9e1c96·AP 실제 단독 브라우저1/1. **iframe 보존 종료/새 상담은 A05.WIDGET-END로 별도 미완료다.**
+- [x] **A05.INSTALL** AP 상담 링크·QR·정확한 own origin 소유 확인·기본 floating/inline SDK·1회 first-party handoff. `deployments.db.test.ts`, QR f9e1c96·AP 실제 단독 브라우저1/1. iframe 보존 종료/새 상담의 별도 완료 범위는 A05.WIDGET-END(fe6a524)를 따른다.
 - [x] **F01.CATALOG** Field 사업정보/업종·서비스·가격·FAQ·두 예약 방식 상속/명시 선택·서버 초안/승인본. `business-core.db.test.ts`, 업종4ca067d.
 - [x] **F02.EDITOR / F04.BASIC-PUBLISH** Field3배치·다중 소개 페이지·편집/자동저장/충돌·사진/alt·명시 공개·과거 디자인을 초안으로 복구. `sites.db.test.ts/site-media.store.test.ts`, 이전 native UI evidence. **자체 domain은 F04.CUSTOM-DOMAIN으로 별도 미완료다.**
 - [x] **F03.ADAPTER** Field 자체 제작 LLM adapter·PG job/Valkey/별도 worker·제안 검수 후 초안 적용·충돌/사진 보존. `site-generation.db.test.ts` 및 worker/queue 기존 evidence. 실 LLM 공급사 검수는 별도다.
@@ -40,9 +42,10 @@
 - [x] **C02.AP-STANDALONE-REVOKE** 실제 Field API/web/DB/Valkey·비밀값 부재에서 AP signup/승인/직접 문의·답변/export/외부widget·selection회수200→401/owner guest브라우저. eab1d30, `pnpm test:independence:agent`53496 exit0. 모든 공급사/전체AP gate 완료는 아니다.
 - [x] **R00.INVENTORY-1** TASKS46개/QA160 기능군·현재 코드/계약을 대조한 잔여1차목록. **b1ef381**, `DEVELOPMENT_REMAINING_AUDIT.md`. 전체QA 실행/최종 누락 확정은 아니다.
 
+- [x] **A05.WIDGET-END** native iframe 보존 종료/입력 잠금·명시 새 상담·현재 종료 ID 확인·유실 응답 재조회·늦은 AI/조회 오류 폐기·과거 전달 ticket 만료/직렬화·기존 receipt 분리. 코드 **fe6a524**, 집중 native DB79104 exit0 2/2·Chromium320 native6355 exit0 2/2·API type14816/lint45013·최종 repair review16296 exit0/추가 P1/P2 없음. managed48590 최신 양제품build/ready·웹200 반영. 전체 시안 인수/실 공급사/전체 E2E·QA/G는 별도다.
+
 ### 남은 작업 — 여기서 다음 세부 ID를 선택한다
 
-- [ ] **A05.WIDGET-END** native iframe 보존 종료/입력·stale AI 결과 폐기/명시 새 상담/기존 receipt 분리. 다음 구현 대상.
 - [ ] **A07.F09.PAID** 제품별 유료 plan/동의·거래/주기·갱신/해지/유예/환불·entitlement/UI/PG adapter.
 - [ ] **A06.F08.DELIVERY** Kakao/SMS/webpush 발송·콜백/unknown 조회·중복/역순/한도·설정/실패확정 fallback.
 - [ ] **F04.CUSTOM-DOMAIN** 자체domain 등록/검증/연결/TLS/대표URL 상태·기본주소 유지/새AP origin.
@@ -56,7 +59,7 @@
 ---
 
 
-**개발 잔여 대조(2026-09-26):** docs/technical/DEVELOPMENT_REMAINING_AUDIT.md에 TASKS46개 인벤토리/확인된 내부6묶음을 기록했다. native widget 종료, 유료 billing, 메시지 발송, 자체 domain, public client write 계약, OAuth/복원 수명 보완이 남는다. 외부 key 부재와 내부 미구현을 구분하며 전체/C03 in_progress. 코드 단계는 eab1d30 커밋/당시 status clean. 이 문서 대조는 테스트 실행/전체160 QA 통과가 아니다. 다음은 widget→billing/발송/주소/public client 구현이다.
+**최신 완료/잔여(2026-09-26):** 내부 세부32개 [x]/잔여7개 [ ]. A05.WIDGET-END는 코드 fe6a524·집중 DB2/2/브라우저2/2·최종 review/managed48590 반영으로 완료 체크했다. 1차 내부6묶음 중 widget이 끝났으며 나머지 유료 billing·메시지 발송·자체 domain·public write 계약·OAuth/복원 수명5묶음과 외부/최종 인수가 남는다. TASKS 원본46개/QA160/전체C03 완료라는 뜻이 아니다. 다음 세부 ID는 A07.F09.PAID다. 아래 누적 이전 진행중/미완료 문구는 당시 이력이며 상단 체크 원장이 우선한다.
 
 
 **2026-09-26 AP native 회수 단계 최종:** AP74855 29/29·Field52785 30/30·전체 type/lint57153·최신 lint37774 exit0. 실제 Field 미배포 AP independence53496 exit0(own native 회수/token200→401 포함). 세 번째 review62519 P2 package cwd 문제는 AP 생성/기존 journal 경로 절대화·key/파일 보존으로 보완, actual 설정2/2와 마지막 repair review87113 exit0/추가P1/P2 없음. 리뷰 내부 test는 read-only EPERM 미실행이며 root 설정2/2와 구분한다. mock36780 양 API/웹·retention worker ready/health 실제 확인. 전체/C03/A08는 in_progress. 다음은 전체 문서 기능 대조로 남은 범위 확정이며 위젯/일반 OAuth lifecycle·legacy/Field key·유료 구독 원장/외부 발송 adapter·최종 사용자 화면/실 공급사·운영 QA/G는 완료되지 않았다. 자세한 현재 사실은 docs/CODEX_HANDOFF.md 상단 참조. 아래 누적 기록의 이전 handle/미완료는 당시 이력이다.

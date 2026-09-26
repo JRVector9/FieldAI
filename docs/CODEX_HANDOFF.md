@@ -12,12 +12,42 @@
 
 - 사용자가 **“완료된 작업은 체크하고, 에이전트가 잊고 같은 작업을 다시 하지 않도록 반드시 지켜”**라고 명시했다.
 - 작업 재개 전에 `TASKS.md` 상단 **완료 체크 — 재작업 방지 기준**을 먼저 읽는다. 이 목록이 완료 세부 ID의 기준 원장이다. 상세 규칙은 `AGENTS.md`6.1. 기억 부재/compaction으로 완료 항목을 재구현·검수 반복하지 않는다.
-- 이번에 현재 로그/AP29·Field30/commit/source와 기존 범위별 evidence를 확인해 로컬 완료 세부31개를 `[x]`, 남은8개 항목을 `[ ]`로 기록했다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다. phase plan에서 이미 구현된 AP native 회수5개가 아직 `[ ]`였던 것을 실제 결과에 맞춰 `[x]`로 수정했다.
+- 최초 체크 정리는 현재 로그/AP29·Field30/commit/source와 기존 evidence로 로컬 완료31개[x]/잔여8개[ ]를 기록했다. 이후 A05.WIDGET-END(fe6a524) 완료로 현재는32개[x]/잔여7개[ ]이며 아래 최신 단계와 TASKS 원장이 우선한다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다. phase plan에서 이미 구현된 AP native 회수5개가 아직 `[ ]`였던 것을 실제 결과에 맞춰 `[x]`로 수정했다.
 - 신규 오류/요구변경/현재상태 불일치가 확인됐을 때만 같은 완료 ID에 재개 사유·증거·추가 범위를 먼저 기록한다. 이전 완료 근거/commit은 삭제하지 않는다.
 - 변경 파일: AGENTS.md·TASKS.md·PHASE_2_EXECUTION_PLAN·DEVELOPMENT_REMAINING_AUDIT·이 인계. 문서 변경으로 서비스 테스트 재실행 없음, diff 체크만 수행. 현재 mock36780 양 ready/생존을 실제 재확인했다.
-- 원래 진행 목표는 계속 전체 v3/C03 로컬 기능이며 **다음은 A05.WIDGET-END**다. 아직 UI/API 코드는 변경하지 않았다. native renderer deployments.ts와 현재 create/get/startNew API부터 확인해 시안을 직접 열고 범위/QA/명령 기록 후 구현한다.
+- 원래 진행 목표는 계속 전체 v3/C03 로컬 기능이다. 체크 정리 당시 다음은 A05.WIDGET-END였으며 현재 진행 상태는 바로 아래 별도 세부 작업 기록을 따른다.
 
-## 현재 작업 — 개발 종료 범위 대조 (2026-09-26)
+## 현재 인수인계 — A05.WIDGET-END 완료 (2026-09-26)
+
+- **현재 목표/상태:** 전체 v3/C03 로컬 기능을 끝까지 구현해 사용할 환경을 유지한다. 전체 목표는 active/in_progress. 이번 미완료 세부 A05.WIDGET-END만 implemented/로컬 verified로 끝냈고 **TASKS 내부 세부32개[x]/잔여7개[ ]**다. 완료된 설치·보존·회수 범위를 재구현하지 않았다. 다음 ID는 A07.F09.PAID다.
+- **코드 commit/변경:** **fe6a524**, customer-consultations.ts·deployments.ts·retention-purge.db.test.ts·tools/run-e2e.mjs·새 ap-widget-ended-http.test.mjs/ap-widget-ended-browser.py. 완료 체크/phase/coverage/audit/이 인계와 옵시디언 위젯 일지도 갱신한다. 공개 cross-product 계약·schema/migration·Field 코드 변경 없음. AP PRD2.5~2.7/보안5.5·QA17/97~102/119 로컬 범위다.
+- **완료/결정:** 인증한 현재 종료 conversation에만 startNewFrom을 허용한다. 활성·타ID/재시도409, implicit 종료410은 provider/예산 gate보다 먼저 확인한다. 새 익명 원본/이벤트는 명시 동작만 생성하고 응답 유실은 GET current로 같은 ID를 채택한다. 사람 문의는 모델 미설정에도 유지하고 실제 AI 성공은 모의하지 않는다. 이전 질문/조건/AI/미소비 ticket는 혼용하지 않는다. reset TX에서 과거 ticket 만료, 생성/소비 session→ticket 잠금으로 직렬화. iframe에는 receipt를 수집하지 않고 기존 first-party 확인키 접근을 유지한다.
+- **실제 DB/검수:** Node24.18.0/own 격리 PG17, `node /tmp/ap-widget-end-run-focused-db.mjs` **79104 exit0 2/2 fail0/skip0**, /tmp/ap-widget-end-gate-priority-green.log. 종료/read metadata/POST/recover410·provider undefined/limit0에도 종료410·활성/타ID409·과거ticket410/전달 없음·새원본1개·retry 중복0을 확인했다. 마지막 API type14816/lint45013 exit0. 마지막 UI build72657/type70754/lint29628 exit0. 기존 AP전체29/Field30을 재실행하거나 개수를 합산하지 않았다.
+- **실제 UI/시안:** `node --test tools/spikes/ap-widget-ended-http.test.mjs` **6355 exit0 2/2**, /tmp/ap-widget-end-late-transcript-green.log. native SDK/iframe·실제 정리 worker/own 원장·실제commit201 뒤 응답 유실→동일ID 복구·늦은 answer/transcript 네트워크 오류 폐기·입력/대화 초기화·무overflow/pageerror0. 합성 model/ownership verifier는 테스트 fixture다. 원 시안 `agent/chat`을 실제 Chromium320에서 열어 /tmp/ap-widget-end-prototype-320.png와 native /tmp/ap-widget-ended-320.png를 직접 확인했다. AP 표준 E2E8번째에 등록만 했으며 전체 E2E/사용자 최종 시각·동선 인수는 미실행.
+- **실패/복구:** implicit 종료200 red68909, 새 버튼 hidden CSS red81212, 과거ticket가 새 대화를 전달200 red67915, bearer 종료질문401 red64853, 늦은 transcript 실패의 stale 안내 red57265, 미설정 provider가 종료보다503 red58484를 실제 재현해 수정했다. 최초 browser31726은 fixture origin/responseId 오류이며 기능 red로 주장하지 않는다. 모델/외부 key 미설정은 blocked 상태 그대로다. 새 상담 실패는 이전 종료 상태를 유지해 재조회/재시도한다. 기존 종료 원본/확인키/usage·보존 원장은 롤백으로 되살리지 않는다. 운영 자료 삭제·실 발송/청구/배포 없음, own 합성 UUID DB/파일만 정리했다.
+- **최종 리뷰:** ak의 이전 gpt-5.6 미지원 기록에 따라 gpt-6-sol/high 사용. 처음 `codex review -m`은 현재 CLI 옵션 오류exit2로 검토 미실행, 이후 -c model/review_model로 실행했다. review18114 exit0/P1 1·P2 1: GET retention 부재(P1/raw confidence 미출력)는 등록된 retention-consumers preSerialization과 실제 bearer GET assertion으로 반증하여 기존 공통 처리를 재작성하지 않았다. bearer401(P2)은 실제 수정. 두 번째46246 exit0/P2 1인 gate 우선순위도 실제 red→green. 최종 독립 repair **16296 exit0**, /tmp/ap-widget-end-gate-repair-review.log: **No concrete remaining P1/P2 findings**. 리뷰 자체 수정/테스트 미실행이며 root의 위 실제 검사와 구분한다. raw confidence는 모든 리뷰에서 미출력이다.
+- **현재 로컬 환경:** 기존36780 정상 종료130, 중간32741 정상 종료exit0 후 **48590** /tmp/ap-widget-end-final-managed-runtime.log가 최신 양제품build/ready/worker·양웹200으로 실행 중이다. AP http://localhost:3001/workspace / Field http://localhost:3002/workspace. Field 제작 모델 미설정 blocked_integration 유지. 이전 handle을 재사용하거나 timeout만으로 중복 기동하지 않는다.
+- **남음:** A07.F09.PAID→발송/자체domain/publicwrite→OAuth lifecycle 순서. 자체 native billing 원장/adapter부터 문서와 시안에 맞춰 구현한다. 실 인증/MFA/LLM/PG/발송/DNS/TLS·사용자 최종 시각/동선/실기기·전체 적용 QA/G/운영 RPO/RTO는 별도 미완료다. 이번 내부 완료는 전체 C03/A05/QA160/출시 완료가 아니다.
+
+### 다음 에이전트의 정확한 명령 — 완료 재작업 금지
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+sed -n '1,62p' TASKS.md
+git status --short
+git log -2 --oneline
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+rg -n '구독|유료|갱신|해지|유예|환불|결제' docs/01_AGENT_PLATFORM_PRD.md docs/02_FIELD_PRD.md docs/04_SECURITY_OPERATIONS_RELEASE.md docs/06_REQUIREMENTS_QA.md
+rg --files apps/agent-api/src apps/field-api/src apps/agent-api/migrations apps/field-api/migrations | rg 'subscription|billing|trial'
+sed -n '1,180p' apps/agent-api/src/subscription.ts
+sed -n '1,180p' apps/field-api/src/subscription.ts
+rg -n '구독|요금|결제|환불' reference/field_ui_prototype_v3.html
+```
+
+A07.F09.PAID 범위/관련QA/검수 명령을 phase plan에 먼저 적고 구현한다. 위젯/보존/회수를 다시 구현하지 않는다. 현재48590 환경은 유지하고 새 코드 반영이 필요한 경우에만 실제 생존 확인/정상 종료 후 `pnpm mock:run`을 실행한다. 아래 누적 기록의 완료 전/이전 runtime 문구는 당시 이력이다.
+
+## 이력 — 개발 종료 범위 대조 (2026-09-26, 위젯 완료 전)
 
 - **목표/결과:** 전체 v3 기능/사용 가능한 로컬 환경 구축은 계속 active/in_progress다. 사용자의 종료 시점 질문에 대해 TASKS46개·QA160의 기능군과 양제품 PRD/계약을 코드와 대조한 `docs/technical/DEVELOPMENT_REMAINING_AUDIT.md`를 작성했다. 46개 완료/160개 통과나 최종 누락 확정을 주장하지 않는다.
 - **확인된 내부 누락6묶음:** native widget 종료/새 상담, 양제품 유료 billing 원장/상태·PG adapter, 양제품 메시지 발송/콜백/unknown·SMS fallback/webpush, Field 자체 domain 상태/등록/검증, PRD 최소 public POST connection/deployment·scope 계약 차이, 일반 OAuth lifecycle/legacy/Field route key 종료. 앞의 “3작업군”은 작은3개 Task/시간/완료율이 아니다. 단순 외부 key 연결만으로2~4가 완성되는 현재 상태도 아니다.

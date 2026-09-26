@@ -5,17 +5,17 @@
 
 ## 기준과 한계
 
-- 기준 commit: **eab1d30** (AP native revocation journal/격리 restore), Node24.18.0·로컬 mock PostgreSQL17·Field Valkey8.1.10.
+- 1차 대조 기준 commit: **eab1d30** (AP native revocation journal/격리 restore). 후속 A05.WIDGET-END 완료 코드 **fe6a524**와 실제 범위 검수는 아래1행/coverage/인계에 갱신했다. Node24.18.0·로컬 mock PostgreSQL17·Field Valkey8.1.10.
 - 사용자 우선순위: 문서 기능을 끝까지 구현해 사용할 로컬 환경을 유지한다. 실 인증/MFA·공급사 연결은 후속, 최종 화면/동선 테스트는 사용자가 한다. 화면 작업 때는 `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`을 직접 열어 비교한다.
 - v3 architecture B01~B12/21결정, 양제품 PRD, 연동4.11~4.12, 보안5.3~5.7, TASKS 원본 **46개 Task**, QA01~160을 기능군에 대조했다. 아래는 코드/계약을 읽은 인벤토리이며 **46개 완료/160개 통과라는 뜻이 아니다**.
 - 이번 대조에서 추가 서비스 테스트/전체 시안 비교는 실행하지 않았다. native 테스트 최신 실제 증빙은 인계 상단: AP29/29·Field30/30·AP 단독 native revoke200→401/브라우저1/1. UI/API 파일이 있다는 이유로 Done 판정하지 않는다.
 - 정확한 시간/완료율은 아직 산정하지 않는다. 내부 구현 누락과 공급사 key 부재를 구분하지 않은 기존 “3작업군” 설명을 작은 Task3개로 해석하면 안 된다. 추가 역할/상태별 누락은 계속 이 목록에 기록한다.
 
-## 현재 확인된 내부 개발 6묶음
+## 1차 내부 개발 6묶음 중 위젯 완료 — 현재 남은 5묶음
 
 | 순서 | 작업 / 관련 ID·QA | 현재 직접 확인한 근거 | 종료 기준 |
 |---|---|---|---|
-| 1 | 외부 위젯 상담 완료 / C03,A05,D03·QA17/97~102/119 | native `agent-api/src/deployments.ts` renderer는 보존 종료 metadata를 반영하지 않고 410 뒤 generic 오류/기존 질문 버튼으로 남는다. first-party `agent-public.tsx`의 종료/새 상담은 별도로 구현돼 있다. | 기존 원본 종료 안내·stale 입력/AI 결과 폐기·명시적 새 대화 ID·이전 receipt 혼용 방지, 시안 해당 화면 비교. |
+| 1 | [x] A05.WIDGET-END 내부 완료 / C03,A05,D03·QA17/97~102/119 | 코드 fe6a524: native iframe 종료410/안내·입력/AI/조건 폐기·현재 종료 ID를 확인한 새 상담·유실 응답 재조회·과거 ticket 만료/직렬화. 집중 own PG17 DB2/2·native Chromium320 2/2·최종 repair review 추가 P1/P2 없음·managed48590 반영. | 내부 범위는 완료다. 기존 first-party receipt를 유지하며 전체 역할 시안/사용자 최종 인수·실 외부 설치/기기·전체 QA/G는 별도로 남는다. |
 | 2 | 독립 유료 구독 내부 기능 / A07,F09·QA43~46/126/146 | 양제품 `src/subscription.ts`는 mock trial 시작/종료 예약만, checkout은 항상503 `paid_checkout_not_configured`. 관련 migrations는 trial이며 native billing_period/invoice/refund/plan 원장이 없다. | 제품별 승인 plan·동의·주기/거래 유일 원장·결과 미상 조회·갱신/해지/유예/환불·entitlement/UI, 실제 PG 성공을 모의 처리하지 않는 adapter. |
 | 3 | 알림 발송 내부 기능 / A06,F08·QA35~40/148/149 | in_app 이벤트/읽음·outbox·단일 알림 주체/route generation은 있다. 고객 알림은 `blocked_integration`, 실제 kakao/SMS/webpush 발송·콜백/재조회 worker는 없다. | 제품별 provider adapter·시도/상태/usage 원장·중복/역순/unknown 조회·실패 확정 때만 SMS fallback·푸시 등록/해제/설정/UI. 공급사 미설정이면 blocked 유지. |
 | 4 | Field 자체 주소 설정 / F04·PRD3.4·QA13~15 | `sites.ts` 기본 slug/base domain 공개와 tenant host 검사만. 자체 domain 등록/검증/DNS/TLS 상태를 저장·변경하는 native API/DB가 없다. | 도메인 요청/소유 확인/연결 상태와 오류·대표URL, 실패 시 기본 주소 유지, AP 새 origin은 공개 계약 검증. live DNS/TLS 공급사는 후속 연결. |
@@ -41,13 +41,13 @@
 | C00 | 구현 이력 | C00_INVENTORY.md | 외부 운영 자산 부재·QA115 N/A는 미확인 |
 | C01 | 부분 | contracts/*-integrator-v1.openapi.json | PRD 최소 목록과 public POST connection/deployment 차이, 구버전 정책 |
 | C02 | 로컬 부분 검수 | tools/mock-run.mjs·run-independence.mjs | 운영 DB/큐/키/파일 ACL·CI/배포 |
-| C03 | 부분 | 양제품 web/src·reference HTML | widget 종료 흐름·모든 역할/최종 시안 대조 |
+| C03 | 부분 | 양제품 web/src·reference HTML·위젯 fe6a524 | 모든 역할/최종 시안 대조·미완료 기능 UI |
 | A00 | 로컬 구현 | agent-api/src/auth.ts·business.ts | 이메일 소유·카카오·계정 연결·번호 변경·MFA 후속 |
 | A01 | 내부 구현 | business.ts·agents.ts·field-sources.ts | 전체 QA/실 모델 근거 검수 |
 | A02 | 내부 구현 | customer-consultations.ts·inquiries.ts·inquiry-attachments.ts | 전체 고객/실기기 인수 |
 | A03 | 내부 구현 | inquiries.ts·customer-consultations.ts | 외부 알림 발송은 별도 미구현 |
 | A04 | adapter 구현/외부 미연결 | openai.ts·agents.ts | 실 LLM·모델/예산 설정과 공급사 검수 |
-| A05 | 부분 | deployments.ts·agent-public.tsx | iframe 종료/새 상담 UI, 실 외부 설치/기기 |
+| A05 | 내부 위젯 보완 완료 | deployments.ts·agent-public.tsx·fe6a524 | 실 외부 설치/기기·사용자 최종 인수 |
 | A06 | 이벤트 원장만 구현 | inquiries.ts·field-actions.ts | 공급사 발송/콜백/unknown 조회·SMS fallback·webpush |
 | A07 | 체험만 구현 | subscription.ts·000046_trial_subscriptions.sql | 유료 plan/주기/거래/갱신/환불/크레딧·PG adapter |
 | A08 | 부분 | admin.ts·customer-support.ts·retention/revocation 모듈 | 일반 OAuth 개별 수명/legacy 증빙·운영 백업/MFA |
@@ -78,7 +78,7 @@
 | D00 | 로컬 구현 | campaigns.ts | 최종 사업자 카드/승인/시안 인수 |
 | D01 | 로컬 구현 | publishers.ts | 실 매체 도메인/권한/파트너 검수 |
 | D02 | 로컬 구현 | placements.ts | 최종 정확 버전 승인/보류 인수 |
-| D03 | 로컬 구현 | deployments.ts·placements.ts | widget 종료 흐름·실 매체/고객 기기 |
+| D03 | 로컬 구현 | deployments.ts·placements.ts·위젯 fe6a524 | 실 매체/고객 기기·사용자 최종 인수 |
 | D04 | 로컬 구현 | distribution-events.ts·distribution-metrics.ts | 전 작은 집단/차분 억제 QA 증빙 |
 | D05 | 미완료/미승인 | run-e2e.mjs distribution | G-D1~2/실 매체 인수·독립 릴리스 |
 | R00 | 대조 진행 | 본 문서·QA01~160 | 160개 모두의 제품/환경/commit별 실행 evidence 미완성 |
