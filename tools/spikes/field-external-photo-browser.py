@@ -1,6 +1,5 @@
 import asyncio
 import os
-import re
 import sys
 from playwright.async_api import async_playwright
 
@@ -13,13 +12,16 @@ async def main(request_id: str):
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         try:
-            response = await page.goto("http://localhost:3002/workspace", wait_until="networkidle")
+            response = await page.goto("http://localhost:3002/workspace?mode=login", wait_until="networkidle")
             assert response and response.status == 200
             await page.get_by_label("이메일").first.fill(os.environ["FIELD_TEST_OWNER_EMAIL"])
             await page.get_by_label("비밀번호").first.fill(os.environ["FIELD_TEST_OWNER_PASSWORD"])
-            await page.get_by_role("button", name="로그인").click()
+            await page.locator('form button[type="submit"]').click()
+            await page.get_by_role("navigation", name="모바일 사업자 메뉴").get_by_role("link", name="문의").click()
+            await page.locator('#owner-inbox .field-owner-inbox-item[data-inbox-key^="ap:"]').filter(
+                has_text="사진 전달 고객"
+            ).click()
             panel = page.locator("#external-inquiries")
-            await panel.get_by_role("button", name=re.compile("사진 전달 고객")).click()
             await panel.get_by_text("Field에 비공개 복사 완료").wait_for()
             photo = panel.get_by_role("img", name="고객이 Field 전달에 동의한 문의 사진")
             await photo.wait_for()

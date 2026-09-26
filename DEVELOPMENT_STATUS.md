@@ -1,5 +1,9 @@
 # 개발 진행 상태 — 2026-09-26
 
+## 최신 C03/A00/F00 로그인 진입·분배 E2E (2026-09-26)
+
+AP 홈 `로그인`이 가입 폼으로 향하는 320px red를 확인해 기존 `/workspace?mode=login` 분기로 연결했다. Field 홈은 이미 정상 분기였다. 새 320px 브라우저 검사는 두 제품 로그인/무료 시작 4개 진입 1/1. 현재 mock의 표준 AP 3/3·Field 3/3 E2E 통과 뒤, 분배 E2E의 오래된 화면 선택자를 실제 모바일 예약·문의/연결 해제·고객 접힘 도구 동선으로 수정해 최종 매체 복구+AP 배치→Field 업무 2/2 exit 0. 새 mock **1896** 양 API/웹 build/ready, AP web typecheck·전체 lint·Python 구문·diff 검사 exit 0. 기준 `reference/field_ui_prototype_v3.html`의 오늘 1440/320px을 실제 열어 캡처하고 Field 실제 업무·서비스·고객 예약 캡처와 다시 대조했다. 사용자 최종 디자인/동선 인수·실 인증 공급사·정식 QA/G는 남아 C03/A00/F00 `in_progress`다.
+
 ## 최신 C03/F-O12 AP 연결 FAQ 선택 화면 (2026-09-26)
 
 Field 승인 FAQ가 AP 별도 출처 검토·owner 승인·선택·지식 공개·재진입까지 이어지는 실제 양방향 연결 브라우저 최종 1/1. 1440px에서 늘어난 시작 카드와 320px 44px 미만 버튼을 확인해 AP 연결 화면의 카드/버튼/FAQ 문답을 정리했다. 버튼 높이 0/1 red→새 mock **27712** 최종 1/1, 320px 가로 넘침·pageerror 0, 1440px 시작 카드 높이<500px. `/tmp/field-ap-faq-{320,1440}.png` 시각 확인, AP web typecheck·전체 lint·diff 검사 exit 0. 기존 FAQ 기능의 제품별 원장/권한은 유지하고 API/DB/계약 변경 없음. 사용자 최종 인수·정식 QA/G·실 공급사는 남아 C03/F-O12 `in_progress`다. 이전 최초 Git 저장은 `3446330`이다.

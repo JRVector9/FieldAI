@@ -11,12 +11,12 @@ async def main():
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         try:
-            response = await page.goto("http://localhost:3002/workspace", wait_until="networkidle")
+            response = await page.goto("http://localhost:3002/workspace?mode=login", wait_until="networkidle")
             assert response and response.status == 200
             await page.get_by_label("이메일").first.fill(os.environ["FIELD_TEST_OWNER_EMAIL"])
             await page.get_by_label("비밀번호").first.fill(os.environ["FIELD_TEST_OWNER_PASSWORD"])
-            await page.get_by_role("button", name="로그인").click()
-            await page.locator("#external-inquiries").get_by_role("heading", name="AP에서 전달된 문의").wait_for()
+            await page.locator('form button[type="submit"]').click()
+            await page.get_by_role("navigation", name="모바일 사업자 메뉴").get_by_role("link", name="오늘").wait_for()
             await page.goto("http://localhost:3002/workspace/integrations", wait_until="domcontentloaded")
             await page.get_by_role("heading", name="연결 기록").wait_for()
             await page.get_by_text("Field 연결 해제됨").first.wait_for()

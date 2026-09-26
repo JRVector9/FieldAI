@@ -222,7 +222,7 @@ async def main(inquiry_id: str):
             await field_page.get_by_role("button", name="Field 예약 확인키 받기").click()
             await field_page.get_by_text("Field 예약 확인키", exact=True).wait_for()
             await field_page.get_by_role("button", name="예약 열기").click()
-            await field_page.get_by_role("heading", name="Field 상담 · 신청 접수").wait_for()
+            await field_page.get_by_text("예약 요청 현황", exact=True).wait_for()
             assert await page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             assert await field_page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             assert not errors, errors

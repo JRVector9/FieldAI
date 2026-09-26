@@ -3,6 +3,16 @@ import os
 from playwright.async_api import async_playwright
 
 
+async def open_external_inquiry(page):
+    await page.get_by_role("navigation", name="모바일 사업자 메뉴").get_by_role("link", name="문의").click()
+    await page.locator('#owner-inbox .field-owner-inbox-item[data-inbox-key^="ap:"]').filter(
+        has_text="HTTP 전달 고객"
+    ).click()
+    panel = page.locator("#external-inquiries")
+    await panel.get_by_role("heading", name="AP에서 전달된 문의").wait_for()
+    return panel
+
+
 async def main():
     stage = os.environ.get("FIELD_AP_REPLY_BROWSER_STAGE", "retry")
     assert stage in {"denied", "retry"}
@@ -12,14 +22,12 @@ async def main():
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         try:
-            response = await page.goto("http://localhost:3002/workspace", wait_until="networkidle")
+            response = await page.goto("http://localhost:3002/workspace?mode=login", wait_until="networkidle")
             assert response and response.status == 200
             await page.get_by_label("이메일").first.fill(os.environ["FIELD_TEST_OWNER_EMAIL"])
             await page.get_by_label("비밀번호").first.fill(os.environ["FIELD_TEST_OWNER_PASSWORD"])
-            await page.get_by_role("button", name="로그인").click()
-            panel = page.locator("#external-inquiries")
-            await panel.get_by_role("heading", name="AP에서 전달된 문의").wait_for()
-            await panel.get_by_role("button", name="HTTP 전달 고객 · Field 상담 · 테스트 · 접수").click()
+            await page.locator('form button[type="submit"]').click()
+            panel = await open_external_inquiry(page)
             await panel.get_by_text("실제 HTTP로 전달하는 서비스 문의").wait_for()
             assert await panel.get_by_text("010-3333-4444", exact=False).count() > 0
             await panel.get_by_text("AP 원본 상태:", exact=False).wait_for()
@@ -31,8 +39,7 @@ async def main():
                 await panel.get_by_role("button", name="AP에 답변 저장").click()
                 await page.get_by_text("AP 답변을 저장하지 못했습니다 (403).", exact=False).wait_for()
                 await page.reload(wait_until="networkidle")
-                panel = page.locator("#external-inquiries")
-                await panel.get_by_role("button", name="HTTP 전달 고객 · Field 상담 · 테스트 · 접수").click()
+                panel = await open_external_inquiry(page)
                 reply = panel.get_by_label("AP 원본 대화에 답변")
                 await page.get_by_text("AP 미전송 초안이 Field에 보관됨").wait_for()
                 assert await reply.input_value() == "320 화면에서 남긴 후속 답변"
@@ -56,8 +63,7 @@ async def main():
                 await page.unroute("**/v1/owner/external-requests/*/replies", lost_field_response)
                 assert await reply.input_value() == ""
                 await page.reload(wait_until="networkidle")
-                panel = page.locator("#external-inquiries")
-                await panel.get_by_role("button", name="HTTP 전달 고객 · Field 상담 · 테스트 · 접수").click()
+                panel = await open_external_inquiry(page)
                 await panel.get_by_text("브라우저 응답 분실 뒤 AP 원본 확인").wait_for()
             assert await page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             assert not errors, errors

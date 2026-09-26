@@ -1,5 +1,7 @@
 # 2단계 화면 검토본 — 2차 검수
 
+2026-09-26 기준 HTML 재확인: `reference/field_ui_prototype_v3.html` 자체를 Chromium에서 `FieldPrototype.seedDemo()`와 `owner/today`로 열어 `/tmp/field-reference-today-{1440,320}.png`를 새로 저장하고, 실제 Field 업무 320px 캡처 `/tmp/field-today-task-320.png`를 확인했다. 같은 날짜의 `/tmp/field-services-{prototype,current-1440}.png`, `/tmp/field-booking-{reference,actual}-1440.png`도 나란히 열어 서비스 카드·고객 예약 폼을 대조했다. 기본 밝은 회색 배경/흰 카드/파란 행동/모바일 하단 메뉴와 예약 2열 폼·요약은 참고 시안의 구조를 따른다. 시안 상단의 통합 역할 전환과 Field의 `외부 배포` 수치는 문서상 독립 제품 경계에 맞춰 운영 화면에 복제하지 않는다. 실제 Field의 네 번째 오늘 카드는 홈페이지 공개 상태이고 AP가 배포를 소유한다. 전체 시각·동선 동일성은 사용자가 최종 확인할 예정이며 현재 C03 완료 주장 근거는 아니다.
+
 2026-09-26 AP 연결·FAQ 화면 대조: 실제 AP/Field 별도 계정의 양방향 연결 뒤 AP owner가 Field 승인 사실을 검토하고 FAQ 1건을 지식 공개본에 선택하는 흐름을 320px 브라우저로 확인했다. 1440px 시각 대조에서 시작 카드가 긴 검토 카드 높이까지 늘어나고 모바일 작업 버튼이 44px보다 낮아, 연결 화면을 단일 세로 카드 구조와 44px 버튼으로 정리했다. 최종 `/tmp/field-ap-faq-{320,1440}.png`를 열어 카드/FAQ 문답/줄바꿈을 확인했고 320px 가로 넘침·pageerror는 0이었다. 사용자 시각·동선 최종 인수는 이후다.
 
 2026-09-26 Field FAQ 화면 대조: 시안 v3의 `승인 정보·FAQ`는 Field 사업자가 입력한 문답을 공개 승인 뒤 사이트 고객 질문 섹션과 연결한다. 실제 320px 사업자 작업실에서 FAQ 입력→저장·승인→사이트의 질문 섹션 공개→고객 문답 표시를 확인했고, `/tmp/field-faq-320.png`와 `/tmp/field-faq-1440.png`를 열어 문답 카드·줄바꿈/여백을 확인했다. 320px 문서 가로 넘침 0. 사이트 공개본은 승인 당시의 문답을 유지한다. AP는 별도 Field 출처 검토 후 FAQ를 선택해야 AI 근거가 된다. 사용자 시각·동선과 AP 연결 UI 실브라우저 최종 인수는 이후다.

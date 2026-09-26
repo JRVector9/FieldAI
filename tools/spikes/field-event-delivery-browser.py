@@ -12,11 +12,12 @@ async def main():
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         try:
-            response = await page.goto("http://localhost:3002/workspace", wait_until="networkidle")
+            response = await page.goto("http://localhost:3002/workspace?mode=login", wait_until="networkidle")
             assert response and response.status == 200
             await page.get_by_label("이메일").first.fill(os.environ["FIELD_TEST_OWNER_EMAIL"])
             await page.get_by_label("비밀번호").first.fill(os.environ["FIELD_TEST_OWNER_PASSWORD"])
-            await page.get_by_role("button", name="로그인").click()
+            await page.locator('form button[type="submit"]').click()
+            await page.get_by_role("navigation", name="모바일 사업자 메뉴").get_by_role("link", name="예약").click()
             panel = page.locator("#owner-reservations")
             await panel.get_by_role("button", name=re.compile("HTTP 전달 고객")).first.click()
             status = panel.get_by_role("region", name="AP 연결 예약 사건 상태")

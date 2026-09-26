@@ -1,5 +1,29 @@
 # CODEX 인수인계 — 2026-09-26
 
+## 최신 인수인계 — C03/A00/F00 홈 로그인 진입·분배 E2E (2026-09-26)
+
+- **현재 목표:** `reference/field_ui_prototype_v3.html`와 docs의 AP/Field 독립 제품 기능을 끝까지 구현해 로컬에서 사용할 수 있게 한다. 사용자는 최종 화면 디자인·동선/실 외부 연동을 직접 확인할 예정이다. C03 전체 완료와 출시 승인은 아직 미증명이다. 새 mock PTY **1896**: AP 웹 `http://localhost:3001/workspace`/API `127.0.0.1:4311`, Field 웹 `http://localhost:3002/workspace`/API `127.0.0.1:4321`; 양 API ready·양 웹 HTTP 200을 실제 재확인했다.
+- **완료 작업:** 시안 원본 HTML을 실제 Chromium에서 `FieldPrototype.seedDemo()`→`owner/today`로 열어 1440/320px 캡처 `/tmp/field-reference-today-{1440,320}.png`를 만들었다. 실제 Field 업무 `/tmp/field-today-task-320.png`, 기존 서비스/고객 예약 시안·실제 캡처도 열어 대조했다. AP 홈의 기존 계정 `로그인`이 가입 폼으로 향하는 오류를 고쳤다. Field 홈과 양제품 작업실은 이미 `?mode=login`을 지원했다. 오래된 Field 분배 연결 브라우저 검사들이 시안형 업무 화면으로 이동하지 않고 숨긴 패널/옛 제목을 찾던 문제를 현재 모바일 문의·예약/고객 접힘 도구 동선에 맞췄다.
+- **수정 파일:** `apps/agent-web/src/agent-home.tsx`, 신규 `tools/spikes/auth-entry-browser.py`, `tools/spikes/{field-action-browser,field-connection-revoke-browser,field-connection-revoke-status-browser,field-event-delivery-browser,field-external-inquiry-browser,field-external-photo-browser,field-manual-contact-browser,field-notification-route-browser}.py`, `docs/technical/{PHASE_2_EXECUTION_PLAN.md,PHASE_2_UI_REVIEW.md}`, `TASKS.md`, `DEVELOPMENT_STATUS.md`, 이 파일. 제품별 API·DB/migration·로그인 세션·공개 계약 변경 없음.
+- **핵심 설계 결정:** 시안의 통합 역할 전환은 검토 도구이며 실제 AP/Field 계정·배포는 독립이다. Field의 오늘 네 번째 카드는 AP 소유 외부 배포 수치가 아니라 Field 홈페이지 공개 상태다. 기존 로그인/가입 쿼리 분기를 재사용하고, E2E는 사용자가 누르는 모바일 메뉴와 문의 목록에서 상세를 연다. 기존 예약 확인키/권한/사건 경로는 변경하지 않는다.
+- **실제 검사/환경/커밋:** 로컬 PostgreSQL 17·Field Valkey·mock. 새 320px 홈 진입 검사에서 AP `로그인`→가입 제출 버튼으로 0/1 red, 새 빌드 뒤 AP/Field 로그인·무료 시작 4경로 1/1. 변경 전 같은 mock에서 `pnpm test:e2e:agent` 3/3·`pnpm test:e2e:field` 3/3 exit 0. `pnpm test:e2e:distribution`은 예전 UI 선택자에서 여러 번 non-zero(로그인 중복 이름, 숨긴 예약/문의, 옛 예약 제목, 접힌 고객 도구)였고 최종 재실행은 publisher 1/1+AP 배치→Field 예약/원본 답변/해제/알림 경로 1/1, 합계 2/2 exit 0. 최종 `pnpm mock:run` PTY 1896 양 API/웹 build/ready; `pnpm --filter @fieldai/agent-web typecheck`, `pnpm lint`, 변경 Python `py_compile`, `git diff --check` exit 0. 커밋 해시는 `git log -1 --oneline`으로 확인한다.
+- **실패한 접근:** Field 홈 자체도 `?mode=login`을 무시한다고 처음 의심했으나 코드 조사 결과 이미 반영돼 있었다. AP 홈 링크만 잘못됐다. 분배 E2E는 옛 UI의 모든 섹션 상시 표시와 옛 버튼/제목을 가정해 단계별로 중단됐으며 기능 API 실패로 취급하지 않았다. 실제 메뉴·목록·접힘 상태를 반영한 최종 전체 검사는 통과했다.
+- **남은 작업:** C03의 다른 실제 기능/화면과 시안 대조, 200% 확대·전체 키보드/스크린리더, 사용자 최종 시각·동선 인수, 요구사항별 정식 QA/G. 인증·LLM·알림·결제·DNS/TLS·백업 실 공급사는 `blocked_integration`; 운영 배포·고객 발송·청구 없음. 다음 기능 Task는 파일 범위·요구/QA·명령을 실행 계획 맨 위에 기록한 뒤 진행한다.
+- **다음 에이전트 정확한 명령:**
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short --branch
+git log -2 --oneline
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+sed -n '1,17p' docs/technical/PHASE_2_EXECUTION_PLAN.md
+/tmp/fieldai-ui-venv/bin/python tools/spikes/auth-entry-browser.py
+pnpm test:e2e:distribution
+```
+
+서버가 종료됐으면 먼저 `pnpm mock:run`으로 재시작한다. 긴 분배 검사는 약 2분이며 실 공급사/출시 검수와 다르다.
+
 ## 최신 인수인계 — C03/F-O12 AP 연결 FAQ 선택 화면 (2026-09-26)
 
 - **현재 목표:** `reference/field_ui_prototype_v3.html`과 v3 문서대로 AP/Field 독립 제품의 기능·화면을 로컬에서 사용할 수 있게 한다. 사용자는 최종 시각·동선 테스트와 실 외부 연동을 직접 진행한다. 이 단계는 AP 연결 화면과 FAQ 선택 검수이며 전체 C03/제품 완료는 미증명이다. 로컬 mock PTY **27712**: AP `http://localhost:3001/workspace`, API `127.0.0.1:4311`; Field `http://localhost:3002/workspace`, API `127.0.0.1:4321`. 양 API `/health/ready`와 양 웹 `/workspace`는 각각 ready/HTTP 200을 실제 확인했다.

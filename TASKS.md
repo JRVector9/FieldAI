@@ -1,5 +1,7 @@
 # TASKS — 독립 제품 개발 작업 보드 v3.0
 
+최근 C03/A00/F00 로그인 진입·분배 E2E(2026-09-26): AP 홈 로그인 링크가 가입 폼으로 열리는 실제 320px red를 `?mode=login` 연결로 수정했고 Field의 기존 진입도 함께 확인해 두 제품 로그인/가입 4경로 1/1. 표준 로컬 AP E2E 3/3·Field E2E 3/3, 예전 UI 선택자에 걸린 분배 E2E red들을 실제 모바일 메뉴·문의 목록·고객 관리 도구로 갱신한 최종 분배 2/2 exit 0. 새 mock **1896** 빌드/ready, AP web typecheck·lint·Python 구문 통과. `reference/field_ui_prototype_v3.html`의 오늘 1440/320px을 직접 열어 실제 업무·서비스·예약 화면 캡처와 대조했다. 사용자 시각/동선 인수·실 인증/알림/LLM·정식 QA/G는 남아 C03/A00/F00 `in_progress`다.
+
 최근 C03/F-O12 AP 연결 FAQ 화면(2026-09-26): Field 별도 동의→AP owner source 검토·승인→FAQ 선택·지식 공개·재진입 실제 양방향 브라우저 1/1. 1440px 검토 화면의 늘어난 시작 카드와 320px 44px 미만 버튼 red를 확인해 세로 카드/44px 버튼/FAQ 문답 카드를 정리했다. 새 mock **27712** 양제품 build/ready, 최종 320px 브라우저 1/1·1440/320px 캡처 시각 확인·가로 넘침/pageerror 0, AP web typecheck·전체 lint exit 0. 사용자 최종 인수·정식 QA/G·실 공급사는 남아 C03/F-O12 `in_progress`; API/DB/계약 변경 없음.
 
 최근 C03/F-O12 승인 FAQ 경로(2026-09-26): 시안 v3의 `승인 정보·FAQ`와 Field 사이트 질문 섹션을 실제 카탈로그 원장으로 연결했다. Field 사업자 문답 초안은 명시 승인 뒤에만 고객 사이트 공개본 및 `field.facts.read` preview.8에 포함된다. AP는 별도 source 검토/승인 뒤 FAQ를 선택해 새 AP AI 지식 공개본으로 만들며, 제품별 DB·계정·원본 대화를 공유하지 않는다. 계약 정적 red→1/1, Field 카탈로그/공개 facts 격리 DB red→5/5, AP 소비 격리 DB red→1/1, Field 실제 320px 사업자→사이트·고객 문의/두 예약 전체 브라우저 최종 1/1 두 차례. 320/1440px FAQ 캡처 대조·320px 가로 넘침 0, 양 API build/양 웹 typecheck/lint 통과. mock **47796** 양제품 build/ready. AP 선택 UI 실브라우저·사용자 최종 인수·정식 QA/G·실 공급사는 남아 C03/F-O12 `in_progress`다.

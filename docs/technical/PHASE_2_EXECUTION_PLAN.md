@@ -1,5 +1,12 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/A00/F00 홈 로그인·가입 진입 분리 및 연결 E2E 복구 — 2026-09-26
+
+- 파일 범위: `apps/agent-web/src/agent-home.tsx`, 신규 `tools/spikes/auth-entry-browser.py`, 오래된 Field 연결 브라우저 검사 8개, 계획/현황/화면 검토/인수인계 문서. 계정 API·DB·세션·제품 간 계약은 변경하지 않는다.
+- 요구/QA/게이트: 시안 v3 `플랫폼/사업자 시작`의 기존 계정 로그인과 신규 가입을 구분하고 AP/Field 각각 자기 계정으로 돌아온다(AP-P01/AP-O01, Field F-O01, QA01/02/71/81/119). 로그인 링크는 로그인 폼, 무료 시작은 가입 폼으로 열어야 한다. 양제품 세션은 공유하지 않는다.
+- 검사/구현 순서: AP/Field 홈의 로그인/가입 링크가 여는 실제 폼을 320px Chromium에서 재현해 red를 확인한다. 기존 두 작업실의 `mode=login` 처리를 확인하고 AP 홈 로그인 주소만 바로잡는다. 연결 E2E는 모바일 사업자 메뉴에서 현재 문의/예약 화면으로 이동하도록 하고 접힌 예약 도구를 열어 검증한다. AP web typecheck·lint, 새 mock build/ready, 홈→로그인/가입 및 제품별/분배 E2E를 확인한다. 사용자 디자인·최종 인수와 실 인증 공급사는 이후다.
+- 실행 결과: AP 홈 `로그인`이 `/workspace`의 가입 폼을 여는 320px red를 확인했다. Field 홈은 이미 `?mode=login`으로 정상 분기하고 있었고, AP도 작업실의 쿼리 처리는 이미 있었다. AP 홈 링크만 `/workspace?mode=login`으로 고친 뒤 두 제품의 로그인/가입 4개 진입이 320px 1/1 통과했다. 표준 `pnpm test:e2e:agent` 3/3, `pnpm test:e2e:field` 3/3은 이 변경 전 현재 mock에서 통과했다. `pnpm test:e2e:distribution`은 예전 UI 검사 선택자 때문에 로그인 중복 버튼·숨긴 예약/문의 패널·옛 고객 예약 제목·접힌 예약 도구에서 순차 red가 났다. 사용자가 실제 누르는 모바일 메뉴/문의 목록/관리 도구로 검사 경로를 바꾼 최종 실행은 매체 복구와 AP 배치→Field 예약·사건·답변·해제·알림 경로 2/2 exit 0. 새 mock **1896** 양 API/웹 build/ready, AP web typecheck·전체 lint·변경 Python 구문·diff 검사 exit 0. 실제 이메일·카카오 인증 공급사와 전체 출시 게이트는 미연결/미검수다.
+
 ### C03/F-O12 AP 연결 화면의 Field FAQ 선택 검수 — 2026-09-26
 
 - 파일 범위: `tools/spikes/ap-field-connection-browser.py`, `apps/agent-web/src/{agent-field-connections.tsx,agent-field-connections.css}`, 계획/상태/화면 검토/인수인계 문서. 제품별 DB·세션 경계는 유지한다.
