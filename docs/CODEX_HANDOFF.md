@@ -1,4 +1,4 @@
-# CODEX 인수인계 — 2026-09-26
+# CODEX 인수인계 — 2026-09-27
 
 ## 사용자 지정 기준 시안 — 작업 재개 시 필수 확인
 
@@ -12,10 +12,42 @@
 
 - 사용자가 **“완료된 작업은 체크하고, 에이전트가 잊고 같은 작업을 다시 하지 않도록 반드시 지켜”**라고 명시했다.
 - 작업 재개 전에 `TASKS.md` 상단 **완료 체크 — 재작업 방지 기준**을 먼저 읽는다. 이 목록이 완료 세부 ID의 기준 원장이다. 상세 규칙은 `AGENTS.md`6.1. 기억 부재/compaction으로 완료 항목을 재구현·검수 반복하지 않는다.
-- 최초 체크 정리는 로컬 완료31개[x]/잔여8개[ ]였고 위젯(fe6a524)·PLAN-BASIS(b639a4d)를 거쳐 **CONSENT-BACKEND(1a04815)** 추가로 현재 **34개[x]/7개[ ]**다. TASKS 상단이 최신 세부 원장이며 과거 개수는 당시 이력이다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다.
+- 최초 체크 정리는 로컬 완료31개[x]/잔여8개[ ]였고 위젯(fe6a524)·PLAN-BASIS(b639a4d)를 거쳐 **CONSENT-BACKEND(1a04815)** 추가로 현재 **35개[x]/7개[ ]**다(AUTH-ISSUE ed61b70 추가). TASKS 상단이 최신 세부 원장이며 과거 개수는 당시 이력이다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다.
 - 신규 오류/요구변경/현재상태 불일치가 확인됐을 때만 같은 완료 ID에 재개 사유·증거·추가 범위를 먼저 기록한다. 이전 완료 근거/commit은 삭제하지 않는다.
 - 최초 체크 정리 당시 변경 파일: AGENTS.md·TASKS.md·PHASE_2_EXECUTION_PLAN·DEVELOPMENT_REMAINING_AUDIT·이 인계. 문서 변경으로 서비스 테스트 재실행 없이 diff 체크만 수행했고 당시 mock36780 양 ready/생존을 재확인했다. 지금 runtime/체크는 아래 최신 단계가 우선한다.
 - 원래 진행 목표는 계속 전체 v3/C03 로컬 기능이다. 체크 정리 당시 다음은 A05.WIDGET-END였으며 현재 진행 상태는 바로 아래 별도 세부 작업 기록을 따른다.
+
+## 현재 인수인계 — A07.F09.AUTH-ISSUE 완료 (2026-09-27)
+
+- **목표/Task/상태:** 전체 v3/C03 기능과 사용할 로컬 환경은 active/in_progress. 이번 AUTH-ISSUE/AP와 Field 자체 소유 경로/순차 Coordinator·AP·Field는 아래 내부 범위 implemented/verified. 착수 HEAD ed196d2·clean·완료34/잔여7을 실제 확인했으며 이번 실제 코드/검수/환경/체크는 progress다. PAID 전체/QA160/출시를 완료 처리하지 않는다.
+- **완료/commit/변경 경로:** **ed61b70**, AP71/Field65, 각 src/billing-authorization-execution.ts·billing-authorization-worker.ts·test/billing-authorization.db.test.ts·package start, tools/mock-run.mjs, BILLING_PROVIDER_SETUP와 paid 시작 범위13파일. 완료 체크는 TASKS/paid plan/phase/coverage/audit/이 인계·옵시디언에 같은 checkpoint로 저장한다. TASKS **35개[x]/7개[ ]**. 이미 완료한 가격/동의 API/port·trial/usage/위젯/보존/회수는 재개하지 않았다.
+- **요구/결정/계약:** AP PRD2.8·Field3.8·보안5.4/5.5·QA43~46/113/126/146 인증 실행 부분. 제품별 DB/domain/환경/키/worker를 공유하지 않는다. org→구독/인증 잠금과 첫 시작/120초 lease/claim을 호출 전에 commit, 원래 request_key/authKey/customerKey로만 unknown/프로세스 중단을 재시도한다. 첫시작 timestamp 불변,15일 창 종료1분 전부터 자동발급 중단,stale claim 결과 폐기. 성공 billingKey를 제품/구독 purpose로 암호화하고 일회용 ciphertext를 폐기한다. **authorization completed는 paid/active/청구 성공이 아니다.** 공개 cross-product DTO/scope 변경 없음.
+- **실제 검수:** Node24.18.0/각 own UUID PG17. `node /tmp/ap-billing-authorization-run-db.mjs` **6174**, Field equivalent **91110 exit0 각9/9 fail0/skip0** /tmp/{ap,field}-billing-authorization-final-green.log(새8+관련consent1). 동시/expired lease·같은 request key·stale result·MID/설정 부재·권한/TTL·멱등창·ciphertext 폐기/목적 binding·트랜잭션0을 확인했다. 각 worker CLI --once ready(blocked_integration)/empty exit0. 실제 공급사/계정은 synthetic fixture다. type **31179/46800**, lint **49686**, API build **75046/34309 exit0**. 전체 unit/DB/E2E·새UI/실PG/실기기/QA/G는 미실행. 자기 UUID DB만 정리했다.
+- **실패/접근 수정:** 최초99942/27952 worker 부재 각6 red. tuple 타입92764/22082 exit2→고정 tuple. 기존 동의 검사와 새 worker의 같은 DB 전체건수/대기원장 경합21956/48407 exit1을 기존 기대값 변경 없이 **새 검사 파일의 별도 UUID DB**로 격리했고 최종 병렬9/9다. reviewer P2의 unavailable configuration/expired unstarted auth 보존을95293/67597 blocked≠failed red로 재현→만료/중지 확인을 설정보다 먼저 처리·ciphertext 폐기. 이미 시작한 unknown은 ciphertext/법정 증거를 보존하고 취소로 환원하지 않는다.
+- **독립 검토:** gpt-6-sol/high 최초 **92981 exit0**, P2 1건/raw confidence0.88(설정 없는 만료 원장의 secret 폐기 순서). 수정 재검토 **79675 exit0**, /tmp/billing-authorization-repair-audit-result.md: **No remaining concrete P1/P2 finding**, confidence0.88. 두 검토는 read-only/static·자체 tests/실 호출/수정 없음이며 root 실제9/9와 구분한다.
+- **현재 환경:** 실제73001 생존 확인 뒤 Ctrl+C terminalexit1/ELIFECYCLE을 관찰했으며 정상0이라고 기록하지 않는다. 새 **48041**, /tmp/billing-authorization-managed-runtime.log가 최신 양제품build/migrate/API ready·양웹200·각 인증 worker ready(blocked_integration)·retention ready. own DB의 AP000071/Field000065·claim_token/next_attempt_at 두열을 직접 조회했다. snapshot controller72041 한 개와 자체 인증 workers76804/76841 각각 한 개·동일parent72041. AP http://localhost:3001/workspace / Field http://localhost:3002/workspace. Field 제작 모델 부재 blocked_integration 유지. 이제 적용/커밋71/65는 수정하지 않고 다음 migration은 **AP72/Field66**다.
+- **남은 일/복구/권한:** 다음 **첫 청구/거래 pending·provider 실행·동일 order 조회→갱신/해지/유예→환불/entitlement→실 SDK callback/owner/admin UI**. first approvedAt 기준 기간 확정과 승인 tax policy를 새 migration/명시 경제값에 연결하며 VAT만으로 임의 taxFree 정책을 추정하지 않는다. 최초 기간 끝은 승인시각이 확정되기 전 provisional 성공으로 저장하지 않는다. `/billing/return` 아직 없음; UI에서는 canonical origin/cookie host/selected org를 실제 대조한다. 실 PG/MFA/가격·법무·계약/출시/사용자 시안 인수는 별도. 실제 청구/발송/운영 삭제/배포 없음. 실패 rollback으로 원래 request key/started_at/unknown을 초기화하지 않는다.
+
+| 검토 발견 | level / raw confidence | 반영 |
+|---|---|---|
+| 설정 부재/변경 시 만료된 미시작 auth ciphertext 보존 | P2 / 0.88 | 실제 양제품 red 후 만료 판단 우선/폐기; 최종 각9/9 |
+| 수정 재검토79675 | P1/P2 없음 / 0.88 | static 검토 완료, runtime 결과는 root 검사와 구분 |
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+sed -n '1,62p' TASKS.md
+git status --short
+git log -2 --oneline
+sed -n '1,90p' docs/technical/A07_F09_PAID_EXECUTION_PLAN.md
+cat docs/technical/BILLING_PROVIDER_SETUP.md
+cat apps/agent-api/src/billing-authorization-execution.ts
+cat apps/agent-api/migrations/000069_paid_billing.sql
+cat apps/agent-api/src/billing-period.ts
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+다음 첫 청구 범위/파일/QA/명령을 paid plan에 먼저 기록하고 새 native 실패부터 진행한다. 기존 체크 완료 worker/계산/동의를 재구현하지 않는다. 92981/79675는 terminal이며 다시 poll하지 않는다. 48041은 생존 확인해서 유지하고 source 변경 반영이 필요할 때만 종료/재기동한다. timeout만으로 중복 기동하지 않는다. 이번 backend에 UI 비교를 수행하지 않았으며 상단 시안 경로는 유지한다.
 
 ## 현재 인수인계 — A07.F09.CONSENT-BACKEND 완료 (2026-09-26)
 

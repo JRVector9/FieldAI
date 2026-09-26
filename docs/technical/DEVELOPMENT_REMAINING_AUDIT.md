@@ -16,7 +16,7 @@
 | 순서 | 작업 / 관련 ID·QA | 현재 직접 확인한 근거 | 종료 기준 |
 |---|---|---|---|
 | 1 | [x] A05.WIDGET-END 내부 완료 / C03,A05,D03·QA17/97~102/119 | 코드 fe6a524: native iframe 종료410/안내·입력/AI/조건 폐기·현재 종료 ID를 확인한 새 상담·유실 응답 재조회·과거 ticket 만료/직렬화. 집중 own PG17 DB2/2·native Chromium320 2/2·최종 repair review 추가 P1/P2 없음·managed48590 반영. | 내부 범위는 완료다. 기존 first-party receipt를 유지하며 전체 역할 시안/사용자 최종 인수·실 외부 설치/기기·전체 QA/G는 별도로 남는다. |
-| 2 | 독립 유료 구독 내부 기능 / A07,F09·QA43~46/126/146 | [x] PLAN-BASIS **b639a4d**, [x] CONSENT-BACKEND **1a04815**. own 가격/기간 기반과 owner 명시 동의·SDK nonce/session/org/mode/MID·암호화 authKey pending·미시작 취소/secret 폐기·Toss port. native 최종각3/3·port/config 각2/2·review92527 exit0, managed73001 반영. PG키 부재는 checkout503이며 카드 인증/결제 성공을 모의하지 않는다. | 남은 PAID: 인증 발급/청구/미상/갱신/해지/유예 worker·환불/entitlement·실 SDK callback/owner/admin UI. 완료 backend/가격을 반복하지 않는다. 전체 유료 구독 완료는 아니다. |
+| 2 | 독립 유료 구독 내부 기능 / A07,F09·QA43~46/126/146 | [x] PLAN-BASIS b639a4d·CONSENT-BACKEND 1a04815·AUTH-ISSUE **ed61b70**. own 가격/동의와 인증 발급 worker·원래 request key/첫시작 불변·lease/stale fencing·암호화 credential·15일창/만료 폐기. 최신 DB각9/9·type/lint/build·repair79675 P1/P2 없음(confidence0.88), managed48041 각 worker ready/양웹200. PG 미설정은 blocked 유지. | 첫 청구/동일 주문 대조·갱신/해지/유예 worker·환불/entitlement·실 SDK callback/owner/admin UI. 완료 가격/동의/발급 worker는 반복하지 않는다. 전체 유료 구독/실 PG는 미완료다. |
 | 3 | 알림 발송 내부 기능 / A06,F08·QA35~40/148/149 | in_app 이벤트/읽음·outbox·단일 알림 주체/route generation은 있다. 고객 알림은 `blocked_integration`, 실제 kakao/SMS/webpush 발송·콜백/재조회 worker는 없다. | 제품별 provider adapter·시도/상태/usage 원장·중복/역순/unknown 조회·실패 확정 때만 SMS fallback·푸시 등록/해제/설정/UI. 공급사 미설정이면 blocked 유지. |
 | 4 | Field 자체 주소 설정 / F04·PRD3.4·QA13~15 | `sites.ts` 기본 slug/base domain 공개와 tenant host 검사만. 자체 domain 등록/검증/DNS/TLS 상태를 저장·변경하는 native API/DB가 없다. | 도메인 요청/소유 확인/연결 상태와 오류·대표URL, 실패 시 기본 주소 유지, AP 새 origin은 공개 계약 검증. live DNS/TLS 공급사는 후속 연결. |
 | 5 | 공개 통합자 최소 계약 / C01,A09·PRD2.10/계약4.12·QA129~133/158 | 문서의 POST `/integrations/v1/connections`, POST `/integrations/v1/deployments`와 scope `ap.deployments.manage`가 현재 OpenAPI/auth/native API에 없다. 현재 deployments는 GET, 해제는 연결별 HMAC이고 범용 manage는 문서도 후속이라고 명시한다. | Coordinator 계약 변경→consumer 검사→native 구현, Field도 동일 공개 client 계약 사용, 모든 client/actor/org/scope 검증·버전/오류 호환성. 범용 manage 후속과 현재 필수 계약 차이는 ADR로 명시. |
@@ -107,4 +107,4 @@ curl -fsS http://127.0.0.1:4311/health/ready
 curl -fsS http://127.0.0.1:4321/health/ready
 ```
 
-A05.WIDGET-END(fe6a524)·PLAN-BASIS(b639a4d)·CONSENT-BACKEND(1a04815)는 완료됐으므로 다시 구현하지 않는다. 현재 다음은 A07.F09.PAID의 인증 발급/청구 worker다. SDK/결제 UI 작업 시 owner/billing/admin/billing을 직접 열고 남은 기능 범위와 의미 있는 검수 명령을 먼저 기록한다. 이전 조사 당시의 “원장 없음/체험만/owner 동의 없음”은 현재 구현으로 갱신했다.
+A05.WIDGET-END·PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE(ed61b70)는 완료다. 현재 다음은 PAID의 첫 청구/거래 worker이며 발급을 반복하지 않는다. SDK/결제 UI 단계에는 owner/billing/admin/billing을 직접 열고 범위/검수 명령을 기록한다. 이전 “원장/동의/인증 worker 없음”은 당시 상태이며 최신 체크가 우선한다.

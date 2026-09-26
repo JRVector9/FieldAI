@@ -63,7 +63,7 @@ assert.equal(response.statusCode, 201, response.body);
 - 성공은 암호화 credential 저장 및 authorization completed까지다. 구독 active/paid·거래/기간/첫 청구·갱신/환불/제공량/UI/실 PG는 이번 완료에 포함하지 않는다. 어떤 카드 청구도 이 worker에 연결하지 않는다.
 - 검수: 각 own UUID PG17에서 새 native 파일의 성공/암호화·동시 worker·lease 만료·응답 유실 동일키·MID/키 부재·원래 TTL/취소·재시도창 초과를 먼저 red로 재현한다. 직접 영향을 받는 consent native 검사만 추가 실행하고 변경 API type/lint/build·read-only 독립 CLI 리뷰를 수행한다. live 호출과 전체 QA/시안 인수는 미실행으로 남긴다.
 
-- [ ] 제품별 인증 발급 worker와 동일키 unknown 복구를 구현·검수하고 세부 완료 원장에 체크한다.
+- [x] **A07.F09.AUTH-ISSUE / ed61b70:** 각 자체 발급 worker·동일키 unknown/만료 lease 복구·암호화 credential·stale claim/멱등창/만료 secret 폐기 완료. 최종 DB6174/91110 각9/9·type/lint/build exit0·repair79675 P1/P2 없음/confidence0.88·managed48041 적용. TASKS35개[x]/7개[ ]·phase/coverage/audit/인계도 동시 체크. **첫 청구/거래/갱신/환불/제공량/UI는 남으며 다음은 첫 청구다.**
 
 ### 현재 선택한 미완료 범위 — A07.F09.CONSENT-AUTH (2026-09-26)
 
@@ -75,7 +75,7 @@ assert.equal(response.statusCode, 201, response.body);
 **Files:** 각 src/toss-billing.ts·billing-worker.ts·billing.ts·billing-routes.ts/server.ts; 각 package.json, tools/mock-run.mjs·환경 template; 각 test/toss-billing.adapter.test.ts·paid-billing.db.test.ts.
 
 - [ ] fixture provider를 native runtime에 주입하고 명시 동의→카드 인증 binding→거래 pending→실행 성공/timeout→같은 주문 조회를 먼저 재현한다. 시험 adapter를 runtime fallback으로 넣지 않는다.
-- [ ] Toss client/secret/MID·별도 billing 암호화 key와 product/profile을 검증한다. 서버 키/billingKey/authKey는 응답/로그/원본 export에 노출하지 않는다. 원시 카드 번호를 받지 않는다.
+- [x] **CONSENT-BACKEND(1a04815)**에서 Toss client/secret/MID·별도 billing 암호화 key와 product/profile 검증 완료. 서버 키/billingKey/authKey는 응답/로그/원본 export에 노출하지 않는다. 원시 카드 번호를 받지 않는다.
 - [ ] 같은 요청 ID를 DB에 저장한 뒤 provider 호출하며 crashed processing은 unknown으로 대조한다. 콜백은 결과를 신뢰하지 않고 현재 원격 주문을 조회한다. 금액/통화/MID/order와 저장 요청이 일치해야 paid로 반영한다.
 - [ ] 월 갱신은 기존 동의 금액/원래 기준일로 한 기간만 만든다. unknown이면 새 order를 만들지 않는다. 과거 여러 기간을 몰래 묶어 청구하지 않는다. 실패는 승인된 grace 기간/cleanup mode로 구분한다.
 - [ ] owner 해지는 아직 시작하지 않은 갱신을 중지하고 남은 paid 기간/기존 문의·예약·export를 유지한다. 이미 processing/unknown인 거래는 결과 확인 대상으로 남긴다. 다른 제품 구독을 호출하지 않는다.
@@ -97,7 +97,7 @@ assert.equal(response.statusCode, 201, response.body);
 - [ ] owner/billing의 plan/금액·세금·제공량·별도 동의·현재 paid 기간·다음 갱신·해지·실패 유예·결제/환불 내역/결과 재조회와 admin/billing의 계획 승인·조회/환불 검토를 실제 API에 연결한다.
 - [ ] 공급사/가격 부재는 사유와 비활성 버튼으로 표시한다. mock fixture의 paid를 실 결제로 표시하지 않는다. 응답 유실은 저장한 request ID로 대조하고 재시도로 새 청구를 만들지 않는다.
 - [ ] 변경 범위 DB/unit·type/lint/build, 좁은 native HTTP/320px 흐름, CLI 독립 리뷰를 실행한다. 무관한 완료 기능/전체 Field/AP 회귀를 이유 없이 반복하지 않는다. 사용자 전체 시안/동선/실 공급사 테스트는 미완료로 구분한다.
-- [ ] 실제 살아 있는 managed48590을 확인하고 필요한 시점에만 정상 종료/최신 mock build 반영한다. 완료 하위 범위·코드 commit·실제 검사·미검수/남은 항목을 TASKS/phase/handoff에 체크한다. A07.F09.PAID 전체 체크는1~4 내부 완료 후에만 한다.
+- [ ] 실제 살아 있는 managed48041을 확인하고 필요한 시점에만 정상 종료/최신 mock build 반영한다. 완료 하위 범위·코드 commit·실제 검사·미검수/남은 항목을 TASKS/phase/handoff에 체크한다. A07.F09.PAID 전체 체크는1~4 내부 완료 후에만 한다.
 
 ## 검수 명령
 

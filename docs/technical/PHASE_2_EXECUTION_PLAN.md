@@ -1,6 +1,6 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
-**현재 완료 체크 기준:** TASKS.md 상단이 우선이다. 아래 AP native 회수 단계는 eab1d30에 구현/부분검수/리뷰/커밋 완료했으며 해당5개 체크를 갱신했다. 아래 이전 handle·리뷰대기 문구는 당시 실행이력이고 현재 작업 지시가 아니다. 다음은 A05.WIDGET-END이며 같은 회수3경로를 다시 구현하지 않는다.
+**현재 완료 체크 기준:** TASKS.md 상단 내부35개[x]/7개[ ]가 우선이다. 최신 AUTH-ISSUE(ed61b70)는 완료 체크했으며 다음은 PAID의 첫 청구/거래 worker다. 아래 과거 handle·진행중·다음 작업 문구는 당시 이력이다. 완료한 발급/동의/가격·위젯·회수를 기억 부재로 다시 구현하지 않는다.
 
 
 ### C03/A08 AP 권한 회수·격리 복원 — 2026-09-26 작업 시작
@@ -1946,3 +1946,14 @@ AP와 Field의 독립 웹 앱에서 문서의 역할별 화면·이동 경로·�
 - [x] **A07.F09.CONSENT-BACKEND / 1a04815:** 위 native 동의/인증 **대기 저장 backend/port 범위만** 완료 체크. 최종92527 exit0/No concrete P1/P2 defects·raw confidence 미출력·static 검토/자체 test 미실행. 실제 root 검사는 위 각3/3·unit 각2/2다. TASKS34[x]/7[ ]·paid plan/coverage/audit/인계/일지를 함께 갱신한다.
 - 최신 runtime **73001** /tmp/paid-consent-managed-runtime.log에 양제품 build/migrate/API ready·양웹200·각 retention worker·신규authorizationAPI401을 확인했다. old53591 Ctrl+C 후 terminalexit1/ELIFECYCLE이었으므로 성공0으로 기록하지 않는다. 실제 process snapshot은 controller74228 한 개·own worker75278/75296이며 새 API들이4포트를 정상 bind했다. own managed AP000070/Field000064·binding4열도 실제 조회했다. 기존70/64는 변경하지 않고 다음 schema는71/65다.
 - 다음은 미완료 PAID의 인증 발급/첫 청구/미상/갱신/해지 worker, 환불/제공량과 실제 SDK callback/owner/admin UI다. backend/controller 구현을 반복하지 않는다. SDK success URL은 아직 웹 페이지가 없으므로 사용자 전체 카드 인증 동선을 완료한 것은 아니다. full QA/G/실 PG와 최종 사용자 인수는 여전히 미실행이다.
+
+### A07.F09.AUTH-ISSUE — 내부 완료 checkpoint (2026-09-27)
+
+- [x] **A07.F09.AUTH-ISSUE** 각 제품 자체 인증 발급 worker·호출 전 첫 시작/lease/claim 기록·같은 request key 미상/재시작 복구·늦은 결과 폐기·15일 멱등창 제한·암호화 credential 저장/일회용 ciphertext 폐기. 코드 **ed61b70**, AP71/Field65. own UUID PG17 최종6174/91110 각9/9(새8+관련consent1) fail0/skip0, type31179/46800·lint49686·build75046/34309 exit0. 독립 repair79675 exit0/P1·P2 없음/confidence0.88. managed48041 양제품build/migrate/ready·양웹200·인증 worker blocked_integration ready/실제 프로세스 확인. **구독 활성화·첫 청구·갱신/유예/환불/제공량·SDK/결제 UI·실 PG는 포함하지 않는다.** 인증 발급 worker를 다시 구현하지 않고 첫 청구부터 이어간다.
+- AP71/Field65·각 billing-authorization-execution/worker·새 native 검사·package start·managed runner·PG 설정 문서13파일. org→구독/인증 잠금, 공급사 호출 전 첫 started_at/120초 lease/claim을 commit한다. 미상은 원래 request_key/authKey/customerKey로만 재시도, 15일 창 종료1분 전부터 자동 발급 중지, 이전 claim의 늦은 결과 폐기. 성공 credential은 제품/구독 purpose AES-GCM이며 일회용 ciphertext를 폐기한다. started_at 불변/시작한 원장 pending·blocked·canceled 환원 차단. 설정 부재/변경 때 미시작 blocked, 시작한 요청 unknown. 구독 active/paid나 카드 청구를 수행하지 않는다.
+- 실제 명령: `node /tmp/ap-billing-authorization-run-db.mjs` **6174**, Field equivalent **91110 exit0 각9/9 fail0/skip0** /tmp/{ap,field}-billing-authorization-final-green.log. 새8+직접 관련consent1, 서로 별도 UUID DB에 병렬 실행. worker 자체 CLI --once도 own test DB에서 ready(blocked_integration)/empty exit0. 공급사/계정은 synthetic fixture이며 실 PG/auth/UI evidence가 아니다. 자기 UUID DB만 정리했다. 기존 AP29/Field30·전체QA를 합산하지 않는다.
+- 최종 type `pnpm --filter @fieldai/agent-api typecheck`31179 / Field46800, `pnpm lint`49686, `pnpm build:agent`75046 / Field34309 exit0. 최초 worker 부재99942/27952 각6 red, 테스트 tuple type92764/22082 exit2, 같은 DB 병렬 건수21956/48407 exit1을 수정했다. 기존 완료검사의 기대값을 바꾸지 않고 새 파일에 별도 UUID DB를 마련해 최종 병렬9/9로 확인했다.
+- 독립 review92981 exit0/P2 1건·raw confidence0.88: 설정 부재/변경 때 만료된 미시작 auth ciphertext를 계속 보존. native95293/67597 blocked≠failed red 후 만료 판단을 설정보다 먼저 처리했다. 최종 repair79675 exit0/남은P1·P2 없음/confidence0.88. 두 검토는 read-only/static이며 자체 테스트/실 공급사 호출/수정 없음.
+- runtime: 살아 있는73001 확인 뒤 Ctrl+C terminalexit1/ELIFECYCLE을 관찰했고 정상exit0로 보고하지 않는다. 최신48041 /tmp/billing-authorization-managed-runtime.log 양제품build/migrate/ready·각 인증 worker ready(blocked_integration)·양web200. 실제 own DB AP000071/Field000065/claim_token/next_attempt_at 조회, controller72041 하나와 자체 인증 workers76804/76841 각각 하나/동일parent를 확인했다. 기존71/65는 적용/커밋됐으며 다음 schema는72/66. 실 PG키는 넣지 않았다.
+- TASKS[x]는 인증 발급/미상 복구 내부 범위만이다. 첫 청구·같은 주문 결과 조회·갱신/해지/유예·환불/entitlement·실 SDK callback/owner/admin UI·실 PG/최종 사용자 인수는 남는다. 이미 완료한 가격/동의/발급 worker를 다시 만들지 않는다.
+
