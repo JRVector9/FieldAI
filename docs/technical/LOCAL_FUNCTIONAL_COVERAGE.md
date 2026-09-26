@@ -1,6 +1,20 @@
 # 로컬 기능 검수 현황 — 2026-09-27
 
-**최신 완료 원장:** TASKS 상단 내부36개[x]/7개[ ]를 따른다. WIDGET-END·PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE(00c3e0d)는 완료 범위다. PAID 갱신/해지/유예·환불/제공량·접근제한·SDK/UI와 전체QA/실 공급사/최종 인수는 미완료다. 아래 과거 “남음/다음/runtime”은 당시 이력이며 최신 원장/인계가 우선한다.
+## 최신 내부 완료 checkpoint — ef0dfd3 (2026-09-27)
+
+TASKS 상단 **40개[x]/7개[ ]**를 따른다. 고정 디자인은 reference/field_ui_prototype_v3.html이며 시안에 없는 기능만 `(추가)`로 표시한다. 원본 시안은 수정하지 않았다. 완료 backend/화면을 기억 부재로 다시 만들지 않는다.
+
+- [x] **A07.F09.RENEW-CANCEL-ACCESS.BACKEND** 원래 KST 기준일의 다음 한 기간 갱신·고정grace/worker 부재 시간 제한·owner/current session/org/Origin/UUID 해지·실제 send/cancel 직렬화·알려진 미발송 취소/unknown 대조·paid/grace/cleanup 접근·기존 업무/export 보존. 코드 **ef0dfd3**, AP73/76·Field67, 각 subscription-access/lifecycle/charge/consent/subscription/trial 모듈·native 검사. own UUID PG17 **70963/78883 각29/29 fail0/skip0 exit0**, 직접 관련 최초청구11 포함, 최종 정적65770 P1/P2 없음/0.87. **확정 HTTP거절·provider 환불·AI 제공량·SDK/결제 UI·실PG는 제외**한다.
+- [x] **A06.F08.DELIVERY.INTERNAL** 제품별 encrypted 동의/recipient·durable worker/lease/order/일일 시도 cap·unknown GET 대조/중복 방지·단일 알림 주체·확정 실패/명시 동의 SMS fallback·webpush port/404·410 회수·retention ciphertext 정리·owner 자기설정/철회·기존 이력 보존 UI. 코드 **ef0dfd3**, AP74/78·Field68·notification 모듈/검사·양관리실 component/CSS. own UUID PG17 각13/13+추가 설정/권한 각3/3, adapter 각5/5 exit0; backend7649/0.90·UI39859 재검토 P1/P2 없음. **고객 채널동의 UI/서비스워커·실발송·실기기/최종 화면 인수는 제외**한다.
+- [x] **F04.CUSTOM-DOMAIN.INTERNAL** 조직별 주소 등록/소유 TXT·DNS·trusted TLS/Host/site binding·짧은 증거 TTL·대표주소/기본주소 유지·disconnect/reconnect/release generation·own Host tenant/resource/확인키·AP 정확 origin별 설치/증명 보존·고정 시안 주소 UI. 코드 **ef0dfd3**, Field69·custom-domain 모듈/worker/검사·sites/Host/proof·domain-settings. 정상 createFieldApp own UUID PG17 **40510 11/11**, DNS2/2·Host3/3 exit0; 정적11413 P1/P2 없음/high(숫자없음). **실edge/DNS/TLS 공급사·실AP custom origin·사용자 최종 시각/동선 인수는 제외**한다.
+- [x] **A09.PUBLIC-WRITE.CONTRACT-BACKEND** preview.9 공개 connection/deployment POST·명시 scope/actor/org/선택AI/exactorigin·UUID/If-Match·own client 배포 verify/activate/pause·selection 회수/늦은 활성화 차단·Field 공개 HTTP consumer·새scope 동의 설명. 코드 **ef0dfd3**, AP75/77·auth/integrator/public write·Field client·OpenAPI/계약03·permanent runner/native HTTP 검사. **66327 AP7/7**, Field5/5·실OAuth/HTTP83629 1/1·계약1/1 exit0; 정적66741 P1/P2 없음/0.91. **새Field durable intent BFF/화면·실DNS·최종 인수는 제외**한다.
+
+- 공통 실제 검사: 전체 typecheck50703·lint12958 exit0. managed95896 최신 양API/web build·AP78/Field69 migrate·양ready200/양웹200·새API401·제품별 자체worker ready. logs: /tmp/parallel-fixed-design-managed-runtime.log·runtime-evidence.log·process-evidence.log. root UI 정적6407 P1/P2 없음/0.86. C02.LOCAL 추가 migration guard 실제canary6/6 exit0; 기존 완료 체크 유지.
+- 현재 내부 미완료: 확정HTTP거절/환불/AI제공량/SDK·결제UI, 새Field durable public-write BFF/UI, 고객채널동의UI/서비스워커, 일반OAuth 수명/legacy/route key. 실 공급사/QA/G·최종 사용자 화면/동선/실기기는 별도 미완료다. 전체 부모 Task/출시 완료가 아니다.
+- 실패·복구·정적리뷰와 실행된 테스트의 구분·정확한 다음 명령은 CODEX_HANDOFF.md 최신 통합 항목을 따른다. 적용73~78/67~69는 덮어쓰지 않으며 다음schema번호는 실제상태 확인 후 AP79/Field70부터 예약한다.
+
+
+**이력 — 이전 완료 원장:** TASKS 상단 내부36개[x]/7개[ ]를 따른다. WIDGET-END·PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE(00c3e0d)는 완료 범위다. PAID 갱신/해지/유예·환불/제공량·접근제한·SDK/UI와 전체QA/실 공급사/최종 인수는 미완료다. 아래 과거 “남음/다음/runtime”은 당시 이력이며 최신 원장/인계가 우선한다.
 
 **2026-09-27 완료 표시 점검:** paid/phase 계획에 남아 있던 완료 동의·fixture 실행·최초 거래/동일 주문 복구·설정 부재/기존 runtime 반영 체크를 위 세부 ID/commit과 현재 소스·기존 검수 로그에 맞췄다. 완료와 미완료가 섞인 항목을 분리했고 SDK callback/갱신/해지/환불/제공량/UI는 미완료로 유지했다. 기존 테스트 결과를 확인한 문서 점검이며 서비스 테스트 재실행/새 기능 완료 추가는 없다. TASKS의36[x]/7[ ]를 유지한다.
 

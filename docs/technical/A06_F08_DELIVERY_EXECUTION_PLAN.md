@@ -122,3 +122,9 @@ pnpm --filter @fieldai/field-api exec tsx --test test/notification-delivery.adap
 - 이번 후속 exact commands: `node /tmp/ap-notification-settings-run-db.mjs`, `node /tmp/field-notification-settings-run-db.mjs`, `pnpm --filter @fieldai/agent-web typecheck`, `pnpm --filter @fieldai/field-web typecheck`. 이들은 신규변경이 있을때만 좁게검수하며 기존범위를 기억부재로 다시구현하지 않는다.
 
 - 최종 owner-only/native경합 추가 이후 양API typecheck AP41287/Field66807 terminal exit0. `/tmp/{ap,field}-notification-settings-final-api-type.log`. own문서/승인기존2파일 `git diff --check` exit0. 실제 완료code commit은 root통합 이후기록한다.
+
+## 내부 완료 체크와 중앙 반영 (2026-09-27)
+
+- [x] **A06.F08.DELIVERY.INTERNAL** 제품별 encrypted 동의/recipient·durable worker/lease/order/일일 시도 cap·unknown GET 대조/중복 방지·단일 알림 주체·확정 실패/명시 동의 SMS fallback·webpush port/404·410 회수·retention ciphertext 정리·owner 자기설정/철회·기존 이력 보존 UI. 코드 **ef0dfd3**, AP74/78·Field68·notification 모듈/검사·양관리실 component/CSS. own UUID PG17 각13/13+추가 설정/권한 각3/3, adapter 각5/5 exit0; backend7649/0.90·UI39859 재검토 P1/P2 없음. **고객 채널동의 UI/서비스워커·실발송·실기기/최종 화면 인수는 제외**한다.
+
+managed95896 AP78/Field69·최신 양API/web build/ready·양웹200·새API401·자체workers ready를 root가 실제 확인했다. 현재 TASKS40[x]/7[ ]이며 전체 출시 완료가 아니다. 상세 현재 결과/미실행/다음 명령은 CODEX_HANDOFF.md 상단을 따른다.

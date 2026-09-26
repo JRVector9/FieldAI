@@ -100,6 +100,7 @@
     "docs/technical/evidence/c03-field-workspace-before.png",
     "docs/technical/evidence/c03-field-workspace-after-320.png",
     "docs/technical/evidence/c03-field-workspace-after-640.png",
+    "reference/field_ui_prototype_v3.html",
     "docs/technical/evidence/c03-field-workspace-before.png",
     "docs/technical/evidence/c03-field-workspace-after-320.png",
     "docs/technical/evidence/c03-field-workspace-after-640.png",
@@ -109,6 +110,6 @@
     "docs/00_PRODUCT_ARCHITECTURE.md",
     "docs/03_INTEGRATION_CONTRACT.md"
   ],
-  "master_bytes": 237211,
-  "master_lines": 1594
+  "master_bytes": 326547,
+  "master_lines": 1845
 }

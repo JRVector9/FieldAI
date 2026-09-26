@@ -499,8 +499,9 @@ IntegrationBinding
 | Scope | 허용 | 추가 경계 |
 |---|---|---|
 | ap.agent.read | 선택한 AI의 공개·상태 정보 | AP 전체 조직 조회 불가 |
+| ap.connections.create | 선택한 AP 조직·AI와 외부 사이트의 설치 전용 연결 생성/조회 | 상대 로그인·정보·예약·결제 권한을 만들지 않음 |
 | ap.sources.refresh | 이 연결의 승인 정보 갱신 요청 | 임의 source/지식 공개 금지 |
-| ap.deployments.manage | 검증된 Field 사이트의 배포 생성·중지 | 다른 외부 사이트 배포 삭제 불가 |
+| ap.deployments.manage | Field 및 일반 외부 client의 정확 origin owned_embed 준비·소유 검증·활성·중지 | 현재 client+grant가 만든 설치만 허용, 다른 native/client 배포 조작 불가 |
 | ap.conversations.read | 이 연결·배포 또는 넘겨받은 업무에 관련된 대화 | AI의 다른 사이트 대화를 전부 조회하지 않음 |
 | ap.conversations.reply | 연결 대화에 동의한 사업자의 직접 답변 | 설치용 백그라운드 credential에는 넣지 않음 |
 | ap.events.read | 이 연결 사건·실패 메타데이터 | 매체/타 연결 이벤트 조회 불가 |
@@ -755,11 +756,14 @@ Field source가 해제되면 그 값의 AP 사용을 중단한다. 데이터가 
 | 경로 | 권한/필수 입력 | 결과 |
 |---|---|---|
 | GET /integrations/v1/me | AP 위임 token | 허용 조직·AI·scope·grant 상태 |
-| POST /integrations/v1/connections | 동의 transaction, 선택 AI | binding, 허용 기능 |
+| POST /integrations/v1/connections | ap.connections.create, 현재 owner 위임/선택 조직·AI·client·grant, 외부 조직 UUID·정확 origin | installation_only binding, UUID 멱등 영수증 |
+| GET /integrations/v1/connections/{id} | ap.connections.create, 같은 client·grant·조직·AI | 설치 전용 연결 상태 |
 | GET /integrations/v1/connections/{id}/source | ap.sources.refresh, 현재 연결 | AP 저장/승인 source 버전·검토 상태 |
 | POST /integrations/v1/connections/{id}/source-refreshes | ap.sources.refresh, 예상 source 버전 |202 sync_job |
 | GET /integrations/v1/connections/{id}/source-refreshes/{operationId} | ap.sources.refresh, 현재 연결 | 갱신 작업 상태·결과 |
-| POST /integrations/v1/deployments | ap.deployments.manage, owned origin·agent | 설치 준비; 검증 후 활성 |
+| POST /integrations/v1/deployments | ap.deployments.manage, 자기 public 연결·정확 origin·선택 조직/AI, UUID key | owned_embed pending 준비; 검증/명시 활성은 별도 |
+| GET /integrations/v1/deployments/{id} | ap.deployments.manage, 이 client+grant가 만든 배포 | 상태·소유 proof·revision/ETag |
+| POST /integrations/v1/deployments/{id}/verify / activate / pause | ap.deployments.manage, 자기 배포·UUID key·If-Match | 실제 소유 검증/명시 활성/중지, 충돌409·조건 누락428 |
 | GET /integrations/v1/conversations | read, 연결 제한 cursor | 최소 목록·출처·remote 상태 |
 | GET /integrations/v1/conversations/{id}/messages | read, 범위·cursor | 원본 sequence |
 | POST /integrations/v1/conversations/{id}/replies | user reply, message·revision·idempotency | 원본 message ID·저장/알림 상태 |
@@ -785,6 +789,12 @@ Field source가 해제되면 그 값의 AP 사용을 중단한다. 데이터가 
 | POST /v1/customer-handoffs/exchange | 1회 고엔트로피 코드 | Field 예약 확인키 발급·이전 키 폐기 |
 | POST /integrations/v1/connections/{id}/revoke | 현재 연결별 HMAC 서명; 범용 manage 동의는 후속 | Field 로컬 회수·서명 영수증 |
 | POST /integrations/v1/webhooks/agent | 등록 서명 |202 durable inbox receipt |
+
+AP 설치 쓰기의 고정 계약은 `agent-integrator-v1.openapi.json` **1.0.0-preview.9**다. `ap.connections.create`/`ap.deployments.manage`는 client 등록과 AP owner의 조직·AI 선택, 실제 OAuth 동의/token 모두에 명시해야 한다. `externalOrganizationId`는 caller-side 설치 식별값이며 Field actor/조직 동의나 양방향 정보·예약 binding의 증거가 아니다. Field와 일반 외부 client는 같은 경로·scope·origin proof·권한을 사용한다. 현재 Field HTTP consumer 모듈은 이 계약을 소비하지만 사업자 새 BFF/화면 호출과 새 scope 재동의 사용자 흐름은 후속이다.
+
+신규 public 설치 write는 UUID `Idempotency-Key`를 쓰며 기존 reply/source refresh의 43자 base64url key는 유지한다. 같은 client+grant+operation+target/key와 정규 요청 본문/If-Match는 저장된 결과로200 복구하고, 변경 내용 재사용은409 `retryable:false`다. 배포 변경은 quoted revision `If-Match`를 사용하며 native 상태 변경도 revision을 진행한다. owner 위임/token 만료·회수 또는 현재 membership 상실은401, 누락 scope403, 다른 조직/AI/client/grant/native 배포는 안전한404다. 관리 API는 pending·verifiedAt·active·paused를 구분하고 실제 origin 검증 없이 active를 만들지 않는다. 성공 응답은 `request_id`, `operation_id`, `state`, `retryable`을 포함하고 오류는 `request_id`·rejected 상태·재시도 가능 여부를 구분한다. 저장 뒤 응답 유실/형상 오류는 같은 UUID로 복구하고 새 연결/key로 우회하지 않는다.
+
+배포 생성은 기존 `allowed_deployment_ids`와 대화 읽기 권한을 자동 확장하지 않는다. 새 배포 상담 원문은 AP owner의 별도 선택/재동의가 필요하다. 기존 native selection 회수는 해당 grant의 새 public 설치만 paused로 전환하며 다른 native 배포·예약·구독·원본을 보존한다. 이 설치 전용 경로는 기존 양방향 Field bind나 후속 범용 OAuth revoke를 대신하지 않는다.
 
 write의 Idempotency-Key는 제품+client+connection+operation 범위다. 같은 키·다른 body는409. 변경 객체에는 If-Match/expected_revision을 쓴다.400 입력,401 인증,403 권한,404 안전한 미존재,409 충돌/조건 변경,410 해제/만료,429 사용량,503 일시 장애를 명확히 반환한다. 응답은 `request_id`, `operation_id`(비동기), `state`, `retryable`을 포함하고 개인정보를 오류 문구에 넣지 않는다.
 
@@ -1210,6 +1220,230 @@ Owner / reviewed_at / blocker / next action:
 
 ## TASKS — 독립 제품 개발 작업 보드 v3.0
 
+### 완료 체크 — 재작업 방지 기준 (2026-09-27)
+
+**사용자 필수 지침: 완료된 작업을 체크하고, 후속 에이전트가 같은 작업을 다시 하지 않도록 유지한다.** 이 섹션이 현재 세부 완료의 기준 원장이다. `[x]`는 아래에 적힌 **내부/로컬 범위** 완료이며 전체 부모 Task·운영 출시·사용자 최종 시안 인수 완료가 아니다. 기억 부재로 재작업하지 않는다.
+
+근거 스냅샷: AP 실제29/29(`/tmp/ap-revocation-metadata-cache-db.log`)·Field30/30(`/tmp/ap-revocation-runner-field.log`), Node24.18.0/제품별 mock PG17, AP 단독 실행 실제통과(`/tmp/ap-revocation-independent-standalone.log`). 코드가 포함된 최신 commit **eab1d30** 및 이전 원본 구현 commit, `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`의 범위별 실제 결과. 아래 해당 native 테스트 파일과 현재 구현도 직접 대조했다. 이번 체크 정리는 테스트 재실행이 아니다.
+
+최신 추가 완료: **ef0dfd3**의 RENEW-CANCEL-ACCESS.BACKEND·DELIVERY.INTERNAL·CUSTOM-DOMAIN.INTERNAL·PUBLIC-WRITE.CONTRACT-BACKEND. 현재 내부 세부40개[x]/남은7개[ ]이며 실제 검수/환경은 인계 상단을 따른다. 부모 전체 출시 완료로 해석하지 않는다.
+
+이력 — 완료 표시 정합성 점검(2026-09-27, 당시 verified): 사용자 필수 지침/AGENTS.md6.1에 따라 이 원장·paid/phase 계획·coverage·잔여 audit·인계를 대조했다. 해당7문서만 수정했고 코드/API/schema 변경은 없다. paid 계획의 완료 동의/최초 청구가 미완료와 묶인 체크박스와 phase의 오래된 “owner 동의부터” 지시를 분리하고, 과거 착수 기록은 이력으로 표시했다. 근거는 기존 구현 commit/현재 native 테스트 소스와 보존된 검수 로그다. 실제 Python 문서 대조 exit0: 완료36/미완료7·세부 ID 중복0·완료4개 commit/남은 기능 체크/시안 경로 유지. 문서 diff 확인·`git diff --check` exit0. 서비스 테스트는 재실행하지 않았고 새 기능 완료를 추가한 것은 아니다.
+
+**고정 디자인 지침(2026-09-27):** `reference/field_ui_prototype_v3.html` 디자인 자체는 고정한다. 기존 배치·색·글자·메뉴·반응형 규칙을 재설계하거나 반복 조정하지 않는다. 시안에 없는 새 기능만 기존 디자인 안에 넣고 **`(추가)`**로 표시한다. AGENTS.md6.0 및 인계 상단을 따른다. root가 중앙 UI와 통합을 소유하고 병렬 에이전트는 지정된 backend/Host 연결 범위만 수정한다. 이번 지침 기록은 새 기능 완료 체크가 아니다.
+
+**C02.LOCAL 추가 오류 재개(2026-09-27, 기존[x] 유지):** delivery Field fixture가 peer 제품의 migration 인자를 넘겼고 `tools/run-migrations.mjs`의 무조건 own .env fallback으로 AP mock에73~75가 적용됐다. 실제 own pgmigrations/catalog 조회와 Public Agent 호출부 read-only 조사로 확인했다. 변경 전 추가 범위는 `.env` 읽기 전에 own URL 부재+peer URL 명시를 거부하는 최소 guard와 새 `tools/test/migration-selection.test.mjs`다. 양URL 부재인 정상 managed는 기존 fallback 유지, own UUID 명시도 유지. 양URL 모두 명시된 잘못된 product는 이 guard만으로 구별하지 못한다. 검수는 실제 runner를 child에서 import하고 loadEnvFile canary로 DB에 접근하지 않은 채 잘못된제품이 먼저 거부되는지 확인한다. 기존 환경/DB/서버를 재구현하거나 완료 체크를 되돌리지 않는다.
+
+#### 완료된 내부 세부 작업 — 같은 범위를 다시 구현하지 않는다
+
+- [x] **C02.LOCAL** 제품별 API/웹·PG17/migration/키·Field Valkey·managed mock 실행/정상 종료·DB 볼륨 유지. `tools/mock-run.mjs`, 양제품 health 실제ready. 운영 ACL/CI는 별도다.
+- [x] **A00.LOCAL / F00.LOCAL** 로컬 이메일 계정/별도 세션·조직/membership·다른 조직 접근 차단. `auth.ts/business.ts`, 양제품 business-core DB 검사. 실메일/카카오/MFA는 별도다.
+- [x] **A01.NATIVE** AP 직접 지식 초안 자동저장·미완성 비공개·지역/시간·명시 승인·불변 공개본. `business-core.db.test.ts`, 지역/시간441c60c. 새로운 public client write와 혼동하지 않는다.
+- [x] **A04.ADAPTER** AP 모델 adapter·승인 근거 검증·테스트와 고객 업무 분리·예산/실패 차단. `openai.ts/agents.ts`, `agents.db.test.ts`. 실 LLM 결과 검수는 별도다.
+- [x] **A02.INTAKE** AP 익명 상담→명시 동의 사람 접수·확인키/후속 대화·재시도 원장·비공개 사진. `customer-consultations/inquiries/inquiry-attachments.db.test.ts`. 실 발송은 별도다.
+- [x] **A03.REPLY** AP 사업자 문의 목록/답변·내부 메모 분리·mode·종결/재개·스팸 발송 중단. `inquiries/inquiry-spam.db.test.ts`, 스팸06e7314.
+- [x] **A05.INSTALL** AP 상담 링크·QR·정확한 own origin 소유 확인·기본 floating/inline SDK·1회 first-party handoff. `deployments.db.test.ts`, QR f9e1c96·AP 실제 단독 브라우저1/1. iframe 보존 종료/새 상담의 별도 완료 범위는 A05.WIDGET-END(fe6a524)를 따른다.
+- [x] **F01.CATALOG** Field 사업정보/업종·서비스·가격·FAQ·두 예약 방식 상속/명시 선택·서버 초안/승인본. `business-core.db.test.ts`, 업종4ca067d.
+- [x] **F02.EDITOR / F04.BASIC-PUBLISH** Field3배치·다중 소개 페이지·편집/자동저장/충돌·사진/alt·명시 공개·과거 디자인을 초안으로 복구. `sites.db.test.ts/site-media.store.test.ts`, 이전 native UI evidence. 자체 domain 내부 범위는 F04.CUSTOM-DOMAIN.INTERNAL(ef0dfd3) 완료, 실 공급사/최종 인수는 별도다.
+- [x] **F03.ADAPTER** Field 자체 제작 LLM adapter·PG job/Valkey/별도 worker·제안 검수 후 초안 적용·충돌/사진 보존. `site-generation.db.test.ts` 및 worker/queue 기존 evidence. 실 LLM 공급사 검수는 별도다.
+- [x] **F05.INTAKE / F06.REPLY** Field 비회원 직접 문의·확인키·비공개 사진·후속 질문/사업자 답변/내부 메모·멱등 복구. `business-core/inquiry-attachments.db.test.ts`. 고객 외부 발송은 별도다.
+- [x] **F07.BOOKING** 희망시간/시간표형·공통 자원·사업자 최종확정·수동 일정·제안/변경/취소·점유 충돌/동시성·고객 확인키/메시지. `bookings/reservations.db.test.ts`. 실 알림/최종 사용자 인수는 별도다.
+- [x] **I00.OAUTH-BIND / I01.MAPPING** 양방향 별도 OAuth 조직/actor/AI/scopes 동의·grant/binding·허용 자원 검증. 양제품 integrator/connection DB 검사. 최소 public POST API 추가는 별도다.
+- [x] **I02.SOURCE** 승인 Field facts→AP 검토/승인·revision/hash·가격/중요값 재확인·stale 대체·독립 worker/outbox. 양제품 connection/field-actions DB 검사와 기존 연결 HTTP evidence.
+- [x] **I03.SDK** Field 사이트의 AP 공식 공개 SDK 설치·origin 확인·비연결 직접 문의/예약 fallback 유지. `deployments/sites`·기존 설치 native HTTP evidence. 자체 domain 새 origin은 별도다.
+- [x] **I04.REQUEST / I05.ORIGINAL** 고객이 확인한 ActionRequest·외부 요청 idempotency/unknown 대조·수신 snapshot·Field 예약·안전 handoff, Field에서 AP 원본 API 답변/초안·내부 메모 차단. `field-actions/integrator/ap-connection` DB 검사. AP 원문을 Field DB에 복제하는 작업은 하지 않는다.
+- [x] **I06.NATIVE-REVOKE** 양쪽 owner/selection/서명 회수3경로·로컬 차단·durable 원격 retry/ACK·기존 업무/확인키 유지. `revocation-restore/connection/integrator` DB 검사. 범용 manage·개별 token lifecycle·route key 종료는 별도다.
+- [x] **A06.IN-APP / F08.IN-APP** 처리 업무 outbox/알림 이벤트·읽음·사업자 내부 목록·단일 알림 주체/route generation. 양제품 inquiry/booking/event 검사. 발송 내부 범위는 A06.F08.DELIVERY.INTERNAL(ef0dfd3) 완료, 실발송/고객동의 UI·서비스워커는 별도다.
+- [x] **A07.TRIAL / F09.TRIAL** 제품별 mock14일 체험 동의·한 번 시작/종료 예약·만료 신규업무 제한·기존업무/내보내기 보존. `subscription.db.test.ts` 각2개. **유료 billing은 A07.F09.PAID로 별도 미완료다.**
+- [x] **A07.F09.PLAN-BASIS** 각 제품 가격 버전 요청·다른 운영자 승인·판매 중지·자체 조회·불변 승인 plan/동의 snapshot/기간 저장 기반·기간 중복/겹침 차단·KST 원래 월말 계산. 코드 **b639a4d**, AP69/Field63·각 billing modules/DB/calendar 검사. own PG17 최종38087/75037 각3/3(새1+관련trial2)·calendar95519 각1/1·type60326/21102·lint67398·build63017/63888 exit0, 최종 독립 repair4350 exit0/남은P1/P2 없음. managed53591에 migrate/build 반영·양ready/양웹200. **owner 유료 동의·카드 인증·실행 worker·결제/갱신/해지/유예/환불·제공량/UI·실 PG는 포함하지 않는다.** main A07.F09.PAID와 AUTH.LIVE/MFA는 미완료로 유지한다.
+- [x] **A07.F09.CONSENT-BACKEND** 제품별 owner 명시 가격/약관/자동갱신 동의·한 intent/같은UUID 복구·SDK nonce의 org/actor/session/mode/MID/TTL binding·암호화 authKey pending202·미시작 취소/비밀값 폐기, own Toss issue/charge/order lookup port와 strict 키/profile 설정. 코드 **1a04815**, AP70/Field64·각 consent/context/Toss modules·등록/새 DB/adapter 검사. native84322/76016 각3/3(새1+직접관련trial2), adapter static 각2/2·type25047/75781·lint58419·build62281/60371 exit0. audit92527 exit0/남은P1/P2 없음·raw confidence 미출력. managed73001 최신 양제품build/migrate/ready·양웹200·신규API401·실제 적용/binding조회. **인증 발급/실제 청구 worker·갱신/환불/제공량·SDK 콜백 페이지/결제 UI·실 PG는 제외하며, pending은 카드 인증/결제 성공이 아니다.** 이 backend를 다시 만들지 않고 worker부터 이어간다.
+- [x] **A07.F09.AUTH-ISSUE** 각 제품 자체 인증 발급 worker·호출 전 첫 시작/lease/claim 기록·같은 request key 미상/재시작 복구·늦은 결과 폐기·15일 멱등창 제한·암호화 credential 저장/일회용 ciphertext 폐기. 코드 **ed61b70**, AP71/Field65. own UUID PG17 최종6174/91110 각9/9(새8+관련consent1) fail0/skip0, type31179/46800·lint49686·build75046/34309 exit0. 독립 repair79675 exit0/P1·P2 없음/confidence0.88. managed48041 양제품build/migrate/ready·양웹200·인증 worker blocked_integration ready/실제 프로세스 확인. **구독 활성화·첫 청구·갱신/유예/환불/제공량·SDK/결제 UI·실 PG는 포함하지 않는다.** 인증 발급 worker를 다시 구현하지 않고 첫 청구부터 이어간다.
+- [x] **A07.F09.FIRST-CHARGE** 제품별 최초 period0/거래 원장·명시 면세 승인/동의 snapshot·기존 멱등 기록 복구·호출 전 MID/API-key fingerprint/본문/첫시작·동일 order 조회/replay 제한·stale 결과 폐기·실 승인시각 한 번 확정/기간 겹침 차단·암호화 paymentKey. 코드 **00c3e0d**, AP72/Field66. own UUID PG17 최종97718/12549 각12/12(새11+관련consent1), port4250/90058 각3/3·type34206/18899·lint35728·API build20074/26601 exit0. 독립26858 exit0/P1·P2 없음/confidence0.82. managed65775 최신build/migrate/양ready·양웹200·각 최초청구/인증worker ready(blocked_integration)·실제 프로세스/적용열 확인. **갱신/해지/유예·HTTP 확정거절 분류·환불/제공량/접근제한·SDK/결제UI·실PG는 포함하지 않는다.** 첫 청구를 다시 만들지 않고 갱신/해지/유예로 이어간다.
+- [x] **A08.ADMIN / F09.ADMIN** 각제품 관리자 membership·metadata 조회/감사·타제품 권한 차단·non-mock MFA 미연결 차단. 양제품 `admin.db.test.ts`. 실 MFA/모든 운영 메뉴 인수는 별도다.
+- [x] **A08.MODERATION / F09.MODERATION** 신고 snapshot·다른 운영자 승인 접근·대상 제한·사업자 알림/이의·기존 업무 유지. `moderation.db.test.ts`, AP9f08208/Field5bfe05e.
+- [x] **A08.SUPPORT / F09.SUPPORT** 업무별 사유/기간/scope·다른 운영자 승인·현재 membership/만료/회수 확인·원본/사진 읽기 감사. `customer-support.db.test.ts`, APcb98923/Fielda13510e.
+- [x] **A08.RETENTION-BASIS / F09.RETENTION-BASIS** 자체 보존 정책/다른 승인·실제 종결 clock·dispute hold·기한/미확인/미래 업무·private preview. `retention.db.test.ts`, APe89bf2a/Fieldc87f14f.
+- [x] **A08.RETENTION-EXEC / F09.RETENTION-EXEC** 승인 정리 job/별도 worker·파일/원문 제거·tombstone/late writer 차단·ID/usage/확인키 유지·reader 잠금/소비자 종료. `retention-purge.db.test.ts`, APa5aee2b/Fielde28229f. 운영 자료를 임의 삭제하지 않는다.
+- [x] **A08.RETENTION-RESTORE / F09.RETENTION-RESTORE** 제품별 signed journal·immutable receipts·별도 최신 checkpoint·실제 PG17 dump/별도 restore 삭제 재적용·반복0·누락/변조 거절. `retention-purge.db.test.ts`, APa5aee2b/Fieldd717532. 운영 RPO/RTO·proof 동시rollback은 별도다.
+- [x] **A08.REVOCATION-RESTORE / F09.REVOCATION-RESTORE** native3경로 별도signed 회수 원장·token ciphertext 즉시폐기·재활성화/늦은발급 차단·실제PG17 dump/restore200→401·checkpoint CLI·원본/확인키 유지. AP**eab1d30**/Field**c809c28**, 각 `revocation-restore.db.test.ts`. **일반 provider token/legacy/route key 후속과 구분한다.**
+- [x] **D00.CARD / D01.PUBLISHER / D02.PLACEMENT** 카드 초안/승인본/보류·매체 조직/정확 domain/slot·정확 카드 버전 배치 승인/중지. `campaigns/publishers/placements.db.test.ts`. 실 매체 계약/최종 시안은 별도다.
+- [x] **D03.HANDOFF / D04.METRICS** 매체외부카드→AP 안전접수·출처변조 차단·이벤트·PII 제외/작은집단 집계/export. `distribution.db.test.ts` 및 기존 native metrics evidence. 신규 widget 종료만 별도 추가한다.
+- [x] **A08.F09.EXPORT / A07.F09.USAGE** 제품별 원본/사진 아카이브·usage 원장/실적 분리·다른 조직 거절. `inquiry-archive/operations-archive/usage`와 기존 export DB/UI evidence. 대용량 분할/법정 청구 원장은 별도다.
+- [x] **C02.AP-STANDALONE-REVOKE** 실제 Field API/web/DB/Valkey·비밀값 부재에서 AP signup/승인/직접 문의·답변/export/외부widget·selection회수200→401/owner guest브라우저. eab1d30, `pnpm test:independence:agent`53496 exit0. 모든 공급사/전체AP gate 완료는 아니다.
+- [x] **R00.INVENTORY-1** TASKS46개/QA160 기능군·현재 코드/계약을 대조한 잔여1차목록. **b1ef381**, `DEVELOPMENT_REMAINING_AUDIT.md`. 전체QA 실행/최종 누락 확정은 아니다.
+
+- [x] **A05.WIDGET-END** native iframe 보존 종료/입력 잠금·명시 새 상담·현재 종료 ID 확인·유실 응답 재조회·늦은 AI/조회 오류 폐기·과거 전달 ticket 만료/직렬화·기존 receipt 분리. 코드 **fe6a524**, 집중 native DB79104 exit0 2/2·Chromium320 native6355 exit0 2/2·API type14816/lint45013·최종 repair review16296 exit0/추가 P1/P2 없음. managed48590 최신 양제품build/ready·웹200 반영. 전체 시안 인수/실 공급사/전체 E2E·QA/G는 별도다.
+
+- [x] **A07.F09.RENEW-CANCEL-ACCESS.BACKEND** 원래 KST 기준일의 다음 한 기간 갱신·고정grace/worker 부재 시간 제한·owner/current session/org/Origin/UUID 해지·실제 send/cancel 직렬화·알려진 미발송 취소/unknown 대조·paid/grace/cleanup 접근·기존 업무/export 보존. 코드 **ef0dfd3**, AP73/76·Field67, 각 subscription-access/lifecycle/charge/consent/subscription/trial 모듈·native 검사. own UUID PG17 **70963/78883 각29/29 fail0/skip0 exit0**, 직접 관련 최초청구11 포함, 최종 정적65770 P1/P2 없음/0.87. **확정 HTTP거절·provider 환불·AI 제공량·SDK/결제 UI·실PG는 제외**한다.
+- [x] **A06.F08.DELIVERY.INTERNAL** 제품별 encrypted 동의/recipient·durable worker/lease/order/일일 시도 cap·unknown GET 대조/중복 방지·단일 알림 주체·확정 실패/명시 동의 SMS fallback·webpush port/404·410 회수·retention ciphertext 정리·owner 자기설정/철회·기존 이력 보존 UI. 코드 **ef0dfd3**, AP74/78·Field68·notification 모듈/검사·양관리실 component/CSS. own UUID PG17 각13/13+추가 설정/권한 각3/3, adapter 각5/5 exit0; backend7649/0.90·UI39859 재검토 P1/P2 없음. **고객 채널동의 UI/서비스워커·실발송·실기기/최종 화면 인수는 제외**한다.
+- [x] **F04.CUSTOM-DOMAIN.INTERNAL** 조직별 주소 등록/소유 TXT·DNS·trusted TLS/Host/site binding·짧은 증거 TTL·대표주소/기본주소 유지·disconnect/reconnect/release generation·own Host tenant/resource/확인키·AP 정확 origin별 설치/증명 보존·고정 시안 주소 UI. 코드 **ef0dfd3**, Field69·custom-domain 모듈/worker/검사·sites/Host/proof·domain-settings. 정상 createFieldApp own UUID PG17 **40510 11/11**, DNS2/2·Host3/3 exit0; 정적11413 P1/P2 없음/high(숫자없음). **실edge/DNS/TLS 공급사·실AP custom origin·사용자 최종 시각/동선 인수는 제외**한다.
+- [x] **A09.PUBLIC-WRITE.CONTRACT-BACKEND** preview.9 공개 connection/deployment POST·명시 scope/actor/org/선택AI/exactorigin·UUID/If-Match·own client 배포 verify/activate/pause·selection 회수/늦은 활성화 차단·Field 공개 HTTP consumer·새scope 동의 설명. 코드 **ef0dfd3**, AP75/77·auth/integrator/public write·Field client·OpenAPI/계약03·permanent runner/native HTTP 검사. **66327 AP7/7**, Field5/5·실OAuth/HTTP83629 1/1·계약1/1 exit0; 정적66741 P1/P2 없음/0.91. **새Field durable intent BFF/화면·실DNS·최종 인수는 제외**한다.
+
+#### 남은 작업 — 여기서 다음 세부 ID를 선택한다
+
+**병렬 소유/착수 이력(2026-09-27, 현재3agent 완료)/Coordinator=root:** 구독 RENEW-CANCEL-ACCESS는 root가 기존 billing/subscription/trial-access·AP73/Field67을 소유한다. Delivery Agent는 A06.F08.DELIVERY의 신규 provider/발송 worker/별도 실행·콜백 모듈과 AP74/Field68만, Domain Agent는 F04.CUSTOM-DOMAIN의 신규 domain 모듈·Field69와 Field sites의 domain 연결부만, Public API Agent는 A09.PUBLIC-WRITE 계약/consumer·별도 public write 모듈과 필요 시 AP75/Field70만 소유한다. 각 Agent가 먼저 세부 파일/관련 요구/QA/명령을 기록한다. 공통 app.ts/server.ts/package.json/tools/mock-run.mjs·완료 원장·인계·runtime 재기동·git add/commit은 root만 변경한다. 다른 소유 파일 변경이 필요하면 Coordinator에 요청하고 먼저 덮어쓰지 않는다. 각 Agent는 자신의 scope 결과/실제검수/미검수/등록 patch를 제출하며 전체 출시 완료로 체크하지 않는다.
+
+**착수 이력 — 병렬 소유 추가/완료 ID 확장 근거:** Domain Agent는 Field sites.ts의 domain 연결부 및 field-web proxy.ts/site-route.ts/.well-known AP 검증 route의 custom Host resolver만 추가 소유한다. Public API Agent는 AP integrator-auth.ts/integrator-routes.ts/auth.ts의 신규 명시 공개write scope·grant 재검사와 deployments.ts의 origin 검증 helper export만 추가 소유한다. Delivery Agent는 기존 AP field-notification-route-close.ts의 발송 확정상태/해제 경합 분기 및 관련 native 검사만 추가 소유한다. 현재 route-close는 blocked/not_applicable만 종료 가능해 새 sent/failed 상태가 안전한 종료를 막고, claim/close 경합은 같은 action lock이 필요하다는 직접 증거다. A06.IN-APP/F08.IN-APP·I06.NATIVE-REVOKE의 기존 완료 이력은 유지하며 신규 외부 발송 상태 소비 범위만 확장한다. 각 계획에 구체 경로/원래 commit·추가 검수를 기록하고 타 소유 범위는 변경하지 않는다.
+
+**착수 이력 — A07.F09.RENEW-CANCEL-ACCESS(2026-09-27):** HEADfc10170/clean·완료36/잔여7·managed65775 실제 live 확인. 기존 FIRST-CHARGE00c3e0d의[x]는 유지하고 period0 전용 실행기를 own 갱신 period에도 사용하는 추가 범위만 연다. 현재 claim은 `billing_period=0`이고 trial-access는 paid를 읽지 않아 유효한 결제도 expired trial로 거절하는 구체적 증거가 있다. AP73/Field67·각 charge-execution/worker·billing-consent-routes/billing/subscription/trial-access와 새 subscription-access/native lifecycle 검사를 수정한다. QA43~46/113/126/146 중 갱신/해지/시간 기반 접근을 own UUID PG17 fixture·관련 최초 청구 회귀·API type/lint/build·CLI 독립검토로 확인한다. 최초 동의/인증/가격을 재구현하지 않으며 확정 HTTP거절/환불/AI 제공량/실 SDK/UI는 별도 남는다. 상세 범위/복구/명령은 paid 실행 계획을 따른다.
+
+**착수 이력 — FIRST-CHARGE 추가 범위(2026-09-27):** 당시 미완료 A07.F09.FIRST-CHARGE를 선택했다. 기존 PLAN-BASIS(b639a4d)·CONSENT-BACKEND(1a04815)의[x]는 유지한다. 최초 청구 연결을 위해 면세 미지정 legacy 차단/명시 승인 taxFreeAmount snapshot·owner 대조와 Toss adapter API-key fingerprint metadata만 확장한다. 현재 원장에 면세값이 없고 공식 멱등키가 API key에도 묶이는 구체적 근거는 paid 실행 계획에 기록했다. 가격/동의/인증 backend 자체를 재구현하지 않는다.
+
+- [ ] **A07.F09.PAID** HTTP 확정거절 분류·provider 환불/대조·AI entitlement/제공량·실 SDK 콜백/owner/admin 결제 UI. PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE·RENEW-CANCEL-ACCESS.BACKEND는 완료이며 반복하지 않는다. 전체 유료 흐름/실PG는 별도 미완료다.
+- [ ] **A06.F08.DELIVERY** 고객 채널별 동의/철회 UI·브라우저 서비스워커/푸시 등록 흐름·실발송/실기기/최종 화면 인수. DELIVERY.INTERNAL의 provider port/원장/worker/설정 화면은 완료이며 재구현하지 않는다.
+- [ ] **F04.CUSTOM-DOMAIN** 실edge/TLS 공급사 연결·실DNS/custom AP origin 검수·사용자 최종 화면/동선 인수. CUSTOM-DOMAIN.INTERNAL의 등록/상태/Host/대표주소 API·DB·UI는 완료다. 미연결은 blocked_integration 유지.
+- [ ] **A09.PUBLIC-WRITE** 새Field durable public-write intent BFF/화면 연결·실DNS/최종 인수. CONTRACT-BACKEND의 공개POST/scope/HTTP consumer는 완료이며 기존SDK 설치와 구분한다.
+- [ ] **I06.AUTH-LIFECYCLE** 일반 OAuth token 삭제/refresh family·legacy revoked baseline·Field route key 종료/복원 증빙.
+- [ ] **AUTH.LIVE / PROVIDERS.LIVE** 사용자가 후속으로 지정한 실메일/카카오/계정연결/번호변경/MFA·실LLM/PG/발송/DNS/TLS/운영저장소 연결·공급사 검수.
+- [ ] **R00.QA / R02.ACCEPTANCE** 추가 문서/역할 누락 대조·모든 적용QA evidence·사용자 최종 시안/동선/실기기·키보드/스크린리더/운영게이트.
+
+**재개 기록 규칙:** `[x]`를 다시 열어야 하면 동일 ID 아래 `재개 사유 / 현재 증거 / 추가 범위 / 이전 완료 commit`을 먼저 남긴다. compaction·다른 에이전트·오래된 문서의 “남음”만으로 재개하지 않는다. 무관한 테스트를 반복하지 않는다. 상세 사용범위는 `AGENTS.md`6.1과 audit/현재 handoff를 따른다.
+
+---
+
+
+**최신 완료/잔여(2026-09-27):** 내부 세부40개[x]/잔여7개[ ]. 코드ef0dfd3·managed95896 AP78/Field69·최신 양API/web build/ready·양웹200·새worker blocked_integration ready. 다음 내부 범위는 PAID 확정HTTP거절/환불/제공량/SDK·UI, Field public-write BFF/UI, 고객 알림동의 UI/서비스워커, OAuth 수명이다. 고정 디자인/추가 표기를 지킨다. 전체46개Task/QA160/C03 완료라는 뜻이 아니다. 아래 과거 기록보다 상단 원장이 우선한다.
+
+
+**2026-09-26 AP native 회수 단계 최종:** AP74855 29/29·Field52785 30/30·전체 type/lint57153·최신 lint37774 exit0. 실제 Field 미배포 AP independence53496 exit0(own native 회수/token200→401 포함). 세 번째 review62519 P2 package cwd 문제는 AP 생성/기존 journal 경로 절대화·key/파일 보존으로 보완, actual 설정2/2와 마지막 repair review87113 exit0/추가P1/P2 없음. 리뷰 내부 test는 read-only EPERM 미실행이며 root 설정2/2와 구분한다. mock36780 양 API/웹·retention worker ready/health 실제 확인. 전체/C03/A08는 in_progress. 다음은 전체 문서 기능 대조로 남은 범위 확정이며 위젯/일반 OAuth lifecycle·legacy/Field key·유료 구독 원장/외부 발송 adapter·최종 사용자 화면/실 공급사·운영 QA/G는 완료되지 않았다. 자세한 현재 사실은 docs/CODEX_HANDOFF.md 상단 참조. 아래 누적 기록의 이전 handle/미완료는 당시 이력이다.
+
+- **단독 실행 최신 결과:** 재리뷰88411 exit0/P2 1건은 independence launcher가 AP 회수 원장 설정을 누락하던 문제였다. tools/run-independence.mjs own AP 경로/키 allowlist·환경 단위검사 실제 undefined red→2/2, independence-flow의 실제 owner selection revoke/토큰200→401을 추가했다. managed92152 정상 종료130와 Field DB/Valkey compose stop33427 exit0 뒤 pnpm test:independence:agent **53496 exit0**(/tmp/ap-revocation-independent-standalone.log): 실제 Field API/web/DB/Valkey 미배포/포트 부재를 시작·종료 시 확인하고 AP 가입/승인/문의/답변/export/외부 widget/공개 이어가기·native 회수와 owner/guest browser1/1을 확인했다. 모든 AP 기능/실 공급사 완료를 주장하지 않는다. 후속 세 번째 독립 review62519(/tmp/ap-revocation-third-review.log)는 진행 중이며 clean/commit 미확인이다. 양제품 복구 mock36780(/tmp/ap-revocation-standalone-restored-runtime.log)가 현재 기동 중이다. 이전92152/46139/62510/68922는 종료됐고 독립 gate53496의 API/web도 정상 종료됐다.
+
+
+최신 리뷰 보완: 첫 독립93162 exit0 P2 3건(잠금40P01·UUID index·전체 원장 재읽기)을 migration68/증분 서명·DB proof cache로 보완했다. watcher 방식은 실제 same-size 변조 즉시200을 놓친98265/99027 red로 폐기했고, 현재 요청마다 전체 파일 inode/크기/mtime/ctime을 직접 대조한다. 변경 파일만 HMAC/hash를 다시 검사하며 checkpoint/restore는 항상 전체 재검증한다. 최종 AP74855 29/29 fail0/skip0 exit0, type/lint57153 exit0, metadata 읽기500entry/10회18.744ms 대 이전361.09ms(전체 서비스 latency 검수 아님). 최신 mock92152 양제품 build/migrate/ready와 retention worker ready. 재리뷰88411 실행 중으로 clean/commit은 아직 미확인이다. 전체 목표/C03는 in_progress다.
+
+
+최근 C03/A08 AP native 권한 회수·격리 복원(2026-09-26): AP native owner 연결/선택 회수·검증된 원격 수신을 AP 전용 HMAC/fsync 원장과 불변 ID/hash receipt에 연결했다. migration67은 해제 즉시 access/refresh ciphertext null·재활성화 금지·늦은 OAuth token 발급 직렬화를 적용한다. 실제 해제 전 PG17 dump/별도 restore의 bearer200→회수 재적용401, 고객 문의/확인키 보존·수신 ID 복원·외부 회수 blocked/가짜 ACK 금지·반복0을 검수했다. 최신 checkpoint 필수·원장 유실/변조/추가·namespace/조직 binding 불일치 전체 rollback과 current DB localhost alias/Field port/원장 내부 증빙 출력 거절을 확인했다. AP DB26074 29/29·Field DB52785 30/30 fail0/skip0 exit0, 최종 type25729/lint6277 exit0, 초기 mock 설정1/1·직접 내부 import 경계12312 exit0, 연결 화면 HTML smoke1/1. mock62510 양제품 API/웹 build/migrate/ready·독립 retention worker ready와 양 health를 확인했다. 독립 CLI93162(gpt-6-sol/high)는 진행 중이며 clean을 아직 주장하지 않는다. 일반 OAuth provider의 개별 토큰 삭제/refresh family 수명·양제품 legacy 회수 baseline/Field route key 수명·embed 종료/새 상담·전체 PRD/QA/G/독립 실행·운영 RPO/RTO·외부 공급사/MFA·사용자 최종 화면/동선은 남아 전체/C03 in_progress다.
+
+
+최근 C03/A08·F09 AP 실제 정리/양제품 원장 연속성(2026-09-26): AP 정리 요청/다른 승인/취소·독립 worker·실제 파일/원문/AI/자체 사본 정리·usage/ID 보존·DB 재저장 차단, 고객 종료/명시적 새 상담을 연결했다. AP migration65/66·Field migration62의 제품별 immutable journal receipt와 signed 원장 대조로 유실·대체·변조/실행 중 폴더 부재 뒤 추가 정리를 차단한다. JSON/사진/archive/지원 읽기는 응답 종료까지 보호하며 photo-only 첨부 목록은 현재 ready ID와 재대조한다. 열린 고객 follow-up410은 원본 재조회/기존 시도 폐기로 종료 안내를 반영한다. AP DB89449 28/28·Field DB17798 30/30 fail0/skip0 exit0, type18900/lint7378 exit0, native HTTP/320px6968 1/1 exit0. 독립 CLI13308 재리뷰 exit0에서 추가 지적 없음. 최신 mock68922 양제품 build/migrate/ready·독립 worker ready와 양 health를 확인했다. AP revoke 독립 원장/복원·Field route key/legacy·전체 문서 기능/QA/G·운영 RPO/RTO·실 공급사/MFA/사용자 최종 화면·동선은 남아 전체/C03 in_progress다.
+
+최근 C03/A08 AP 자체 보존 기반(2026-09-26): AP 정책의 익명30/문의180/사진90 요청·다른 operator 승인/중단, 실제 종결 clock/재개·근거 있는 legacy 이관, 불변 hold/별도 해제·기한 경과 유지, private metadata preview와 관리자 audit UI를 연결했다. AP 자체 AI/발송·현재 승인 지원·외부 업무 미확인/미래 예약을 구분하며 Field DB/내부 코드를 사용하지 않는다. migration64, 실제 AP DB **1325 27/27**, legacy63→64 **1/1**, type **61572**/lint **53746 exit0**, 새 managed mock **92132** 양 API/웹 build/ready·native HTTP/320px **71697 1/1**(ACK 유실 동일 요청/별도 승인·보류 해제/503 metadata 유지·조작 잠금/가로 넘침/pageerror0). 실제 정리 job/worker·원문/사진/AI·전달 payload 제거·복원 증빙과 전체 PRD/QA/G·Field route key/legacy·실 공급사/MFA·최종 사용자 인수는 남아 C03/A08/전체 목표는 in_progress다. 운영 삭제·실 발송/청구/배포 없음.
+
+최근 C03/F09 Field 삭제 원장 검증(2026-09-26): 삭제 복원 함수/CLI에 별도 최신 서명 checkpoint를 필수로 연결했다. 전체 원장 directory 부재/entry 누락·추가 미대조·변조/회수 목록 혼용은 사진/DB 변경 전에 실패하고 복원 원문·사진을 유지한다. 실제 PG17 dump/restore에서 checkpoint export/restore CLI·파일/원문 제거·반복0, current DB localhost·media symlink alias/잘못된 local port/원장 안 출력 거절을 검수했다. 최종 Field DB **2217 30/30**, type **57849**/lint **78010**/Field build **90668 exit0**. restore-only 변경으로 native runtime21041은 재기동하지 않았고 양 API ready를 확인했다. UI/AP DB/계약/migration 변경 없음. 신뢰 checkpoint+원장 동시 과거 교체·legacy 회수 baseline·route key 종료 수명/미확인 삭제 추가 대조·운영 복구, AP 자체 보존·전체 PRD/QA/G/사용자 최종 인수는 남아 C03/F09 in_progress다.
+
+최근 C03/F09 Field 회수·격리 복원(2026-09-26): native owner 연결/선택 회수와 서명 수신 3경로에 Field 전용 서명/fsync 원장을 연결했다. AP access/refresh ciphertext 즉시 null·재활성화 거절, 늦은 OAuth token 발급과 회수의 실제 PG17 경합을 막았다. 최신 별도 checkpoint의 전체 ID/해시를 검증하고 해제 전 실제 dump/restore 뒤 권한·token·동의를 차단하며 고객 문의/확인키를 유지한다. 수신 회수 ID를 복원하고 백업 후 회수 의도는 원격 ACK 대신 blocked 재대조 상태로 복구한다. 최종 Field DB **8959 30/30**, 타입 **52968**/린트 **45964**/Field 빌드 **73538 exit0**. 실제 양제품 HTTP/320px **12875 1/1**. 현재 mock **21041** 양 API/웹 ready·Field retention worker ready. migration61, AP 내부/DB/공개 계약 변경 없음. 전용 route key 종료 수명·legacy 회수 baseline·신뢰 checkpoint/원장 동시 rollback·삭제 원장 전체 누락·운영 복구, AP 자체 보존·전체 PRD/QA/G·사용자 최종 인수는 남아 C03/F09 in_progress다.
+
+최근 C03/F09 Field 정리 실행(2026-09-26): 불변 업무/조직/정책·revision/활동 기준을 가진 정리 요청→다른 운영자 승인→취소/실행 직전 권한·보류·정책 재확인→실제 파일 삭제/부재 확인·개인정보/원문 제거를 연결했다. 사진 scope는 업무 원문을 유지한다. DB tombstone/child/support 제약·늦은 복사 claim 확인으로 재저장을 막고, 고객/사업자 종료 안내·관리자 원장/ACK·조회 실패 복구를 연결했다. Field 전용 서명 원장과 실제 PG17 dump/별도 restore의 삭제 재적용도 검수했다. 새 migration60, AP 내부/DB/공개 계약 변경 없음. 최종 Field DB **56067 29/29**, native HTTP/320px **73367 1/1**, 전체 typecheck **58010 exit0**, lint **99020 exit0**. 현재 mock **54477** 양제품 build/ready·Field 독립 retention worker 실제 ready/합성 job completed다. 표준 E2E7개 중 해당 보존 HTTP 검사만 이번 변경으로 실행했으며 전체 명령은 미실행이다. **revoke 원장 재적용/원장 전체 유실 검수·실 운영 복구, AP 자체 보존, 전체 PRD/QA/G/사용자 최종 화면·동선 인수는 남아 C03/F09 in_progress**다. 실 사용자·운영 자료 삭제/발송/청구/배포 없음.
+
+최근 C03/F09 Field 보존 기반(2026-09-26): 실제 종결/재개 시각·legacy 원장 근거, 기간 immutable 정책 요청/다른 운영자 승인/중단, 조직·업무 종류/ID에 묶인 분쟁/법정 기록 검토/조사 hold·다른 운영자 해제·검토 초과 유지, 메타데이터 preview100개+cursor를 연결했다. 미승인 정책/진행 업무/미확인 종결/미래 일정/보류/전달 대기/지원 열람/기한을 구분하며 수신 예약은 Field 예약 종결을 따른다. Field 수신 문의의 native 업무 종결/ACK 복구·목록 상태/대기 집계도 AP 원본과 별도로 연결했다. Field migration000059, AP 내부/공개 계약 변경 없음. Field DB 최종28/28(93261), 실제 legacy migration1/1, 최신 mock85257 HTTP/320px36901 1/1·기존 관리자87655 1/1, 최종 typecheck37941/lint57228 exit0. 표준 Field E2E7개 등록 뒤 전체 명령 미실행. 이 단계는 삭제 실행이 아니며 정리 job/worker·파일/개인정보 제거/소비자·복원 후 원장 재적용과 AP 자체 보존 구현·전체 명세 검수는 필수로 남아 C03/F09 in_progress다. 운영 MFA/법무/실 공급사/사용자 최종 인수도 미완료다.
+
+최근 C03/F09 Field 업무별 지원 접근(2026-09-26): Field 직접 문의/예약/이미 받은 외부 업무 snapshot을 업무 종류+ID·대화/제출 내용/연락처·지역/사진의 별도 grant로 읽는다. 다른 운영자 승인/사유/기간·현재 양 운영자 권한·만료/회수·성공 읽기/파일 오류·지연 회수 감사, 요청 ACK/조회503 복구·Blob 폐기를 연결했다. 내부 메모/확인키·AP 원문/토큰을 제외하고 복사 대기는 사진 성공이 아니다. Field migration000058, AP 내부/공개 계약 변경 없음. Field DB 최종27/27(session15725), typecheck88434/lint82464 exit0, mock99529 HTTP/320px10485 1/1(업무3종·별도 승인·실제 사진·응답 분실/조회 복구·회수/실제8초 만료·원본/점유 보존·가로 넘침/pageerror0). mock origin 주소 불일치403을 재현하고 Field 로그인과 같은 정확한 두 loopback 주소만 추가했다. 표준 Field E2E5개 등록 뒤 전체 명령 미실행. 시안 request-access 실제 모달 확인. 다음은 제품별 보존/정리·분쟁 hold/전체 명세 누락 대조이며 운영 MFA/법무/실 공급사/전체 QA/G·사용자 최종 시각/동선은 남아 C03/F09 `in_progress`다.
+
+최근 C03/A08 AP 문의 지원 접근(2026-09-26): AP 별도 grant/감사 원장·목적/참조/사유·대화/연락처/사진 scope·다른 운영자 승인/기간·현재 양 운영자 권한·열람/회수/만료·사진 읽기 뒤 재확인과 웹 복구를 연결했다. 신고 grant/타 actor·타 문의/auditor·자기 승인은 원본 권한이 아니며 내부 메모/확인키를 공개하지 않는다. AP migration000063, Field 내부/공개 계약 변경 없음. AP DB25/25(session86324), 최종 typecheck48647/lint11371 exit0, mock75745의 HTTP/320px22877 1/1(ACK 분실/같은 요청·선택 범위·실제 사진·queue503 복구·회수·실제8초 만료/상세·사진 폐기·가로 넘침/pageerror0), 기존 관리자1988 1/1. AP E2E5개 등록 뒤 전체 명령 미실행. 시안 request-access 실제 모달을 확인했다. 다음은 Field 자체 원본/사진 지원 접근이며 보존/정리·운영 MFA/고객 요청 진위/실 공급사·전체 PRD/QA/G·사용자 최종 인수는 남아 A08/C03 `in_progress`다.
+
+최근 C03/A08 AP 신고·검토·이의(2026-09-26): native 신고/공개 snapshot·다른 운영자 승인/기간 접근·검토 사유/감사·신고별 배포 제한·사업자 내부 알림/읽음/이의/결정·해당 hold 해제를 연결했다. 복수 hold/owner pause·다른 배포/직접 문의·기존 원본/사람 접수를 보존한다. 신규 위젯 접수의 실제 PG17 경합과 제한 중 기존 상담 새로고침/위젯 사람 인계를 red→green으로 수정했다. AP DB24/24(session33270), typecheck2626/lint17406 exit0, mock **10988** 신고 HTTP/320px32096 1/1·기존 관리자9826 1/1, 양제품 API/웹 build/ready. 320px 긴 사업명 가로 넘침도 red→green. AP migration000062, Field 내부/제품 간 계약 변경 없음. 표준 AP E2E4개에 등록했지만 전체 명령은 미실행. 시안 agent/chat·admin/audit 직접 대조. 다음 내부 작업은 QA49/시안의 고객정보 열람 요청을 별도 native 문의·사진 범위로 구현하는 것이다. 신고 grant를 고객 원본에 재사용하지 않는다. 일반 지원 열람/보존·정리·운영 MFA/IP·전체 PRD/QA/G·실 공급사·사용자 최종 인수는 남아 A08/C03 `in_progress`다.
+
+최근 C03/F09 Field 신고·검토·이의(2026-09-26): native 신고/공개 snapshot·다른 운영자 승인/기간 접근·검토 사유/감사·사이트별 공개 제한·사업자 내부 알림/읽음/이의/결정·해당 제한 해제를 연결했다. 원본/초안·기존 및 신규 직접 문의/예약을 유지하고 타 신고 제한은 해제하지 않는다. 실제 Field DB26/26(session98497), typecheck85251/lint60748 exit0, mock **46010** 신고 HTTP/320px15625 1/1·기존 관리자19942 1/1·tenant/렌더3/3. 응답 분실/멱등 복구·신고 당시 서비스/FAQ/페이지 문구를 확인했다. 표준 E2E 등록 뒤 전체 명령 미실행. AP 신고는 다음 별도 제품 구현이다. 일반 고객 원문/사진 지원 접근·원래 client-IP proxy 검수·운영 MFA/보존/복구·전체 C03/사용자 최종 인수/실 공급사/G는 남아 `in_progress`다.
+
+최근 C03/F01·F02 Field 업종 입력(2026-09-26): Field 업종 입력·자동 저장·충돌 비교·재접속·명시 승인·공개 사이트 표시·제작 snapshot을 연결했다. 구버전 JSONB 미등록/불변 해시와 구버전 PUT 기존 업종 보존, null/숫자/초과 거부를 확인했다. Field DB red→25/25(session47139), 사이트 렌더링 red→2/2, typecheck(84722)/lint(29562) exit 0. mock **88953**에서 자동 저장 HTTP/320px 브라우저(28560) 1/1·사업자→공개 사이트→직접 문의/두 예약 HTTP/브라우저(43752) 1/1, Python 구문/diff exit 0. 업종만 바뀐 응답 분실/409 두 선택·승인본 유지 포함. 시안 create/business와 실제 320px 입력 캡처를 직접 열었다. migration/AP/공개 제품 간 facts 계약 변경 없음. C03 전체·사용자 최종 인수·실 공급사/출시 게이트는 미완료다.
+
+최근 C03/I04·F-O09 Field 업무 수신 기록(2026-09-26): 신규 수신 목적/검증 동의 필드/업무180일·사진90일 제안 정책을 Field 원장·문의/예약 상세·개별/전체 export에 연결했다. 과거 정책 null·멱등/해제 뒤 보존과 목적/JSON null DB 제약을 Field DB red→24/24로 확인했다. 320px 표시 부재 red→mock **2217** 최종 양제품 HTTP/브라우저 1/1(문의/예약 표시·기존 원본 답변/해제/알림). typecheck/lint/구문/diff exit 0·양제품 build/ready. Field migration000056; AP 코드/DB·공개 계약 변경 없음. proposed 정책을 운영 승인이나 자동 정리 완료로 처리하지 않는다. 다음 확인된 기능 누락은 Field PRD 3.2의 업종 입력/저장이다. 전체 C03/사용자 최종 인수/실 공급사/G는 미완료다.
+
+최근 C03/A01·A02 AP native 지역·영업시간(2026-09-26): 선택값의 입력·자동 저장/충돌 비교·명시 승인·공개 상담 표시·AI 근거를 연결하고 구버전 JSONB/불변 승인본을 보존했다. 미승인 지역·시간은 고객 안내에 포함하지 않는다. 실제 AP DB red→23/23, mock **29076** AP 사업자 HTTP/브라우저 1/1·native 자동 저장 HTTP/브라우저 1/1(지역만 변경한 응답 분실/409, 시간만 변경한 409·서버 선택), typecheck/lint/Python/diff exit 0·양제품 build/ready. 시안 승인 정보 화면을 직접 확인했다. migration/Field/제품 간 계약 변경 없음. C03 전체·사용자 최종 인수·실 공급사/G는 미완료다.
+
+최근 C03/A06 AP 스팸 분류·알림 중단(2026-09-26): AP 권한/revision 분류·해제와 원본·고객 후속 메시지/사진·내부 메모 보존, 알림/공개 답변 중단, Field 초안 보존을 연결했다. AP DB 22/22·Field DB 24/24, typecheck/lint exit 0. mock **17560** 양제품 API/웹 build/ready, AP 사업자 HTTP/브라우저 1/1·양제품 HTTP/브라우저 1/1. Field 상태 주입 화면 검수와 실제 DB 거절/원장 검수를 구분한다. AP migration 000061; 공개 계약/Field DB/schema 변경 없음. 다음 내부 누락은 AP PRD 2.2 native 지역·영업시간이다. 전체 C03/사용자 최종 인수/실 공급사/G는 미완료다.
+
+최근 C03/F-C04 공개 사업 정보 조회 상태(2026-09-26): 빈 값 정상 카탈로그의 거짓 로딩을 수정하고 로딩/미등록/404/실패·재시도와 대상 있는 헤더 링크를 구분했다. 320px red→mock **44403**에서 지연/404/503·네트워크 실패/재시도·기존 문의/두 예약/후보 이동 exit 0. Field web typecheck·lint·구문/diff·양제품 build exit 0. 다음 내부 누락은 AP PRD 2.7의 spam 상태/발송 중단이다. 전체 C03·사용자 최종 인수·실 공급사/G는 미완료다.
+
+최근 C03/A05 AP 상담 링크 QR 공유(2026-09-26): 활성 링크의 QR를 브라우저에서 만들어 PNG로 다운로드한다. 버튼 부재 red→AP E2E 3/3, canvas 생성 실패 후 재시도·다운로드/320px 표시 이미지 jsQR 해독·공개 URL 일치·중지 404/재활성화를 포함한 좁은 AP 사업자 HTTP 1/1. AP web typecheck/lint/구문/diff exit 0. mock **1112** 양제품 build/ready·Field 재접수 320px도 exit 0이고 이전 후보 버튼 CSS를 반영했다. 다음 확인된 화면 상태 결함은 Field 정상 카탈로그의 지역/운영시간 빈 값이 계속 로딩으로 표시되는 것이다. 전체 문서/사용자 최종 시각·동선/실 공급사·출시 검수는 미완료다.
+
+최근 C03/F05·F06·F07/I06 AP 대체 직접 요청(2026-09-26): 고객의 명시 선언과 선택적 AP 요청 ID를 Field 문의/두 예약 원장·내보내기에 저장했다. 사업자에게만 같은 조직의 수신 ID 기반 중복 후보와 기존 문의/예약 이동을 제공한다. AP 원문 자동 복사·전화번호 병합·새 접근 권한 부여는 하지 않는다. 새 DB 3개 red→Field 전체 24/24, 새 320px 브라우저(후보 조회 503 복구 포함) exit 0, Field 표준 E2E 3/3, 브라우저 포함 AP↔Field HTTP 1/1, typecheck/lint/Python/diff exit 0. mock **45321** 양제품 build/ready. 시각 검토 뒤 후보 버튼의 44px/CSS는 다음 mock 빌드에서 반영한다. 다음 내부 누락: AP PRD 2.5 상담 링크 QR 공유. C03 전체와 출시 게이트는 `in_progress`다.
+
+최근 C03 로컬 기능 회귀 감사(2026-09-26): 코드 `a023c67`에서 표준 AP/Field/Distribution E2E 3/3·3/3·2/2, 격리 제품 DB 각 21/21, 계약/장애 주입/보안/lint/typecheck/unit exit 0. 상대 프로세스/DB/비밀값 부재의 AP/Field 독립 실행도 각각 exit 0이고 mock **53283**으로 복구했다. 검수 범위는 `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`. 문서 대조에서 Field PRD 3.8의 AP 장애 후 직접 새 문의/예약 `fallback_origin`·가능한 원요청 ID 관계/중복 후보가 미구현임을 확인해 다음 내부 구현으로 남겼다. C03 전체·사용자 시각/동선·실 공급사/출시 게이트는 미완료다.
+
+최근 C03/I03 Field AP 연결·설치 재확인(2026-09-26): Field 연결 목록 GET 503을 0건으로 표시하지 않고 별도 실패/재시도로 복구한다. 이전 목록은 보존하되 확인 전 조작을 막는다. Field 설치 기록이 active여도 AP 활성 배포에서 빠지거나 연결이 revoked이면 현재 사용 불가와 직접 문의·예약 유지 경로를 보여준다. 320px 브라우저에서 거짓 빈 상태·해제 연결 안내 red→green, 설치·연결·배포 조회 실패/재시도·가로 넘침/pageerror 0. 실제 AP pause→Field 후보 제외/AP 공개 404/Field 사이트 200→reactivate 후보 복귀를 포함한 양방향 HTTP 1/1, Field web typecheck·lint·구문 검사 exit 0, 새 mock **23141** 양제품 build/ready. 실 DNS/TLS·사용자 최종 화면 인수·정식 QA/G는 남아 C03/I03 `in_progress`다.
+
+최근 C03/I03 Field AP 설치 상태(2026-09-26): 사이트 초안 주소를 공개 주소로 표시하고 설치 조작을 노출하던 문제를 수정했다. Field 설치 조회의 실제 공개본 유무를 반환하고 초안/공개/조회 실패를 구분한다. AP 배포 조회 503도 활성 배포 0건과 구분해 재시도한다. Field DB 검사 red→2/2, 320px 브라우저 red→green, 기존 AP↔Field 연결 HTTP 1/1, Field API build·web typecheck·lint·Python 구문 exit 0. 새 mock **86290** 양제품 build/ready. 사용자 최종 화면 인수·실 공급사/정식 QA/G는 남아 C03/I03 `in_progress`다.
+
+최근 C03/QA57·119 AP/Field 사업자 키보드 초점(2026-09-26): 시안 v3 `owner/today` 320px을 다시 열고, 실제 신규 조직의 긴 폼을 Tab으로 이동할 때 두 제품 입력 초점이 하단 메뉴 뒤에 가리는 각 0/1 red를 확인했다. 모바일 작업실 스크롤 영역에 100px 초점 여유를 적용해 AP/Field 320/390px 키보드 초점·메뉴 Enter 이동 각 exit 0, 양 웹 typecheck·lint·Python 구문 exit 0. 새 mock **2358** 양제품 build/ready. 전체 키보드·스크린리더·실 200% 확대·사용자 시각/동선 인수는 남아 C03 `in_progress`다.
+
+최근 C03/I04 AP 고객 Field 전달 기록 부분 장애(2026-09-26): 기존 요청이 있는 320px 화면에서 전달 이력 GET 503 뒤 기록이 사라지는 0/1 red를 확인했다. 같은 문의·확인키의 재조회는 마지막으로 확인한 전달 기록/사진을 유지하고 새 문의·확인키는 초기화한다. 실패한 서비스 조회로 새 가격·시간·동의를 진행하지 않는다. 최종 양방향 연결 HTTP/브라우저 1/1, AP web typecheck·전체 lint·Python 구문 exit 0, 새 mock **7578** 네 HTTP 200. mock worker가 켜진 첫 green 실행의 수동 revoke `empty` 경합은 `FIELD_EVENT_WORKERS_RUNNING=1`로 실제 실행 환경을 명시한 최종 재실행에서 해소했다. 사용자 시각/동선·정식 QA/G·실 공급사는 남아 C03/I04 `in_progress`다.
+
+최근 C03/A00/F00 로그인 진입·분배 E2E(2026-09-26): AP 홈 로그인 링크가 가입 폼으로 열리는 실제 320px red를 `?mode=login` 연결로 수정했고 Field의 기존 진입도 함께 확인해 두 제품 로그인/가입 4경로 1/1. 표준 로컬 AP E2E 3/3·Field E2E 3/3, 예전 UI 선택자에 걸린 분배 E2E red들을 실제 모바일 메뉴·문의 목록·고객 관리 도구로 갱신한 최종 분배 2/2 exit 0. 새 mock **1896** 빌드/ready, AP web typecheck·lint·Python 구문 통과. `reference/field_ui_prototype_v3.html`의 오늘 1440/320px을 직접 열어 실제 업무·서비스·예약 화면 캡처와 대조했다. 사용자 시각/동선 인수·실 인증/알림/LLM·정식 QA/G는 남아 C03/A00/F00 `in_progress`다.
+
+최근 C03/F-O12 AP 연결 FAQ 화면(2026-09-26): Field 별도 동의→AP owner source 검토·승인→FAQ 선택·지식 공개·재진입 실제 양방향 브라우저 1/1. 1440px 검토 화면의 늘어난 시작 카드와 320px 44px 미만 버튼 red를 확인해 세로 카드/44px 버튼/FAQ 문답 카드를 정리했다. 새 mock **27712** 양제품 build/ready, 최종 320px 브라우저 1/1·1440/320px 캡처 시각 확인·가로 넘침/pageerror 0, AP web typecheck·전체 lint exit 0. 사용자 최종 인수·정식 QA/G·실 공급사는 남아 C03/F-O12 `in_progress`; API/DB/계약 변경 없음.
+
+최근 C03/F-O12 승인 FAQ 경로(2026-09-26): 시안 v3의 `승인 정보·FAQ`와 Field 사이트 질문 섹션을 실제 카탈로그 원장으로 연결했다. Field 사업자 문답 초안은 명시 승인 뒤에만 고객 사이트 공개본 및 `field.facts.read` preview.8에 포함된다. AP는 별도 source 검토/승인 뒤 FAQ를 선택해 새 AP AI 지식 공개본으로 만들며, 제품별 DB·계정·원본 대화를 공유하지 않는다. 계약 정적 red→1/1, Field 카탈로그/공개 facts 격리 DB red→5/5, AP 소비 격리 DB red→1/1, Field 실제 320px 사업자→사이트·고객 문의/두 예약 전체 브라우저 최종 1/1 두 차례. 320/1440px FAQ 캡처 대조·320px 가로 넘침 0, 양 API build/양 웹 typecheck/lint 통과. mock **47796** 양제품 build/ready. AP 선택 UI 실브라우저·사용자 최종 인수·정식 QA/G·실 공급사는 남아 C03/F-O12 `in_progress`다.
+
+최근 C03/F-O08 Field 오늘 처리 항목 필터(2026-09-26): 시안 v3의 `모두/답변 필요/예약 요청` 탭이 실제 Today에 없음을 직접 문의가 있는 320px 브라우저 0/1 red로 확인했다. Field 직접·AP 전달 문의/예약 후보를 먼저 모은 뒤 유형 필터를 적용하고 최근 6건을 표시한다. 선택 탭 건수·페이지 잔여 `+`·유형별 빈 상태를 구분하고 기존 상세로 연다. 최종 Field 전체 사업자→고객 브라우저 1/1(문의/예약 각 탭 전환, 기존 사이트/문의/두 예약), Field web typecheck·전체 lint exit 0, mock **98099** 양제품 build/ready·네 HTTP 200, 320px 필터 캡처 가로 넘침 0. 사용자 최종 인수·정식 QA/G·실 공급사는 남아 C03/F-O08 `in_progress`; API/DB/계약 변경 없음.
+
+최근 C03/F-O08/F-O10 Field 오늘 일정 연결(2026-09-26): 시안 v3의 `오늘 일정`과 달리 전체 확정 예약만 세고 수동 일정은 제외하던 문제를 실제 오늘 수동 일정 1건에서 320px 0/1 red로 재현했다. Field 예약 정책 시간대로 오늘 날짜를 계산해 기존 주간 달력 API의 확정 예약·전화 예약·수동 시간 차단을 오늘 수치/시간순 목록에 표시한다. 직접 추가는 기존 수동 일정 dialog, 확정 예약은 상세로 연결한다. 달력 503은 `—`/재조회이며 미래 확정 예약은 오늘 0건이다. 최종 Field 전체 사업자→고객 브라우저 1/1(오늘 1→삭제 0, 503 복구, 직접 추가, 미래 예약, 기존 문의/예약 흐름), Field web typecheck·전체 lint exit 0, mock **94263** 양제품 build/ready·네 HTTP 200, 320px 캡처 가로 넘침 0. 사용자 최종 인수·정식 QA/G·실 공급사는 남아 C03/F-O08/F-O10 `in_progress`; API/DB/계약 변경 없음.
+
+최근 C03/F-O08 Field 사업 정보 승인과 사이트 공개 상태 분리(2026-09-26): 시안 v3 `owner/today` 대조에서 카탈로그 승인만 해도 `홈페이지 공개`로 보이던 문제를 320px 실제 브라우저 0/1 red로 재현했다. 카탈로그와 사이트 공개본을 별도로 조회해 오늘·AI 카드·사이트 카드·사이트 링크는 실제 사이트 공개 상태, 서비스/예약 승인 버전은 카탈로그 상태를 사용한다. 공개 조회 503은 `확인 불가`/개별 재시도이며 승인 상태 미확인 때는 승인 버튼을 막는다. 최종 Field 전체 사업자→사이트 공개→고객 문의/두 예약 브라우저 1/1(승인 전/후·두 503→200 포함), Field web typecheck·전체 lint exit 0, mock **40396** 양제품 build/ready·네 HTTP 200. 사용자 최종 인수·정식 QA/G·실 공급사는 남아 C03/F-O08 `in_progress`; API/DB/계약 변경 없음.
+
+최근 C03/F-O08 Field 오늘 알림 조회 실패(2026-09-26): 알림 원장 GET 503에서 오늘 화면이 실패를 알리지 않고 `첫 문의를 기다리고 있어요`라고 보이던 것을 320px red로 재현했다. 알림 실패 전용 경고·재조회 버튼을 추가하고, 모든 관련 원장 조회가 완료된 뒤에만 빈 업무 안내를 표시한다. 직접 문의·AP 전달·예약 집계는 각자 정상 상태를 유지한다. 최종 320px 외부 문의/예약/알림 503→200 복구 검사 exit 0, Field 전체 사업자→고객 흐름 1/1, Field web typecheck·전체 lint exit 0, mock **7851** 양제품 build/ready·네 HTTP 200. 실 알림 공급사·사용자 최종 인수·정식 QA/G는 남아 C03/F-O08 `in_progress`다.
+
+최근 C03/A02/F-O08 열린 작업실의 오늘 재조회(2026-09-26): 사업자 탭을 열어 둔 사이 별도 고객이 실제 문의를 제출해도 AP/Field 오늘 메뉴를 다시 눌렀을 때 옛 0건이 남는 문제를 두 제품 320px 브라우저 red로 확인했다. 오늘 진입 때 AP owner 문의·알림, Field 직접 문의·AP 전달·직접 예약·알림 원장을 제품별 GET으로 다시 읽는다. mock **76683** 양제품 build/ready·양 API/웹 HTTP 200, `pnpm typecheck`·`pnpm lint` exit 0, AP/Field 실제 사업자→고객 전체 흐름 각 1/1에서 열린 탭 새 문의 반영·기존 상세/예약 확인, Field 열린 탭의 새 직접 예약 1건/고객 이름도 추가 확인. 사용자 최종 인수·장기 대기/푸시·정식 QA/G/실 공급사는 남아 C03/A02/F-O08 `in_progress`다.
+
+최근 C03/A02 AP 오늘 실제 고객 문의·조회 실패(2026-09-26): 실제 AP 고객 문의가 집계 1건이어도 오늘 업무에는 알림 제목만 보이던 것을 브라우저 red로 확인했다. AP owner 문의 원장의 확인 필요 최근 최대 6건에서 고객/서비스/출처를 보여주고 기존 상세로 연다. 문의·처리 알림 조회는 loading/failed/ready로 구분해 503을 첫 문의/읽지 않음 0건으로 표시하지 않고 재시도한다. 두 제품 모바일 업무 제목 줄임표도 실제 320px red→줄바꿈 green. 최종 mock **65366** 양제품 build/ready·양 API/웹 200, AP/Field 실제 사업자→고객 전체 흐름 각 1/1, 두 제품 503→재시도 320px exit 0, 전체 lint·AP web typecheck exit 0. 사용자 디자인/최종 인수·전체 QA/G/실 공급사는 남아 C03/A02 `in_progress`다.
+
+최근 C03/F-O08 Field 오늘 실제 처리 항목·장애 복구(2026-09-26): 시안 v3 `owner/today`와 1440px 실제 화면을 대조하고 알림 제목만 보이던 `지금 확인할 일`을 Field 직접 문의·AP 전달 요청·Field 직접 예약의 실제 확인 필요 항목 최대 6건/상세 이동으로 바꿨다. 내부 테스트·조회 실패 출처는 업무 목록에서 제외한다. 문의/예약 일부 GET 503은 0건 대신 `—`와 재시도를 표시하고, 빈 화면의 첫 문의 문구도 조회 완료일 때만 보인다. 320px 브라우저 red(실제 고객 이름 없음/503에서 0건·잘못된 빈 문구)→최종 green, Field 전체 사업자→사이트 공개→고객 문의/두 예약 1/1·320px 가로 넘침 0, Field web typecheck·전체 lint exit 0, mock **85881** 양제품 build/ready·양 API/웹 200. 실제 디자인 최종 확인·전체 QA/G/공급사 검수는 남아 C03 `in_progress`다.
+
+최근 C03/QA57·58·119 실제 화면 점검(2026-09-26): 실제 AP/Field 사업자 화면의 선택 입력 13.3px을 공통 16px로, Field 고객 대화 보조 문구 13px을 14px로 고쳤다. 새 mock **92540** 양제품 build/ready 뒤 실제 사업자 주요 경로와 비저장 검토본 52개 URL의 320/390px·CSS zoom 2 근사에서 보이는 글자 <14px·텍스트 입력 <16px·문서 가로 넘침 0, 실제 사업자 경로의 pageerror 0, 전체 lint/typecheck exit 0. 실제 브라우저 200% 줌·스크린리더/전체 키보드·사용자 시각/동선 검토와 정식 QA/G는 남아 C03 `in_progress`다.
+
+최근 C03/A02/F-O09 오래된 문의 재개 노출(2026-09-26): AP/Field 사업자 직접 문의 목록을 접수 시각이 아닌 최근 활동 시각·ID 키셋으로 정렬하고 UI 목록 시간을 맞췄다. 접수 시각은 보존한다. 103건 경계의 마지막 문의에 새 활동을 만들면 첫 페이지로 올라오는 DB 검사에서 양제품 각각 20/21 red→21/21 green, 계정/커서 분리·100+3 탐색 유지. 전체 lint/typecheck, AP/Field 웹 unit 10/10·14/14, mock **92325** 양제품 build/ready·API/웹 200, 실제 320px 사업자→고객 브라우저 각 1/1. 103건 UI 조작·사용자 최종 인수/정식 QA/G·실 공급사는 남아 C03/A02/F-O09 `in_progress`다.
+
+최근 C03/F-O09 Field 직접 문의 처리 완료·고객 재개(2026-09-26): 시안 v3 사업자 문의함의 `처리 완료`를 Field 직접 문의 권한·revision API/DB/화면에 연결했다. 고객은 기존 확인키로 완료 원문을 읽고 새 질문을 보내 `확인 필요`로 재개한다. 완료·재개 사건은 Field 한 건/조직 내보내기에 보존하고 완료 자체는 고객 알림을 만들지 않는다. Field DB 20/21 red→21/21 green, Field web unit 14/14·전체 lint/typecheck exit 0, mock **18991** 양제품 build/ready·API/웹 200. 실제 320px 전체 사업자→사이트 공개→직접 문의/두 예약 브라우저 1/1에서 완료 응답 유실→GET 복구·고객 재개를 확인하고 320/1440px 시안 캡처를 대조했다. 사용자 최종 인수·전체 접근성/정식 QA/G·실 공급사는 남아 C03/F-O09 `in_progress`, 외부 `blocked_integration`이다.
+
+최근 C03/A02 AP 문의 처리 완료·고객 재개(2026-09-26): 시안 v3의 사업자 `처리 완료`를 AP owner/editor 권한·revision 조건의 원장으로 연결했다. 고객은 기존 확인키로 완료 원문을 읽고 추가 질문을 보내면 다시 `확인 필요`가 되며, 완료 자체는 고객 발송을 만들지 않는다. 완료/재개 사건은 migration `000059`와 한 건/조직 내보내기에 포함한다. AP 격리 DB 20/21 red→21/21 green(중복/권한/오래된 요청/재개), 웹 unit 10/10·전체 lint/typecheck exit 0, mock **87846** 양제품 build/ready·API/웹 200. 실제 320px 브라우저의 완료 응답 유실→상태 재조회·고객 재개→사업자 재조회 1/1, 1440/320px 시안 이미지 대조·가로 넘침 0. 사용자 최종 인수/전체 접근성/정식 QA/G·실 공급사 검수는 남아 C03/A02 `in_progress`, 외부는 `blocked_integration`다.
+
+최근 C03/A02 AP 문의함 동의된 AI 이력·유입 출처(2026-09-26): 익명 AI 상담/외부 직접 준비 원본은 계속 사업자 문의함에서 제외하고, 고객 동의 후 사람 문의로 전환된 같은 ID의 AI 답변 이력만 `AI 기록` 탭에 표시한다. 상담 링크·소유 위젯·제휴 매체·직접 문의 출처는 AP 배포 kind로 구분한다. AP DB 새 응답 필드 red 19/21→21/21 green, AP 웹 unit 10/10·전체 lint/typecheck exit 0, mock **66320** 양제품 build/ready·양 API/웹 200. 합성 Chromium AI 필터/출처·320px·100→103/503 회복 exit 0, 실제 AP 사업자→링크/외부 위젯→고객 문의/답변·출처/재열람 1/1. 실모델·전체 접근성/정식 QA/G/사용자 최종 테스트는 남아 C03/A02 `in_progress`다.
+
+최근 C03/A02 AP 사업자 문의함 시안·100건 이후 탐색(2026-09-26): AP owner 문의 GET에 계정 범위·마이크로초 `(created_at,id)` 커서/`nextCursor`를 추가했다. 시안 v3와 대조해 검색·상태 필터·목록/대화·답변/내부 메모·320px 복귀/초점, 이전 문의·503 재시도와 부분 집계를 연결했다. 기존 AP 직접 문의 원본·Field 제품 분리는 유지한다. AP 격리 DB 20/21 red→21/21 green, AP 웹 단위 10/10, 전체 unit·lint·typecheck exit 0, 새 mock **78359** 양제품 build/ready·웹 200. 합성 Chromium 100→103/장애 재시도/검색·상세·320px 초점·가로 넘침 0·pageerror 0, 실제 AP 사업자→상담 링크/외부 위젯→고객 문의/답변/재열람·내보내기 브라우저 1/1. 오래된 단위/브라우저 화면 선택자는 현행 UI에 맞춰 복구했다. 실제 저장 100건 이상·전체 접근성/정식 QA/G·사용자 최종 테스트와 실 공급사는 남아 C03/A02 `in_progress`, 외부 연동은 `blocked_integration`다.
+
+최근 C03/F-O09 Field 문의함 직접·AP 전달 100건 이후 탐색(2026-09-26): Field owner 직접 문의/AP 전달 문의 GET에 조직·목록 종류를 묶은 마이크로초 키셋 페이지를 추가하고, 시안 v3 문의함에서 각 출처별 이전 항목·503 재시도/기존 목록 보존을 연결했다. 모바일 상세 제목 줄바꿈과 다른 계정 목록 초기화도 보완했다. 격리 Field DB red→21/21 green, Field API build·web typecheck/변경 ESLint·unit 14/14, 최신 mock **27863** 양제품 build/ready·양 API ready. 합성 Chromium 직접/AP 100→103/첫 503 복구·오래된 상세/모바일 초점·320px 가로 넘침 0·pageerror 0, 기존 예약 100→103 스모크 exit 0. 실제 저장 대량 흐름·전체 접근성/정식 QA/G·사용자 최종 테스트는 남아 C03/F-O09 `in_progress`다.
+
+최근 C03/F-O09·QA57/119 Field 모바일 문의함 초점 이동(2026-09-26): 320px에서 예약·직접 문의·AP 전달 목록을 열면 대화 뒤로 버튼, 복귀하면 이전 항목(없으면 검색)에 초점을 둔다. 기존 시안 v3의 목록↔대화 구조를 유지하고 데스크톱 초점은 건드리지 않는다. 합성 Chromium 복귀 초점 부재 red→두 스모크 exit 0(예약 100→103/503 재시도, 세 출처 초점, 320px 가로 넘침 0·pageerror 0). Field web typecheck·변경 ESLint exit 0, unit 14/14, 최신 mock **88115** 양제품 build/ready·양 API ready. 전체 200%/스크린리더/키보드 경로·정식 QA/G·사용자 최종 테스트는 남아 `in_progress`다.
+
+최근 C03/F07·F-O09 Field 예약 목록 100건 이후 탐색(2026-09-26): owner 예약 GET에 조직 범위 100건 키셋 페이지/`nextCursor`를 추가하고 PostgreSQL 마이크로초 접수 시각을 보존한다. 문의함·예약 관리의 이전 예약/실패 재시도와 시안 v3의 내부 목록 스크롤을 연결하고 부분 집계는 `+`로 표시한다. 격리 Field DB 처음 19/20 red→최종 20/20, Field API/web build, Field web unit 14/14·typecheck·변경 ESLint exit 0. 최신 mock **48138** 양제품 build/ready·양 API ready; 합성 Chromium 문의함 100→103/503 재시도·103번째 상세, 예약 관리 100→103, 320px 가로 넘침 0·pageerror 0; 기존 문의함 스모크 exit 0. 실제 저장 예약 전체 E2E·정식 QA/G·사용자 최종 테스트는 남아 C03/F07/F-O09 `in_progress`다.
+
+최근 C03/F07·F-O09 Field 사업자 문의함 예약 대화(2026-09-26): 시안 v3처럼 직접 예약도 사업자 문의함 목록·원문·답변에서 처리한다. 고객 요청/추가 메시지는 Field owner 인증 GET, 답변은 기존 멱등 POST와 원문 재조회로 연결하고 예약 결정은 예약·일정으로 연다. AP 출처 예약은 Field 직접 대화 목록에서 제외한다. 목록·상세 503은 재시도, 고객 추가 메시지 알림은 문의함 대화로 이동한다. 합성 Chromium red→green: 1440/320px 목록/상세 503 복구·응답 분실 POST 1/원문 대조·모바일 복귀·예약 관리 이동·알림 이동, 가로 넘침 0·pageerror 0. 기존 직접/AP 문의함 스모크 exit 0, Field 웹 unit 14/14·typecheck·변경 ESLint exit 0, 최종 mock **15330** 양제품 build/ready·양 API ready. 실제 예약 전체 E2E/최근 100건 밖 탐색·정식 QA/G·사용자 최종 검수는 남아 C03/F07/F-O09 `in_progress`다.
+
+최근 C03/F07 Field 직접 예약 추가 대화(2026-09-26): 시안 v3 고객 예약 대화의 추가 메시지·사업자 답변을 Field 단독 원장/확인키·owner 권한 API/outbox/사용량/내보내기 및 양쪽 화면에 연결했다. AP 출처 예약은 AP 원본 대화를 유지한다. 격리 Field DB 19/19, Field 웹 복구 단위 1/1, Field API·양 웹 mock build, Field web typecheck·변경 ESLint exit 0. 최신 mock **61671** 양 API ready; 합성 고객 Chromium 1440/320px의 응답 분실·GET 503→새로고침 복구·AP 출처 분리 3 POST, 사업자 답변 1 POST에서 가로 넘침 0·pageerror 0. 실제 외부 알림·전체 E2E/보안·정식 QA/사용자 최종 테스트는 남아 C03/F07 `in_progress`, 공급사 `blocked_integration`이다.
+
+최근 C03/F07 Field 고객 예약 후속 상태·제안 화면(2026-09-26): 시안 v3 예약 대화와 1440/320px 비교 후 승인 당시 사업장명·상태 배지·요청/가격/제안·원본 사건 카드로 정리했다. 기존 확인키/사진/조건 재검수/변경·취소/알림 경로는 접이식 관리에서 유지한다. 제안 동의는 Field 확인키와 revision으로 1회 전송하며 고객 수락을 확정으로 표시하지 않는다. Field API/web build, web typecheck·변경 ESLint, 격리 Field DB 19/19 exit 0, 새 mock **13041** 양제품 build/ready·양 API ready. 합성 Chromium 제안 POST 200/409·신청/확정 320px에서 가로 넘침 0·pageerror 0. 예약 안 추가 자유 메시지는 이 단계 당시 API/원장이 없었고 위 최신 단계에서 구현했다. 전체 E2E/보안·사용자 최종 테스트는 미실행, C03/F07 `in_progress`다.
+
+최근 C03/F05·F06 Field 고객 후속 문의 대화(2026-09-26): 시안 v3 대화 화면과 실제 1440/320px을 비교해 Field 확인키 GET의 접수 당시 승인 사업명을 헤더·대화 제목에 반영하고 접수 ID·짧은 상태 배지를 표시했다. 새 이름의 미승인 초안은 기존 고객 대화에 섞이지 않는다. Field API build·web typecheck·변경 ESLint exit 0, 격리 Field DB 19/19 통과. 최종 mock **30112** 양제품 build/ready·양 API ready, 합성 대화 두 폭·320px 가로 넘침 0·pageerror 0/상태 배지 한 줄 표시를 확인했다. 전체 E2E/보안·사용자 최종 테스트는 미실행, C03/F05/F06 `in_progress`다.
+
+최근 C03/F05·F07 Field 고객 접수 완료 화면(2026-09-26): 시안 v3 `customer/success`와 Field 1440/320px 화면을 대조해 문의·예약의 실제 서버 접수 뒤 전용 완료 카드에 접수 ID/확인키·후속 이동을 표시한다. 예약은 미확정, 외부 발송은 성공으로 표시하지 않는다. 같은 탭 후속 화면은 2분·1회용 세션 확인키를 소비해 Field 원본 GET을 실행하며 수동 입력도 가능하다. 사진 첨부 중 이동을 막고 실패 시 같은 원본의 재시도를 유지한다. Field web typecheck/변경 ESLint exit 0, 최종 mock **30112** 양제품 build/ready·양 API ready. 합성 201/503 양 폭·320px 사진 첨부 지연/503·후속 GET/키 삭제에서 가로 넘침 0·pageerror 0. 실제 DB/권한·전체 E2E/보안·정식 QA·사용자 최종 테스트는 미실행, C03/F05/F07 `in_progress`다.
+
+최근 C03/F07 Field 희망시간 예약 입력(2026-09-26): 고객 예약 화면을 시안 v3와 비교해 희망시간 제출형에 날짜·시간대 선택을 추가하고 기존 자유 입력을 유지했다. 둘 다 기존 `preferredTimeText`로 접수되며 서비스별 시간표형 로직은 그대로다. 선택한 희망 시간은 고객 요약에 표시하되 확정으로 보이지 않는다. Field web typecheck/변경 ESLint exit 0, 최종 mock **43869** 양제품 build/ready·양 API ready. 합성 승인 카탈로그/예약 POST 503의 Chromium 1440/320px에서 구조화 선택 POST 1회·320px 자유 입력 원문 POST 1회·요약·가로 넘침 0·pageerror 0. 실제 예약 저장/확정과 전체 E2E/DB/보안·정식 QA·사용자 최종 테스트는 미실행, C03/F07 `in_progress`다.
+
+최근 C03/A02/A05 AP 고객 상담 링크 시안 정합(2026-09-26): 시안 v3 `agent/chat`과 실제 1440/320px 화면을 대조해 중앙 대화 카드·승인 FAQ 빠른 질문·사람 문의 진입·문의 양식 안 사진 선택으로 정리했다. FAQ는 승인된 AP 원장만 사용하고 누르면 AI 질문을 즉시 제출하며 기존 상담/접수/복구·Field 선택 연결은 유지한다. AP web typecheck/변경 ESLint exit 0, 최종 mock **28386** 양제품 build/ready·양 API ready. 합성 승인 지식/AI 공급사 503 Chromium 1440/320px에서 FAQ→AI 질문 POST 1회·공급사 503 때 초안 보존·사람 문의 앵커·사진 입력·가로 넘침 0·pageerror 0. 실제 AI/문의 제출과 전체 E2E/DB/계약/보안·정식 QA·사용자 인수 테스트는 미실행, C03/A02/A05 `in_progress`다.
+
+최근 C03/F09 Field 관리자 시안 정합(2026-09-26): Field 관리자 데스크톱 사이드 메뉴·실제 사업체/문의/예약/공개 사이트/사건 집계 카드·대기 사건/감사 목록을 시안 v3 구조에 맞췄다. 모바일 하단 운영/제작/발송/감사와 더보기 사업체/구독을 연결했다. Field 전용 인증·관리자 권한·추가 인증 차단/API/감사 원장은 유지했다. 양제품 web typecheck·변경 ESLint exit 0, 최종 mock **6199** 양제품 build/ready·양 API ready. 합성 관리자 응답 Chromium 1440/320px Field 제작/감사/사업체 이동·가로 넘침 0·pageerror 0, 실제 비인증 로그인 요구 확인. 최종 빌드의 AP 관리자 합성 화면도 exit 0. 전체 정식 QA/사용자 인수 테스트는 미실행, C03/F09 `in_progress`다.
+
+최근 C03/A10 AP 관리자 시안 정합(2026-09-26): 시안 v3 관리실 구조를 대조해 AP 관리자 데스크톱 사이드 메뉴·실제 집계 카드·사건/감사 목록을 정리하고, 모바일 하단 메뉴와 조직/구독 더보기를 연결했다. 기존 AP 관리자 인증/권한·추가 인증 차단과 `/v1/admin/overview` 원장은 유지한다. AP web typecheck/변경 ESLint exit 0, 최종 mock **31228** 양제품 build/ready. 합성 관리자 응답 Chromium 1440/320px 집계·사건·감사·조직 이동·가로 넘침 0·pageerror 0, 실제 비인증 로그인 요구를 확인했다. 합성 응답은 실제 권한/원장 검사가 아니며 전체 정식 QA·사용자 인수 테스트는 미실행, C03/A10 `in_progress`다.
+
+최근 C03/D01~D04 AP 제휴 매체 시안 정합(2026-09-26): 한 긴 페이지를 시안 v3의 오늘·노출 위치·배치 승인·집계 성과·매체 설정 5개 화면으로 나눴다. 기존 AP 조직/도메인/위치/배치 승인/성과 API·권한을 유지하고, 실제 승인·공개 가능·설치 배치만 활성 수치/독자 카드 미리보기에 반영한다. 모바일 320px 메뉴 5개를 모두 보이게 배치했다. AP web typecheck/변경 ESLint·관련 Python 구문 exit 0, 최종 mock **97778** 양제품 build/ready·양 API ready. 신규 AP mock 계정/매체 조직의 1440/320px 메뉴·조직 생성·노출/배치 빈 상태·집계 화면 이동·가로 넘침 0·pageerror 0. 실제 DNS/배치 승인/외부 기사/성과 전체 E2E·정식 QA·사용자 인수 테스트는 미실행, C03/D01~D04 `in_progress`다.
+
+최근 C03/F01/F08 Field 설정·구독 화면(2026-09-26): 시안 v3의 2열 설정 카드·사업체 요약을 실제 Field 관리실에 적용하고 데스크톱 설정·구독/모바일 더보기를 같은 화면으로 연결했다. 8개 카드는 실제 사이트·서비스·예약 정책·문의·AP 연결·알림·구독/운영 데이터·사용량 경로를 연다. 실제 초안/승인 상태와 로그아웃을 사업체 카드에 표시한다. 기존 Field 브라우저 스크립트 2개의 버튼 이름을 갱신했다. Field web typecheck/변경 ESLint/Python 구문 exit 0, 최종 mock **64331** 양제품 build/ready·양 API ready, 실제 신규 조직 1440/320px 카드/정책/서비스/구독 이동·가로 넘침 0·pageerror 0. 전체 E2E/정식 QA·사용자 인수 테스트는 미실행, C03/F01/F08 `in_progress`다.
+
+최근 C03/F08 Field 사업자 알림 화면(2026-09-26): 최신 시안 v3의 사업자 설정·고객 알림·이력 카드로 정리했다. 실제 Field owner 알림 최근 100건/읽음 경로를 유지하고 목록 오류를 0건으로 표시하지 않는다. 공급사 없는 카카오·푸시·수신 번호 설정은 비활성 이유를 보이며, Field/AP 고객 발송 주체를 구분한다. Field web typecheck/변경 ESLint exit 0, 최종 mock **60270** 양제품 build/ready. 실제 빈 mock 조직 1440/320px 가로 넘침 0·pageerror 0, 합성 목록 503→오류/재시도 복구를 320px에서 확인했다. 실제 이벤트 열기/읽음·실 공급사 설정/발송·전체 E2E/정식 QA·사용자 인수 테스트는 미실행, C03/F08 `in_progress`다.
+
+최근 C03/F01 Field 사업자 서비스 시안 정합(2026-09-26): 최신 v3 `owner/services` 카드 배치를 실제 Field 사업 초안에 연결했다. 이름·설명·소요시간·확정 가격·서비스별 예약 방식과 초안/승인 상태를 표시하고 추가·수정은 기존 저장/승인 폼으로 이동한다. 새 조직은 입력 폼을 바로 열고, 재방문에는 카드가 먼저 보인다. 정책 버튼은 예약 정책 입력을 펼친다. Field web typecheck/변경 ESLint exit 0, 최종 mock **79824** 양제품 build/ready. 새 mock 사업자 1440/320px에서 추가→입력→서버 저장→새로고침 카드 재표시·수정 입력 초점·정책 열기·가로 넘침 0·pageerror 0. 실제 승인→고객 공개/예약 조건과 전체 E2E·정식 QA·사용자 인수 테스트는 미실행, C03/F01 `in_progress`다.
+
+최근 C03/F05/I05 Field 사업자 문의함 실제 목록·상세(2026-09-26): 시안 v3의 검색·상태 필터·좌측 목록/우측 대화와 모바일 목록↔상세 구조를 Field 직접 문의/AP 전달 목록에 적용했다. 출처별 기존 상세·답변 원본/권한은 유지하고 직접 문의 내부 메모/답변을 탭으로 전환한다. 최신 시안의 데이터가 있는 화면과 목록 너비·출처 안내를 대조했다. Field web typecheck/변경 ESLint exit 0, 최종 mock **69685** 양제품 build/ready. 합성 두 출처 응답의 1440/320px 화면에서 상세/필터/검색·모바일 복귀·가로 넘침 0·pageerror 0, 실제 빈 mock 조직의 320px 빈 상태·가로 넘침 0·pageerror 0을 확인했다. 실제 문의 제출/답변·AP 연결과 전체 E2E/정식 QA·사용자 인수 테스트는 미실행, C03/F05/I05 `in_progress`다.
+
+최근 C03/F05/I05 Field 사업자 문의함 빈 상태(2026-09-26): 최신 시안 v3의 문의함 제목·빈 접수 카드·다음 행동을 실제 작업실에 맞췄다. 승인본이 없으면 사이트 준비, 있으면 고객 문의 링크를 열고, 데이터가 있으면 기존 Field 직접 문의/AP 전달 문의의 별도 원본·상세·답변 권한 경로를 출처별 카드로 유지한다. 두 목록이 모두 정상 조회되어야 빈 상태를 표시하며 실패한 출처에는 재시도 버튼을 둔다. Field web typecheck/변경 ESLint exit 0, 최종 mock **45818** 양제품 build/ready, 1440px 시안 이미지 대조와 320px 가로 넘침 0·pageerror 0. 합성 AP 목록 503에서 빈 상태를 숨기고 재시도 후 복구됨을 320px에서 확인했다. 실제 문의 생성/답변·실제 AP 장애·두 출처 동시 화면/전체 E2E·정식 QA·사용자 인수 테스트는 미실행, C03/F05/I05 `in_progress`다.
+
+최근 C03/F07 Field 예약·일정 시안 정합(2026-09-26): 최신 시안 v3 `calendar3()`의 일자별 카드·날짜 이동/입력·확정 일정/수동 차단·확인할 요청 화면을 실제 Field owner 원장에 연결했다. 새 owner 주간 범위 읽기 API는 사업장 시간대와 7일 제한·500건 초과 거절·진행 중 요청 최대 100건을 적용한다. 수동 일정 등록 모달은 실제 차단 원장에 저장하고 기존 정책/예약 처리 기능은 유지한다. Field API build·web typecheck/변경 ESLint·Python 구문 exit 0, 최종 mock **95034** 양제품 build/ready. 승인된 mock 사업장 API 200/잘못된 범위 400, 수동 차단 201→주간 조회 1건→320px UI 표시, 최종 320px 모달 등록→일자 일정 표시·가로 넘침 0·pageerror 0, 1440px 시안 대조. 실제 고객 예약 확정 전체 흐름/정식 QA/사용자 인수 테스트는 미실행, C03/F07 `in_progress`다.
+
+최근 C03/F05 Field 직접 문의 장소(2026-09-26): 시안의 선택 지역·이용 장소를 Field 문의 원장·공개 POST·고객/사업자 조회·한 건/전체 내보내기에 추가했다. 장소가 비어 있으면 기존 멱등 payload/해시를 유지한다. migration 000050, Field API build·web typecheck/변경 ESLint exit 0, 새 mock **45302** 양제품 migration/build/ready. 승인 카탈로그 Chromium 320px 입력 표시·가로 넘침 0·pageerror 0. 실제 문의 제출/저장·권한/내보내기·전체 E2E/정식 QA는 미실행, C03/F05 `in_progress`다.
+
+최근 C03/F07 Field 예약 시안 입력·사진(2026-09-26): 공개 예약에 요청 내용·지역/이용 장소를 받아 Field 원장/고객 확인키 조회/사업자 상세/한 건·전체 export에 연결하고, 구버전 제출 재시도 해시를 보존했다. 예약 사진 전용 비공개 원장/확인키 POST·GET/사업자 GET, 최대 5장·8MiB·WebP 정규화·중복 200·순차 첨부/남은 사진 재시도/내보내기를 추가했다. Field 전용 migration 000048·000049, 변경 API build·web typecheck·ESLint·브라우저 스크립트 Python 구문 exit 0, mock **97897** 양제품 migration/build/ready·네 URL 200. 실제 승인 카탈로그의 320px에서 새 입력·사진 5장 미리보기·6장 거절·가로 넘침 0·pageerror 0. 실제 예약 제출·사진 POST/권한/재시도/내보내기·DB/계약/보안/전체 E2E·정식 QA는 미실행, C03/F07 `in_progress`다.
+
+최근 C03/F05 Field 문의 사진 시안 정합(2026-09-26): 직접 문의·확인키 후속 대화에서 사진 최대 5장(장당 8MiB)을 선택하고 로컬 썸네일로 확인한다. 메시지 저장 후 Field 비공개 첨부 API로 순차 업로드하고 부분 성공·응답 미상 때 남은 파일을 같은 문의에서 재시도한다. 실제 승인 카탈로그의 Chromium 320px에서 2/5장 선택·6장 거절, 썸네일 5개·가로 넘침 0·pageerror 0, 1440/390/320px 기존 접수 탭도 가로 넘침 0. 최종 Field web typecheck/ESLint/build exit 0, 새 mock **45065** 양 API/웹 build·ready와 네 URL 200. 실제 제출/사진 전송·DB/계약/보안·정식 QA/사용자 인수 테스트는 미실행, C03/F05 `in_progress`다.
+
+최근 C03/Field 고객 후속 대화 시안 정합(2026-09-26): 확인키 열람 뒤 대화 카드·고객/사업자 말풍선·추가 질문과 메시지 전달 상태, 접이식 키/사진 관리로 배치했다. raw 문의 상태를 고객용으로 표시하고 내부 메모를 렌더에서 제외한다. 합성 GET 응답을 넣은 React 화면의 Chromium 1440/390/320px 가로 넘침 0·pageerror 0·내부 메모 표시 0이며 실제 권한 검사는 아니다. Field web typecheck/변경 TSX ESLint exit 0, mock **73675** 양 API/웹 build·ready와 네 URL 200. 실제 제출·확인키/사진 E2E·DB/계약/보안·최종 인수 테스트는 미실행, C03/F06 `in_progress`다.
+
+최근 C03/Field 고객 접수 시안 정합(2026-09-26): 공개 고객 문의/예약을 시안형 탭·입력/사업 요약 2열과 모바일 1열로 바꿨다. 요약은 실제 승인 사업·서비스·가격이고 예약 서비스 선택도 반영하며 `#reservation` 직접 링크가 예약 탭을 연다. Chromium 1440/390/320px 가로 넘침 0·pageerror 0, Field web typecheck/변경 TSX ESLint·스크립트 Python 구문 exit 0, mock **25525** 양 API/웹 build·ready와 네 URL 200. 전체 제출/확인키 E2E·DB/계약/보안·접근성·최종 인수 테스트는 후속 단계에 남아 C03/F06/F07 `in_progress`다.
+
+최근 C03/AP 시안 정합(2026-09-26): AP 가입·첫 조직·사업자 오늘/승인 정보·문의/알림 메뉴를 기준 시안과 1440/390/320px 비교해 반영했다. 오늘 수치는 AP 자체 문의·알림·승인 revision·서비스 초안에서 읽으며 Field 제작은 별도 제품 링크다. 실제 계정 가입→조직→오늘/승인 정보 가로 넘침 0·pageerror 0, AP web typecheck/변경 TSX ESLint·스크립트 Python 구문 exit 0, mock **67710** 양 API/웹 build·ready와 네 URL 200. 전체 E2E·DB/계약/보안·최종 인수 테스트는 이 변경 뒤 미실행이다. 실 인증/모델은 `blocked_integration`, C03/A01/A03은 `in_progress`다.
+
+최근 C03 시안 v3 화면 정합(2026-09-26): Field 홈·가입/시작·사업자 오늘/메뉴, 사이트 편집기 좌우/모바일, 고객 기본 템플릿과 독립 AP 첫 화면을 `reference/field_ui_prototype_v3.html`의 1440/390/320px과 비교해 반영했다. Field 대시보드 문의/예약 수치는 자체 API, AI 설치 상태는 Field의 AP 설치 조회이며 AP/Field 계정·DB는 독립이다. 변경 파일 typecheck/ESLint/Python 구문·새 mock **25148** 양제품 build/ready·네 HTTP 200, 주요 화면 가로 넘침 0/메뉴·미리보기 전환을 확인했다. 초기 홈 단위 13/13과 예약 충돌 브라우저 1/1은 후속 시안 화면 변경 이전 결과이며 새 전체 E2E는 사용자의 최종 테스트 시점까지 미실행이다. 다른 고객/매체/관리자 화면·전체 접근성·실공급사/정식 QA/G는 남아 C03/F03/F04/F07 `in_progress`다.
+
 최근 C03/A05/QA24 AI 실패 질문 초안 포화 복구: AP 사람 문의 초안이 5,000자 한도에 가까워 AI 실패 질문을 자동으로 더하지 못하면 누락을 명시한다. 기존 입력은 자르지 않고 AI 질문 칸에 원문을 남기며, 고객이 초안을 줄인 뒤 같은 질문을 한 번 넣을 수 있다. 4,990자 초안/공급사 503의 320px Chromium red→green, 최종 새 mock **41820** 양제품 build/ready와 전체 AP↔Field HTTP/320px 1/1(112초), lint/typecheck/unit/Python 구문 통과. API/DB/schema·권한·제품 간 계약 변경 없음; 이 수정 뒤 제품 DB/계약/보안은 재실행하지 않았다. 실제 모델·정식 QA24/G-A2·사용자 디자인 검토는 남아 C03/A05 `in_progress`다.
 
 최근 A05/C03/QA21·24 오래된 AI 실행 결과 미상: AP 고객 AI 실행이 5분 넘게 `in_progress`이면 같은 키 조회/재시도에 `result_unknown`을 표시한다. DB 실행은 임의 성공/실패로 바꾸지 않고 다른 키 질문을 차단하며 원래 모델이 늦게 끝나면 완료 답변을 복구한다. AP 링크는 새로고침 뒤 미상 질문을 사람 문의 초안에 남기고 iframe은 재조회·AP 사람 문의를 안내한다. AP 격리 DB 20/20, 새 mock **26057** 양제품 build/ready, 전체 AP↔Field HTTP/320px 브라우저 1/1(114초), 계약 정적 2/2+제품 DB 5/5·보안 기본(AP 20/20·Field 19/19/tenant/관리자)·lint/typecheck/unit 통과. 실제 공급사 종료 조회/수동 해소·운영 타임아웃 정책·정식 QA21/24/G·디자인 검토는 남아 A05/C03 `in_progress`다.
@@ -1433,7 +1667,7 @@ C03/F07 추가 로컬 근거: Field 시간표형 예약의 가능 시간 첫 조
 | D04 | in_progress | AP 배치 문의 시작·연락처 동의 접수를 DB 사건으로 1회 기록, 미리보기/테스트/식별된 봇 제외. 사업자·매체의 완료 UTC 주 8개만 5 미만 억제·구간값으로 JSON/CSV 제공. Field의 AP 수신 확정 사건을 같은 배포 문의에 귀속해 최초 예약 확정 1회만 구간 집계하고 미연결은 미지원, 매출·수금은 미측정으로 표시한다. AP owner가 매체 승인 배포를 명시 OAuth 선택하면 Field 소비자가 이를 읽고 사이트 설치에서는 제외한다. 실제 매체 카드→AP live 문의 5건→Field 예약/확정→서명 사건 AP 처리→완료 주 사업자/매체 JSON·CSV `5-9`와 320px 매체 화면 `5~9건` 양방향 HTTP/browser 1/1, AP DB 18/18·Field DB 17/17·계약 2+5 통과 | 실매체 DNS/TLS, 원래 사건 시각의 완료 주 도달/운영 데이터, 고도화 봇·복수 역할 차분 공격·정식 QA104~107/G-D2, 실매체 운영 검수 |
 | 나머지 9개 | planned | 개별 task의 완료 근거 없음 | 각 행의 Definition of Done과 QA·gate |
 
-실행 명령·환경·결과·미실행 항목은 `DEVELOPMENT_STATUS.md`, `docs/technical/SPIKE_REPORT.md`, `docs/CODEX_HANDOFF.md`에 기록한다. Git 저장소와 commit ID는 아직 없다.
+실행 명령·환경·결과·미실행 항목은 `DEVELOPMENT_STATUS.md`, `docs/technical/SPIKE_REPORT.md`, `docs/CODEX_HANDOFF.md`에 기록한다. 현재 Git 저장소가 있으며 최신 코드/저장 상태는 `git log -3 --oneline`과 `git status --short`로 확인한다. 아래 실행 현황의 오래된 검사 개수는 당시 증거이며 맨 위 후속 기록/coverage와 구분한다.
 
 ### 실행 순서와 독립 출시
 
@@ -1553,6 +1787,23 @@ pnpm build:field
 고객·사업자/서비스 제공자·매체·각 제품 관리자 화면을 유지한다. 글자 최소14px, 본문/입력16px, 모바일320px부터 검수한다. 조작 가능한 버튼에는 실제 API 또는 비활성 사유가 필요하다. UI 입력·저장·반영·공개·전달·확정·발송·열람 상태를 구분한다.
 
 한 작업의 Done은 UI+API+domain+DB+권한+이벤트+사용량+오류+테스트+복구가 연결된 상태다. 코드 완료와 출시 승인은 분리한다. 모든 작업 시작 전 파일 범위·관련 요구/QA·명령을 기록한다.
+
+### 6.0 고정 디자인 기준 — 사용자 필수 지침 (2026-09-27)
+
+- 화면 디자인 원본은 `reference/field_ui_prototype_v3.html`이다. 사용자 지시로 디자인 자체를 고정한다. 기존 배치·색상·글자·메뉴·반응형 규칙을 임의로 재설계하거나 반복 조정하지 않는다.
+- 원본에 있는 화면을 처음 구현할 때 해당 HTML/CSS를 그대로 기준으로 사용한다. 이미 구현 완료된 화면은 새 오류·요구 변경의 구체적 근거 없이 다시 작업하지 않는다.
+- 시안에 없는 새 기능은 기존 디자인 안에 추가하고 사용자에게 보이는 기능 이름에 **`(추가)`**를 표시한다. 기존 시안에 있는 기능에는 추가 표시를 붙이지 않는다.
+- API·권한·원장·실제 상태는 v3.0 개발 문서에 연결하며 제품 경계를 지킨다. 시안의 고정 예시 데이터/가짜 성공을 서비스 결과로 승계하지 않는다.
+
+### 6.1 완료 체크와 재작업 금지 — 사용자 필수 지침
+
+- **모든 작업 시작 전에 `TASKS.md` 상단의 `완료 체크 — 재작업 방지 기준`을 먼저 읽는다.** 이어서 `docs/CODEX_HANDOFF.md` 현재 상태, `git status`/`git log`와 해당 구현을 확인한다.
+- `[x]`인 세부 작업은 완료 범위다. 에이전트 교체·컨텍스트 압축·기억 부재만으로 재구현하거나 처음부터 검수를 반복하지 않는다. 새 작업은 미완료 `[ ]` 세부 ID에서 선택하고 phase plan에 그 ID/범위/관련 요구/검수 명령을 기록한다.
+- 새 오류 재현·요구 변경·현재 코드와 완료 기록의 구체적 불일치가 있을 때만 완료 항목을 다시 연다. **코드 변경 전에 동일 세부 ID에 재개 사유·증거·추가 범위를 기록**하고 기존 완료 이력/근거는 보존한다. 이유 없는 `[x]`→`[ ]` 변경이나 이미 끝난 계획의 재생성은 금지한다.
+- 완료 즉시 해당 세부 항목을 `[x]`로 바꾸고 수정 경로·실행한 검수/환경·코드 포함 commit·남은 외부/최종 인수 범위를 기록한다. `TASKS.md`, 사용한 phase 체크박스, 잔여 audit, 인계파일을 같은 단계에 갱신한다. 미실행/실패를 체크하지 않는다.
+- 부모 Task가 출시/외부 연동 때문에 `in_progress`여도 끝난 내부 세부 기능은 `[x]`로 유지한다. 부모 전체 완료와 내부 완료 범위를 구분해 같은 기능을 반복하지 않는다. 사용자 최종 화면/동선 테스트와 실 공급사 연결은 별도 미완료로 남긴다.
+- 완료 체크의 기준 원장은 `TASKS.md` 상단이다. 상세 증거는 `LOCAL_FUNCTIONAL_COVERAGE.md`와 인계/실제 검사 기록에 연결한다. 중복 목록의 오래된 “남음” 문구보다 최신 체크/코드 상태를 우선한다.
+- 단계별 체크박스 하나에 완료 범위와 미완료 범위가 섞이면 같은 세부 ID/근거를 유지한 채 `[x]`와 `[ ]`로 나눈다. 과거 착수·“다음 작업” 기록은 **이력**으로 표시하고, 현재 다음 작업에는 미완료 범위만 적는다.
 
 ### 7. 작업 보고 템플릿
 

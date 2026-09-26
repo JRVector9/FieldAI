@@ -13,7 +13,7 @@
 
 - 사용자가 **“완료된 작업은 체크하고, 에이전트가 잊고 같은 작업을 다시 하지 않도록 반드시 지켜”**라고 명시했다.
 - 작업 재개 전에 `TASKS.md` 상단 **완료 체크 — 재작업 방지 기준**을 먼저 읽는다. 이 목록이 완료 세부 ID의 기준 원장이다. 상세 규칙은 `AGENTS.md`6.1. 기억 부재/compaction으로 완료 항목을 재구현·검수 반복하지 않는다.
-- 현재 **내부36개[x]/잔여7개[ ]**다. 최신 추가 완료는 **FIRST-CHARGE(00c3e0d)**이며 TASKS 상단이 기준 원장이다. 최초 체크 당시31개[x]/8개[ ]와 이후 단계의 개수는 이력이다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다.
+- 현재 **내부40개[x]/잔여7개[ ]**다. 최신 추가 완료는 **ef0dfd3의4개 내부 세부 범위**이며 TASKS 상단이 기준 원장이다. 최초 체크 당시31개[x]/8개[ ]와 이후 단계의 개수는 이력이다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다.
 - 신규 오류/요구변경/현재상태 불일치가 확인됐을 때만 같은 완료 ID에 재개 사유·증거·추가 범위를 먼저 기록한다. 이전 완료 근거/commit은 삭제하지 않는다.
 - 최초 체크 정리 당시 변경 파일: AGENTS.md·TASKS.md·PHASE_2_EXECUTION_PLAN·DEVELOPMENT_REMAINING_AUDIT·이 인계. 문서 변경으로 서비스 테스트 재실행 없이 diff 체크만 수행했고 당시 mock36780 양 ready/생존을 재확인했다. 지금 runtime/체크는 아래 최신 단계가 우선한다.
 - 원래 진행 목표는 계속 전체 v3/C03 로컬 기능이다. 체크 정리 당시 다음은 A05.WIDGET-END였으며 현재 진행 상태는 바로 아래 별도 세부 작업 기록을 따른다.
@@ -37,9 +37,9 @@ rg -n '^\- \[ \]' docs/technical/A07_F09_PAID_EXECUTION_PLAN.md
 
 미완료 세부 ID/파일 범위/관련 QA/검수 명령을 paid 계획에 기록한 후 다음 코드를 수정한다. 기존 `[x]`를 기억 부재로 재개하지 않는다.
 
-## 현재 통합 완료 — 고정 디자인/추가 기능·내부 검수 (2026-09-27)
+## 현재 통합 완료 — 코드ef0dfd3 / 고정 디자인/추가 기능·내부 검수 (2026-09-27)
 
-- **목표/상태:** 전체 v3/C03 내부 기능·독립 로컬 환경을 계속 구현한다. 이번 갱신/해지/접근 backend·알림 내부 실행/설정 화면·자체 도메인 내부/API/화면·공개 설치 계약/backend/HTTP consumer는 implemented 및 아래 범위 local verified다. 전체 부모 Task/출시/QA160/사용자 최종 화면 인수는 완료가 아니다. 착수 fc10170/clean, 이전36[x]/7[ ] 체크는 보존한다. 코드 commit 후 아래4개 내부 세부 ID를 체크한다.
+- **목표/상태:** 전체 v3/C03 내부 기능·독립 로컬 환경을 계속 구현한다. 이번 갱신/해지/접근 backend·알림 내부 실행/설정 화면·자체 도메인 내부/API/화면·공개 설치 계약/backend/HTTP consumer는 implemented 및 아래 범위 local verified다. 전체 부모 Task/출시/QA160/사용자 최종 화면 인수는 완료가 아니다. 착수 fc10170/clean, 이전36[x]/7[ ] 체크는 보존한다. 코드 **ef0dfd3**으로 저장했고 TASKS/각phase/coverage/audit/인계의4개 내부 세부 ID를 체크한다.
 - **디자인/중앙 UI:** 원본 reference HTML은 수정하지 않았다. 새 Field domain 화면은 ownerDomain/settingsWrap/settingsNav HTML/CSS를 기준으로 관리실 설정 안에 연결했다. 기본 주소는 defaultOrigin, 다중 주소/대표 선택/해제·재연결만 `(추가)`. AP 새 scope 두 개는 기존 동의 위치에 설명/`(추가)`만 붙였다. 알림 설정은 ownerNotifications3 구조로 연결하고 기존 업무 이력·읽음/문의 이동을 children으로 보존했다. 이번 CUA file:// 시안 열기는 정책 거부였고 우회하지 않았다. HTML/CSS 원문 확인과 정적 검토를 수행했으며 새 UI 브라우저/실기기/사용자 최종 검수는 미실행이다.
 - **Root billing 실제 검수:** `node /tmp/ap-billing-lifecycle-run-db.mjs`, Field equivalent **70963/78883 terminal exit0 각29/29 fail0/skip0**, `/tmp/{ap,field}-billing-expiry-gate-final.log`(새18+직접 관련firstcharge11), Node24.18.0/제품별 own UUID PG17/합성 provider. 원래 KST anchor/index의 다음 한 기간·고정grace·worker 부재 시간 제한·owner/current session/org/Origin/UUID 해지·unknown/늦은 paid/기존 업무 보존·mode/환불 접근을 확인했다. 실제 카드 청구가 아니다.
 - **병렬 실제 검수:** Public 중앙 createApp AP7/7(66327), Field client5/5, 실제 OAuth/HTTP consumer1/1(83629), 계약1/1. Domain 정상 createFieldApp own PG17 11/11(40510), DNS2/2, Host3/3. Delivery backend 양제품 각13/13(89010/7245), adapter 각5/5, 추가 자기actor masked조회·무번호 유지/철회·권한 경합 양제품 각3/3(79740/23567). 각 실행계획에 명령/제품/fixture/실패/미실행을 기록했다. 전체 unit/DB/E2E/QA/G를 실행한 것은 아니다.
@@ -50,6 +50,8 @@ rg -n '^\- \[ \]' docs/technical/A07_F09_PAID_EXECUTION_PLAN.md
 - **최신 공통 검사:** `pnpm typecheck`50703 exit0(`/tmp/parallel-fixed-design-final-typecheck.log`); `pnpm lint`12958 exit0(`/tmp/parallel-fixed-design-final-lint.log`); `git diff --check` exit0. managed95896의 최신 양제품 API/web build가 각각 완료하고 모든 준비 상태까지 진행했다. 이전76527/33801 빌드는 당시 source 근거이며 마지막 source의 build는 아래 managed 로그가 우선한다.
 - **현재 로컬 환경:** 이전 managed65775에 Ctrl+C 후 terminalexit1을 관찰했으며 정상0이라고 기록하지 않는다. 최신 **managed95896** `/tmp/parallel-fixed-design-managed-runtime.log`: AP78/Field69 migrate, 양 API/web 최신 build, 각 own billing/notification/retention 및 Field custom-domain worker ready. 공급사 없는 worker는 blocked_integration 유지. `/tmp/parallel-fixed-design-runtime-evidence.log` 실제 exit0: 양 ready200/양 web200, 새 notification/domain/cancel/public-write 무인증401, own DB 마지막 migration AP78/Field69·dispatch 두 열 조회. `/tmp/parallel-fixed-design-process-evidence.log`: controller57805 한 개, AP/Field notification62984/62997·Field domain62998 한 개씩 동일parent57805. timeout으로 중복 기동하지 않는다.
 - **남음/복구:** PAID 확정 HTTP거절·환불/AI제공량·SDK callback/owner/admin UI, 고객 알림동의 UI/서비스워커/실푸시, 새 Field durable public-write BFF/화면, 일반OAuth 수명/legacy/route key, 전체QA/G/실 공급사/사용자 최종 화면 인수. 이미 완료한 internal backend와 고정 화면을 다시 만들지 않는다. 원래 order/request/unknown 증거를 보존하며 실 청구/고객 발송/DNS 변경/배포/운영 삭제는 수행하지 않았다. 이후 migration은 실제 파일/pgmigrations 확인 후 **AP79/Field70**부터 예약한다.
+
+**완료 체크/문서 검수:** 코드ef0dfd3에 연결한4개 내부 세부 체크를 추가했고 기존36개는 유지했다. 실제 Python 대조 exit0: TASKS40[x]/7[ ]·ID중복0·고정 시안경로/추가표시 유지. `/tmp/fieldai-report-venv/bin/python tools/build_report.py` exit0로 분할03/TASKS/AGENTS→마스터Markdown/HTML 재생성, `tools/check_package.py` exit0(`/tmp/parallel-fixed-design-doc-check.log`). 이는 문서/계약 패키지 검사이며 서비스/출시 게이트 통과가 아니다.
 
 **현재 주소:** AP http://localhost:3001/workspace · Field http://127.0.0.1:3002/workspace. 같은 hostname으로 로그인/Origin을 유지한다.
 

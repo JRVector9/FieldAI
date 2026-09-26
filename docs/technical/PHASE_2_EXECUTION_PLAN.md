@@ -1,6 +1,20 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
-**현재 완료 체크 기준:** TASKS.md 상단 내부36개[x]/7개[ ]가 우선이다. FIRST-CHARGE(00c3e0d)는 완료 체크했으며 다음은 PAID 갱신/해지/유예다. 아래 과거 handle/진행중/다음 문구는 당시 이력이다. 완료한 첫 청구/발급/동의/가격·위젯·회수를 재구현하지 않는다.
+## 최신 내부 완료 checkpoint — ef0dfd3 (2026-09-27)
+
+TASKS 상단 **40개[x]/7개[ ]**를 따른다. 고정 디자인은 reference/field_ui_prototype_v3.html이며 시안에 없는 기능만 `(추가)`로 표시한다. 원본 시안은 수정하지 않았다. 완료 backend/화면을 기억 부재로 다시 만들지 않는다.
+
+- [x] **A07.F09.RENEW-CANCEL-ACCESS.BACKEND** 원래 KST 기준일의 다음 한 기간 갱신·고정grace/worker 부재 시간 제한·owner/current session/org/Origin/UUID 해지·실제 send/cancel 직렬화·알려진 미발송 취소/unknown 대조·paid/grace/cleanup 접근·기존 업무/export 보존. 코드 **ef0dfd3**, AP73/76·Field67, 각 subscription-access/lifecycle/charge/consent/subscription/trial 모듈·native 검사. own UUID PG17 **70963/78883 각29/29 fail0/skip0 exit0**, 직접 관련 최초청구11 포함, 최종 정적65770 P1/P2 없음/0.87. **확정 HTTP거절·provider 환불·AI 제공량·SDK/결제 UI·실PG는 제외**한다.
+- [x] **A06.F08.DELIVERY.INTERNAL** 제품별 encrypted 동의/recipient·durable worker/lease/order/일일 시도 cap·unknown GET 대조/중복 방지·단일 알림 주체·확정 실패/명시 동의 SMS fallback·webpush port/404·410 회수·retention ciphertext 정리·owner 자기설정/철회·기존 이력 보존 UI. 코드 **ef0dfd3**, AP74/78·Field68·notification 모듈/검사·양관리실 component/CSS. own UUID PG17 각13/13+추가 설정/권한 각3/3, adapter 각5/5 exit0; backend7649/0.90·UI39859 재검토 P1/P2 없음. **고객 채널동의 UI/서비스워커·실발송·실기기/최종 화면 인수는 제외**한다.
+- [x] **F04.CUSTOM-DOMAIN.INTERNAL** 조직별 주소 등록/소유 TXT·DNS·trusted TLS/Host/site binding·짧은 증거 TTL·대표주소/기본주소 유지·disconnect/reconnect/release generation·own Host tenant/resource/확인키·AP 정확 origin별 설치/증명 보존·고정 시안 주소 UI. 코드 **ef0dfd3**, Field69·custom-domain 모듈/worker/검사·sites/Host/proof·domain-settings. 정상 createFieldApp own UUID PG17 **40510 11/11**, DNS2/2·Host3/3 exit0; 정적11413 P1/P2 없음/high(숫자없음). **실edge/DNS/TLS 공급사·실AP custom origin·사용자 최종 시각/동선 인수는 제외**한다.
+- [x] **A09.PUBLIC-WRITE.CONTRACT-BACKEND** preview.9 공개 connection/deployment POST·명시 scope/actor/org/선택AI/exactorigin·UUID/If-Match·own client 배포 verify/activate/pause·selection 회수/늦은 활성화 차단·Field 공개 HTTP consumer·새scope 동의 설명. 코드 **ef0dfd3**, AP75/77·auth/integrator/public write·Field client·OpenAPI/계약03·permanent runner/native HTTP 검사. **66327 AP7/7**, Field5/5·실OAuth/HTTP83629 1/1·계약1/1 exit0; 정적66741 P1/P2 없음/0.91. **새Field durable intent BFF/화면·실DNS·최종 인수는 제외**한다.
+
+- 공통 실제 검사: 전체 typecheck50703·lint12958 exit0. managed95896 최신 양API/web build·AP78/Field69 migrate·양ready200/양웹200·새API401·제품별 자체worker ready. logs: /tmp/parallel-fixed-design-managed-runtime.log·runtime-evidence.log·process-evidence.log. root UI 정적6407 P1/P2 없음/0.86. C02.LOCAL 추가 migration guard 실제canary6/6 exit0; 기존 완료 체크 유지.
+- 현재 내부 미완료: 확정HTTP거절/환불/AI제공량/SDK·결제UI, 새Field durable public-write BFF/UI, 고객채널동의UI/서비스워커, 일반OAuth 수명/legacy/route key. 실 공급사/QA/G·최종 사용자 화면/동선/실기기는 별도 미완료다. 전체 부모 Task/출시 완료가 아니다.
+- 실패·복구·정적리뷰와 실행된 테스트의 구분·정확한 다음 명령은 CODEX_HANDOFF.md 최신 통합 항목을 따른다. 적용73~78/67~69는 덮어쓰지 않으며 다음schema번호는 실제상태 확인 후 AP79/Field70부터 예약한다.
+
+
+**이력 — 이전 완료 체크 기준:** TASKS.md 상단 내부36개[x]/7개[ ]가 우선이다. FIRST-CHARGE(00c3e0d)는 완료 체크했으며 다음은 PAID 갱신/해지/유예다. 아래 과거 handle/진행중/다음 문구는 당시 이력이다. 완료한 첫 청구/발급/동의/가격·위젯·회수를 재구현하지 않는다.
 
 
 ### C03/A08 AP 권한 회수·격리 복원 — 2026-09-26 작업 시작
@@ -1928,7 +1942,8 @@ AP와 Field의 독립 웹 앱에서 문서의 역할별 화면·이동 경로·�
 - 시안 owner/billing/admin/billing을 file:// Chromium320으로 실제 열어 /tmp/ap-paid-{owner,admin}-prototype-320.png 직접 확인했다. 기존 통합29,000/31,900원 가격은 승계하지 않는다.
 - 설계 기준: 제품별 불변 승인 plan·명시 동의·(subscription,period) 유일 거래·월말 원래 기준일. unknown은 같은 거래 조회로 대조하고 새 청구/가짜 성공으로 해결하지 않는다.
 - [x] **PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE:** 가격/기간/owner 동의 native API·인증 발급/최초 청구 worker·같은 주문 미상 복구는 각 완료 checkpoint를 따른다(b639a4d/1a04815/ed61b70/00c3e0d). 기존 구현을 반복하지 않는다.
-- [ ] 남은 갱신/해지/유예·HTTP 확정거절 분류, 환불/제공량/cleanup 제한, SDK callback/시안 owner/admin UI. 현재 다음은 갱신/해지/유예다. 아래 착수 당시 미구현/“다음” 문구는 이력이다.
+- [x] **RENEW-CANCEL-ACCESS.BACKEND / ef0dfd3:** 갱신/해지/고정grace·시간 기반 paid/grace/cleanup 접근 내부검수 각29/29 및 managed95896 반영.
+- [ ] HTTP 확정거절 분류·provider 환불/AI제공량·SDK callback/고정 시안 owner/admin 결제 UI. 아래 착수 당시 미구현/“다음” 문구는 이력이다.
 
 - 1차 구현 당시 이력: AP69/Field63 native plan 요청/다른 운영자 승인/retire·승인 불변, own billing 최근100 조회와 schema 기간 유일/동의 binding·원래 KST 월말 계산. AP77913 3/3/Field45417 3/3(각 새1+관련기존trial2)·제품별 calendar1/1 통과. API type78751/35863·lint41444도 실제 exit0. 당시 review87487의 P2 consent binding을 다음 기록대로 보완했다. 유료 owner 동의/PG/worker/환불/제공량/UI 미구현이며 위 전체 Paid 체크박스는[ ]로 유지한다.
 

@@ -10,7 +10,7 @@
 
 ## 기준/착수 증거
 
-**현재 상태(2026-09-27):** TASKS의 PLAN-BASIS(b639a4d)·CONSENT-BACKEND(1a04815)·AUTH-ISSUE(ed61b70)·FIRST-CHARGE(00c3e0d)는 `[x]`다. 아래 착수 당시 상태는 이력이다. 다음은 미완료 갱신/해지/유예이며, 이어서 환불/제공량/접근제한·SDK callback/owner/admin UI를 연결한다. 현재 체크는 내부36개[x]/잔여7개[ ]이며 기존 완료를 다시 구현하지 않는다.
+**현재 상태(2026-09-27):** TASKS40[x]/7[ ]. PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE·RENEW-CANCEL-ACCESS.BACKEND(ef0dfd3)는 완료다. 다음 내부 범위는 확정HTTP거절·provider 환불/AI제공량·SDK callback/owner/admin UI이며 기존 완료를 반복하지 않는다.
 
 - HEAD0802a23, git status clean. TASKS 내부 완료32개/미완료7개 중 A07.F09.PAID 선택. subscription.ts 양제품은 trial과 checkout503뿐이며 billing period/plan/transaction 원장은 없다. 이미 완료된 trial/usage/설치/보존/회수는 다시 만들지 않는다.
 - 요구: architecture B01~B04/B10~B12·결정17, AP PRD2.8·Field PRD3.8, 보안5.4/5.5·QA43~46/113/126/146·G-A1/G-F3/G-L1. 실제 G 승인/실 공급사는 후속이다.
@@ -57,7 +57,7 @@ assert.equal(response.statusCode, 201, response.body);
 
 ## 2. 실제 provider port/거래 실행·미상 복구·갱신/해지
 
-### 현재 선택 — A07.F09.RENEW-CANCEL-ACCESS (2026-09-27)
+### 완료 checkpoint — A07.F09.RENEW-CANCEL-ACCESS.BACKEND (2026-09-27)
 
 - 착수 HEADfc10170/clean·TASKS36[x]/7[ ]·managed65775 live. 직전 체크 정합성 commit은 progress. FIRST-CHARGE00c3e0d의 완료를 보존하며 실제 period0 전용 claim/paid 미반영 trial-access에 갱신·시간 기반 접근을 추가한다.
 - Files: AP000073_billing_lifecycle.sql/Field000067_billing_lifecycle.sql; 각 billing-charge-execution/worker·billing-consent-routes·billing·subscription·trial-access, 새 subscription-access.ts·test/billing-lifecycle.db.test.ts. 기존 적용72/66와 공개 cross-product 계약은 변경하지 않는다.
@@ -65,8 +65,8 @@ assert.equal(response.statusCode, 201, response.body);
 - Decisions: 원래 anchor+index의 다음 한 기간만 생성하고 기간 전체가 지난 미수금은 자동 몰아 청구하지 않는다. grace는 예정 period start+동의 graceDays로 고정해 worker 부재/재시도로 연장하지 않는다. 결제 승인시각은 거래에 보존하되 갱신으로 anchor/기간을 이동하지 않는다. owner/current session·Origin·UUID idempotency·org→sub/tx lock 해지로 미시작 원장을 취소하고 시작한 processing/unknown은 같은 주문 대조로 유지한다. 남은 paid 기간/기존 업무/확인키/export는 보존한다. 종료된 paid나 nonmock 미구독은 신규 업무만 거절하며 유효 paid/grace는 과거 trial 만료보다 우선한다. mock 체험 미시작의 기존 로컬 동작은 유지한다.
 - Verification: 새 native 파일을 각 fixture own UUID PG17에 실행한다. 실패 먼저 확인 후 월말/동시/응답 유실·같은order·해지 선후·늦은 승인·고정grace/worker부재·미수기간/원장불변·권한/Origin/멱등을 구현한다. 직접 확장한 first-charge 파일만 관련 회귀에 포함한다. `node /tmp/{ap,field}-billing-lifecycle-run-db.mjs`, 각 API typecheck/build, `pnpm lint`, 좁은 read-only CLI 검토. tests는 synthetic provider, 실 PG/전체 QA/시안/UI는 미실행.
 - Failure/rollback: 실패/unknown은 기존 transaction/request를 유지하고 새 주문을 생성하지 않는다. 적용 migration을 되돌리거나 원장을 삭제하지 않는다. 다음 HTTP 확정거절/환불/AI 제공량/SDK·UI 단계와 실 PG gate는 미완료로 남긴다.
-- Review repair 추가 근거: CLI21200 P1(0.96) lookup 중 해지 뒤 POST 경합은 native3calls≠2로 재현해 구독별 send/cancel gate로 직렬화했다. 후속85028 P2(0.94)는 claim 뒤 실제 POST 전에 해지된 **미발송** 거래를 unknown으로 영구 보존해 새 가입을 막는 경우다. native81822/44662 unknown≠canceled를 재현했다. 아직 미커밋/managed 미적용인 새73/67에 dispatch tracking version/호출 직전 marker와 불변 guard를 추가한다. 기존72/66 원장의 version0은 이미 호출됐을 수 있어 unknown을 유지하고, version1+marker 없음의 중지 거래만 로컬 미발송 실패/기간 취소로 닫는다. 외부 응답 불확실을 확정 실패로 바꾸지 않는다.
-- [ ] native 갱신/해지/시간 기반 접근 구현·검수·runtime 반영·완료 체크.
+- Review repair 추가 근거: CLI21200 P1(0.96) lookup 중 해지 뒤 POST 경합은 native3calls≠2로 재현해 구독별 send/cancel gate로 직렬화했다. 후속85028 P2(0.94)는 claim 뒤 실제 POST 전에 해지된 **미발송** 거래를 unknown으로 영구 보존해 새 가입을 막는 경우다. native81822/44662 unknown≠canceled를 재현했다. 당시 미커밋/미적용73/67의 추가 계획이었으나 AP73 적용 사고 이후 dispatch tracking은 새AP76으로 분리했고 Field67에 유지했다. ef0dfd3/managed95896에 반영됐으며 적용73~78/67~69를 덮어쓰지 않는다. 기존72/66 원장의 version0은 이미 호출됐을 수 있어 unknown을 유지하고, version1+marker 없음의 중지 거래만 로컬 미발송 실패/기간 취소로 닫는다. 외부 응답 불확실을 확정 실패로 바꾸지 않는다.
+- [x] **A07.F09.RENEW-CANCEL-ACCESS.BACKEND** 원래 KST 기준일의 다음 한 기간 갱신·고정grace/worker 부재 시간 제한·owner/current session/org/Origin/UUID 해지·실제 send/cancel 직렬화·알려진 미발송 취소/unknown 대조·paid/grace/cleanup 접근·기존 업무/export 보존. 코드 **ef0dfd3**, AP73/76·Field67, 각 subscription-access/lifecycle/charge/consent/subscription/trial 모듈·native 검사. own UUID PG17 **70963/78883 각29/29 fail0/skip0 exit0**, 직접 관련 최초청구11 포함, 최종 정적65770 P1/P2 없음/0.87. **확정 HTTP거절·provider 환불·AI 제공량·SDK/결제 UI·실PG는 제외**한다.
 
 ### 완료 이력 — A07.F09.FIRST-CHARGE (2026-09-27)
 
@@ -102,8 +102,8 @@ assert.equal(response.statusCode, 201, response.body);
 - [x] **CONSENT-BACKEND(1a04815)**에서 Toss client/secret/MID·별도 billing 암호화 key와 product/profile 검증 완료. 서버 키/billingKey/authKey는 응답/로그/원본 export에 노출하지 않는다. 원시 카드 번호를 받지 않는다.
 - [x] **AUTH-ISSUE·FIRST-CHARGE:** 같은 요청 ID/claim을 DB에 저장한 뒤 provider를 호출하고, crashed processing/응답 유실은 원래 요청/같은 order로 대조한다. 금액/통화/MID/order/세금/승인시각을 검증해야 paid로 반영한다. 위 native 검사와 ed61b70/00c3e0d가 근거다.
 - [ ] 실제 SDK return 페이지의 현재 session/org/state 대조와 인증 결과 재조회 동선을 연결한다. callback query만으로 인증/결제 성공을 표시하지 않는다.
-- [ ] 월 갱신은 기존 동의 금액/원래 기준일로 한 기간만 만든다. unknown이면 새 order를 만들지 않는다. 과거 여러 기간을 몰래 묶어 청구하지 않는다. 실패는 승인된 grace 기간/cleanup mode로 구분한다.
-- [ ] owner 해지는 아직 시작하지 않은 갱신을 중지하고 남은 paid 기간/기존 문의·예약·export를 유지한다. 이미 processing/unknown인 거래는 결과 확인 대상으로 남긴다. 다른 제품 구독을 호출하지 않는다.
+- [x] **RENEW-CANCEL-ACCESS.BACKEND / ef0dfd3:** 월 갱신은 기존 동의 금액/원래 기준일로 한 기간만 만든다. unknown이면 새 order를 만들지 않는다. 과거 여러 기간을 몰래 묶어 청구하지 않는다. 실패는 승인된 grace 기간/cleanup mode로 구분한다.
+- [x] **RENEW-CANCEL-ACCESS.BACKEND / ef0dfd3:** owner 해지는 아직 시작하지 않은 갱신을 중지하고 남은 paid 기간/기존 문의·예약·export를 유지한다. 이미 processing/unknown인 거래는 결과 확인 대상으로 남긴다. 다른 제품 구독을 호출하지 않는다.
 - [x] **CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE의 현재 서버/worker:** 공급사 부재는 blocked_integration, 이미 시작한 요청은 unknown으로 유지하며 같은 원장을 보존한다. product/profile/MID/키 binding 및 test/live 설정 분리를 구현·검수했다. managed65775의 각 auth/first-charge worker도 blocked_integration ready다. 향후 갱신/환불 worker의 동일 조건 검수와 실 공급사 검수는 미완료다.
 
 ## 3. 환불·제공량·기능 제한
@@ -113,7 +113,7 @@ assert.equal(response.statusCode, 201, response.body);
 - [ ] 고객 요청→operator 검토/다른 승인→provider cancel의 금액 상한/중복/timeout·동일 거래 조회를 재현한다.
 - [ ] 해지와 환불을 별도 기록한다. 완료 환불의 실제 provider transaction을 저장하며 기존 지불·환불을 덮어쓰지 않는다. 부분 환불 합계는 실제 paid 금액 이하, 미상 환불 중 추가 cancel은 차단한다. 불확실한 cancel를 다른 취소와 임의 매핑하지 않는다.
 - [ ] 승인된 제공량과 해당 paid period의 실제 소비/진행 중 예약을 제품별 원장으로 검사한다. 초과는 제한/경고이고 자동 추가 청구가 아니다. 기존 문의/예약 답변·확정·고객 확인키·export는 cleanup 상태에도 유지한다.
-- [ ] 환불 전후/유예 만료/worker 부재의 시간 기반 접근을 검수하고 paid가 유효하면 과거 trial 만료만으로 신규 기능을 거절하지 않는다.
+- [x] **RENEW-CANCEL-ACCESS.BACKEND / ef0dfd3:** 저장된 환불 상태/유예 만료/worker 부재·mode의 시간 기반 접근 검수 각29/29. 실제 provider 환불 실행/대조는 위 미완료 항목에 남는다.
 
 ## 4. 시안 기반 owner/admin UI·runtime·단계 완료 체크
 
@@ -149,3 +149,8 @@ pnpm build:web:field
 - AP73은 own mock에 이미 적용되어 동결. 뒤에 추가한 dispatch schema는 새AP76으로 분리했다. Field67은 own mock 미적용이므로 원본에 추가 유지. AP74/75도 적용돼 보완은 delivery78/public77로 분리한다. UI는 고정 시안, 새 기능만 `(추가)`이며 배치/스타일 재설계하지 않는다.
 
 - CLI11284 terminalexit0/P2 confidence0.94: 기간 종료 직전 시작한 lookup이 종료 후 빈 결과를 반환하면 시작snapshot now로 갱신POST 가능. 새 native에서 실제 lookup 기다림 중 종료경계를 넘는 추가red를 재현하고 send gate에서 원래기간/15일멱등창을 현재elapsed clock으로 재확인한다. 양제품28/28은 이 새경계추가 전 검수이며 최종repair는 아직이다.
+
+### 갱신/해지 최종 완료 근거 — ef0dfd3 (2026-09-27)
+
+- 실제 own UUID PG17 최종70963/78883 각29/29 exit0 fail0/skip0, /tmp/{ap,field}-billing-expiry-gate-final.log. 네 경합/중단/만료 지적은 실제red 후 수정했고 최종65770 read-only review P1/P2 없음/confidence0.87. 전체 typecheck50703·lint12958 및 managed95896 최신 양API/web build·AP78/Field69 적용/ready 확인.
+- 전체 paid UI/실SDK/실PG·provider 환불/AI제공량·확정HTTP거절·QA/G는 미완료다. 과거 진행 중/다음 기록은 당시 이력이며 이 checkpoint와 TASKS를 우선한다.

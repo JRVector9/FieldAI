@@ -72,3 +72,9 @@ Coordinator(root)가 실제 중앙 변경을 적용했다(직접 파일 읽음):
 - row: id/hostname/state/desiredState/ownership/dns/tls/binding/isPrimary/origin/checkedAt/validUntil/certificateExpiresAt/error + verification(txtName/txtValue/cnameName/cnameTarget) + apOrigin(origin/approvalRequired:true).
 - state: registered/ownership_pending/dns_pending/tls_pending/connected/blocked_integration/unknown/error/release_pending/disconnected/verification_expired를 구분. 기본주소는 domain 준비와 무관하게 유지한다.
 - AP GET설치에 defaultOrigin·origin별 installations[]; POST설치/verification body.origin은 선택된 정확 custom origin이다. publicSite의 siteOrigin은 canonical, requestOrigin은 해당 요청에서 허용된 실제 origin, defaultOrigin은 계속유효한 기본주소다.
+
+## 내부 완료 체크와 중앙 반영 (2026-09-27)
+
+- [x] **F04.CUSTOM-DOMAIN.INTERNAL** 조직별 주소 등록/소유 TXT·DNS·trusted TLS/Host/site binding·짧은 증거 TTL·대표주소/기본주소 유지·disconnect/reconnect/release generation·own Host tenant/resource/확인키·AP 정확 origin별 설치/증명 보존·고정 시안 주소 UI. 코드 **ef0dfd3**, Field69·custom-domain 모듈/worker/검사·sites/Host/proof·domain-settings. 정상 createFieldApp own UUID PG17 **40510 11/11**, DNS2/2·Host3/3 exit0; 정적11413 P1/P2 없음/high(숫자없음). **실edge/DNS/TLS 공급사·실AP custom origin·사용자 최종 시각/동선 인수는 제외**한다.
+
+managed95896 AP78/Field69·최신 양API/web build/ready·양웹200·새API401·자체workers ready를 root가 실제 확인했다. 현재 TASKS40[x]/7[ ]이며 전체 출시 완료가 아니다. 상세 현재 결과/미실행/다음 명령은 CODEX_HANDOFF.md 상단을 따른다.

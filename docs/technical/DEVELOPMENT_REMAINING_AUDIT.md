@@ -1,27 +1,41 @@
 # 개발 종료까지 남은 범위 — 2026-09-26 1차 코드 대조
 
+## 최신 내부 완료 checkpoint — ef0dfd3 (2026-09-27)
+
+TASKS 상단 **40개[x]/7개[ ]**를 따른다. 고정 디자인은 reference/field_ui_prototype_v3.html이며 시안에 없는 기능만 `(추가)`로 표시한다. 원본 시안은 수정하지 않았다. 완료 backend/화면을 기억 부재로 다시 만들지 않는다.
+
+- [x] **A07.F09.RENEW-CANCEL-ACCESS.BACKEND** 원래 KST 기준일의 다음 한 기간 갱신·고정grace/worker 부재 시간 제한·owner/current session/org/Origin/UUID 해지·실제 send/cancel 직렬화·알려진 미발송 취소/unknown 대조·paid/grace/cleanup 접근·기존 업무/export 보존. 코드 **ef0dfd3**, AP73/76·Field67, 각 subscription-access/lifecycle/charge/consent/subscription/trial 모듈·native 검사. own UUID PG17 **70963/78883 각29/29 fail0/skip0 exit0**, 직접 관련 최초청구11 포함, 최종 정적65770 P1/P2 없음/0.87. **확정 HTTP거절·provider 환불·AI 제공량·SDK/결제 UI·실PG는 제외**한다.
+- [x] **A06.F08.DELIVERY.INTERNAL** 제품별 encrypted 동의/recipient·durable worker/lease/order/일일 시도 cap·unknown GET 대조/중복 방지·단일 알림 주체·확정 실패/명시 동의 SMS fallback·webpush port/404·410 회수·retention ciphertext 정리·owner 자기설정/철회·기존 이력 보존 UI. 코드 **ef0dfd3**, AP74/78·Field68·notification 모듈/검사·양관리실 component/CSS. own UUID PG17 각13/13+추가 설정/권한 각3/3, adapter 각5/5 exit0; backend7649/0.90·UI39859 재검토 P1/P2 없음. **고객 채널동의 UI/서비스워커·실발송·실기기/최종 화면 인수는 제외**한다.
+- [x] **F04.CUSTOM-DOMAIN.INTERNAL** 조직별 주소 등록/소유 TXT·DNS·trusted TLS/Host/site binding·짧은 증거 TTL·대표주소/기본주소 유지·disconnect/reconnect/release generation·own Host tenant/resource/확인키·AP 정확 origin별 설치/증명 보존·고정 시안 주소 UI. 코드 **ef0dfd3**, Field69·custom-domain 모듈/worker/검사·sites/Host/proof·domain-settings. 정상 createFieldApp own UUID PG17 **40510 11/11**, DNS2/2·Host3/3 exit0; 정적11413 P1/P2 없음/high(숫자없음). **실edge/DNS/TLS 공급사·실AP custom origin·사용자 최종 시각/동선 인수는 제외**한다.
+- [x] **A09.PUBLIC-WRITE.CONTRACT-BACKEND** preview.9 공개 connection/deployment POST·명시 scope/actor/org/선택AI/exactorigin·UUID/If-Match·own client 배포 verify/activate/pause·selection 회수/늦은 활성화 차단·Field 공개 HTTP consumer·새scope 동의 설명. 코드 **ef0dfd3**, AP75/77·auth/integrator/public write·Field client·OpenAPI/계약03·permanent runner/native HTTP 검사. **66327 AP7/7**, Field5/5·실OAuth/HTTP83629 1/1·계약1/1 exit0; 정적66741 P1/P2 없음/0.91. **새Field durable intent BFF/화면·실DNS·최종 인수는 제외**한다.
+
+- 공통 실제 검사: 전체 typecheck50703·lint12958 exit0. managed95896 최신 양API/web build·AP78/Field69 migrate·양ready200/양웹200·새API401·제품별 자체worker ready. logs: /tmp/parallel-fixed-design-managed-runtime.log·runtime-evidence.log·process-evidence.log. root UI 정적6407 P1/P2 없음/0.86. C02.LOCAL 추가 migration guard 실제canary6/6 exit0; 기존 완료 체크 유지.
+- 현재 내부 미완료: 확정HTTP거절/환불/AI제공량/SDK·결제UI, 새Field durable public-write BFF/UI, 고객채널동의UI/서비스워커, 일반OAuth 수명/legacy/route key. 실 공급사/QA/G·최종 사용자 화면/동선/실기기는 별도 미완료다. 전체 부모 Task/출시 완료가 아니다.
+- 실패·복구·정적리뷰와 실행된 테스트의 구분·정확한 다음 명령은 CODEX_HANDOFF.md 최신 통합 항목을 따른다. 적용73~78/67~69는 덮어쓰지 않으며 다음schema번호는 실제상태 확인 후 AP79/Field70부터 예약한다.
+
+
 **완료 항목 기준:** `TASKS.md` 상단 체크 원장을 먼저 읽는다. 본 문서의 부모 Task “부분/미완료”는 남은 범위가 있다는 뜻이며, 이미 `[x]`인 세부 구현을 다시 하라는 지시가 아니다. 재개는 AGENTS.md6.1에 따른 구체적 증거/사유가 있을 때만 한다.
 
-**2026-09-27 표시 정합성 점검:** 내부36[x]/잔여7[ ] 유지. paid/phase의 오래된 owner 동의/인증 발급/최초 청구 미완료 표시는 기존 PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE 근거에 맞춰 체크했다. 실 SDK return·갱신/해지/유예·환불/제공량/UI는 별도 미완료다. 과거 “다음” 지시를 현재 작업으로 읽어 완료 기능을 다시 구현하지 않는다. 문서 점검만으로 전체 기능군/QA/G를 통과 처리하지 않는다.
+**이력 — 2026-09-27 표시 정합성 점검:** 내부36[x]/잔여7[ ] 유지. paid/phase의 오래된 owner 동의/인증 발급/최초 청구 미완료 표시는 기존 PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE 근거에 맞춰 체크했다. 실 SDK return·갱신/해지/유예·환불/제공량/UI는 별도 미완료다. 과거 “다음” 지시를 현재 작업으로 읽어 완료 기능을 다시 구현하지 않는다. 문서 점검만으로 전체 기능군/QA/G를 통과 처리하지 않는다.
 
 
 ## 기준과 한계
 
 - 1차 대조 기준 commit: **eab1d30** (AP native revocation journal/격리 restore). 후속 A05.WIDGET-END 완료 코드 **fe6a524**와 실제 범위 검수는 아래1행/coverage/인계에 갱신했다. Node24.18.0·로컬 mock PostgreSQL17·Field Valkey8.1.10.
-- 사용자 우선순위: 문서 기능을 끝까지 구현해 사용할 로컬 환경을 유지한다. 실 인증/MFA·공급사 연결은 후속, 최종 화면/동선 테스트는 사용자가 한다. 화면 작업 때는 `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`을 직접 열어 비교한다.
+- 사용자 우선순위: 문서 기능을 끝까지 구현해 사용할 로컬 환경을 유지한다. 실 인증/MFA·공급사 연결은 후속, 최종 화면/동선 테스트는 사용자가 한다. 디자인은 `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`로 고정한다. 새 화면 구현 시 HTML/CSS를 기준으로 사용하고 기존 완료 화면을 반복 조정하지 않는다. 새 기능만 `(추가)`로 표기한다.
 - v3 architecture B01~B12/21결정, 양제품 PRD, 연동4.11~4.12, 보안5.3~5.7, TASKS 원본 **46개 Task**, QA01~160을 기능군에 대조했다. 아래는 코드/계약을 읽은 인벤토리이며 **46개 완료/160개 통과라는 뜻이 아니다**.
 - 이번 대조에서 추가 서비스 테스트/전체 시안 비교는 실행하지 않았다. native 테스트 최신 실제 증빙은 인계 상단: AP29/29·Field30/30·AP 단독 native revoke200→401/브라우저1/1. UI/API 파일이 있다는 이유로 Done 판정하지 않는다.
 - 정확한 시간/완료율은 아직 산정하지 않는다. 내부 구현 누락과 공급사 key 부재를 구분하지 않은 기존 “3작업군” 설명을 작은 Task3개로 해석하면 안 된다. 추가 역할/상태별 누락은 계속 이 목록에 기록한다.
 
-## 1차 내부 개발 6묶음 중 위젯 완료 — 현재 남은 5묶음
+## 기능군별 남은 범위 — 내부 완료와 외부/최종 인수 분리
 
 | 순서 | 작업 / 관련 ID·QA | 현재 직접 확인한 근거 | 종료 기준 |
 |---|---|---|---|
 | 1 | [x] A05.WIDGET-END 내부 완료 / C03,A05,D03·QA17/97~102/119 | 코드 fe6a524: native iframe 종료410/안내·입력/AI/조건 폐기·현재 종료 ID를 확인한 새 상담·유실 응답 재조회·과거 ticket 만료/직렬화. 집중 own PG17 DB2/2·native Chromium320 2/2·최종 repair review 추가 P1/P2 없음·managed48590 반영. | 내부 범위는 완료다. 기존 first-party receipt를 유지하며 전체 역할 시안/사용자 최종 인수·실 외부 설치/기기·전체 QA/G는 별도로 남는다. |
-| 2 | 독립 유료 구독 내부 기능 / A07,F09·QA43~46/126/146 | [x] 가격/동의/인증발급·**FIRST-CHARGE 00c3e0d**. own 명시tax·첫 거래/기간·원래 order/key/body/start·GET 대조·키 회전/창 제한/stale 폐기·실 승인시각/date/overlap/암호화 paymentKey. 최신 DB각12/12·port각3/3·type/lint/build·review26858 P1/P2 없음(confidence0.82), managed65775 각 auth/charge worker ready·양웹200. 미설정PG/legacy tax는 blocked 유지. | 갱신/해지/유예·확정 HTTP거절 분류·환불/entitlement·접근제한·SDK callback/owner/admin UI. 완료 가격/동의/발급/첫 청구를 반복하지 않는다. 유료전체/실PG는 미완료다. |
-| 3 | 알림 발송 내부 기능 / A06,F08·QA35~40/148/149 | in_app 이벤트/읽음·outbox·단일 알림 주체/route generation은 있다. 고객 알림은 `blocked_integration`, 실제 kakao/SMS/webpush 발송·콜백/재조회 worker는 없다. | 제품별 provider adapter·시도/상태/usage 원장·중복/역순/unknown 조회·실패 확정 때만 SMS fallback·푸시 등록/해제/설정/UI. 공급사 미설정이면 blocked 유지. |
-| 4 | Field 자체 주소 설정 / F04·PRD3.4·QA13~15 | `sites.ts` 기본 slug/base domain 공개와 tenant host 검사만. 자체 domain 등록/검증/DNS/TLS 상태를 저장·변경하는 native API/DB가 없다. | 도메인 요청/소유 확인/연결 상태와 오류·대표URL, 실패 시 기본 주소 유지, AP 새 origin은 공개 계약 검증. live DNS/TLS 공급사는 후속 연결. |
-| 5 | 공개 통합자 최소 계약 / C01,A09·PRD2.10/계약4.12·QA129~133/158 | 문서의 POST `/integrations/v1/connections`, POST `/integrations/v1/deployments`와 scope `ap.deployments.manage`가 현재 OpenAPI/auth/native API에 없다. 현재 deployments는 GET, 해제는 연결별 HMAC이고 범용 manage는 문서도 후속이라고 명시한다. | Coordinator 계약 변경→consumer 검사→native 구현, Field도 동일 공개 client 계약 사용, 모든 client/actor/org/scope 검증·버전/오류 호환성. 범용 manage 후속과 현재 필수 계약 차이는 ADR로 명시. |
+| 2 | 독립 유료 구독 / A07,F09·QA43~46/126/146 | [x] 가격/동의/인증/첫청구·RENEW-CANCEL-ACCESS.BACKEND(ef0dfd3). own PG17 각29/29, 고정 grace·해지 send gate·미발송 취소/unknown·시간 기반 접근. | 확정 HTTP거절·provider 환불/AI제공량·SDK callback/owner/admin UI·실PG/최종 인수. |
+| 3 | 알림 / A06,F08·QA35~40/148/149 | [x] DELIVERY.INTERNAL(ef0dfd3): port/ledger/worker/unknown조회·동의/상한/fallback·owner 고정설정UI. 각13/13+추가각3/3·adapter각5/5. | 고객 채널동의 UI/서비스워커·실발송/실기기/최종 인수. |
+| 4 | Field 주소 / F04·PRD3.4·QA13~15 | [x] CUSTOM-DOMAIN.INTERNAL(ef0dfd3): 등록/소유/DNS/TLS 증거 상태·Host/release·대표/기본주소·origin별SDK/proof·고정UI. native11/11·DNS2/2·Host3/3. | 실edge/DNS/TLS 공급사·실AP custom origin·최종 화면/동선 인수. |
+| 5 | 공개 통합자 / C01,A09·PRD2.10/계약4.12·QA129~133/158 | [x] PUBLIC-WRITE.CONTRACT-BACKEND(ef0dfd3): preview.9/scope/POST/If-Match/idempotency·consumer. AP7/7·Field5/5·실HTTP1/1·계약1/1. | 새Field durable intent BFF/화면·실DNS/최종 인수·후속 범용manage 계약. |
 | 6 | 권한 수명과 백업 후 복원 / A08,F09,I06·QA47/150~153 | native 연결/selection 회수는 이번 eab1d30에서 journal/restore 구현. 설치된 OAuth provider의 개별 access row 삭제·refresh rotation/revoke family는 별도다. legacy revoked baseline과 Field route key 종료 수명도 미완료. | 실제 native auth 수명 사건의 durable proof·별도 복원 재적용·legacy 근거·원격 미확인/키 종료·기존 업무/접근 유지. 운영 RPO/RTO와 checkpoint/journal 동시 과거 교체 방지는 운영 게이트. |
 
 순서는 고객이 사용하는 작은 위젯 보완 후 큰 미구현 구독·알림·주소·공개 client 기능을 먼저 완성하고, 기존 회수 보완을 별도 완료 기준으로 끝내기 위한 것이다. 새로운 보안 항목을 임의로 계속 확장하지 않는다. 기능 작업 시작 전 각 범위/QA/명령을 phase plan에 기록한다.
@@ -41,39 +55,39 @@
 | Task | 현재 범위 | 직접 대조한 코드/문서 | 남은 것 |
 |---|---|---|---|
 | C00 | 구현 이력 | C00_INVENTORY.md | 외부 운영 자산 부재·QA115 N/A는 미확인 |
-| C01 | 부분 | contracts/*-integrator-v1.openapi.json | PRD 최소 목록과 public POST connection/deployment 차이, 구버전 정책 |
+| C01 | 공개write 내부 계약 구현 | preview.9·integrator-public-write·ef0dfd3 | 전체 구버전 호환/범용관리 후속·새Field BFF/UI |
 | C02 | 로컬 부분 검수 | tools/mock-run.mjs·run-independence.mjs | 운영 DB/큐/키/파일 ACL·CI/배포 |
 | C03 | 부분 | 양제품 web/src·reference HTML·위젯 fe6a524 | 모든 역할/최종 시안 대조·미완료 기능 UI |
 | A00 | 로컬 구현 | agent-api/src/auth.ts·business.ts | 이메일 소유·카카오·계정 연결·번호 변경·MFA 후속 |
 | A01 | 내부 구현 | business.ts·agents.ts·field-sources.ts | 전체 QA/실 모델 근거 검수 |
 | A02 | 내부 구현 | customer-consultations.ts·inquiries.ts·inquiry-attachments.ts | 전체 고객/실기기 인수 |
-| A03 | 내부 구현 | inquiries.ts·customer-consultations.ts | 외부 알림 발송은 별도 미구현 |
+| A03 | 내부 구현 | inquiries.ts·customer-consultations.ts | 고객 알림동의 UI/실발송·최종 인수 |
 | A04 | adapter 구현/외부 미연결 | openai.ts·agents.ts | 실 LLM·모델/예산 설정과 공급사 검수 |
 | A05 | 내부 위젯 보완 완료 | deployments.ts·agent-public.tsx·fe6a524 | 실 외부 설치/기기·사용자 최종 인수 |
-| A06 | 이벤트 원장만 구현 | inquiries.ts·field-actions.ts | 공급사 발송/콜백/unknown 조회·SMS fallback·webpush |
-| A07 | 체험·가격/동의 backend 부분 구현 | subscription·billing·consent/context/Toss, b639a4d/1a04815 | 인증 발급/청구 worker·미상/갱신/해지/환불·제공량·SDK/결제 UI·실 PG |
+| A06 | 발송 내부/설정 UI 구현 | notification 모듈·ef0dfd3 | 고객 동의 UI/서비스워커·실발송/기기 |
+| A07 | 구독 lifecycle backend 구현 | billing/subscription-access·ef0dfd3 | 확정HTTP거절·환불/AI제공량·SDK/결제UI·실PG |
 | A08 | 부분 | admin.ts·customer-support.ts·retention/revocation 모듈 | 일반 OAuth 개별 수명/legacy 증빙·운영 백업/MFA |
-| A09 | 부분 | auth.ts·integrator-routes.ts | 최소 public 연결/설치 write API·scope·범용 client 계약 대조 |
+| A09 | 공개 write 계약/backend 구현 | integrator-public-write/Field HTTP client·ef0dfd3 | 새Field durable BFF/UI·전체 호환/범용manage 후속 |
 | A10 | 미완료 | run-independence.mjs AP mock 실제 통과 | 실 AI/알림/결제 없는 로컬 결과는 전체 실검수 아님 |
 | A11 | 미승인 | 보안 문서5.7 | G-A1~3/G-L1 실제 evidence/출시 승인 |
 | F00 | 로컬 구현 | field-api/src/auth.ts·business.ts | 실 인증/계정 보안은 후속 |
 | F01 | 내부 구현 | business.ts·bookings.ts | 전체 필드/역할 인수 |
 | F02 | 내부 구현 | sites.ts·site-media.ts·site-editor.tsx | HEIC/운영 저장소·최종 접근성/시안 |
 | F03 | adapter/worker 구현 | field-openai.ts·site-generation.ts·worker.ts | 실 제작 LLM·모델/예산 설정 |
-| F04 | 기본 공개만 구현 | sites.ts·server.ts | 자체 domain 등록/검증/DNS/TLS/실패 상태 API/DB/UI |
+| F04 | 도메인 내부/Host/고정UI 구현 | custom-domain/sites/domain-settings·ef0dfd3 | 실edge/DNS/TLS·실AP custom origin·최종 인수 |
 | F05 | 내부 구현 | inquiries.ts·inquiry-attachments.ts | 전체 고객/실기기 인수 |
-| F06 | 내부 구현 | inquiries.ts·field-workspace.tsx | 외부 발송은 별도 미구현 |
+| F06 | 내부 구현 | inquiries.ts·field-workspace.tsx | 고객 동의 UI/실발송·최종 인수 |
 | F07 | 내부 구현 | bookings.ts·reservations.ts·field-booking.tsx | 전체 예약 상태/역할/실기기 최종 인수 |
-| F08 | 이벤트 원장만 구현 | notifications.ts·reservation events | 공급사 발송/콜백/unknown 조회·SMS fallback·webpush |
-| F09 | 부분 | subscription/billing/consent/context/Toss·admin/support/retention/revocation | 인증 발급/청구/환불/제공량/결제 UI·route key/legacy 증빙·운영 MFA/복구 |
+| F08 | 발송 내부/설정 UI 구현 | notification 모듈·ef0dfd3 | 고객 동의 UI/서비스워커·실발송/기기 |
+| F09 | 부분 | billing/subscription-access·admin/support/retention/revocation·ef0dfd3 | 확정HTTP거절·환불/AI제공량·SDK/결제UI·route key/legacy·운영MFA/복구 |
 | F10 | 미완료 | run-independence.mjs Field 기존 로컬 증빙 | 실 제작 AI/알림/구독/도메인까지 독립 검수 |
 | F11 | 미승인 | 보안 문서5.7 | G-F1~3/G-L1 실제 evidence/출시 승인 |
 | I00 | 로컬 구현 | 양제품 auth·integrator·connector | 실 계정/전체 scope·재동의 lifecycle 인수 |
 | I01 | 로컬 구현 | 양제품 connector/integrator·source 모듈 | public client 동등 조건/전 scope 대조 |
 | I02 | 로컬 구현 | field-sources/source-refreshes·facts-change-delivery | 전체 stale/가격·호환성 QA 증빙 |
-| I03 | 로컬 구현 | AP deployments·Field site SDK 설치 | 새 자체 domain origin 검증·실 외부 설치 |
+| I03 | 내부 구현 | AP deployments/Field origin별SDK·ef0dfd3 | 실custom domain/AP origin·외부 설치/최종 인수 |
 | I04 | 로컬 구현 | field-actions·integrator external-requests·customer-handoffs | 실 공급사/전 동의 및 fault QA |
-| I05 | 로컬 구현 | ap-conversations·field-event-inbox·notification-route | 발송 성공과 ACK의 실제 공급사 상태 연결 |
+| I05 | 원본 API/단일 알림 주체 내부 구현 | ap-conversations/route-close/notification worker·ef0dfd3 | 실제 공급사 상태/원격ACK 검수 |
 | I06 | 부분 | 양제품 revoke worker·route close·revocation restore | 일반 OAuth token 수명/legacy·Field route key 종료 |
 | I07 | 부분 검수 | run-integration-faults.mjs·contract/DB tests | 이전 consumer/알 수 없는 필드·enum·정식 전체 fault |
 | I08 | 미승인 | 보안 문서5.7 | G-I1~3 실제 evidence·독립 제품 승인 |

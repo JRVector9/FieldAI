@@ -41,3 +41,9 @@ CLI39241 exit0 P2/high 4건(숫자confidence없음): 사이트 조회실패를 �
 - Delivery UI39859 재검토 잔여 P1/P2 없음, 기존 지적0.97/0.96 반영. 자체 설정 API 양제품79740/23567 각3/3 exit0.
 - 최신 전체 typecheck50703·lint12958 exit0. managed95896에서 양 API/web 최신 build 완료, ready/웹200·신규 API401·AP78/Field69 적용을 실제 확인했다. 로그는 인계 상단을 따른다.
 - 디자인 원본은 수정하지 않았다. 사용자 최종 화면/동선/320px·실기기, 고객 채널동의 UI/서비스워커/실푸시·새Field 공개설치 BFF는 별도 미완료다.
+
+## 내부 완료 체크와 중앙 반영 (2026-09-27)
+
+- [x] **FIXED-UI.INTERNAL / ef0dfd3:** domain/owner notification/scope 설명 중앙 연결·타입/lint/최신 managed build·정적6407 clean. 기존 디자인 고정, 새 기능만 `(추가)`. 사용자 최종 화면/기기/동선 인수와 미구현 고객동의/서비스워커/Field BFF는 미완료다.
+
+managed95896 AP78/Field69·최신 양API/web build/ready·양웹200·새API401·자체workers ready를 root가 실제 확인했다. 현재 TASKS40[x]/7[ ]이며 전체 출시 완료가 아니다. 상세 현재 결과/미실행/다음 명령은 CODEX_HANDOFF.md 상단을 따른다.
