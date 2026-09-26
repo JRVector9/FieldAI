@@ -2,7 +2,9 @@ import asyncio
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -271,6 +273,7 @@ async def main():
             await expect(owner.locator("p.state-message")).to_contain_text("배포 생성 결과를 확인할 수 없습니다")
             await owner.get_by_role("button", name="생성 결과 확인").click()
             await owner.get_by_role("heading", name=re.compile("상담 링크 · pending")).wait_for()
+            assert await owner.get_by_role("button", name="QR 코드 만들기", exact=True).count() == 0
             assert len(link_create_keys) == 2 and link_create_keys[0] == link_create_keys[1]
             await expect(owner.locator(".deployment-list article.knowledge-source").filter(
                 has=owner.get_by_role("heading", name=re.compile("상담 링크")))).to_have_count(1)
@@ -297,6 +300,46 @@ async def main():
             await public_link.wait_for()
             consultation_url = await public_link.get_attribute("href")
             assert consultation_url and consultation_url.startswith("/consult/")
+            # 이미지 생성 실패는 기존 링크를 남기며, 복구된 브라우저 기능으로 재시도한다.
+            await owner.evaluate("""() => {
+                const original = HTMLCanvasElement.prototype.toDataURL;
+                HTMLCanvasElement.prototype.toDataURL = function(...args) {
+                    HTMLCanvasElement.prototype.toDataURL = original;
+                    throw new Error('Synthetic first QR canvas failure');
+                };
+            }""")
+            await deployment.get_by_role("button", name="QR 코드 만들기", exact=True).click()
+            await deployment.get_by_text("QR 이미지를 만들지 못했습니다.", exact=False).wait_for()
+            assert await deployment.get_by_role("img", name="상담 링크 QR 코드", exact=True).count() == 0
+            await public_link.wait_for()
+            await deployment.get_by_role("button", name="QR 코드 만들기", exact=True).click()
+            qr_image = deployment.get_by_role("img", name="상담 링크 QR 코드", exact=True)
+            await qr_image.wait_for()
+            await expect(qr_image).to_have_js_property("naturalWidth", 320)
+            async with owner.expect_download() as download_info:
+                await deployment.get_by_role("link", name="QR 이미지 다운로드", exact=True).click()
+            download = await download_info.value
+            with tempfile.TemporaryDirectory(prefix="fieldai-consult-qr-") as temporary:
+                path = str(Path(temporary) / "consult-qr.png")
+                await download.save_as(path)
+                decoded = subprocess.run(["node", "tools/spikes/decode-consult-qr.mjs", path], capture_output=True, text=True)
+                assert decoded.returncode == 0, decoded.stderr
+                qr = json.loads(decoded.stdout)
+                assert qr == {"url": f"http://localhost:3001{consultation_url}", "width": 320, "height": 320}
+            await qr_image.screenshot(path="/tmp/agent-consult-qr-320.png")
+            rendered = subprocess.run(["node", "tools/spikes/decode-consult-qr.mjs", "/tmp/agent-consult-qr-320.png"],
+                                      capture_output=True, text=True)
+            assert rendered.returncode == 0, rendered.stderr
+            assert json.loads(rendered.stdout)["url"] == qr["url"]
+            await owner.screenshot(path="/tmp/agent-consult-qr-owner-320.png", full_page=True)
+            await deployment.get_by_role("button", name="중지", exact=True).click()
+            await deployment.get_by_role("heading", name=re.compile("상담 링크 · paused")).wait_for()
+            assert await owner.get_by_role("button", name="QR 코드 만들기", exact=True).count() == 0
+            assert await owner.get_by_role("img", name="상담 링크 QR 코드", exact=True).count() == 0
+            paused = await guest.request.get(f"http://localhost:3001/v1/public/deployments/{consultation_url.rsplit('/', 1)[1]}")
+            assert paused.status == 404
+            await deployment.get_by_role("button", name="활성화", exact=True).click()
+            await public_link.wait_for()
             await owner.wait_for_load_state("networkidle")
             assert await owner.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 

@@ -6,6 +6,30 @@
 - 저장소 기준 경로: `reference/field_ui_prototype_v3.html`. 후속 에이전트도 이 파일을 화면·동선 구현 기준으로 사용하며, 인수인계 갱신 시 이 시안 경로를 상단에 유지한다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03/A05 AP 상담 링크 QR 공유 (2026-09-26)
+
+- **현재 목표:** 전체 v3.0 기능을 시안 기준의 실제 AP/Field 서비스에 연결하고 사용 가능한 독립 로컬 환경을 유지한다. 사용자 최종 디자인/흐름과 실 공급사 연동은 이후다. 전체 완료는 미증명이다.
+- **완료 작업:** 활성 AP 상담 링크를 브라우저에서 QR PNG로 생성/다운로드한다. QR에는 AP 공개 상담 URL만 포함한다. 생성 실패에 기존 링크/재시도를 유지한다. pending/paused에는 QR 공유를 숨기고, 출력된 QR도 원래 공개 배포 상태 검사로 신규 상담을 차단한다. 이전 Field 재접수 후보 버튼의 44px/CSS를 새 mock 빌드에 반영해 실제 화면을 다시 확인했다.
+- **수정 파일:** 새 `apps/agent-web/src/AgentConsultQr.tsx`, `src/{agent-deploy.tsx,agent-public.css}`, `apps/agent-web/package.json`, `pnpm-lock.yaml`; `tools/spikes/agent-owner-flow-browser.py`, 새 `tools/spikes/decode-consult-qr.mjs`; 실행 계획·상태·TASKS·coverage·이 파일. API/schema/migration/제품 간 공개 계약 변경 없음.
+- **핵심 설계:** `qrcode@1.5.4`를 클릭할 때 동적 import해 browser PNG를 만든다. `@types/qrcode@1.5.6`, 해독 전용 dev `jsqr@1.4.0`/`pngjs@7.0.0`을 registry 실제 조회 버전으로 고정했다. 외부 QR 사이트·Field·고객 확인키/개인정보를 사용하지 않는다. 인쇄물의 URL은 서버 배포 상태를 계속 따르며 고객 권한을 추가하지 않는다.
+- **실제 검사/환경:** 코드 `c9c475d` 이후 작업트리, 로컬 PG17/Field Valkey/mock/Chromium. 기존 활성 링크에 QR 버튼이 없어 AP 사업자 브라우저 0/1 red. 새 `pnpm mock:run` **1112** 양제품 API/웹 build/ready 후 `pnpm test:e2e:agent` 3/3. canvas 최초 실패→링크 유지/재시도, 다운로드 PNG 및 320px 실제 표시 이미지의 별도 jsQR 해독/정확한 공개 URL, pause QR 비노출+공개 API 404→재활성화를 포함한 `AP_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python node --test tools/spikes/agent-owner-flow-http.test.mjs` 1/1. AP web typecheck·lint·변경 Python/Node 구문·diff exit 0. 새 mock의 Field 재접수 브라우저도 exit 0. 캡처 `/tmp/agent-consult-qr-owner-320.png`, `/tmp/field-fallback-owner-320.png`를 열었다. 마지막 양 웹 HTTP 200·양 API ready 확인.
+- **실패한 접근:** QR 기능 부재 red 외 제품 검사 실패 없음. 웹 도구의 npm registry 메타데이터 페이지 접근은 실패해 `pnpm view`로 정확한 버전을 조회했다. QR 구현/해독 방법은 공식 저장소 문서를 읽었다.
+- **남은 작업:** 다음 실제 화면 상태 결함은 Field 카탈로그가 정상 로드됐는데 지역·운영시간 빈 값이면 헤더가 계속 `승인 정보를 불러오는 중`인 것이다. 새 고객 캡처와 `field-public.tsx` 빈 문자열 fallback에서 확인했다. 정상 미등록/로딩/조회 실패를 구분하고 현재 합성 빈 값 fixture로 검수한다. 전체 문서 기능·역할 대조/사용자 최종 시각·동선/200%·전체 접근성/실 QR 카메라·인쇄/정식 QA/G는 아직 미증명이다. 실 인증·LLM·알림·결제·DNS/TLS·객체 저장소/백업 공급사는 `blocked_integration` 또는 미검수. 운영 배포/청구/고객 발송/운영 삭제 없음.
+- **다음 에이전트 정확한 명령:**
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -2 --oneline
+sed -n '1,33p' docs/CODEX_HANDOFF.md
+rg -n '승인 정보를 불러오는 중' apps/field-web/src/field-public.tsx
+sed -n '95,125p' tools/spikes/field-request-fallback-browser.py
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+빈 값 헤더 Task의 파일/요구/QA/명령을 계획에 기록하고, 현재 고객 폼이 정상 로드된 상태에서 헤더의 거짓 로딩 표시 단언을 red 확인한 뒤 수정한다. mock **1112**는 살아 있으면 그대로 사용하고 코드 빌드 반영 때에만 그 확인된 세션을 정상 종료/재기동한다. timeout만으로 중복 실행하지 않는다. AP `http://localhost:3001/workspace`, Field `http://localhost:3002/workspace`; 위 시안 경로를 유지한다.
+
 ## 최신 인수인계 — C03/F05·F06·F07/I06 AP 대체 직접 요청 (2026-09-26)
 
 - **현재 목표:** 시안 v3와 전체 v3.0 문서의 실제 기능을 완성하고 AP/Field 독립 로컬 환경을 유지한다. 사용자 최종 디자인/동선과 실 공급사 연결은 이후다. 전체 목표/C03 완료는 미증명이다.

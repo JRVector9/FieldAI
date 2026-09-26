@@ -1,5 +1,14 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/A05 AP 상담 링크 QR 공유 — 2026-09-26
+
+- 상태: `in_progress`. AP PRD 2.5의 대표 링크/QR, A05/C03, B01/B06/B07, QA57/119/127/159의 관련 로컬 부분.
+- 범위: 새 `apps/agent-web/src/AgentConsultQr.tsx`, `src/{agent-deploy.tsx,agent-public.css}`, `apps/agent-web/package.json`, `pnpm-lock.yaml`, `tools/spikes/agent-owner-flow-browser.py`, 새 `tools/spikes/decode-consult-qr.mjs`; 계획·현황·검수·인계 문서. API/DB/제품 간 계약 변경 없음.
+- 설계: 현재 서버 조회에서 활성 상태인 AP 상담 링크에만 QR 생성/PNG 다운로드를 제공한다. 현재 AP 웹 origin과 해당 public deployment ID의 `/consult/...` URL만 넣으며 확인키·세션·고객 정보를 담지 않는다. 사용자가 생성할 때 브라우저에서 `qrcode`를 동적 import해 PNG를 만들고, 외부 QR 서비스 호출·Field 의존을 만들지 않는다. 실패는 재시도 상태이며 기존 상담 URL은 계속 표시한다. 배포 중지 뒤에는 QR를 새로 공유하지 못하게 하고 이미 출력한 QR는 원래 배포 상태 검사로 차단된다.
+- 근거: [node-qrcode 공식 문서](https://github.com/soldair/node-qrcode)의 browser/Promise/toDataURL API, [jsQR 공식 문서](https://github.com/cozmo/jsQR)의 RGBA 독립 해독 API. 의존성은 실제 npm registry 조회 버전으로 고정한다. `jsqr`·`pngjs`는 실제 다운로드 이미지 해독 검사 전용 devDependencies다.
+- 순서/명령: 기존 320px AP 사업자 승인/활성 흐름에 QR 생성 버튼/PNG 다운로드/독립 jsQR 해독→정확한 상담 링크/비회원 화면 진입을 추가해 red 확인. encoder와 UI 구현 뒤 `pnpm --filter @fieldai/agent-web typecheck`, `pnpm lint`, `pnpm mock:run` 양제품 build/ready, `pnpm test:e2e:agent`를 실행한다. Field 후보 버튼 CSS도 이 빌드에 반영하고 해당 320px 경로를 다시 확인한다. 전체 실 휴대전화 카메라/인쇄 검수·사용자 최종 디자인·정식 QA/G는 별도로 남긴다.
+- 결과: 기존 활성 상담 링크의 QR 버튼 부재를 320px AP 사업자 E2E red로 확인했다. `qrcode@1.5.4`, `@types/qrcode@1.5.6`, 검사 전용 `jsqr@1.4.0`/`pngjs@7.0.0`을 고정했다. 새 mock **1112** 양제품 build/ready에서 AP 표준 E2E 3/3, QR 첫 canvas 실패→URL 유지/재시도·PNG와 실제 320px 표시 이미지의 독립 해독·정확한 공개 URL·배포 중지 시 QR 비노출/공개 API 404→재활성화를 포함한 좁은 AP 사업자 HTTP 1/1. AP web typecheck/lint/Python/Node 구문/diff exit 0. Field 새 재접수 320px 경로도 exit 0이고 이전 후보 버튼 CSS가 실제 반영된 캡처를 확인했다. AP 실 카메라/종이 인쇄·전체 접근성·공급사/G는 미검수이며 C03/A05 전체 완료로 처리하지 않는다.
+
 ### C03/F05·F06·F07/I06 AP 대체 직접 요청의 출처·관계 — 2026-09-26
 
 - 상태: `in_progress`. Field PRD 3.8, B02/B04/B07/B08, QA05/57/119/139/143/153/155/159의 관련 로컬 부분.

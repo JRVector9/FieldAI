@@ -71,3 +71,7 @@
 }
 .agent-action-request-id{overflow-wrap:anywhere;font-size:16px}
 .agent-action-request-id code{font-size:14px;overflow-wrap:anywhere}
+.agent-consult-qr{margin:16px 0;padding:16px;border:1px solid #dbe2ec;border-radius:12px;font-size:16px;min-width:0}
+.agent-consult-qr img{display:block;width:100%;max-width:320px;height:auto;aspect-ratio:1;background:#fff;margin:12px 0}
+.agent-consult-qr button,.agent-consult-qr a{display:inline-flex;align-items:center;min-height:44px;padding:10px 14px;border:1px solid #cad5e0;border-radius:10px;background:#fff;color:#234a73;font-size:16px;cursor:pointer}
+.agent-consult-qr :is(a,button):focus-visible{outline:2px solid #1762a6;outline-offset:3px}

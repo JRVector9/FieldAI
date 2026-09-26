@@ -1,5 +1,7 @@
 # TASKS — 독립 제품 개발 작업 보드 v3.0
 
+최근 C03/A05 AP 상담 링크 QR 공유(2026-09-26): 활성 링크의 QR를 브라우저에서 만들어 PNG로 다운로드한다. 버튼 부재 red→AP E2E 3/3, canvas 생성 실패 후 재시도·다운로드/320px 표시 이미지 jsQR 해독·공개 URL 일치·중지 404/재활성화를 포함한 좁은 AP 사업자 HTTP 1/1. AP web typecheck/lint/구문/diff exit 0. mock **1112** 양제품 build/ready·Field 재접수 320px도 exit 0이고 이전 후보 버튼 CSS를 반영했다. 다음 확인된 화면 상태 결함은 Field 정상 카탈로그의 지역/운영시간 빈 값이 계속 로딩으로 표시되는 것이다. 전체 문서/사용자 최종 시각·동선/실 공급사·출시 검수는 미완료다.
+
 최근 C03/F05·F06·F07/I06 AP 대체 직접 요청(2026-09-26): 고객의 명시 선언과 선택적 AP 요청 ID를 Field 문의/두 예약 원장·내보내기에 저장했다. 사업자에게만 같은 조직의 수신 ID 기반 중복 후보와 기존 문의/예약 이동을 제공한다. AP 원문 자동 복사·전화번호 병합·새 접근 권한 부여는 하지 않는다. 새 DB 3개 red→Field 전체 24/24, 새 320px 브라우저(후보 조회 503 복구 포함) exit 0, Field 표준 E2E 3/3, 브라우저 포함 AP↔Field HTTP 1/1, typecheck/lint/Python/diff exit 0. mock **45321** 양제품 build/ready. 시각 검토 뒤 후보 버튼의 44px/CSS는 다음 mock 빌드에서 반영한다. 다음 내부 누락: AP PRD 2.5 상담 링크 QR 공유. C03 전체와 출시 게이트는 `in_progress`다.
 
 최근 C03 로컬 기능 회귀 감사(2026-09-26): 코드 `a023c67`에서 표준 AP/Field/Distribution E2E 3/3·3/3·2/2, 격리 제품 DB 각 21/21, 계약/장애 주입/보안/lint/typecheck/unit exit 0. 상대 프로세스/DB/비밀값 부재의 AP/Field 독립 실행도 각각 exit 0이고 mock **53283**으로 복구했다. 검수 범위는 `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`. 문서 대조에서 Field PRD 3.8의 AP 장애 후 직접 새 문의/예약 `fallback_origin`·가능한 원요청 ID 관계/중복 후보가 미구현임을 확인해 다음 내부 구현으로 남겼다. C03 전체·사용자 시각/동선·실 공급사/출시 게이트는 미완료다.
