@@ -403,6 +403,9 @@ export function registerIntegratorRoutes(app: FastifyInstance, runtime: Business
       if (row.state === 'closed') {
         await db.query('rollback'); return reply.code(409).send({ error: 'conversation_closed' });
       }
+      if (row.state === 'spam') {
+        await db.query('rollback'); return reply.code(409).send({ error: 'conversation_spam' });
+      }
       if (row.revision !== expectedRevision) {
         await db.query('rollback');
         return reply.code(409).send({ error: 'revision_conflict', currentRevision: row.revision });

@@ -1,5 +1,17 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/A06 AP 문의 스팸 분류·알림 중단 — 2026-09-26
+
+- 상태: `in_progress`. 요구: AP PRD 2.7, A06/C03, QA40/48/57/119/157 관련 로컬 부분. 원본/증빙 보존과 발송 중단을 분리한다.
+- 파일 범위: AP migration `000061_inquiry_spam.sql`, `src/{inquiries,inquiry-attachments,integrator-routes,field-notification-route-close,admin}.ts`, 새 `test/inquiry-spam.db.test.ts`와 관련 기존 DB 검사; AP 웹 `src/{workspace,agent-public}.tsx`, `src/agent-home.css`, 기존 `tools/spikes/agent-owner-flow-browser.py`; 실행 계획/현황/TASKS/coverage/인계. 공개 응답은 기존 string state와 notification `not_applicable` 계약을 사용하며 제품 간 계약/Field DB 변경 없음.
+- 설계: 권한 있는 AP owner/editor가 현재 revision으로 spam 분류/해제한다. 분류는 원문·내부 메모·확인키·기존 예약을 유지하고 대화 상태만 바꾼다. 고객 후속 메시지도 저장하되 spam을 자동 해제하지 않고 발송 가능한 알림은 만들지 않는다. 내부 메모는 허용, 고객 답변/처리 완료는 먼저 해제해야 한다. 해제는 needs_owner이며 중단했던 과거 알림을 재발송하지 않는다.
+- 저장/경합: 상태·revision·분류 감사·기존 미발송 알림 중단을 하나의 AP 트랜잭션으로 처리한다. notification의 중단 이유는 `spam`, 기존 계약상 상태는 `not_applicable`다. DB insert guard가 문의 행 잠금으로 새로운 고객/Field 예약 사건 알림도 중단한다. Field 예약 사건 원장은 유지하며 AP 알림 주체를 이중 발송으로 바꾸지 않는다.
+- 검수 순서/명령: 새 실제 PG17 권한/분류/후속 메시지/알림/복구/내보내기 검사 red→구현→`pnpm test:db:agent`. 기존 AP integrator 답변과 예약 사건/해제 검사를 확인한다. 320px 사업자 분류/응답 분실 후 현재 상태 조회/해제·고객 원본 후속/신규 알림은 기존 AP 브라우저에 고정한다. `pnpm typecheck`, `pnpm lint`, 새 mock build/ready 및 좁은 AP 사업자 HTTP 브라우저로 확인한다. 공급사/사용자 최종 인수/전체 G는 미검수다.
+- Field 소비자 범위 추가: `apps/field-web/src/field-workspace.tsx`, `tools/spikes/field-external-inquiry-browser.py`. 공개 계약의 기존 string state `spam`을 읽으면 원본/작성 초안은 유지하고 AP 답변 버튼을 비활성화하며 AP 관리실에서 해제해야 함을 안내한다. 같은 실제 원본 조회에 상태만 주입한 320px 검사 red→green과 기존 양제품 HTTP 흐름으로 확인한다. Field DB/schema·연결 권한 변경 없음.
+- Field BFF 경합 추가: `apps/field-api/src/ap-conversations.ts`, `test/ap-connection.db.test.ts`. AP가 409 `conversation_spam`으로 저장 거절을 확정한 경우를 결과 미상으로 저장하지 않고 기존 `revision_conflict` 초안 상태로 보존해 원본 재확인/해제 후 명시 제출하도록 한다. Field DB/schema 변경 없음. 실제 PG17 소비자 검사 red→green 후에 반영한다.
+- 복구: nullable 알림 중단 이유와 확장 상태·감사는 보존한다. 과거 알림을 다시 available로 바꾸거나 원문을 삭제하지 않는다. 기존 코드로 즉시 롤백하면 spam 상태를 잘못 다룰 수 있어 기존 코드 롤백은 이 기능을 해제한 뒤 검토해야 한다.
+- 결과: 새 분류 API/사진 권한/Field 초안 거절 검사 red→AP DB 22/22·Field DB 24/24, 전체 typecheck/lint exit 0. mock **17560** 양제품 API/웹 build/ready에서 AP 사업자 HTTP/브라우저 1/1(응답 분실→상태 조회, 분류/후속 사진/원본/메모/해제/신규 알림), 양제품 HTTP/브라우저 1/1(기존 위젯·예약·해제·알림과 Field spam 표시/초안 보존)을 확인했다. Field 브라우저 spam 상태는 실제 원본 응답에 상태만 주입한 소비자 검사이며 실제 저장 거절/알림 원장은 별도 PG17 검사로 증명했다. `/tmp/agent-inquiry-spam-320.png`를 열었다. 넓은 사진 허용은 기존 AI 사전동의 권한 검사 red를 만들어 폐기하고 해당 고객 메시지의 spam 알림 증거로 한정했다. 실 공급사/전체 QA/G/사용자 최종 인수는 미검수다.
+
 ### C03/F-C04 공개 양식의 카탈로그 조회 상태 — 2026-09-26
 
 - 상태: `in_progress`. 파일: `apps/field-web/src/field-public.tsx`, `tools/spikes/field-request-fallback-browser.py`, 계획·상태·TASKS·coverage·인계. API/DB/계약 변경 없음.

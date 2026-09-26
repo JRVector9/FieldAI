@@ -86,7 +86,8 @@ async function messages(client: PoolClient | BusinessRuntime['pool'], id: string
 }
 export async function insertMessage(client: PoolClient, inquiryId: string, sequence: string,
   actor: 'customer' | 'owner', visibility: 'customer' | 'internal', body: string,
-  attempt?: MessageAttempt, external?: { actorUserId: string; clientId: string; grantId: string }) {
+  attempt?: MessageAttempt, external?: { actorUserId: string; clientId: string; grantId: string },
+  suppressNotification = false) {
   const id = randomUUID();
   await client.query(
     `insert into ap.inquiry_messages(id, inquiry_id, sequence, actor, visibility, body, delivery_state,
@@ -94,7 +95,7 @@ export async function insertMessage(client: PoolClient, inquiryId: string, seque
        external_actor_user_id, external_client_id, external_grant_id)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [id, inquiryId, sequence, actor, visibility, body,
-      visibility === 'internal' ? 'not_applicable' : 'blocked_integration',
+      visibility === 'internal' || suppressNotification ? 'not_applicable' : 'blocked_integration',
       attempt?.keyHash ?? null, attempt?.requestHash ?? null,
       external?.actorUserId ?? null, external?.clientId ?? null, external?.grantId ?? null],
   );
@@ -111,7 +112,7 @@ export async function messageReplay(client: PoolClient, inquiryId: string, attem
   const row = result.rows[0];
   if (!row) return null;
   return row.submission_request_hash === attempt.requestHash
-    ? { messageId: row.id, state: row.actor === 'customer' ? 'needs_owner'
+    ? { messageId: row.id, state: row.actor === 'customer' ? row.delivery_state === 'not_applicable' ? 'spam' : 'needs_owner'
       : row.visibility === 'internal' ? null : 'waiting_customer', delivery: row.delivery_state }
     : { error: 'idempotency_conflict' };
 }
@@ -282,15 +283,18 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
         if ('error' in replay) return reply.code(409).send(replay);
         return reply.code(200).send(replay);
       }
-      const messageId = await insertMessage(client, request.params.id, row.next_sequence, 'customer', 'customer', body, attempt);
-      await client.query("update ap.inquiries set state = 'needs_owner', mode = 'human' where id = $1", [request.params.id]);
+      const isSpam = row.state === 'spam';
+      const messageId = await insertMessage(client, request.params.id, row.next_sequence, 'customer', 'customer', body,
+        attempt, undefined, isSpam);
+      const nextState = isSpam ? 'spam' : 'needs_owner';
+      await client.query("update ap.inquiries set state = $2, mode = 'human' where id = $1", [request.params.id, nextState]);
       if (row.state === 'closed') await client.query(
         `insert into ap.inquiry_resolution_events(id, inquiry_id, event_type, revision, source_message_id)
          values ($1, $2, 'reopened', $3, $4)`,
         [randomUUID(), request.params.id, row.revision + 1, messageId]);
       await recordInquiryEvent(client, row.organization_id, 'ap.inquiry.customer_message', request.params.id, messageId);
       await client.query('commit');
-      return reply.code(201).send({ messageId, state: 'needs_owner', delivery: 'blocked_integration' });
+      return reply.code(201).send({ messageId, state: nextState, delivery: isSpam ? 'not_applicable' : 'blocked_integration' });
     } catch (error) {
       await client.query('rollback');
       throw error;
@@ -342,13 +346,13 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
        join ap.outbox o on o.id = n.outbox_id
        join ap.memberships m on m.organization_id = n.organization_id
        left join ap.notification_reads r on r.notification_id = n.id and r.user_id = $1
-       where m.user_id = $1 and m.role in ('owner', 'editor') and n.audience = 'owner'
+       where m.user_id = $1 and m.role in ('owner', 'editor') and n.audience = 'owner' and n.state = 'available'
        order by n.created_at desc, n.id desc limit 100`, [userId]);
     const count = await runtime.pool.query<{ unread_count: string }>(
       `select count(*)::text as unread_count from ap.notification_events n
        join ap.memberships m on m.organization_id = n.organization_id
        left join ap.notification_reads r on r.notification_id = n.id and r.user_id = $1
-       where m.user_id = $1 and m.role in ('owner', 'editor') and n.audience = 'owner'
+       where m.user_id = $1 and m.role in ('owner', 'editor') and n.audience = 'owner' and n.state = 'available'
          and r.notification_id is null`, [userId]);
     return { notifications: result.rows.map(row => ({ id: row.id, inquiryId: row.inquiry_id,
       eventType: row.event_type, createdAt: row.created_at, readAt: row.read_at })),
@@ -415,7 +419,7 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
         await client.query('rollback');
         return { id: row.id, state: row.state, revision: row.revision };
       }
-      if (row.revision !== expectedRevision || row.state === 'closed') {
+      if (row.revision !== expectedRevision || row.state === 'closed' || row.state === 'spam') {
         await client.query('rollback');
         return reply.code(409).send({ error: 'inquiry_changed', state: row.state, revision: row.revision });
       }
@@ -430,6 +434,49 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
       await client.query('rollback');
       throw error;
     } finally { client.release(); }
+  });
+
+  app.post<{ Params: { id: string } }>('/v1/owner/inquiries/:id/spam', async (request, reply) => {
+    const userId = await ownerUser(request, reply, runtime);
+    if (!userId) return reply;
+    if (!uuidPattern.test(request.params.id)) return reply.code(404).send({ error: 'inquiry_not_found' });
+    const body = object(request.body);
+    const expectedRevision = body?.expectedRevision;
+    if (typeof body?.spam !== 'boolean' || typeof expectedRevision !== 'number'
+      || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
+      return reply.code(400).send({ error: 'invalid_spam_request' });
+    const targetState = body.spam ? 'spam' : 'needs_owner';
+    const client = await runtime.pool.connect();
+    try {
+      await client.query('begin');
+      const found = await client.query<InquiryRow>(
+        `select i.id, i.state, i.revision from ap.inquiries i
+         join ap.memberships m on m.organization_id = i.organization_id
+         where i.id = $1 and m.user_id = $2 and m.role in ('owner', 'editor')
+           and i.consent_at is not null and i.mode = 'human' for update of i`,
+        [request.params.id, userId]);
+      const row = found.rows[0];
+      if (!row) { await client.query('rollback'); return reply.code(404).send({ error: 'inquiry_not_found' }); }
+      if (row.state === targetState && (row.revision === expectedRevision || row.revision === expectedRevision + 1)) {
+        await client.query('rollback');
+        return { id: row.id, state: row.state, revision: row.revision };
+      }
+      if (row.revision !== expectedRevision || (!body.spam && row.state !== 'spam')) {
+        await client.query('rollback');
+        return reply.code(409).send({ error: 'inquiry_changed', state: row.state, revision: row.revision });
+      }
+      await client.query('update ap.inquiries set state = $2, revision = revision + 1, updated_at = now() where id = $1',
+        [row.id, targetState]);
+      if (body.spam) await client.query(
+        `update ap.notification_events set state = 'not_applicable', suppression_reason = 'spam'
+         where inquiry_id = $1 and state in ('available', 'blocked_integration')`, [row.id]);
+      await client.query(
+        `insert into ap.inquiry_resolution_events(id, inquiry_id, event_type, revision, actor_user_id)
+         values ($1, $2, $3, $4, $5)`,
+        [randomUUID(), row.id, body.spam ? 'spam' : 'unspammed', row.revision + 1, userId]);
+      await client.query('commit');
+      return { id: row.id, state: targetState, revision: row.revision + 1 };
+    } catch (error) { await client.query('rollback'); throw error; } finally { client.release(); }
   });
 
   app.get<{ Params: { id: string } }>('/v1/owner/inquiries/:id/export', async (request, reply) => {
@@ -507,6 +554,9 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
         return reply.code(200).send({ ...replay, state: replay.state ?? row.state });
       }
       if (row.state === 'closed') { await client.query('rollback'); return reply.code(409).send({ error: 'inquiry_closed' }); }
+      if (row.state === 'spam' && visibility === 'customer') {
+        await client.query('rollback'); return reply.code(409).send({ error: 'inquiry_spam' });
+      }
       const messageId = await insertMessage(client, request.params.id, row.next_sequence, 'owner', visibility, body, attempt);
       if (visibility === 'customer') {
         await client.query("update ap.inquiries set state = 'waiting_customer' where id = $1", [request.params.id]);

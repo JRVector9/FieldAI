@@ -101,7 +101,7 @@ export function registerFieldNotificationRouteClose(app: FastifyInstance, runtim
       const complete = mirror.rows.length === body.latestRevision + 1
         && mirror.rows.every((row, index) => row.revision === index
           && (noticeEvents.has(row.event_type)
-            ? row.notification_state === 'blocked_integration'
+            ? row.notification_state === 'blocked_integration' || row.notification_state === 'not_applicable'
             : row.notification_state === null))
         && mirror.rows.at(-1)?.id === body.latestEventId;
       const pending = await db.query<{ count: string }>(

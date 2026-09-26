@@ -346,6 +346,17 @@ test('AP integrator chooses an owned AI and reads only explicitly delegated reso
       headers: replyBearer });
     assert.equal(afterReply.statusCode, 200);
     assert.deepEqual(afterReply.json().messages.map((item: { body: string }) => item.body), ['위임 사업자 답변']);
+    const spammed = await app.inject({ method: 'POST', url: `/v1/owner/inquiries/${visibleId}/spam`,
+      headers: { cookie: owner.cookie }, payload: { expectedRevision: 3, spam: true } });
+    assert.equal(spammed.statusCode, 200);
+    const blockedReply = await app.inject({ method: 'POST', url: replyUrl,
+      headers: { ...replyBearer, 'idempotency-key': randomBytes(32).toString('base64url') },
+      payload: { body: '스팸 중 위임 답변 차단', expectedRevision: spammed.json().revision } });
+    assert.equal(blockedReply.statusCode, 409);
+    assert.equal(blockedReply.json().error, 'conversation_spam');
+    assertContract('/integrations/v1/conversations/{id}/replies', 'post', 409, blockedReply.json());
+    assert.equal((await app.inject({ url: `/integrations/v1/conversations/${visibleId}/messages?after=2`,
+      headers: replyBearer })).json().messages.length, 1);
     assert.equal((await app.inject({ method: 'POST', url: `/integrations/v1/authorization/selections/${selectionId}/revoke`,
       headers: { cookie: outsider.cookie } })).statusCode, 404);
     assert.equal((await app.inject({ method: 'POST', url: `/integrations/v1/authorization/selections/${selectionId}/revoke`,

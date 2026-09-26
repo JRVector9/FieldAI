@@ -248,7 +248,7 @@ export function registerApConversationRoutes(app: FastifyInstance, runtime: Fiel
     }
     if (response.status === 409) {
       const conflict = object(await response.json().catch(() => null));
-      await markDraft(runtime, draft.id, conflict?.error === 'revision_conflict'
+      await markDraft(runtime, draft.id, conflict?.error === 'revision_conflict' || conflict?.error === 'conversation_spam'
         ? 'revision_conflict' : 'delivery_unknown');
       return reply.code(409).send({ error: typeof conflict?.error === 'string'
         ? conflict.error : 'ap_reply_conflict',

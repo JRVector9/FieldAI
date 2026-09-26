@@ -35,12 +35,14 @@ export function registerAgentAdminRoutes(app: FastifyInstance, runtime: Business
     const result = await runtime.pool.query<AdminCounts>(`
       select
         (select count(*)::text from ap.organizations) as "organizations",
-        (select count(*)::text from ap.inquiries where state <> 'closed') as "openInquiries",
+        (select count(*)::text from ap.inquiries where state not in ('closed', 'spam')) as "openInquiries",
         (select count(*)::text from ap.notification_events
           where audience = 'customer' and state = 'blocked_integration') as "blockedCustomerNotifications",
         (select count(*)::text from ap.deployments where status = 'active') as "activeDeployments",
         (select count(*)::text from ap.publishers) as "publisherOrganizations",
-        (select count(*)::text from ap.outbox where delivered_at is null) as "pendingOutbox",
+        (select count(*)::text from ap.outbox o where delivered_at is null
+          and not exists (select 1 from ap.notification_events n where n.outbox_id = o.id
+            and n.state = 'not_applicable')) as "pendingOutbox",
         (select count(*)::text from ap.memberships) as "memberships",
         (select count(distinct organization_id)::text from ap.agent_releases) as "approvedAgentOrganizations",
         (select count(*)::text from ap.deployments
@@ -56,8 +58,8 @@ export function registerAgentAdminRoutes(app: FastifyInstance, runtime: Business
           then 'blocked_integration' else 'pending' end as "state"
       from ap.outbox o
       left join ap.notification_events n on n.outbox_id = o.id
-      where o.delivered_at is null
-        or (n.audience = 'customer' and n.state = 'blocked_integration')
+      where (o.delivered_at is null or (n.audience = 'customer' and n.state = 'blocked_integration'))
+        and (n.state is null or n.state <> 'not_applicable')
       order by o.occurred_at desc, o.id desc limit 20
     `);
     await runtime.pool.query(

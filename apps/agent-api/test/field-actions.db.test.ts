@@ -409,10 +409,22 @@ test('AP customer approves current Field terms once and reconciles an unknown de
     eventsUnavailable = true;
     assert.equal((await app.inject({ method: 'POST', url: syncPath, headers: bearer })).statusCode, 503);
     eventsUnavailable = false;
+    const spamRevision = (await app.inject({ url: `/v1/owner/inquiries/${inquiryId}`,
+      headers: { cookie: ownerCookie } })).json().revision as number;
+    const spammed = await app.inject({ method: 'POST', url: `/v1/owner/inquiries/${inquiryId}/spam`,
+      headers: { cookie: ownerCookie }, payload: { expectedRevision: spamRevision, spam: true } });
+    assert.equal(spammed.statusCode, 200, spammed.body);
     const confirmedSync = await app.inject({ method: 'POST', url: syncPath, headers: bearer });
     assert.equal(confirmedSync.statusCode, 200, confirmedSync.body);
     assert.equal(confirmedSync.json().revision, 1);
-    assert.equal(confirmedSync.json().events[1].notificationState, 'blocked_integration');
+    assert.equal(confirmedSync.json().events[1].notificationState, 'not_applicable');
+    const suppressed = await pool.query<{ suppression_reason: string }>(
+      `select n.suppression_reason from ap.notification_events n
+       join ap.field_reservation_events e on e.id = n.field_reservation_event_id
+       where e.action_request_id = $1`, [accepted.json().actionRequestId]);
+    assert.equal(suppressed.rows[0]?.suppression_reason, 'spam');
+    assert.equal((await app.inject({ method: 'POST', url: `/v1/owner/inquiries/${inquiryId}/spam`,
+      headers: { cookie: ownerCookie }, payload: { expectedRevision: spammed.json().revision, spam: false } })).statusCode, 200);
     assert.equal((await app.inject({ method: 'POST', url: syncPath, headers: bearer })).statusCode, 200);
     const mirrored = await pool.query<{ count: string }>(
       'select count(*)::text as count from ap.field_reservation_events where action_request_id = $1',

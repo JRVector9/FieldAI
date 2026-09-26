@@ -87,6 +87,9 @@ export function registerInquiryAttachmentRoutes(app: FastifyInstance, runtime: B
          where i.id = $1 and m.id = $2 and m.actor = 'customer'
            and m.visibility = 'customer'
            and (m.delivery_state = 'blocked_integration'
+             or (i.mode = 'human' and m.delivery_state = 'not_applicable'
+               and exists (select 1 from ap.notification_events n where n.inquiry_id = i.id
+                 and n.source_message_id = m.id and n.suppression_reason = 'spam'))
              or (i.mode = 'external' and m.delivery_state = 'not_applicable'
                and m.sequence = i.next_sequence - 1))
            and i.consent_at is not null and i.visitor_key_hash = $3`,
@@ -115,6 +118,9 @@ export function registerInquiryAttachmentRoutes(app: FastifyInstance, runtime: B
            where i.id = $1 and m.id = $2 and m.actor = 'customer'
              and m.visibility = 'customer'
              and (m.delivery_state = 'blocked_integration'
+               or (i.mode = 'human' and m.delivery_state = 'not_applicable'
+                 and exists (select 1 from ap.notification_events n where n.inquiry_id = i.id
+                   and n.source_message_id = m.id and n.suppression_reason = 'spam'))
                or (i.mode = 'external' and m.delivery_state = 'not_applicable'
                  and m.sequence = i.next_sequence - 1))
              and i.consent_at is not null and i.visitor_key_hash = $3

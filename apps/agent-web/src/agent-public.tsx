@@ -39,7 +39,7 @@ function engagementFrom(value: unknown, id: string): Engagement | null {
 const deliveryLabel = (state: string) => state === 'blocked_integration' ? '외부 알림 미연결'
   : state === 'not_applicable' ? '알림 대상 아님' : state;
 const inquiryStateLabel = (state: string) => state === 'closed' ? '처리 완료'
-  : state === 'needs_owner' ? '사업자 확인 필요'
+  : state === 'spam' ? '알림 중단' : state === 'needs_owner' ? '사업자 확인 필요'
     : state === 'waiting_customer' ? '고객 답변 대기' : state === 'external_ready' ? 'Field 요청 준비' : '직접 응대 중';
 const randomSubmissionKey = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
   .replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
@@ -682,7 +682,8 @@ export function InquiryPage({ id }: { id: string }) {
     setFieldAttachmentRevision(value => value + 1);
     const savedStatus = inquiry?.state === 'external_ready'
       ? "사진을 AP 대화에 비공개로 저장했습니다. Field에 보낼 사진은 별도로 선택하고 동의해 주세요."
-      : "사진을 문의에 비공개로 저장했습니다. 외부 알림은 미연결 상태입니다.";
+      : inquiry?.state === 'spam' ? "사진을 문의에 비공개로 저장했습니다. 이 문의의 알림은 중단된 상태입니다."
+        : "사진을 문의에 비공개로 저장했습니다. 외부 알림은 미연결 상태입니다.";
     setStatus(savedStatus);
     try {
       const updated = await requestJson(`/v1/inquiries/${id}`, "GET", undefined, key);
@@ -692,9 +693,7 @@ export function InquiryPage({ id }: { id: string }) {
   }
   async function retryPhoto() {
     if (!photo || !inquiry) return;
-    const messageId = pendingPhotoMessageId ?? inquiry.messages
-      .filter(item => item.actor === "customer" && item.delivery_state ===
-        (inquiry.state === 'external_ready' ? 'not_applicable' : 'blocked_integration')).at(-1)?.id;
+    const messageId = pendingPhotoMessageId ?? inquiry.messages.filter(item => item.actor === "customer").at(-1)?.id;
     if (!messageId) { setStatus("사진을 연결할 고객 메시지가 없습니다."); return; }
     setBusy(true);
     await attachPhoto(messageId, photo);
@@ -726,7 +725,9 @@ export function InquiryPage({ id }: { id: string }) {
         pendingMessage.current = null; clearPendingMessageSubmission(id); setHasPendingMessage(false);
         const savedStatus = result.status === 200
           ? "이전 추가 질문을 확인했습니다. 새 메시지와 알림은 생성되지 않았습니다."
-          : "추가 질문을 AP에 저장해 사업자 관리실에 표시했습니다. 외부 알림은 미연결 상태입니다.";
+          : (result.data as { state?: string }).state === 'spam'
+            ? "추가 질문을 AP에 저장했습니다. 이 문의의 알림은 중단된 상태입니다."
+            : "추가 질문을 AP에 저장해 사업자 관리실에 표시했습니다. 외부 알림은 미연결 상태입니다.";
         setBody(""); setStatus(savedStatus);
         try {
           const updated = await requestJson(`/v1/inquiries/${id}`, "GET", undefined, key);
@@ -755,7 +756,7 @@ export function InquiryPage({ id }: { id: string }) {
         pendingMessage.current = null; clearPendingMessageSubmission(id); setHasPendingMessage(false);
         setStatus("이전 시도를 포기했습니다. 이미 저장됐을 수 있으므로 새 질문 전에 대화 내용을 확인해 주세요.");
       }}>이전 시도 포기하고 새 질문</button></div>}
-    {inquiry && <div><h2>{inquiry.service?.name ?? "일반 문의"} · {inquiryStateLabel(inquiry.state)}</h2>{inquiry.state === 'closed' && <p>처리 완료된 문의도 추가 질문을 남기면 다시 사업자 확인 필요로 열립니다.</p>}{refreshNeeded && <button type="button" disabled={busy} onClick={() => void refreshInquiry()}>문의 내용 다시 확인</button>}{hasPendingMessage ? <p>이전 추가 질문 결과를 확인한 뒤 확인키를 교체할 수 있습니다.</p> : <ReceiptRotationPanel inquiryId={id} currentKey={key} onRotated={onReceiptRotated} />}<ol>{inquiry.messages.map(message => <li key={message.id}><strong>{message.actor === "owner" ? "사업자" : message.actor === "assistant" ? "AI" : "고객"}</strong> {message.body} <small>알림 {deliveryLabel(message.delivery_state)}</small>
+    {inquiry && <div><h2>{inquiry.service?.name ?? "일반 문의"} · {inquiryStateLabel(inquiry.state)}</h2>{inquiry.state === 'closed' && <p>처리 완료된 문의도 추가 질문을 남기면 다시 사업자 확인 필요로 열립니다.</p>}{inquiry.state === 'spam' && <p>이 문의는 알림 중단 상태입니다. 추가 메시지는 보존되며 사업자 알림은 발송하지 않습니다.</p>}{refreshNeeded && <button type="button" disabled={busy} onClick={() => void refreshInquiry()}>문의 내용 다시 확인</button>}{hasPendingMessage ? <p>이전 추가 질문 결과를 확인한 뒤 확인키를 교체할 수 있습니다.</p> : <ReceiptRotationPanel inquiryId={id} currentKey={key} onRotated={onReceiptRotated} />}<ol>{inquiry.messages.map(message => <li key={message.id}><strong>{message.actor === "owner" ? "사업자" : message.actor === "assistant" ? "AI" : "고객"}</strong> {message.body} <small>알림 {deliveryLabel(message.delivery_state)}</small>
     {inquiry.attachments.filter(item => item.messageId === message.id).map((attachment, index) =>
       <PrivateInquiryPhoto key={attachment.id} inquiryId={id} attachmentId={attachment.id} receiptKey={key} label={`고객 첨부 사진 ${index + 1}`} />)}</li>)}</ol><form className="form-fields" onSubmit={event => void followup(event)}><label>추가 질문<textarea required maxLength={5000} value={body} onChange={event => setBody(event.target.value)} /></label><button type="submit" disabled={busy || recoveringMessage}>추가 질문 저장</button></form>
     <div className="knowledge-source"><label className="inquiry-photo-label">문의 사진 첨부 (선택, 최대 8MB)<input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label>{photo && <><p>선택한 사진: {photo.name}</p><button type="button" disabled={busy} onClick={() => void retryPhoto()}>사진만 첨부 또는 재시도</button></>}</div>

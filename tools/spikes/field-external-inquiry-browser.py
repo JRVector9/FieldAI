@@ -1,6 +1,6 @@
 import asyncio
 import os
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, expect
 
 
 async def open_external_inquiry(page):
@@ -19,6 +19,7 @@ async def main():
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
         page = await browser.new_page(viewport={"width": 320, "height": 720})
+        page.set_default_timeout(10000)
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         try:
@@ -65,6 +66,26 @@ async def main():
                 await page.reload(wait_until="networkidle")
                 panel = await open_external_inquiry(page)
                 await panel.get_by_text("브라우저 응답 분실 뒤 AP 원본 확인").wait_for()
+                reply = panel.get_by_label("AP 원본 대화에 답변")
+                await reply.fill("AP 알림 중단 중 보존할 미전송 초안")
+
+                async def spam_state(route):
+                    upstream = await route.fetch()
+                    assert upstream.status == 200
+                    body = await upstream.json()
+                    body["conversation"]["state"] = "spam"
+                    await route.fulfill(response=upstream, json=body)
+
+                pattern = "**/v1/owner/external-requests/*/conversation?after=0"
+                await page.route(pattern, spam_state)
+                await panel.get_by_role("button", name="AP 원본 새로고침", exact=True).click()
+                await panel.get_by_text("AP에서 스팸으로 분류해 답변·알림을 중단했습니다.", exact=False).wait_for()
+                await expect(panel.get_by_role("button", name="AP에 답변 저장", exact=True)).to_be_disabled()
+                assert await reply.input_value() == "AP 알림 중단 중 보존할 미전송 초안"
+                await page.unroute(pattern, spam_state)
+                await panel.get_by_role("button", name="AP 원본 새로고침", exact=True).click()
+                await expect(panel.get_by_role("button", name="AP에 답변 저장", exact=True)).to_be_enabled()
+                await reply.fill("")
             assert await page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             assert not errors, errors
             print(f"Field external inquiry browser: 320px AP original, durable reply {stage} passed")

@@ -32,7 +32,8 @@ const inquirySourceLabel = (kind: string) => kind === 'link' ? '상담 링크'
   : kind === 'owned_embed' ? '외부 사이트 위젯'
     : kind === 'placement_embed' ? '제휴 매체' : '직접 문의';
 const inquiryStateLabel = (state: string) => state === 'needs_owner' ? '확인 필요'
-  : state === 'waiting_customer' ? '고객 답변 대기' : state === 'closed' ? '처리 완료' : '직접 응대 중';
+  : state === 'waiting_customer' ? '고객 답변 대기' : state === 'closed' ? '처리 완료'
+    : state === 'spam' ? '스팸 · 알림 중단' : '직접 응대 중';
 type OwnerNotification = { id: string; inquiryId: string; eventType: string; createdAt: string; readAt: string | null };
 const notificationLabel = (eventType: string) => eventType === 'ap.inquiry.created' ? '새 문의 접수' : '고객 추가 질문';
 const deliveryLabel = (state: string) => state === 'blocked_integration' ? '외부 알림 미연결' : state;
@@ -401,7 +402,7 @@ export function AgentWorkspace() {
     } else setCloseFeedback("현재 상태를 확인하지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.");
   }
   async function closeSelectedInquiry() {
-    if (!selected || selected.state === "closed" || closeResultUnknown) return;
+    if (!selected || selected.state === "closed" || selected.state === "spam" || closeResultUnknown) return;
     const id = selected.id;
     setBusy(true); setCloseFeedback("");
     try {
@@ -419,6 +420,29 @@ export function AgentWorkspace() {
     } catch {
       setCloseResultUnknown(true);
       setCloseFeedback("응답을 받지 못해 처리 결과를 확인할 수 없습니다. 현재 상태를 먼저 조회해 주세요.");
+    } finally { setBusy(false); }
+  }
+  async function classifySelectedSpam(spam: boolean) {
+    if (!selected || busy || closeResultUnknown) return;
+    const id = selected.id;
+    setBusy(true); setCloseFeedback("");
+    try {
+      const result = await jsonRequest(`/v1/owner/inquiries/${id}/spam`, "POST",
+        { expectedRevision: selected.revision, spam });
+      if (result.status === 200) {
+        const value = result.data as { state: string; revision: number };
+        setSelected(current => current?.id === id ? { ...current, state: value.state, revision: value.revision } : current);
+        setInboxEditor(spam ? "note" : "reply");
+        setCloseFeedback(spam ? "스팸으로 분류하고 이 대화의 알림을 중단했습니다. 원본은 보존됩니다."
+          : "스팸 분류를 해제했습니다. 과거에 중단한 알림은 다시 보내지 않습니다.");
+        await loadInbox(); await loadNotifications();
+      } else if (result.status === 409) {
+        setCloseFeedback("새 질문이나 답변으로 문의가 변경됐습니다. 현재 상태를 확인해 주세요.");
+        await selectInquiry(id, true); await loadInbox();
+      } else setCloseFeedback(`스팸 처리를 저장하지 못했습니다 (${result.status}). 다시 시도해 주세요.`);
+    } catch {
+      setCloseResultUnknown(true);
+      setCloseFeedback("응답을 받지 못해 스팸 처리 결과를 확인할 수 없습니다. 현재 상태를 먼저 조회해 주세요.");
     } finally { setBusy(false); }
   }
   function closeInboxDetail() {
@@ -550,12 +574,13 @@ export function AgentWorkspace() {
           </aside>
           <div className="agent-inbox-thread" aria-label="선택한 문의 대화">
             {selected ? <>
-              <header className="agent-inbox-thread-head"><button ref={inboxBackRef} className="agent-inbox-back" type="button" onClick={closeInboxDetail} aria-label="문의 목록으로">‹</button><span className="agent-inbox-avatar" aria-hidden="true">{selected.customerName.slice(0, 1)}</span><div><h2>{selected.customerName} <small>고객</small></h2><p>{selected.customerPhone} · 연락처 미인증</p></div>{selected.state === "closed" ? <span className="agent-inbox-badge">처리 완료</span> : <button className="agent-inbox-close" type="button" disabled={busy || closeResultUnknown || Boolean(replyBody.trim() || noteBody.trim())} onClick={() => void closeSelectedInquiry()}>처리 완료</button>}</header>
-              <div className="agent-inbox-thread-info"><strong>{selected.service?.name ?? "일반 문의"}</strong><span>AP 원본 대화 · {inquirySourceLabel(selected.sourceKind)} · {inquiryStateLabel(selected.state)}</span><p>{selected.state === "closed" ? "고객이 확인키로 원본을 읽고 추가 질문을 남기면 다시 확인 필요로 열립니다." : "고객에게 답변을 저장하면 확인키로 열람할 수 있습니다. 외부 알림은 미연결 상태입니다."}</p>{Boolean(replyBody.trim() || noteBody.trim()) && selected.state !== "closed" && <p>작성 중인 답변·메모를 저장하거나 비우면 처리 완료를 선택할 수 있습니다.</p>}{closeFeedback && <p role="status" className="agent-inbox-close-feedback">{closeFeedback}</p>}{closeResultUnknown && <button type="button" className="agent-inbox-close-refresh" disabled={busy} onClick={() => void refreshCloseState(selected.id)}>현재 상태 다시 확인</button>}<a href={`/v1/owner/inquiries/${selected.id}/export`}>대화 기록 JSON 다운로드</a></div>
+              <header className="agent-inbox-thread-head"><button ref={inboxBackRef} className="agent-inbox-back" type="button" onClick={closeInboxDetail} aria-label="문의 목록으로">‹</button><span className="agent-inbox-avatar" aria-hidden="true">{selected.customerName.slice(0, 1)}</span><div><h2>{selected.customerName} <small>고객</small></h2><p>{selected.customerPhone} · 연락처 미인증</p></div>{selected.state === "closed" || selected.state === "spam" ? <span className="agent-inbox-badge">{inquiryStateLabel(selected.state)}</span> : <button className="agent-inbox-close" type="button" disabled={busy || closeResultUnknown || Boolean(replyBody.trim() || noteBody.trim())} onClick={() => void closeSelectedInquiry()}>처리 완료</button>}</header>
+              <div className="agent-inbox-thread-info"><strong>{selected.service?.name ?? "일반 문의"}</strong><span>AP 원본 대화 · {inquirySourceLabel(selected.sourceKind)} · {inquiryStateLabel(selected.state)}</span><p>{selected.state === "closed" ? "고객이 확인키로 원본을 읽고 추가 질문을 남기면 다시 확인 필요로 열립니다." : selected.state === "spam" ? "원본을 보존하며 이 대화의 고객·사업자 알림을 중단했습니다.": "고객에게 답변을 저장하면 확인키로 열람할 수 있습니다. 외부 알림은 미연결 상태입니다."}</p>{Boolean(replyBody.trim() || noteBody.trim()) && selected.state !== "closed" && <p>작성 중인 답변·메모를 저장하거나 비우면 처리 완료를 선택할 수 있습니다.</p>}{closeFeedback && <p role="status" className="agent-inbox-close-feedback">{closeFeedback}</p>}{closeResultUnknown && <button type="button" className="agent-inbox-close-refresh" disabled={busy} onClick={() => void refreshCloseState(selected.id)}>현재 상태 다시 확인</button>}<a href={`/v1/owner/inquiries/${selected.id}/export`}>대화 기록 JSON 다운로드</a></div>
+              <div className="agent-inbox-spam-control"><p>{selected.state === "spam" ? "이 대화의 알림을 중단했습니다. 고객의 후속 메시지와 내부 메모는 원본에 보존됩니다." : "스팸으로 분류하면 원본을 보존하고 이 대화의 알림을 중단합니다."}</p><button type="button" disabled={busy || closeResultUnknown || Boolean(replyBody.trim() || noteBody.trim())} onClick={() => void classifySelectedSpam(selected.state !== "spam")}>{selected.state === "spam" ? "스팸 해제" : "스팸으로 분류"}</button>{Boolean(replyBody.trim() || noteBody.trim()) && <p>작성 중인 답변·메모를 저장하거나 비운 뒤 분류를 변경할 수 있습니다.</p>}</div>
               <div className="agent-inbox-messages">{selected.messages.map(message => <div key={message.id} className={`agent-inbox-message ${message.visibility === "internal" ? "internal" : message.actor === "owner" ? "mine" : ""}`}><strong>{message.visibility === "internal" ? "내부 메모" : message.actor === "owner" ? "사업자" : message.actor === "assistant" ? "AI" : "고객"}</strong><p>{message.body}</p>{message.visibility !== "internal" && message.actor === "owner" && <small>알림 {deliveryLabel(message.delivery_state)}</small>}
                 {selected.attachments.filter(item => item.messageId === message.id).map((attachment, index) => <PrivateInquiryPhoto key={attachment.id} inquiryId={selected.id} attachmentId={attachment.id} label={`고객 첨부 사진 ${index + 1}`} />)}</div>)}</div>
-              {selected.state === "closed" ? <p className="agent-inbox-closed-note">이 문의는 처리 완료 상태입니다. 고객이 추가 질문을 남기면 다시 답변할 수 있습니다.</p> : <div className="agent-inbox-editor-tabs" role="group" aria-label="답변 작성 방식"><button type="button" aria-pressed={inboxEditor === "reply"} onClick={() => setInboxEditor("reply")}>고객에게 답변</button><button type="button" aria-pressed={inboxEditor === "note"} onClick={() => setInboxEditor("note")}>내부 메모</button></div>}
-              {selected.state === "closed" ? null : inboxEditor === "reply" ? <form className="agent-inbox-editor" onSubmit={event => void sendOwnerMessage(event, "replies")}><label htmlFor="agent-inbox-reply">고객에게 답변</label><textarea id="agent-inbox-reply" required maxLength={5000} placeholder="고객에게 전달할 답변을 작성해 주세요." value={replyBody} onChange={event => setReplyBody(event.target.value)} /><div><span>AP에 저장 · 외부 알림 미연결</span><button type="submit" disabled={busy}>답변 저장 →</button></div></form>
+              {selected.state === "closed" ? <p className="agent-inbox-closed-note">이 문의는 처리 완료 상태입니다. 고객이 추가 질문을 남기면 다시 답변할 수 있습니다.</p> : selected.state === "spam" ? <p className="agent-inbox-closed-note">고객 답변을 저장하려면 먼저 스팸 분류를 해제해 주세요. 내부 메모는 계속 저장할 수 있습니다.</p> : <div className="agent-inbox-editor-tabs" role="group" aria-label="답변 작성 방식"><button type="button" aria-pressed={inboxEditor === "reply"} onClick={() => setInboxEditor("reply")}>고객에게 답변</button><button type="button" aria-pressed={inboxEditor === "note"} onClick={() => setInboxEditor("note")}>내부 메모</button></div>}
+              {selected.state === "closed" ? null : selected.state !== "spam" && inboxEditor === "reply" ? <form className="agent-inbox-editor" onSubmit={event => void sendOwnerMessage(event, "replies")}><label htmlFor="agent-inbox-reply">고객에게 답변</label><textarea id="agent-inbox-reply" required maxLength={5000} placeholder="고객에게 전달할 답변을 작성해 주세요." value={replyBody} onChange={event => setReplyBody(event.target.value)} /><div><span>AP에 저장 · 외부 알림 미연결</span><button type="submit" disabled={busy}>답변 저장 →</button></div></form>
                 : <form className="agent-inbox-editor" onSubmit={event => void sendOwnerMessage(event, "notes")}><label htmlFor="agent-inbox-note">내부 메모</label><textarea id="agent-inbox-note" required maxLength={5000} placeholder="사업자만 보는 메모를 남겨주세요." value={noteBody} onChange={event => setNoteBody(event.target.value)} /><div><span>고객에게 공개되지 않습니다.</span><button type="submit" disabled={busy}>메모 저장 →</button></div></form>}
             </> : <div className="agent-inbox-empty-thread"><span aria-hidden="true">▤</span><h2>문의를 선택해 주세요</h2><p>목록에서 고객 문의를 열면 원본 대화와 답변 작성이 표시됩니다.</p></div>}
           </div>

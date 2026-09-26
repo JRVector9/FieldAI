@@ -476,6 +476,45 @@ async def main():
             await guest.get_by_text("평일 오후에 연락드리겠습니다.").wait_for()
             assert await guest.get_by_text("합성 검수 기록").count() == 0
             assert await guest.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            lost_spam_ack = True
+
+            async def lose_spam_ack(route):
+                nonlocal lost_spam_ack
+                if lost_spam_ack:
+                    lost_spam_ack = False
+                    response = await route.fetch()
+                    assert response.status == 200
+                    await route.abort("failed")
+                else:
+                    await route.continue_()
+
+            await owner.route("**/v1/owner/inquiries/*/spam", lose_spam_ack)
+            await inbox.get_by_role("button", name="스팸으로 분류", exact=True).click()
+            await inbox.get_by_text("응답을 받지 못해 스팸 처리 결과", exact=False).wait_for()
+            await expect(inbox.get_by_role("button", name="스팸으로 분류", exact=True)).to_be_disabled()
+            await inbox.get_by_role("button", name="현재 상태 다시 확인").click()
+            await inbox.get_by_role("button", name="스팸 해제", exact=True).wait_for()
+            assert await inbox.get_by_label("고객에게 답변", exact=True).count() == 0
+            await owner.unroute("**/v1/owner/inquiries/*/spam", lose_spam_ack)
+            await guest.get_by_role("button", name="문의 열기").click()
+            await guest.get_by_role("heading", name=re.compile("알림 중단")).wait_for()
+            await guest.get_by_label("추가 질문").fill("스팸 분류 중에도 원본을 보존합니다.")
+            await guest.get_by_role("button", name="추가 질문 저장").click()
+            await guest.get_by_text("추가 질문을 AP에 저장했습니다. 이 문의의 알림은 중단된 상태입니다.", exact=True).wait_for()
+            await guest.get_by_label("문의 사진 첨부 (선택, 최대 8MB)").set_input_files("quality_checks/report_320.png")
+            await guest.get_by_role("button", name="사진만 첨부 또는 재시도").click()
+            await guest.get_by_text("사진을 문의에 비공개로 저장했습니다. 이 문의의 알림은 중단된 상태입니다.", exact=True).wait_for()
+            await inbox.get_by_role("button", name="스팸 해제", exact=True).click()
+            await inbox.get_by_text("새 질문이나 답변으로 문의가 변경됐습니다", exact=False).wait_for()
+            await inbox.get_by_text("스팸 분류 중에도 원본을 보존합니다.", exact=True).wait_for()
+            await inbox.get_by_role("button", name="스팸 해제", exact=True).scroll_into_view_if_needed()
+            await owner.screenshot(path="/tmp/agent-inquiry-spam-320.png")
+            assert await owner.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            notices = await owner.request.get("http://localhost:3001/v1/owner/notifications")
+            assert (await notices.json())["unreadCount"] == 0
+            await inbox.get_by_role("button", name="스팸 해제", exact=True).click()
+            await inbox.get_by_text("스팸 분류를 해제했습니다. 과거에 중단한 알림은 다시 보내지 않습니다.", exact=True).wait_for()
+            await inbox.get_by_role("button", name="고객에게 답변", exact=True).click()
             lost_close_ack = True
 
             async def lose_close_ack(route):
@@ -606,7 +645,7 @@ async def main():
             await guest.get_by_text("사진을 문의에 비공개로 저장했습니다", exact=False).wait_for()
             await guest.get_by_role("button", name="문의 내용 다시 확인").click()
             await guest.get_by_text("사진도 AP에서 확인해 주세요.").wait_for()
-            await guest.get_by_role("img", name="고객 첨부 사진 1").wait_for()
+            await guest.locator("li").filter(has_text="사진도 AP에서 확인해 주세요.").get_by_role("img", name="고객 첨부 사진 1").wait_for()
             assert photo_upload_committed and not failed_photo_read
             await guest.unroute(f"**/v1/inquiries/{inquiry_id}/messages/*/attachments", commit_follow_up_photo)
             await guest.unroute(f"**/v1/inquiries/{inquiry_id}", fail_photo_read)

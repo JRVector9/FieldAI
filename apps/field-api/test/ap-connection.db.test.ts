@@ -41,6 +41,7 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
   let refreshCalls = 0;
   let rejectRefresh = false;
   let rejectConversationRead = false;
+  let replySpam = false;
   let replyCalls = 0;
   let revokeCalls = 0;
   let remoteRevokeDown = true;
@@ -132,7 +133,7 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
     if (url === `http://127.0.0.1:4311/integrations/v1/conversations/${apConversationId}`) {
       if (rejectConversationRead) throw new Error('AP conversation timeout');
       return Response.json({ id: apConversationId, deploymentId: apDeploymentId,
-        state: 'needs_owner', revision: apRevision });
+        state: replySpam ? 'spam' : 'needs_owner', revision: apRevision });
     }
     if (url === `http://127.0.0.1:4311/integrations/v1/conversations/${apConversationId}/messages?after=0&limit=100`)
       return Response.json({ conversationId: apConversationId, nextAfter: apRevision === 1 ? '1' : '2',
@@ -142,6 +143,7 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
           createdAt: new Date().toISOString() }])] });
     if (url === `http://127.0.0.1:4311/integrations/v1/conversations/${apConversationId}/replies`
       && init?.method === 'POST') {
+      if (replySpam) return Response.json({ error: 'conversation_spam' }, { status: 409 });
       replyCalls += 1;
       assert.equal(init.headers && (init.headers as Record<string, string>)['idempotency-key'], 'a'.repeat(32));
       assert.deepEqual(JSON.parse(String(init.body)), { body: '가능합니다.', expectedRevision: 1 });
@@ -419,6 +421,17 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
     assert.equal((await app.inject({ method: 'POST', url: replyUrl, headers: ownerHeaders,
       payload: { body: '다른 답변', expectedRevision: 1 } })).statusCode, 409);
     assert.equal((await app.inject({ url: conversationUrl, headers: ownerHeaders })).json().messages.length, 2);
+    replySpam = true;
+    const rejectedSpam = await app.inject({ method: 'POST', url: replyUrl,
+      headers: { ...ownerHeaders, 'idempotency-key': 'b'.repeat(32) },
+      payload: { body: 'AP 스팸 중 보존할 답변 초안', expectedRevision: 2 } });
+    assert.equal(rejectedSpam.statusCode, 409);
+    assert.equal(rejectedSpam.json().error, 'conversation_spam');
+    assert.deepEqual((await app.inject({ url: draftUrl, headers: ownerHeaders })).json().draft,
+      { body: 'AP 스팸 중 보존할 답변 초안', expectedRevision: 2, state: 'revision_conflict' });
+    assert.equal((await app.inject({ url: conversationUrl, headers: ownerHeaders })).json().conversation.state, 'spam');
+    assert.equal(replyCalls, 2);
+    replySpam = false;
 
     const another = await app.inject({ method: 'POST', url: startUrl,
       headers: { cookie: owner.cookie }, payload });

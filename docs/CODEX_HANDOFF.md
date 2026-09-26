@@ -6,6 +6,17 @@
 - 저장소 기준 경로: `reference/field_ui_prototype_v3.html`. 후속 에이전트도 이 파일을 화면·동선 구현 기준으로 사용하며, 인수인계 갱신 시 이 시안 경로를 상단에 유지한다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03/A06 AP 스팸 분류·알림 중단 (2026-09-26)
+
+- **현재 목표:** 전체 문서 기능을 AP/Field 독립 로컬 서비스로 완성한다. 이번 범위는 AP PRD 2.7의 스팸 분류·해제, 원본/증빙 보존, 알림 중단과 Field 소비자의 답변 거절 처리다. C03 전체와 사용자 최종 화면·동선 인수는 미완료다.
+- **구현/파일:** AP migration `000061_inquiry_spam.sql`, `src/{inquiries,inquiry-attachments,integrator-routes,field-notification-route-close,admin}.ts`, 새 `test/inquiry-spam.db.test.ts`, 기존 integrator/field-actions DB 검사; AP 웹 `src/{workspace,agent-public}.tsx`, `agent-home.css`; Field API `ap-conversations.ts`/DB 검사, 웹 `field-workspace.tsx`; 기존 AP owner/Field external inquiry 브라우저와 실행 계획. 아직 미커밋이다.
+- **설계:** AP owner/editor가 현재 revision으로 명시 분류/해제한다. 고객 후속 메시지·사진·내부 메모·확인키·기존 예약을 유지한다. spam 동안 신규 알림은 `not_applicable`/내부 이유 `spam`이며 과거 알림을 되살리지 않는다. AP는 공개 답변을 409로 거절하고 Field는 초안을 보존한다. 기존 공개 string state/알림 상태 계약을 사용하며 Field DB/schema·연결 권한 변경 없음.
+- **실제 검사:** AP DB 최종 22/22(session 92460), Field DB 최종 24/24(session 85640), 전체 typecheck(session 5432)/lint(session 87435) exit 0. 임시 DB 제거 확인. mock **17560**에서 양제품 API/웹 build/ready, API readiness 실제 확인. 최종 AP 사업자 HTTP/브라우저 **70728** 1/1(응답 분실·현재 상태 조회·분류/후속 사진/원본/메모/해제/신규 알림), 양제품 HTTP/브라우저 **87239** 1/1(기존 위젯·예약·해제·알림과 Field spam 소비자 상태 주입/초안 유지) exit 0. 실제 저장 거절/알림 원장은 별도 PG17 검사로 확인했다. AP 320px 캡처 `/tmp/agent-inquiry-spam-320.png`를 열었다.
+- **실패/수정:** 최초 migration의 옛 constraint 이름을 실제 후속 schema에 맞춰 고쳤다. spam 사진을 넓게 허용한 접근은 기존 AI 사전동의 사진 권한 검사를 실패시켜 폐기했다. 해당 고객 메시지의 spam 알림 증거가 있는 경우만 허용해 기존 권한 검사를 유지했다. 두 사진 때문에 모호해진 브라우저 선택자는 원래 대상 메시지 안의 사진으로 한정했다. Field의 확정 저장 거절을 결과 미상으로 저장하던 경로는 기존 revision_conflict 초안 상태로 수정했다.
+- **남은 작업:** 다음 확인된 AP PRD 2.2 누락은 AP native 사업 지식의 지역/영업시간 입력·저장·공개·AI 근거다. 현재 business Content/웹 Draft/agents NativeKnowledge에는 없으며 Field 연결 데이터와 구분해 구현해야 한다. 실 공급사·전체 PRD/QA/G는 미완료다. 이번 스팸 분류는 동의 완료 human 원본 대상이며 익명 AI 상담 분류까지 구현했다고 주장하지 않는다.
+- **복구:** 스팸 행/감사/중단 알림을 보존한다. 기존 코드로 즉시 롤백하면 spam 상태를 잘못 다룰 수 있으므로 스팸 기능/행 처리와 배포 순서를 먼저 검토한다. 운영 배포·청구·실 고객 발송·운영 삭제 없음.
+- **다음 정확한 명령:** `git status --short`, `git log -1 --oneline`, `sed -n '12,20p' docs/01_AGENT_PLATFORM_PRD.md`, `rg -n 'type Content|contentFrom|NativeKnowledge|지역|영업시간' apps/agent-api/src/business.ts apps/agent-api/src/agents.ts apps/agent-web/src/workspace.tsx`, `curl -fsS http://127.0.0.1:4311/health/ready`, `curl -fsS http://127.0.0.1:4321/health/ready`. native 지식 Task의 파일/요구/QA/명령을 기록하고 actual DB/브라우저 단언부터 추가한다. mock **17560**을 timeout만으로 중복 기동하지 않는다. 상단 시안 경로를 유지한다.
+
 ## 최신 인수인계 — C03/F-C04 공개 사업 정보 조회 상태 (2026-09-26)
 
 - **현재 목표:** 시안/v3.0 문서의 기능을 실제 AP/Field 독립 로컬 서비스로 끝까지 연결한다. C03 전체·사용자 최종 화면/동선·실 공급사/G는 미완료다.
