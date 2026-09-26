@@ -1,3 +1,4 @@
+import { registerFieldBillingConsentRoutes } from './billing-consent-routes.js';
 import Fastify from 'fastify';
 import { fromNodeHeaders } from 'better-auth/node';
 import { registerFieldBusinessRoutes, type FieldBusinessRuntime } from './business.js';
@@ -75,6 +76,7 @@ export function createFieldApp(
     registerFieldUsageRoutes(app, businessRuntime);
     registerFieldSubscriptionRoutes(app, businessRuntime);
     registerFieldBillingRoutes(app, businessRuntime);
+    registerFieldBillingConsentRoutes(app, businessRuntime);
   }
   if (authHandler) {
     app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_request, body, done) => {

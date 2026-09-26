@@ -1,3 +1,4 @@
+import { billingContextFromEnvironment } from './billing-context.js';
 import { Pool } from 'pg';
 import { fromNodeHeaders } from 'better-auth/node';
 import { createAgentApp } from './app.js';
@@ -23,6 +24,7 @@ const app = createAgentApp(
   process.env.AP_PROFILE === 'mock' ? pool : undefined,
   {
     pool,
+    billing: billingContextFromEnvironment(),
     revocationJournal,
     resolveUserId: async (headers) =>
       (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,

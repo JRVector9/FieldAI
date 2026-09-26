@@ -1,3 +1,4 @@
+import { billingContextFromEnvironment } from './billing-context.js';
 import { Pool } from 'pg';
 import { fromNodeHeaders } from 'better-auth/node';
 import { createFieldApp } from './app.js';
@@ -19,6 +20,7 @@ const pool = new Pool({ connectionString });
 const siteQueue = process.env.FIELD_VALKEY_URL ? new FieldSiteQueue(process.env.FIELD_VALKEY_URL) : undefined;
 const runtime = {
   pool,
+  billing: billingContextFromEnvironment(),
   resolveUserId: async (headers: import('node:http').IncomingHttpHeaders) =>
     (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
   resolveSession: async (headers: import('node:http').IncomingHttpHeaders) => {

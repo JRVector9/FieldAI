@@ -1,3 +1,4 @@
+import type { BillingContext } from './billing-context.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { IncomingHttpHeaders } from 'node:http';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -9,6 +10,7 @@ import type { AgentRevocationJournal } from './revocation-journal.js';
 import { rejectExpiredTrial } from './trial-access.js';
 
 export type BusinessRuntime = {
+  billing?: BillingContext;
   pool: Pool;
   revocationJournal?: Pick<AgentRevocationJournal, 'read' | 'append'>;
   resolveUserId: (headers: IncomingHttpHeaders) => Promise<string | null>;

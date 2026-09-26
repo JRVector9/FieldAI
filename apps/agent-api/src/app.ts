@@ -1,3 +1,4 @@
+import { registerAgentBillingConsentRoutes } from './billing-consent-routes.js';
 import Fastify from 'fastify';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { Pool } from 'pg';
@@ -84,6 +85,7 @@ export function createAgentApp(
     registerAgentUsageRoutes(app, businessRuntime);
     registerAgentSubscriptionRoutes(app, businessRuntime);
     registerAgentBillingRoutes(app, businessRuntime);
+    registerAgentBillingConsentRoutes(app, businessRuntime);
     registerAgentAdminRoutes(app, businessRuntime);
     registerAgentModerationRoutes(app, businessRuntime);
     registerCustomerSupportRoutes(app, businessRuntime);

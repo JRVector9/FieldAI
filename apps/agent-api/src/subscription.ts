@@ -79,9 +79,4 @@ export function registerAgentSubscriptionRoutes(app: FastifyInstance, runtime: B
     return result(member.organizationId, await getTrial(member.organizationId), true, true);
   });
 
-  app.post('/v1/subscription/checkout', async (request, reply) => {
-    const member = await organizationFor(request, reply, true);
-    if (!member) return reply;
-    return reply.code(503).send({ error: 'paid_checkout_not_configured', state: 'blocked_integration' });
-  });
 }
