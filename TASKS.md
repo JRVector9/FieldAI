@@ -1,5 +1,7 @@
 # TASKS — 독립 제품 개발 작업 보드 v3.0
 
+최근 C03 로컬 기능 회귀 감사(2026-09-26): 코드 `a023c67`에서 표준 AP/Field/Distribution E2E 3/3·3/3·2/2, 격리 제품 DB 각 21/21, 계약/장애 주입/보안/lint/typecheck/unit exit 0. 상대 프로세스/DB/비밀값 부재의 AP/Field 독립 실행도 각각 exit 0이고 mock **53283**으로 복구했다. 검수 범위는 `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`. 문서 대조에서 Field PRD 3.8의 AP 장애 후 직접 새 문의/예약 `fallback_origin`·가능한 원요청 ID 관계/중복 후보가 미구현임을 확인해 다음 내부 구현으로 남겼다. C03 전체·사용자 시각/동선·실 공급사/출시 게이트는 미완료다.
+
 최근 C03/I03 Field AP 연결·설치 재확인(2026-09-26): Field 연결 목록 GET 503을 0건으로 표시하지 않고 별도 실패/재시도로 복구한다. 이전 목록은 보존하되 확인 전 조작을 막는다. Field 설치 기록이 active여도 AP 활성 배포에서 빠지거나 연결이 revoked이면 현재 사용 불가와 직접 문의·예약 유지 경로를 보여준다. 320px 브라우저에서 거짓 빈 상태·해제 연결 안내 red→green, 설치·연결·배포 조회 실패/재시도·가로 넘침/pageerror 0. 실제 AP pause→Field 후보 제외/AP 공개 404/Field 사이트 200→reactivate 후보 복귀를 포함한 양방향 HTTP 1/1, Field web typecheck·lint·구문 검사 exit 0, 새 mock **23141** 양제품 build/ready. 실 DNS/TLS·사용자 최종 화면 인수·정식 QA/G는 남아 C03/I03 `in_progress`다.
 
 최근 C03/I03 Field AP 설치 상태(2026-09-26): 사이트 초안 주소를 공개 주소로 표시하고 설치 조작을 노출하던 문제를 수정했다. Field 설치 조회의 실제 공개본 유무를 반환하고 초안/공개/조회 실패를 구분한다. AP 배포 조회 503도 활성 배포 0건과 구분해 재시도한다. Field DB 검사 red→2/2, 320px 브라우저 red→green, 기존 AP↔Field 연결 HTTP 1/1, Field API build·web typecheck·lint·Python 구문 exit 0. 새 mock **86290** 양제품 build/ready. 사용자 최종 화면 인수·실 공급사/정식 QA/G는 남아 C03/I03 `in_progress`다.

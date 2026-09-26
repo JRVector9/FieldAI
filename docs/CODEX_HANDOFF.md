@@ -5,6 +5,30 @@
 - 시안 파일: `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03 로컬 핵심 기능 회귀 감사 (2026-09-26)
+
+- **현재 목표:** 시안 v3와 v3.0 문서의 기능을 끝까지 구현하고 실제 사용할 수 있는 AP/Field 독립 로컬 환경을 유지한다. 사용자 최종 시각/동선 검수와 실 공급사 연동은 이후다. 전체 목표와 C03 완료는 미증명이다.
+- **완료 작업:** 코드 `a023c67`에서 AGENTS 검수 명령 계약의 로컬 기능/DB/계약/장애/보안/독립성/빌드를 실제 재실행했다. 검사에 포함된 경로는 모두 통과했다. 두 제품을 실제로 각각 상대 서비스·DB 없이 검수하고 양제품 mock을 복구했다. `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`에 범위·제약·새 누락 요구를 기록했다.
+- **수정 파일:** 새 `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`, `docs/technical/PHASE_2_EXECUTION_PLAN.md`, `TASKS.md`, `DEVELOPMENT_STATUS.md`, 이 파일. 제품 코드/API/DB/schema/공개 계약 변경 없음.
+- **핵심 설계 결정:** 현재 green 명령은 자신이 단언하는 경로의 증거다. 전체 PRD 기능 완료를 뜻하지 않는다. Field PRD 3.8의 AP 장애 후 새 직접 문의/예약 `fallback_origin`·원요청 관계/중복 후보 요구는 아직 코드가 없어 다음 내부 구현으로 남긴다. 전화번호만으로 자동 병합하거나 AP 원문/미전송 입력을 몰래 복사하지 않는다.
+- **실제 검사/환경/커밋:** 로컬 PG17·Field Valkey·mock·Chromium, 코드 `a023c67`. `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` exit 0. `pnpm test:db:agent`, `pnpm test:db:field` 각 21/21·별도 임시 DB 제거. `pnpm test:contracts`, `pnpm test:integration:faults`, `pnpm test:security` exit 0. `pnpm test:e2e:agent` 3/3, `pnpm test:e2e:field` 3/3, `pnpm test:e2e:distribution` 2/2. mock PTY 23141 종료/상대 compose `stop` 뒤 `pnpm test:independence:agent`, `pnpm test:independence:field` 각각 exit 0(상대 서비스/DB/비밀값 부재·320px 실제 owner/customer 흐름). 양 API·웹 build는 독립 검사와 최종 mock 복구에서 exit 0. 새 mock PTY **53283** 양제품 build/ready. 이 기록 커밋은 `git log -1 --oneline`으로 확인한다.
+- **실패한 접근:** 이번 표준 검사에서 제품/검사 실패는 없었다. 검사 pass만으로 전체 기능 완료를 추정하지 않고 문서 대조를 추가했고, `fallback_origin` 등 미구현 요구를 발견했다.
+- **남은 작업:** 우선 Field PRD 3.8 AP 대체 직접 새 요청의 출처/관계 기록과 사업자 중복 후보(자기 조직의 요청 ID 기준, 전화번호 자동 병합 금지)를 구현한다. 그 밖의 문서 요구/실제 역할 화면 대조, 사용자 최종 디자인·동선, 전체 접근성/정식 QA/G가 남아 있다. 실 인증/LLM/알림/결제/DNS/TLS/객체 저장소/악성코드 검사/백업 공급사는 `blocked_integration` 또는 미검수다. 운영 배포·청구·고객 발송·운영 데이터 삭제 없음.
+- **다음 에이전트 정확한 명령:**
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -1 --oneline
+cat docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md
+sed -n '98,109p' docs/02_FIELD_PRD.md
+rg -n 'fallback_origin|fallbackOrigin|중복 후보' apps packages
+sed -n '201,300p' apps/field-api/src/inquiries.ts
+rg -n 'app.post|requestBody|customerName|preferredTime' apps/field-api/src/bookings.ts apps/field-web/src/field-booking.tsx
+```
+
+`rg`의 매치 없음(exit 1)은 현재 미구현 확인이다. 다음 작업 시작 전에 정확한 파일 범위·요구/QA·명령을 계획에 기록한다. 로컬 mock **53283**가 살아 있으면 AP `http://localhost:3001/workspace`, Field `http://localhost:3002/workspace`다. HTTP로 현재 상태를 먼저 확인하고 세션이 없을 때만 `pnpm mock:run`으로 띄운다. 위 시안 절대경로는 유지한다.
+
 ## 최신 인수인계 — C03/I03 Field AP 연결·설치 재확인 (2026-09-26)
 
 - **현재 목표:** 위 절대경로의 시안과 v3.0 개발 문서에 맞춰 실제 기능을 끝까지 연결하고 로컬에서 사용할 수 있는 AP/Field 독립 환경을 유지한다. 사용자 최종 디자인·동선 인수와 실 공급사 연동은 이후다. C03 전체/출시 승인은 미완료다.

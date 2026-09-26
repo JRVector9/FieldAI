@@ -1,5 +1,12 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03 로컬 핵심 기능 회귀 감사 — 2026-09-26
+
+- 파일 범위: 먼저 `package.json`의 검수 명령과 AP/Field/매체 실제 브라우저 경로를 실행해 결과를 기록한다. 실패가 확인되면 해당 제품 코드·검사 파일의 정확한 범위를 추가 기록한 뒤 수정한다. 완료 기록은 `docs/technical/PHASE_2_EXECUTION_PLAN.md`, `TASKS.md`, `DEVELOPMENT_STATUS.md`, `docs/CODEX_HANDOFF.md`에 남긴다.
+- 요구/QA/게이트: C03의 고객·사업자·매체 주요 행동과 AP/Field 제품 독립성, QA50/57/58/119 및 D05 로컬 부분. 시안 v3는 화면·기능 기준이고 두 제품 원장은 분리한다. 내부 mock 검수와 실 공급사/출시 검수는 구분한다.
+- 실행 명령: 살아 있는 로컬 mock에서 `pnpm test:e2e:agent`, `pnpm test:e2e:field`, `pnpm test:e2e:distribution`을 순차 실행한다. 실패 유형을 실제 제품 결함과 검사 환경/선택자 오류로 구분하고 필요한 경로만 수정한 뒤 재검사한다. 이후 `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, 제품별 `test:db`, `test:contracts`, `test:integration:faults`, `test:security`를 실행한다. 독립성 게이트는 mock 프로세스와 상대 컨테이너를 종료한 뒤 `pnpm test:independence:agent`, `pnpm test:independence:field`로 실제 부재를 확인하고 mock을 복구한다. 사용자의 최종 시각·동선 인수와 실 외부 연동은 이후다.
+- 실행 결과: 코드 커밋 `a023c67`에서 표준 E2E AP 3/3·Field 3/3·Distribution 2/2, 제품별 격리 DB AP/Field 각 21/21, 계약·장애 주입·보안·lint/typecheck/unit 모두 exit 0. 상대 프로세스/DB/비밀값 부재에서 AP/Field 독립 실행 각각 exit 0이고 양제품 build를 실제 실행했다. 종료했던 mock을 PTY **53283**으로 복구했다. 자세한 범위는 `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`에 있다. 제품 코드 실패는 없었으나 문서 대조에서 Field PRD 3.8의 AP 장애 후 직접 새 문의/예약 `fallback_origin`·원요청 ID 관계/중복 후보가 미구현임을 확인했다. 다음 내부 구현 범위로 남기며 C03 전체/정식 QA/G 완료로 처리하지 않는다.
+
 ### C03/I03 Field AP 연결 목록·설치 배포 재확인 — 2026-09-26
 
 - 파일 범위: `apps/field-web/src/field-ap-connections.tsx`, `tools/spikes/field-installation-state-browser.py`, 계획·상태·화면 검토·인수인계 문서. AP/Field API·DB migration·공개 연동 계약은 변경하지 않는다.
