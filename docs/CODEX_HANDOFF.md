@@ -9,7 +9,36 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
-## 현재 완료 checkpoint — a974b90 / 고정 디자인의 내부 기능 통합 (2026-09-27)
+## 현재 완료 checkpoint — 2362761 / 내부 기능·로컬 사용 환경 (2026-09-27)
+
+- **Current objective / State:** v3/C03의 확정 내부 기능을 끝까지 구현하고 독립 로컬 사용 환경을 마련하는 범위는 완료했다. source2362761, TASKS52[x]/7[ ] (기존49개 유지). 최종 read-only 요구/코드 대조에서 이번3개 이외 추가 확정 내부 누락은 없었다. 실공급사/운영·사용자최종 테스트·전체QA160/출시 승인과 전체Task46 verified는 별도 미완료다. 디자인은 고정하고 새 기능만 `(추가)`.
+- **Completed work:** F03.ALLOWED-FONT(허용2종·legacy글자 유지·초안/명시공개/불변release/복구/AI선택 보존), I03.SOURCE-SYNC-STATUS(실제source상태·현재snapshot 수신시각 syncedAt/null·legacy호환), I06.AUTH-LIFECYCLE.UI(실제key상태/명시close·sessionfence·서버ownpending UUID·정확한cancelled receipt 뒤 재확인 새UUID). 기존 a974b90/52완료는 재구현하지 않는다.
+- **Modified files / Contract:** source29파일,672insert29delete. Field sites/site-generation·ownfont helper/editor/publicrenderer/tests; AP source-refreshes/own native·Field BFF/panel/helper/consumer/runner; route-key ownAPI UI fence/GET요청자일치 boolean·별도client/component·기존연결 attachment·focusedtests; AP OpenAPI/CONTRACT_NOTES/contracts검사·docs03·packagefocused명령. AP read preview.10 additive nullable syncedAt, 설치write preview.9 subset 유지. AP81/Field73 동결·새schema/worker없음, reference원본/플랫폼CSS/기존메뉴배치 변경없음.
+- **Key design decisions:** font없음은 기존스타일 상속·임의URL/CSS 거부, 선택글꼴은 사업자 제작site에만 적용. syncedAt는 현재 source_id/revision snapshot.fetched_at만 사용하며 approval/heartbeat를 수신으로 꾸미지 않음. 상태 current는AP출처승인이고AI공개와 구분. key폐기는 기존원backend 원권한/ACK/업무조정·잠금·worker를 그대로사용. actor/session/currentview 재검사·키원문 저장/노출없음. knowncancelled UUID의 정확한POST영수증과 현재session 확인 뒤에만 terminalmetadata로 기록; unknown 원UUID 유지.
+- **Tests actually run / Environment / Commit:** Node24.18.0, own UUID PG17/합성계정/공개HTTP·ReactSSR consumer,2362761 소스 precommit. font own native7083 1/1·API2/2·웹2/2. source contract2/2·웹2/2·ownAP9002/Field47772 각1/1. key consumer+API9/9·own native1329 route-key선택case1/1(fail/skip0, 전체12재검수아님). `pnpm typecheck`10588/`pnpm lint`45330 terminalexit0. latestmanaged54544 실제양API/web build/ready200, APworkspace/Fieldworkspace·site·integrations200·새보호source/key401. runtimeevidence `/tmp/c03-final-internal-runtime-evidence.log` exit0, controller42202/keyworker44583각1/같은parent. 명령/로그/환경 상세는 C03_FINAL_INTERNAL_UI_EXECUTION_PLAN 및 ownF03/I03 phase.
+- **Reviews / Failed approaches:** font32932 clean .87, source62400 clean .88. key44498 P2 .94 freshsession/두탭 cache→서버ownpending UUID복구,33245 P2 .91 과거cancelled cache→exactcancelled receipt뒤에만 retire; 신규consumerred→최종9green,34899 finalclean .89. 읽기전용·브라우저/테스트 직접실행 안함. 중간wholewebtype78856 exit2(peer작성중·ownfixtureundefined) 보완 후whole0; ownsource lint preferconst 보완. 임시native CJSnamedimport 실행exit1은DB착수전,defaultimport로1329회복. runtimeevidence최초HTTP는성공했으나controller정규식에서suite인수누락으로exit1,프로세스명을 실제대조해checker만보완후exit0. old83305 Ctrl+C terminalexit1 확인 뒤54544한개기동. 실패로그삭제/기대값완화/완료승계없음.
+- **Recovery / Current runtime:** managed54544 live `/tmp/c03-final-internal-managed.log`, AP http://localhost:3001/workspace · Field http://127.0.0.1:3002/workspace(ownOrigin). supplier/model workers blocked_integration, route-key local_reconciliation. 실제청구/환불/발송/DNS/운영삭제/배포없음. 새helper/추가기능을 되돌려도 기존absent JSON/초안·공개릴리스/원장·원unknown UUID는 유지해야 한다. 적용schema를수정/원장을초기화하지않는다. 이전83305와실패/완료한review·test handle은재사용하지않는다.
+- **Remaining / Not tested / Next dependency:** 다음은 사용자최종 기능/화면·모든역할/동선·320px/실기기·키보드/스크린리더와 실메일/카카오/MFA·LLM/PG/발송/VAPID/DNS/TLS·운영ACL/RPO/RTO/QA/G·공급사/호환검수다. 현재7pending은 부모/외부/인수묶음이며 내부7개 개발작업이 아니다. 실제오류/요구변경 증거가 생기면 동일ID에 이유를 먼저기록하고 필요한범위만연다. 기존52[x]를 기억부재/아래이력/전체QA미실행만으로 다시 구현/검사하지않는다.
+
+### Exact commands for next agent — 사용자 검수/외부 연결 후속
+
+문서실제검수: 원장대조52완료/7pending·기존49보존·중복0·원본불변exit0; build_report.py/check_package.py최종exit0. master1872행337468bytes/HTML384086bytes, document_package_only/service_tests_executed=false·DAG46/QA명세160/schema3. 최초linkchecker는 `[ ]`직후괄호를inline link로오인한문구공백만보완했고실패로그보존. AKjournal 실제기록완료(마지막 내부 기능과 로컬 사용 환경 2362761). 서비스QA160통과주장없음.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -3 --oneline
+sed -n '1,108p' TASKS.md
+sed -n '1,55p' docs/CODEX_HANDOFF.md
+cat docs/technical/C03_FINAL_INTERNAL_UI_EXECUTION_PLAN.md
+tail -n 20 /tmp/c03-final-internal-managed.log
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+managed54544가 살아 있으면 두번째mock:run을띄우지않는다. 새 재현이없으면완료한DB/consumer/CLI검수를반복하지않는다. source snapshot/폰트/UUID원장은현재실데이터를보존한다. CUA fileURL보안거부를다른surface/HTTP/CDP로우회하지않는다.
+
+## 이력 — 완료 checkpoint a974b90 / 고정 디자인의 내부 기능 통합 (2026-09-27)
 
 - **Current objective / State:** 전체 v3/C03 내부 기능과 독립 로컬 환경 목표는 active. 이번 5개 내부 범위는 implemented/local verified이고 source **a974b90**으로 저장했다. 기존44[x]를 보존해 TASKS **49[x]/9[ ]**다. 후속9는7개 부모/외부·인수 묶음과2개 새 내부 기능이며 작업량9개가 아니다. 전체서비스/출시/실공급사/QA160/사용자최종 인수 완료가 아니다. 사용자 확정 디자인 고정·완료 화면 반복 조정 금지·시안 밖 기능만 `(추가)`.
 - **Completed work:** A07.AI-ENTITLEMENT, F09.AI-ENTITLEMENT, A07.F09.BILLING-ADMIN-UI, I06.AUTH-LIFECYCLE.BACKEND, C03.AP-HOME-LINKS. AP/Field own periodquota와 실제 비용·unknown hold, 관리자 실제 가격/환불·별도승인·sessionfence, OAuth token/family·legacy cutoff·Field 원래route 조정 후 key 종료/별도복원·serving proof, 기존 홈의 설치/요금 진입. key 상태/명시종료 owner UI는 부모 I06에 남겼다.

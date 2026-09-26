@@ -1,6 +1,16 @@
 # 개발 종료까지 남은 범위 — 2026-09-26 1차 코드 대조
 
-## 현재 내부 완료 checkpoint — a974b90 (2026-09-27)
+## 현재 내부 구현 종료 checkpoint — 2362761 (2026-09-27)
+
+TASKS **52[x]/7[ ]**, 기존49개 보존. 허용폰트·AP source 실제상태/현재snapshot수신시각·기존연결key상태/명시종료 UI까지 연결했다. source29파일/672insert29delete, 원본시안/플랫폼CSS·기존worker/domain·적용schemaAP81/Field73 유지. 새 기능만 `(추가)`.
+
+확정된 내부 누락3개는 완료됐고 별도 read-only 최종 대조에서 새 확정 누락은 발견하지 못했다. 이 대조는 파일/요구 비교이며 실행/전체QA160/사용자화면 검수 주장이 아니다. 각newscope 실제검수는 coverage/own phase에 있다. whole type10588/lint45330 exit0, managed54544 최신양build/ready·해당web200·보호API401·controller/worker1개·같은parent 확인.
+
+현재 남는7개는 실SDK/PG, 실제알림/기기, DNS/TLS, 외부설치 OAuth 최종호환, 운영OAuth복원/RPO/RTO, 실인증/공급사, 사용자최종/QA·출시 게이트 묶음이다. 동일크기7개 개발Task가 아니다. **다음은 사용자 기능/화면 테스트 지원과 지정된 실공급사 연결**이다. 기억/이전표의 오래된 남음 문구로 내부52개를 다시 구현하지 않는다.
+
+아래 1차 감사·Task인벤토리·과거 다음작업은 해당 당시의 이력이다. 현재 잔여 원장은 TASKS 상단과 이 checkpoint를 우선한다.
+
+## 이력 — 내부 완료 checkpoint a974b90 (2026-09-27)
 
 TASKS 상단 **49[x]/9[ ]**가 기준이다. 기존44[x] 유지 후 AP/Field AI 제공량·관리자 구독/청구·일반 OAuth/Field key backend·AP 홈 진입5범위를 추가했다. 디자인 reference/field_ui_prototype_v3.html은 고정하며 신규 요소만 `(추가)`다. 사용자 최종 화면/기기·실 공급사·전체QA/출시는 미검수다.
 

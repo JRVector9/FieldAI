@@ -7,6 +7,10 @@ State: implemented — 이 문서의 기존 내부 UI 범위는 ef0dfd3으로 �
 
 **현재 후속 기준:** TASKS·CODEX_HANDOFF 상단을 따른다. 이후 고객 동의/서비스워커·Field 공개설치 BFF/UI는5ceec42의 완료 체크에 기록되어 있으므로 아래 과거 미완료 문구로 재작업하지 않는다. 제공량/관리자 등 새 기능도 기존 배치 안에 `(추가)`로 연결하며 완료 화면의 디자인을 다시 조정하지 않는다. 이번 문서 상태 정리는 새 UI 검수나 기능 완료 추가가 아니다.
 
+## 최신 추가 기능 — 2362761
+
+허용폰트 선택은 기존 사이트 편집 디자인패널, source상태/실제 snapshot수신시각은 기존 정보갱신 패널, 연결key상태/명시종료는 기존 연결 기록에만 추가했다. 각각 `(추가)` 표시하며 원본 reference·플랫폼 CSS·기존 메뉴/배치는 변경하지 않았다. TASKS52[x]/7[ ]가 현재 완료 원장이다. 실제 검수/실패/복구는 C03_FINAL_INTERNAL_UI_EXECUTION_PLAN / own F03·I03 phase, 사용자최종 시각/320px/동선 인수는 별도다.
+
 ## 이번 범위
 
 - 신규 `apps/field-web/src/field-domain-settings.tsx`와 `field-domain-settings.css`: 원본 `ownerDomain`, `settingsWrap`, `settingsNav`의 제목·설정 메뉴·기본 주소·자체 도메인 입력·DNS 표·소유/인증서/대표 상태·확인 버튼 배치를 그대로 구현한다.

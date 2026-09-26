@@ -500,7 +500,7 @@ IntegrationBinding
 |---|---|---|
 | ap.agent.read | 선택한 AI의 공개·상태 정보 | AP 전체 조직 조회 불가 |
 | ap.connections.create | 선택한 AP 조직·AI와 외부 사이트의 설치 전용 연결 생성/조회 | 상대 로그인·정보·예약·결제 권한을 만들지 않음 |
-| ap.sources.refresh | 이 연결의 승인 정보 갱신 요청 | 임의 source/지식 공개 금지 |
+| ap.sources.refresh | 이 연결의 승인 정보 갱신 요청·원본 검토 상태/수신 시각 읽기 | 임의 source/지식 공개 금지 |
 | ap.deployments.manage | Field 및 일반 외부 client의 정확 origin owned_embed 준비·소유 검증·활성·중지 | 현재 client+grant가 만든 설치만 허용, 다른 native/client 배포 조작 불가 |
 | ap.conversations.read | 이 연결·배포 또는 넘겨받은 업무에 관련된 대화 | AI의 다른 사이트 대화를 전부 조회하지 않음 |
 | ap.conversations.reply | 연결 대화에 동의한 사업자의 직접 답변 | 설치용 백그라운드 credential에는 넣지 않음 |
@@ -564,6 +564,8 @@ state: current | pending_review | stale | unavailable | revoked
 현재 로컬 AP owner 출처 공개 화면은 `GET /v1/connections/field/{id}/source/mapping-options`로 **최신 AP 직접 승인 공개본**의 서비스 이름·설명과 공개본 ID를 읽고, 별도로 저장된 Field 승인 snapshot과 나란히 보여준다. 선택한 Field 서비스가 AP 서비스와 이름이 같으면 owner가 **별도 서비스**, **AP 설명 우선**, **Field 설명 우선** 중 하나를 명시해야 한다. 서로 다른 이름도 owner가 같은 대상으로 지정할 수 있다. 공개 요청은 선택한 Field service ID, AP 서비스 인덱스/우선순위, `expectedNativeReleaseId`, Field `expectedSourceRevision`/`expectedContentHash`를 전송한다. AP 직접 승인본 또는 Field 버전이 변경되면 409로 재검토를 요구한다. 매핑은 AP `source_selection`에 공개본별로 저장되며 같은 선택의 재시도는 멱등이다. AP 설명 우선이면 Field 서비스 설명을 연결 AI 근거에서 제외하고, Field 설명 우선이면 새 connector KnowledgeRelease에서 대응하는 AP 서비스 설명을 제외한다. 별도 서비스는 두 설명을 출처별로 보존한다. AP 직접 초안·승인 원본은 수정하지 않으며 새 AI 공개는 owner의 별도 승인이 필요하다. 가격·시간·예약 조건은 이 매핑의 정적 AI 근거가 아니다.
 
 현재 로컬 연결의 공식 갱신 경로는 `ap.sources.refresh`를 별도 동의한 Field owner가 AP 공개 `GET /connections/{id}/source`에서 AP 저장/승인 버전을 읽고, 현재 저장 버전을 `expectedSourceRevision`으로 보내 `POST /connections/{id}/source-refreshes`를 호출한다. 요청에는 32바이트 무작위값의 base64url `Idempotency-Key`가 필요하다. AP는 token·client·grant·actor·조직·AI·연결 상태와 버전을 확인하고 내구 작업 ID를 202로 반환한다. 같은 키/요청은 같은 작업으로 돌아오고 다른 버전 재사용 또는 현재 버전 충돌은 409다. `GET /connections/{id}/source-refreshes/{operationId}`로 `pending/retry/completed/blocked`를 조회한다. worker는 Field의 승인 사실을 공개 API로 가져와 AP 검토 초안으로 저장하며, AP 사업자 source 승인과 고객 AI 지식 공개는 별도다. 기존 연결에 갱신 범위가 없으면 재동의가 필요하고, Field 조회 장애는 재시도 상태로 남긴다. 이 경로는 예약 확정이나 자동 가격 승인이 아니다.
+
+AP 읽기 preview.10의 `syncedAt`는 현재 source_id/source_revision에 맞는 AP snapshot의 실제 수신 시각이며 source·snapshot이 없으면 null이다. 같은 버전 재조회·사업자 승인·AI 공개 시각을 뜻하지 않는다. Field 신규 consumer는 preview.9에서 빠진 값을 null로 호환하고 잘못된 시각은 502로 거부한다. 설치 쓰기의 preview.9 고정 subset은 바뀌지 않는다.
 
 현재 로컬 자동 경로는 Field의 승인 카탈로그 release와 같은 트랜잭션의 `field.catalog.approved` outbox를 기준으로, 연결 생성 뒤의 최신 승인 release를 활성 연결별 내구 전송 원장에 재조정한다. Field는 연결별 키로 `field.facts.changed`를 서명해 AP `/integrations/v1/field-events`에 전달한다. 사건에는 연결·release ID, 버전, 승인 시각만 있고 사업 설명·가격·연락처는 없다. AP는 서명·시간창·현재 owner/grant·`ap.sources.refresh` 동의를 확인하고 제품 전체에서 event ID를 멱등 검사해 inbox commit 뒤 202를 준다. 별도 worker가 과거 버전은 무시하고 최신 Field 공개 facts를 다시 읽는 내구 갱신 작업을 만든다. Field 전송 실패/응답 미상은 같은 event ID로 재시도한다. 새 AP source는 `pending_review`이며 기존 승인 버전·고객 AI 공개를 바꾸지 않는다. 연결 전 승인분의 최초 가져오기는 사업자의 명시 갱신/연결 검토 경로를 사용한다. release/outbox와 연결 원장만으로 최신 변경을 재조정하므로 모든 중간 버전의 독립 전달 이력을 보장하지 않는다.
 
@@ -758,7 +760,7 @@ Field source가 해제되면 그 값의 AP 사용을 중단한다. 데이터가 
 | GET /integrations/v1/me | AP 위임 token | 허용 조직·AI·scope·grant 상태 |
 | POST /integrations/v1/connections | ap.connections.create, 현재 owner 위임/선택 조직·AI·client·grant, 외부 조직 UUID·정확 origin | installation_only binding, UUID 멱등 영수증 |
 | GET /integrations/v1/connections/{id} | ap.connections.create, 같은 client·grant·조직·AI | 설치 전용 연결 상태 |
-| GET /integrations/v1/connections/{id}/source | ap.sources.refresh, 현재 연결 | AP 저장/승인 source 버전·검토 상태 |
+| GET /integrations/v1/connections/{id}/source | ap.sources.refresh, 현재 연결 | AP 저장/승인 source 버전·검토 상태·현재 snapshot 실제 수신 시각(nullable) |
 | POST /integrations/v1/connections/{id}/source-refreshes | ap.sources.refresh, 예상 source 버전 |202 sync_job |
 | GET /integrations/v1/connections/{id}/source-refreshes/{operationId} | ap.sources.refresh, 현재 연결 | 갱신 작업 상태·결과 |
 | POST /integrations/v1/deployments | ap.deployments.manage, 자기 public 연결·정확 origin·선택 조직/AI, UUID key | owned_embed pending 준비; 검증/명시 활성은 별도 |
@@ -1296,7 +1298,7 @@ Owner / reviewed_at / blocker / next action:
 
 #### 남은 작업 — 여기서 다음 세부 ID를 선택한다
 
-**현재 다음:** F03.ALLOWED-FONT와 I03.SOURCE-SYNC-STATUS를 새 내부 범위로 선택하고 I06 부모의 route-key 상태/명시 종료 UI를 연결한다. 고정 디자인·새 기능 `(추가)`·원문/기존 완료49[x] 유지. managed83305 실제ready, AP81/Field73 적용; 다음 새 migration은 AP82/Field74부터 Coordinator 승인 후 예약한다. 아래 과거 착수 번호/handle은 이력이다.
+**현재 checkpoint / 다음:** source **2362761**, 기존49[x]를 보존하고 마지막 내부3개를 체크해 **52[x]/7[ ]**다. 허용폰트·source 상태/실제 수신 시각·연결 키 상태/명시 종료 UI를 완료했다. managed54544 최신 양API/web build/ready, AP81/Field73 유지·새schema없음. 현재 확정 내부 누락은 없으며 다음은 사용자의 최종 기능/화면 테스트 지원과 실공급사 연결·출시 검수다. 완료52개를 기억 부재/아래 이력으로 다시 작업하지 않는다. 원본 디자인 고정, 새기능만 `(추가)`. 다음schema가 실제 필요하면 AP82/Field74부터 Coordinator 승인 후 예약한다.
 
 
 **착수/병렬 소유 이력 (2026-09-27, HEAD9a7fe33/clean, 아래4범위 현재5ceec42로 완료):** 기존40[x]는 유지한다. root는 **A07.F09.BILLING-UI-CALLBACK**의 양제품 web/src/*-subscription.tsx·새 billing UI/client/callback 및 app/billing/return·필요한 admin 화면 부분만 소유한다. 추가 **AI-ENTITLEMENT**는 각 새 helper/native 검사와 agents/site-generation/usage 연결이며 기존 billing/refund 모듈을 직접 수정하지 않는다. Refund Agent(custom_domain)는 양API 신규 refund routes/worker/domain/Toss port와 charge 확정오류 소비·**AP79/Field70**만 소유한다(기존 적용78/69 수정 금지). Public Agent는 새 Field durable public-write BFF/intent·**Field72** 및 Field 사이트의 새 설치 component만 소유하고 root workspace/site shell 변경은 요청한다. Delivery Agent는 새 고객 채널동의 component·receipt 관련 삽입·서비스워커와 own push 설정 연결만 소유한다. root entitlement schema 필요 시 **AP80/Field71** 예약. Delivery 추가 schema 필요 시 먼저 Coordinator에 요청한다. 공통 app/server/BusinessRuntime/package/lockfile/mock-run·체크원장/인계/master/runtime/git는 root만 통합한다. 각 agent는 수정 전 계획/요구/QA/명령을 기록하고 계약/등록 patch를 제출한다. 완료 backend/고정 디자인을 재구현하지 않는다. 실제 공급사 발송/청구/운영 삭제는 수행하지 않는다.
@@ -1315,9 +1317,10 @@ Owner / reviewed_at / blocker / next action:
 - [ ] **A06.F08.DELIVERY** 실발송/실기기 설치·권한·수신/최종 화면 인수. 고객 동의/철회 UI와 서비스워커/푸시 등록 호출 내부 흐름은5ceec42 완료다. DELIVERY.INTERNAL의 provider port/원장/worker/설정 화면은 완료이며 재구현하지 않는다.
 - [ ] **F04.CUSTOM-DOMAIN** 실edge/TLS 공급사 연결·실DNS/custom AP origin 검수·사용자 최종 화면/동선 인수. CUSTOM-DOMAIN.INTERNAL의 등록/상태/Host/대표주소 API·DB·UI는 완료다. 미연결은 blocked_integration 유지.
 - [ ] **A09.PUBLIC-WRITE** 실DNS·새 설치 purpose의 browser OAuth/최종 인수·전체 호환/범용 lifecycle 후속. Field durable intent BFF/화면은5ceec42 완료다. CONTRACT-BACKEND의 공개POST/scope/HTTP consumer는 완료이며 기존SDK 설치와 구분한다.
-- [ ] **I06.AUTH-LIFECYCLE** 기존 연결 화면의 key 상태 GET/명시 종료 POST `(추가)` UI, 실 운영 checkpoint/RPO/RTO·최종 인수. 일반 token/family·legacy/Field key backend·격리 복원은 a974b90 내부 완료이며 반복하지 않는다.
-- [ ] **F03.ALLOWED-FONT** Field PRD3.2:17. 허용 폰트·초안/공개 JSON·기존 편집 패널 선택 `(추가)`·public 렌더. sites.ts/site-editor.tsx/field-site.tsx에 없음이 읽기 전용 대조로 확인됨. 플랫폼 디자인 변경 없이 추가하며 기존 F02.EDITOR 완료 범위를 재구현하지 않는다.
-- [ ] **I03.SOURCE-SYNC-STATUS** Field PRD3.5:58/60. 기존 AP 정보 패널의 stale/pending_review/current 표시 `(추가)` 및 실제 syncedAt nullable 공개계약/consumer. 현재state는API에있으나패널에없고시각DTO없음. 계약→consumer→구현 순서, 가짜 시각/원문복제없음. 기존 I02.SOURCE의 승인/원장 backend를 재구현하지 않는다.
+- [ ] **I06.AUTH-LIFECYCLE** 실 운영 checkpoint/RPO/RTO·최종 인수만 남는다. token/family·legacy/Field key backend·격리복원은 a974b90, 상태/명시종료 UI는2362761 내부 완료다. 이미 구현한 원backend/worker/native와 UI를 반복하지 않는다.
+- [x] **F03.ALLOWED-FONT** Field PRD3.2:17. 허용2종/기존글자 유지·초안/명시공개 JSON·기존 편집 선택 `(추가)`·public 렌더/복구·AI선택 보존. **2362761**, own PG17 정상앱1/1·API2/2·웹2/2, review32932 clean .87, wholetype10588/lint45330·latestmanaged54544. 플랫폼 디자인/원본 변경없음. 실OS/사용자최종시각·320px·실LLM/출시는 제외. F03_ALLOWED_FONT_EXECUTION_PLAN.md.
+- [x] **I03.SOURCE-SYNC-STATUS** Field PRD3.5:58/60. 실제 source상태와 현재snapshot 수신시각 `(추가)`·preview.10 nullable syncedAt·preview.9 missing호환/invalid502. **2362761**, 계약2/2·웹consumer2/2·own PG17 AP/Field 각1/1, review62400 clean .88, wholetype10588/lint45330·managed54544. 승인/재조회시각을 수신으로 대체하지 않음, 기존worker/승인/설치subset 보존. 전체호환/외부·최종인수는 제외. I03_SOURCE_SYNC_STATUS_EXECUTION_PLAN.md.
+- [x] **I06.AUTH-LIFECYCLE.UI** 기존 연결 기록에 실제 key상태 GET/명시closePOST `(추가)`·현재actor/session fence·서버ownpending UUID 복구·unknown동일UUID·정확한cancelled receipt 뒤에만 재확인 새UUID. **2362761**, consumer+API fence9/9·own PG17 route-key현재receipt1/1, review34899 clean .89(이전P2 .94/.91 보완), wholetype10588/lint45330·managed54544. 이전backend 원권한/잠금/worker/키보존 유지. 실운영복원·사용자최종인수는 I06부모에 남김. C03_FINAL_INTERNAL_UI_EXECUTION_PLAN.md.
 - [ ] **AUTH.LIVE / PROVIDERS.LIVE** 사용자가 후속으로 지정한 실메일/카카오/계정연결/번호변경/MFA·실LLM/PG/발송/DNS/TLS/운영저장소 연결·공급사 검수.
 - [ ] **R00.QA / R02.ACCEPTANCE** 추가 문서/역할 누락 대조·모든 적용QA evidence·사용자 최종 시안/동선/실기기·키보드/스크린리더/운영게이트.
 

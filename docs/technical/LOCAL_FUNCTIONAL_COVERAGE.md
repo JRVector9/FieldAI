@@ -1,6 +1,17 @@
 # 로컬 기능 검수 현황 — 2026-09-27
 
-## 현재 내부 완료 checkpoint — a974b90 (2026-09-27)
+## 현재 내부 완료 checkpoint — 2362761 (2026-09-27)
+
+기존49개 완료 유지, **TASKS52[x]/7[ ]**. 남은 확정 내부3범위 F03.ALLOWED-FONT / I03.SOURCE-SYNC-STATUS / I06.AUTH-LIFECYCLE.UI를 완료했다. 새 상태 표시는 실제 API/원장 값이고 추가 기능만 `(추가)`이며 원본 reference와 기존 플랫폼 CSS는 변경하지 않았다.
+
+- 허용폰트: own Field PG171/1·API2/2·웹2/2. 초안→명시공개→불변릴리스→복구·legacy AI 선택 보존/임의CSS 거부. review .87 clean.
+- source상태: 계약2/2·웹2/2·own AP/Field PG17각1/1. snapshot 현재버전 실제수신만 syncedAt, legacy null·잘못된DTO502. review .88 clean.
+- key UI: 웹consumer+ownAPI session fence9/9·ownPG17 route-key GET1/1. unknown 원UUID, 현재owner 서버pending UUID·정확한 cancelled receipt 이후 재확인 새UUID. 첫P2 .94/.91 보완, 마지막 .89 clean.
+- whole type10588/lint45330 exit0. managed54544 양API/web build·ready200, AP workspace/Field workspace·site·integrations200, 보호source/key401. controller42202/worker44583각1/같은parent. AP81/Field73 유지·새schema없음.
+- 추가 read-only 최종 누락 대조에서 이번3개 밖에 새 확정 내부 기능 누락은 없었다. 실행/전체QA160 통과를 뜻하지 않는다. 실공급사/실운영·사용자최종 화면·동선·기기·320px은 별도7부모/게이트 범위다. 전체Task46 verified/상용출시 완료 아님.
+- 실제 실패·명령·변경경로·복구는 C03_FINAL_INTERNAL_UI_EXECUTION_PLAN / 각own phase / CODEX_HANDOFF 상단. **아래 checkpoint와 다음작업 문구는 당시 이력이며 현재 작업을 다시 여는 근거가 아니다.**
+
+## 이력 — 내부 완료 checkpoint a974b90 (2026-09-27)
 
 TASKS 상단 **49[x]/9[ ]**가 기준이다. 기존44[x] 유지 후 AP/Field AI 제공량·관리자 구독/청구·일반 OAuth/Field key backend·AP 홈 진입5범위를 추가했다. 디자인 reference/field_ui_prototype_v3.html은 고정하며 신규 요소만 `(추가)`다. 사용자 최종 화면/기기·실 공급사·전체QA/출시는 미검수다.
 

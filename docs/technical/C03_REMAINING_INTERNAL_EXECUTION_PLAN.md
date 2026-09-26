@@ -86,6 +86,7 @@ Root가 마지막 source의 whole type97507·lint58007 exit0 및 launcher최소r
 전체LLM/PG/MFA/발송/DNS/TLS·운영restore·전체E2E·사용자최종UI/기기/동선/출시는미검수다. 고정reference변경없음. source미상원장을초기화하거나새UUID재발송하지않는다. 적용schemaAP81/Field73은동결하고필요한추가schema만AP82/Field74부터조율한다. 재현한새오류없이는이미끝난집중검수/구현을반복하지않는다.
 
 - [x] C03.AP-HOME-LINKS / a974b90: 기존 안내의 실제 두 진입·static42088·whole type/build·SSR 확인. 디자인/CSS/header변경없음.
-- [ ] F03.ALLOWED-FONT: 허용폰트 JSON/기존 선택패널/public렌더 (아직 코드 미착수).
-- [ ] I03.SOURCE-SYNC-STATUS: 실제 상태/nullable 동기화시각 계약→consumer→구현 (아직 코드 미착수).
-- [ ] I06 부모 후속: 기존 연결 화면의 key 상태/명시 종료 UI `(추가)` (backend는 완료).
+- [x] F03.ALLOWED-FONT: 2362761 완료. ownPG171/1·API2/2·웹2/2, review .87. 세부 F03_ALLOWED_FONT_EXECUTION_PLAN.
+- [x] I03.SOURCE-SYNC-STATUS: 2362761 완료. 공개preview.10→consumer·actualsnapshot시각, 계약2/2·웹2/2·ownAP/Field각1/1, review .88. 세부 I03_SOURCE_SYNC_STATUS_EXECUTION_PLAN.
+- [x] I06.AUTH-LIFECYCLE.UI: 2362761 완료. 실제GET/명시POST·sessionfence·unknown원UUID·ownpending/cancelled복구, consumer+API9/9·ownPG171/1, finalreview .89. 세부 C03_FINAL_INTERNAL_UI_EXECUTION_PLAN.
+- [ ] 실공급사·실운영·전체QA/사용자최종UI/기기/동선 인수는 부모/게이트 범위로 유지. latestmanaged54544·whole type10588/lint45330 exit0이며 이미 끝난 집중검수/구현을 반복하지 않는다.

@@ -76,7 +76,7 @@
 
 ### 남은 작업 — 여기서 다음 세부 ID를 선택한다
 
-**현재 다음:** F03.ALLOWED-FONT와 I03.SOURCE-SYNC-STATUS를 새 내부 범위로 선택하고 I06 부모의 route-key 상태/명시 종료 UI를 연결한다. 고정 디자인·새 기능 `(추가)`·원문/기존 완료49[x] 유지. managed83305 실제ready, AP81/Field73 적용; 다음 새 migration은 AP82/Field74부터 Coordinator 승인 후 예약한다. 아래 과거 착수 번호/handle은 이력이다.
+**현재 checkpoint / 다음:** source **2362761**, 기존49[x]를 보존하고 마지막 내부3개를 체크해 **52[x]/7[ ]**다. 허용폰트·source 상태/실제 수신 시각·연결 키 상태/명시 종료 UI를 완료했다. managed54544 최신 양API/web build/ready, AP81/Field73 유지·새schema없음. 현재 확정 내부 누락은 없으며 다음은 사용자의 최종 기능/화면 테스트 지원과 실공급사 연결·출시 검수다. 완료52개를 기억 부재/아래 이력으로 다시 작업하지 않는다. 원본 디자인 고정, 새기능만 `(추가)`. 다음schema가 실제 필요하면 AP82/Field74부터 Coordinator 승인 후 예약한다.
 
 
 **착수/병렬 소유 이력 (2026-09-27, HEAD9a7fe33/clean, 아래4범위 현재5ceec42로 완료):** 기존40[x]는 유지한다. root는 **A07.F09.BILLING-UI-CALLBACK**의 양제품 web/src/*-subscription.tsx·새 billing UI/client/callback 및 app/billing/return·필요한 admin 화면 부분만 소유한다. 추가 **AI-ENTITLEMENT**는 각 새 helper/native 검사와 agents/site-generation/usage 연결이며 기존 billing/refund 모듈을 직접 수정하지 않는다. Refund Agent(custom_domain)는 양API 신규 refund routes/worker/domain/Toss port와 charge 확정오류 소비·**AP79/Field70**만 소유한다(기존 적용78/69 수정 금지). Public Agent는 새 Field durable public-write BFF/intent·**Field72** 및 Field 사이트의 새 설치 component만 소유하고 root workspace/site shell 변경은 요청한다. Delivery Agent는 새 고객 채널동의 component·receipt 관련 삽입·서비스워커와 own push 설정 연결만 소유한다. root entitlement schema 필요 시 **AP80/Field71** 예약. Delivery 추가 schema 필요 시 먼저 Coordinator에 요청한다. 공통 app/server/BusinessRuntime/package/lockfile/mock-run·체크원장/인계/master/runtime/git는 root만 통합한다. 각 agent는 수정 전 계획/요구/QA/명령을 기록하고 계약/등록 patch를 제출한다. 완료 backend/고정 디자인을 재구현하지 않는다. 실제 공급사 발송/청구/운영 삭제는 수행하지 않는다.
@@ -95,9 +95,10 @@
 - [ ] **A06.F08.DELIVERY** 실발송/실기기 설치·권한·수신/최종 화면 인수. 고객 동의/철회 UI와 서비스워커/푸시 등록 호출 내부 흐름은5ceec42 완료다. DELIVERY.INTERNAL의 provider port/원장/worker/설정 화면은 완료이며 재구현하지 않는다.
 - [ ] **F04.CUSTOM-DOMAIN** 실edge/TLS 공급사 연결·실DNS/custom AP origin 검수·사용자 최종 화면/동선 인수. CUSTOM-DOMAIN.INTERNAL의 등록/상태/Host/대표주소 API·DB·UI는 완료다. 미연결은 blocked_integration 유지.
 - [ ] **A09.PUBLIC-WRITE** 실DNS·새 설치 purpose의 browser OAuth/최종 인수·전체 호환/범용 lifecycle 후속. Field durable intent BFF/화면은5ceec42 완료다. CONTRACT-BACKEND의 공개POST/scope/HTTP consumer는 완료이며 기존SDK 설치와 구분한다.
-- [ ] **I06.AUTH-LIFECYCLE** 기존 연결 화면의 key 상태 GET/명시 종료 POST `(추가)` UI, 실 운영 checkpoint/RPO/RTO·최종 인수. 일반 token/family·legacy/Field key backend·격리 복원은 a974b90 내부 완료이며 반복하지 않는다.
-- [ ] **F03.ALLOWED-FONT** Field PRD3.2:17. 허용 폰트·초안/공개 JSON·기존 편집 패널 선택 `(추가)`·public 렌더. sites.ts/site-editor.tsx/field-site.tsx에 없음이 읽기 전용 대조로 확인됨. 플랫폼 디자인 변경 없이 추가하며 기존 F02.EDITOR 완료 범위를 재구현하지 않는다.
-- [ ] **I03.SOURCE-SYNC-STATUS** Field PRD3.5:58/60. 기존 AP 정보 패널의 stale/pending_review/current 표시 `(추가)` 및 실제 syncedAt nullable 공개계약/consumer. 현재state는API에있으나패널에없고시각DTO없음. 계약→consumer→구현 순서, 가짜 시각/원문복제없음. 기존 I02.SOURCE의 승인/원장 backend를 재구현하지 않는다.
+- [ ] **I06.AUTH-LIFECYCLE** 실 운영 checkpoint/RPO/RTO·최종 인수만 남는다. token/family·legacy/Field key backend·격리복원은 a974b90, 상태/명시종료 UI는2362761 내부 완료다. 이미 구현한 원backend/worker/native와 UI를 반복하지 않는다.
+- [x] **F03.ALLOWED-FONT** Field PRD3.2:17. 허용2종/기존글자 유지·초안/명시공개 JSON·기존 편집 선택 `(추가)`·public 렌더/복구·AI선택 보존. **2362761**, own PG17 정상앱1/1·API2/2·웹2/2, review32932 clean .87, wholetype10588/lint45330·latestmanaged54544. 플랫폼 디자인/원본 변경없음. 실OS/사용자최종시각·320px·실LLM/출시는 제외. F03_ALLOWED_FONT_EXECUTION_PLAN.md.
+- [x] **I03.SOURCE-SYNC-STATUS** Field PRD3.5:58/60. 실제 source상태와 현재snapshot 수신시각 `(추가)`·preview.10 nullable syncedAt·preview.9 missing호환/invalid502. **2362761**, 계약2/2·웹consumer2/2·own PG17 AP/Field 각1/1, review62400 clean .88, wholetype10588/lint45330·managed54544. 승인/재조회시각을 수신으로 대체하지 않음, 기존worker/승인/설치subset 보존. 전체호환/외부·최종인수는 제외. I03_SOURCE_SYNC_STATUS_EXECUTION_PLAN.md.
+- [x] **I06.AUTH-LIFECYCLE.UI** 기존 연결 기록에 실제 key상태 GET/명시closePOST `(추가)`·현재actor/session fence·서버ownpending UUID 복구·unknown동일UUID·정확한cancelled receipt 뒤에만 재확인 새UUID. **2362761**, consumer+API fence9/9·own PG17 route-key현재receipt1/1, review34899 clean .89(이전P2 .94/.91 보완), wholetype10588/lint45330·managed54544. 이전backend 원권한/잠금/worker/키보존 유지. 실운영복원·사용자최종인수는 I06부모에 남김. C03_FINAL_INTERNAL_UI_EXECUTION_PLAN.md.
 - [ ] **AUTH.LIVE / PROVIDERS.LIVE** 사용자가 후속으로 지정한 실메일/카카오/계정연결/번호변경/MFA·실LLM/PG/발송/DNS/TLS/운영저장소 연결·공급사 검수.
 - [ ] **R00.QA / R02.ACCEPTANCE** 추가 문서/역할 누락 대조·모든 적용QA evidence·사용자 최종 시안/동선/실기기·키보드/스크린리더/운영게이트.
 

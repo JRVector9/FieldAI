@@ -1,6 +1,12 @@
 # 개발 진행 상태 — 2026-09-26
 
-## 현재 checkpoint — a974b90 / 제공량·관리자·OAuth backend·홈 진입
+## 현재 checkpoint — 2362761 / 남은 내부 기능·로컬 사용 환경
+
+기존49개를 유지해 TASKS **52[x]/7[ ]**. 허용폰트·source 상태/현재snapshot 수신시각·기존연결 key상태/명시종료 UI까지 저장했다. 원본 디자인은 고정, 새 기능만 `(추가)`. whole type10588/lint45330 exit0, 각focused own DB/consumer·독립검토 완료. managed54544 최신양API/web build/ready·AP workspace/Field workspace·site·integrations200·보호API401 확인. 적용AP81/Field73 유지, 새schema없음.
+
+현재 확정 내부 누락은 없으며 다음은 사용자 최종 기능/화면 테스트 지원과 실인증·공급사·운영 QA/출시 검수다. 전체QA160/실UI·기기/실공급사/상용출시 완료가 아니다. 기존52개를 아래 과거 “다음” 문구로 반복하지 않는다. 실제명령/실패/복구/잔여는 TASKS·CODEX_HANDOFF 및 새 C03_FINAL_INTERNAL_UI_EXECUTION_PLAN.
+
+## 이력 — checkpoint a974b90 / 제공량·관리자·OAuth backend·홈 진입
 
 기존44[x]를 보존하고 새5범위만 체크해 **49[x]/9[ ]**다. 디자인 원본 고정·완료 화면 반복 조정 금지·새 기능만 `(추가)`. whole type/lint와 집중검수·독립보완검토를 마쳤고 최신 managed83305에 양API/web build·AP81/Field73·compiled 기준선/Field routekey worker를 반영해 ready/페이지200·보호API401을 확인했다. 최초 mock profile 전달 누락31268 exit1은 CLIguard 유지/명시profile 전달로 수정했다. 다음 내부는 Field 허용폰트·AP정보 sync 상태/실제시각·기존 연결 key 상태/종료UI다. 실 공급사/사용자최종UI·기기/전체QA/운영 출시는 미검수다. 정확한 근거·실패·다음 명령은 TASKS와 CODEX_HANDOFF 상단을 따른다.
 
