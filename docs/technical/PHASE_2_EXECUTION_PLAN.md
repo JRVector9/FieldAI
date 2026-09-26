@@ -1,5 +1,19 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/A08 AP 자체 보존·종결·보류 — 2026-09-26 작업 시작
+
+- 결과(부분 progress): AP migration64·native 종결/재개·근거 있는 legacy 이관·불변 정책/보류·별도 승인/해제·AP 원장만 쓰는 preview와 관리자 audit UI를 연결했다. AP DB **1325 27/27**, legacy63→64 **1/1**, type **61572**/lint **53746 exit0**, 새 mock **92132**의 native HTTP/320px **71697 1/1**. 정책 ACK 유실/동일 키·본문 재확인·단일 정책, 다른 운영자 승인/보류 해제, preview503 폐기/원장503 목록 유지·잠금/복구·가로 넘침 없음/pageerror0을 확인했다. 기존 runtime21041을 생존 확인 후 정상 종료130하고 새 관리 build/migration을 반영했다. 기준 HTML `#admin/audit`를 Chromium320으로 열어 `/tmp/ap-retention-prototype-320.png`, 실제 `/tmp/ap-retention-basis-320.png`를 열었다.
+- 실패/수정: 실제 보류 사유 덮어쓰기가 거절되지 않은 **44273** red→DB 불변 trigger. 추가 fixture의 native message sequence/visibility 누락, 공개 제출에 UUID 또는 receipt 없는 키, legacy knowledge source_kind/draft_revision 누락은 실제 모델/키 계약에 맞춰 수정했다. 시안의 감사 heading은 `신고·권한·감사`이고 권한·감사 기록 exact heading을 찾던 탐색은 실패했다. 조건/기대값을 현재 버그에 맞추지 않았다.
+- 마지막 보완: 변조된 cursor의 존재하지 않는2월31일이 Date.parse를 통과해 PostgreSQL500을 일으킨 **66808** red→microsecond UTC 형식/실제 달력 canonical 검증→최종 **1325 27/27**. non-mock 보존 관리자503도 실제 검사했다. 처음 runtime72730 UI 검수78317 이후 확인된72730을 정상 종료130하고 최종 **92132**로 날짜 보완을 반영했다. 최종 HTTP **71697 1/1**은 같은 실제 UI와 live 잘못된 cursor400도 확인한다. `/tmp/ap-retention-policy-320.png`를 추가로 직접 열어 입력/본문16px·하단 감사 navigation의 현재320px 화면을 확인했다.
+- 남음: 실제 AP 정리 job/별도 승인/worker·private file/원문·AI/Field 전달 payload 제거·소비자 tombstone/복원 원장, 외부 업무 종결의 현재 공개 계약 한계, 전체 PRD/QA/G·최종 사용자 UI·실 공급사/MFA. preview를 실제 삭제/전체 Done으로 처리하지 않는다. 표준 AP E2E7개에 신규 두 검사를 등록했지만 전체 E2E 명령은 미실행이다.
+
+- Task/Product/Owner: C03/A08 / AP / 순차 실행, in_progress. d717532 Field 삭제 checkpoint는 실제 검수/커밋 progress이며 AP는 별도 native 원장·권한으로 구현한다. 전체 보존/정리/복원·서비스 목표는 유지한다.
+- 요구/QA/Gate: AP PRD2.5/2.7/관리자·보안5.5 익명30/종결180/사진90 제안, QA46/47/49/119/157/159. 별도 정책 요청·다른 operator 승인/중단, native 종결 시각/재개·증거 있는 legacy backfill, 분쟁/법정 기록 검토/조사 hold·다른 operator 해제/기간 경과 자동 해제 금지, 개인정보 없는 preview·정책/보류/기한/AI·발송·외부 업무·지원 접근 대기를 구분한다.
+- 실제 모델/경계: 익명과 정식 문의는 `ap.inquiries`의 mode/consent/submitted state이며 같은 원문을 유지한다. AP 제공자가 승인된 연락처 없는 사전 Field 준비와 실제 동의 전달을 구분한다. `ap.field_action_requests`/`ap.field_reservation_events`는 AP 자체 네트워크 계약 원장이고 Field DB를 읽지 않는다. unresolved 외부 업무는 정리 가능으로 추정하지 않는다. spam은 자동 종결 근거가 아니다.
+- 파일 범위: 새 AP migration64, `src/retention-routes.ts`/`src/work-retention.ts`, AP app 등록·native inquiry 종결 trigger와 관리자 metadata 표시, 새 AP DB 검사. 웹 새 AgentRetentionAdmin·agent-retention 타입/CSS와 admin audit 연결, focused HTTP/320px·legacy migration 검수와 표준 명령 등록; 진행/인계 문서. AP 내부 구현만 수정하고 Field 코드/DB·공개 integration 계약은 바꾸지 않는다.
+- 순서/명령: native AP policy endpoint와 종결 metadata의 actual red → migration/API/domain/권한/감사/preview·UI/복구 연결 → `pnpm test:db:agent`, `pnpm typecheck`, `pnpm lint`, `pnpm build:agent`, 실제 managed mock build/ready·AP native 관리자 HTTP. 입력 ACK 유실은 같은 UUID/본문 재전송으로 복구하며 조회 실패 때 metadata 유지/조작 잠금·preview 폐기/재조회를 제공한다. 사용자 최종 UI 인수와 실 인증/법무/공급사 승인은 미완료다.
+- 다음 필수 의존성: 실제 정리 요청/별도 승인/취소·독립 worker·원문/사진/파생 AI/전달 payload 정리·consumer tombstone/권한·복원 deletion/revoke 원장까지 이어서 구현한다. 이번 기반/preview를 전체 보존 기능 Done으로 대체하지 않는다. 운영 삭제/고객 발송/배포·청구는 하지 않는다.
+
 ### C03/F09 Field 삭제 원장 완전성 — 2026-09-26 작업 시작
 
 - 결과(부분 progress): 기존 missing directory 복원이 빈 성공이던 경로를 실제 red44378로 재현했다. 별도 최신 checkpoint를 restore 함수/CLI 필수 입력으로 연결하고 ID/hash 전체 대조 뒤 기존 의도/job binding/사진 coverage를 검사한다. 실제 checkpoint export/restore CLI로 PG17 격리 복원 삭제·반복0과 누락/없는 directory/미대조 추가/변조·active DB/media alias/잘못된 port/원장 안 출력 거절을 검수했다. 최종 Field DB2217 30/30, type57849/lint78010/build90668 exit0. API/UI/migration 변경 없어서 runtime21041 재기동/무관한 브라우저 반복 없이 양 API ready를 확인했다. 보호 proof의 동시 과거 교체/legacy/운영 복구·AP 보존·전체 C03은 여전히 미완료다.

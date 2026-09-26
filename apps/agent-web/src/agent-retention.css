@@ -1,0 +1,9 @@
+.agent-retention-panel{padding:24px;background:#fff;border:1px solid #dce1e9;border-radius:20px;font-size:16px;line-height:1.65;min-width:0}
+.agent-retention-panel h2{font-size:22px}.agent-retention-panel h3{font-size:18px;margin:20px 0 8px}.agent-retention-panel h4{font-size:16px;margin:8px 0}
+.agent-retention-panel p{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}
+.agent-retention-panel :is(button,summary){min-height:44px;padding:10px 14px;border:1px solid #d3dce8;border-radius:10px;font-size:16px;background:#fff;color:#284f77;cursor:pointer;margin:4px 8px 4px 0}
+.agent-retention-panel button:disabled{opacity:.55;cursor:not-allowed}.agent-retention-panel :is(button,input,textarea,select,summary):focus-visible{outline:2px solid #1762a6;outline-offset:3px}
+.agent-retention-panel .form-fields{margin:20px 0;grid-template-columns:minmax(0,1fr)}.agent-retention-panel :is(input,textarea,select){font-size:16px;min-width:0;max-width:100%;width:100%;box-sizing:border-box}
+.agent-retention-panel textarea{min-height:100px;padding:12px;border:1px solid #d8d9df;border-radius:11px;resize:vertical}.agent-retention-panel .form-fields>div>label{display:block;margin-bottom:8px}
+.agent-retention-panel article{border:1px solid #dce1e9;border-radius:14px;padding:18px;margin:16px 0;min-width:0}.agent-retention-work{background:#f7faff}
+@media(max-width:600px){.agent-retention-panel{padding:18px}.agent-retention-panel article{padding:14px}}

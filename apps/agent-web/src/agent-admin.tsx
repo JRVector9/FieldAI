@@ -6,6 +6,7 @@ import { agentAdminSections as sections, type AgentAdminSection } from "./agent-
 import "./agent-admin.css";
 import { AgentModerationAdmin } from './AgentModerationAdmin';
 import { AgentCustomerSupport } from './AgentCustomerSupport';
+import { AgentRetentionAdmin } from './AgentRetentionAdmin';
 
 type Overview = {
   product: "agent";
@@ -151,6 +152,7 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
         </section>}
         {section === "audit" && <AgentModerationAdmin actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <AgentCustomerSupport actorUserId={overview.actorUserId} role={overview.role} />}
+        {section === "audit" && <AgentRetentionAdmin actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <section className="special-panel" aria-label="최근 관리자 조회"><h2>최근 관리자 조회</h2>
           {overview.recentAdminAccesses.length === 0 ? <p>조회 기록이 없습니다.</p>
             : <div className="agent-admin-list">{overview.recentAdminAccesses.map((item, index) => <article key={`${item.actorUserId}-${item.accessedAt}-${index}`}>

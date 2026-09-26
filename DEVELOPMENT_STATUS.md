@@ -1,5 +1,9 @@
 # 개발 진행 상태 — 2026-09-26
 
+## 최신 C03/A08 AP 자체 보존·종결·분쟁 보류
+
+AP native 익명30/정식 문의180/사진90 제안 정책의 요청·다른 operator 승인/중단, 실제 종결 clock/재개·근거 있는 legacy 이관, 불변 보류/다른 operator 해제·기한 지난 보류 유지, metadata preview/관리자 audit 화면을 연결했다. AI/발송 pending·현재 승인 지원·외부 업무 미확인/미래 예약은 정리 가능으로 처리하지 않는다. migration64, AP 내부만 변경. 실제 AP DB **1325 27/27**, legacy migration **1/1**, type **61572**/lint **53746 exit0**, 새 mock **92132**의 native HTTP/320px **71697 1/1**(ACK 유실/동일 요청·별도 승인/해제·503 복구/조작 잠금·가로 넘침/pageerror0). 양제품 API/웹 build/ready이며 시안 admin/audit를 다시 실제 확인했다. 실제 AP 정리 job/worker·원문/사진/AI·전달 payload 제거/복원, Field route key/legacy·전체 PRD/QA/G/최종 사용자 인수/실 공급사는 남고 C03/A08/전체 기능은 in_progress다.
+
 ## 최신 C03/F09 Field 삭제 원장 누락 검증
 
 삭제 복원에는 별도 보관한 최신 quiesced 서명 checkpoint를 필수로 받는다. 없는 directory/누락 entry/미대조 추가/변조·회수 목록 혼용은 파일/DB 변경 전 실패한다. Field 신규 worker의 빈 read와 복원 승인을 구분했다. 실제 PG17 dump/restore·checkpoint export/restore CLI로 삭제 적용/반복0·미확인 의도 거절·현재 DB/파일 alias·잘못된 port·원장 내부 출력 거절을 확인했다. 최종 DB **2217 30/30**, type **57849**, lint **78010**, Field build **90668 exit0**. runtime21041 양 API ready를 유지한다. AP 자체 보존·신뢰 proof 동시 과거 교체/legacy 회수 baseline·전용 route key 수명/운영 복구·전체 PRD/QA/G·최종 사용자 UI/동선은 남고 C03/F09는 in_progress다.

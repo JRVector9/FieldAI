@@ -12,6 +12,8 @@ const suites = {
     ['AP administrator routes and permission boundary', 'agent-admin-http.test.mjs'],
     ['AP report, approved support access, and owner appeal', 'agent-moderation-http.test.mjs'],
     ['AP customer support scopes, private photos, and authority expiry', 'agent-customer-support-http.test.mjs'],
+    ['AP retention legacy closure evidence migration', 'agent-retention-migration.test.mjs'],
+    ['AP native retention policy approval, inquiry holds, and administrator recovery', 'agent-retention-http.test.mjs'],
   ],
   field: [
     ['Field owner, public site, inquiry, and two booking modes', 'field-owner-flow-http.test.mjs'],

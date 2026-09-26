@@ -2,10 +2,42 @@
 
 ## 사용자 지정 기준 시안 — 작업 재개 시 확인
 
-- 화면·기능·동선 구현 기준 시안: `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
+- **사용자 지정 화면·기능·동선 구현 기준 시안(필수 참조):** `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
 - 저장소 기준 경로: [reference/field_ui_prototype_v3.html](../reference/field_ui_prototype_v3.html). 후속 에이전트도 이 파일을 화면·동선 구현 기준으로 사용하며, 인수인계 갱신 시 이 시안 경로를 상단에 유지한다.
 - 화면·기능 구현 중에도 해당 역할의 시안을 수시로 다시 확인한다. 경로 기록만으로 시안을 확인했다고 보고하지 말고, 실제 열어 본 화면과 비교 범위를 작업 기록에 남긴다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
+
+## 최신 인수인계 — C03/A08 AP 자체 보존 기반 (2026-09-26)
+
+- **목표/상태:** 전체 기능을 독립 AP/Field 로컬 서비스로 연결하는 목표를 유지한다. AP 보존 정책·실제 종결 시각·분쟁 보류·메타데이터 미리보기와 관리자 UI는 이번 단계의 구현/실제 부분 검수 progress다. 실제 정리 job/worker/원문·사진·AI payload 제거/복원은 다음 필수 작업이며 C03/A08/전체 목표는 in_progress다. 직전 HEAD d717532 이후 커밋은 git log로 확인한다.
+- **수정 범위/요구:** AP migration64, retention-routes/work-retention/app·retention DB 검사, AgentRetentionAdmin/agent-retention 타입·CSS/admin 연결, focused HTTP/browser/legacy migration와 E2E 등록, phase plan/TASKS/status/coverage/이 인계. AP PRD2.5/2.7·보안5.5·QA46/47/49/119/157/159 로컬 일부. Field 내부/DB·공개 연동 계약은 바꾸지 않는다.
+- **설계/완료:** 실제 state 전환만 종결 clock을 기록하고 재개하면 비운다. legacy는 현재 closed/revision과 일치하는 사건만 이관한다. 익명30/정식180/사진90은 제안값이며 정책 요청→다른 operator 승인/중단을 거친다. 정책/보류 사실·해제 이력은 DB 불변, 기한 지난 hold는 자동 해제하지 않는다. 메타데이터 preview는 최근 활동/실제 종결·AI/발송 대기·현재 승인 지원·외부 업무 미확인/미래 예약/보류를 구분하고 AP 자체 받은 원장만 사용한다. 공개 정보 원문/고객 연락처·확인키/AI 질문/사진 키를 preview에 넣지 않는다. 외부 수신 문의의 종결은 현재 AP 원장에 검증 근거가 없어 unresolved를 유지한다.
+- **실제 검수:** 최종 `pnpm test:db:agent` **1325 27/27**(`/tmp/ap-retention-basis-final-db.log`, 별도 PG17 test DB 제거): real close/retry clock/reopen, 정책/멱등/권한/Origin·hold 불변/다른 운영자 해제, 익명 마지막 활동30일/AI pending/사진90 vs문의180/종결 미확인·발송 unknown/지원 pending vs승인·회원권 회수/만료/외부 결과 미상·예약 미래/105 microsecond fixture+기존2개 pagination 총107개 무중복·org cursor binding. legacy **1/1**(`/tmp/ap-retention-basis-migration-final.log`)은63까지 실제 별도 DB→current revision/불일치/무사건→64·원문 불변/재개·새 종결/반복 clock을 확인했다. 전체 typecheck **61572**·lint **53746 exit0**(`/tmp/ap-retention-basis-date-{type,lint}.log`).
+- **실제 UI/환경:** 기존 **21041**을 실제 생존 확인 후 정상 종료130하고 새 managed mock **92132**(`/tmp/ap-retention-basis-final-runtime.log`)으로 양제품 API/웹 build/migration/ready를 확인했다. native HTTP/Chromium320 **71697 1/1**(`/tmp/ap-retention-basis-final-http.log`): 실제 별도 계정/권한·정책 ACK 유실 같은UUID/본문·단일 요청, 별도 승인/보류 해제, preview503 폐기/목록503 metadata 유지·조작 잠금/재조회·가로 넘침 없음/pageerror0. AP http://localhost:3001/workspace, Field http://localhost:3002/workspace, AP 관리자 /admin/audit. 제작 LLM model 미설정 blocked_integration은 외부 후속이다. 기준 HTML `#admin/audit`를 실제 열고 `/tmp/ap-retention-prototype-320.png`와 `/tmp/ap-retention-basis-320.png`를 열었다. 사용자 최종 시각/동선 인수와 전체 표준 E2E7개/security/independence/정식 QA/G는 이번 변경으로 미실행이다.
+- **실패/복구:** old UI 영역 부재 red37924, 보류 기존 사유 덮어쓰기 Missing rejection44273→불변 trigger. 새 fixture의 sequence/visibility와 legacy source_kind/draft_revision 누락, 공개 제출 키에 receipt가 필요했던400을 native 모델/계약에 맞춰 수정했다. 시안 탐색의 exact heading 실패는 실제 `신고·권한·감사` 화면을 열어 확인했다. 이전 코드 rollback에 신규 원장을 삭제할 필요가 없으며 실제 정리 worker가 없는 이번 단계에서 데이터/파일 제거는 없다. 테스트가 만든 합성 계정/조직·별도 DB만 정리했다. 운영 자료/실 계정 삭제·배포/청구/발송 없음.
+- **다음 필수 작업:** AP 실제 정리 요청/다른 승인/취소·독립 worker·사진/대화/연락/AI/외부 전달 private payload 정리·usage/audit ID 유지·소비자 tombstone/권한·독립 삭제/회수 복원 증빙을 native schema/각 reader·late writer부터 조사해 이어간다. Field route key 종료 수명/legacy 회수 baseline·운영 복구/신뢰 proof 동시 과거 교체·전체 PRD/역할/QA/G·실 공급사/MFA·최종 사용자 인수는 남는다. 외부 미연결을 내부 개발 중단 사유로 쓰지 않는다. 시안 경로는 상단에 유지한다.
+- **마지막 보완/현재 소스:** cursor2월31일이 DB500이던 실제 red **66808**→UTC6자리 microsecond/canonical 달력 검증→최종 DB **1325 27/27**, non-mock 관리자503도 확인했다. 처음 runtime72730/UI78317 검수 후72730을 생존 확인/정상 종료130하고 최종92132로 반영했다. 최종 HTTP71697은 기존 UI와 live invalid_cursor400을 확인했고 `/tmp/ap-retention-policy-320.png`를 직접 열었다. 전체 type61572/lint53746 뒤 마지막 변경 HTTP 파일의 focused ESLint도 exit0이다. E2E legacy1/1 결과는 migration64 변경이 없는 동일 소스 결과이며 무관한 반복을 하지 않았다.
+- **정리 소비자 조사:** `inquiry-archive.ts`는 고객 contact/messages/photos export를, `customer-consultations.ts`는 AI history/question/answer와 늦은 완료를, `field-actions.ts`는 고객 contact/consent·field_request_body와 사진 ref 전달을, `inquiry-attachments.ts`는 ready 사진·동의된 action 사진 읽기를, `customer-support.ts`는 승인된 contact/messages/사진 읽기를 담당한다. 삭제는 parent만 가리는 방식으로 끝낼 수 없다. 다음 migration65부터 native nullable/tombstone·late writer/각 reader/usage 원장 보존을 같은 작업 범위에 묶어야 한다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+rg --files apps/agent-api/src apps/agent-api/migrations | rg 'inquir|consult|field-action|support|retention|ai|usage|notification'
+cat apps/agent-api/src/work-retention.ts
+cat apps/agent-api/migrations/000064_work_retention_basis.sql
+cat apps/agent-api/src/inquiry-attachments.ts
+cat apps/agent-api/src/customer-consultations.ts
+cat apps/agent-api/src/field-actions.ts
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+pnpm test:db:agent
+pnpm typecheck
+pnpm lint
+node --test tools/spikes/agent-retention-migration.test.mjs
+AP_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python node --test tools/spikes/agent-retention-http.test.mjs
+```
+
+runtime92132은 생존 확인 후 유지하며 관찰 timeout만으로 재시작하지 않는다. 새 API/UI 반영이 필요할 때만 확인된 프로세스를 정상 종료하고 `pnpm mock:run`을 실행한다. preview의 부분 검수를 실제 삭제·전체 보존/기능 완료로 바꾸지 않는다.
 
 ## 최신 인수인계 — C03/F09 Field 삭제 원장 누락 검증 (2026-09-26)
 

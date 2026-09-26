@@ -1,5 +1,12 @@
 # 로컬 기능 검수 현황 — 2026-09-26
 
+## 최신 AP 자체 보존 기반 — d717532 이후 작업트리
+
+- AP 자체 migration64/API/domain/관리자 UI: 승인 정책·불변 보류, 실제 종결/재개·legacy 이관, 익명 활동30/문의180/사진90 preview·AI/발송·지원·외부 미확인/미래 예약·기간과 hold를 구분한다. Field 내부/DB를 조회하지 않는다.
+- 실제 PG17 AP DB **1325 27/27**, `/tmp/ap-retention-basis-final-db.log`; legacy63→64 별도 DB **1/1**, `/tmp/ap-retention-basis-migration-final.log`. 합성 fixture/임시 DB를 정리했다. 현재 revision 근거 없는 종결을 추정하지 않는다. 107개 metadata microsecond pagination의 중복/누락·cursor org binding을 확인했다.
+- 최종 전체 type **61572**·lint **53746 exit0**; managed mock **92132** 양 API/웹 build/ready. AP native HTTP/Chromium320 **71697 1/1**, `/tmp/ap-retention-basis-final-http.log`: 실제 별도 운영자·ACK 유실 같은 요청 확인/단일 정책·승인/보류 해제·preview503/원장503 복구·조작 잠금·가로 넘침 없음/pageerror0. 시안 admin/audit와 실제 캡처를 열었다. 표준 AP E2E7개에 신규 legacy/HTTP 두 검사를 등록했지만 전체 E2E를 실행한 결과는 아니다.
+- 미완료: 실제 AP 정리 요청/worker·private 원문/사진/AI/전달 제거·복원 증빙/회수·외부 업무 종결의 공개 계약 한계, Field route key 수명/legacy·운영 복구, 전체 PRD/역할/QA/G·실 공급사/MFA·최종 사용자 시각/동선 인수. 보존 기반과 미리보기는 실제 삭제 완료/전체 C03 Done이 아니다.
+
 ## 최신 Field 삭제 원장 누락 검증 — c809c28 이후 작업트리
 
 - 실제 `pnpm test:db:field` **2217 30/30**, `/tmp/field-retention-checkpoint-final-db.log`, 임시 test/restore DB 제거. 기존 실제 PG17 dump/restore에서 missing directory·누락 entry·미대조 추가·checkpoint 변조는 원문/사진을 유지한 채 거절됐다. 별도 checkpoint export/restore CLI로 실제 삭제/원문 제거·반복0/재저장 거절과 기존 미확인 삭제 거절을 확인했다.
