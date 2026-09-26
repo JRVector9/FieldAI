@@ -5,8 +5,9 @@ import { lockRetentionTarget } from './retention-purge-routes.js';
 import { removeRetainedPayload, RETENTION_PHOTO_TABLES } from './retention-purge.js';
 import { RETENTION_TABLES } from './work-retention.js';
 
-export async function reapplyFieldRetentionJournal(runtime: { pool: Pool; media: FieldSiteMediaStore; journal: Pick<FieldRetentionJournal, 'read'> }) {
-  const entries = await runtime.journal.read();
+export async function reapplyFieldRetentionJournal(runtime: { pool: Pool; media: FieldSiteMediaStore;
+  journal: Pick<FieldRetentionJournal, 'verifiedEntries'>; checkpoint: string }) {
+  const entries = await runtime.journal.verifiedEntries(runtime.checkpoint);
   const binding = new Map<string, string>();
   for (const entry of entries) {
     const value = JSON.stringify([entry.organizationId, entry.targetKind, entry.targetId, entry.scope]);

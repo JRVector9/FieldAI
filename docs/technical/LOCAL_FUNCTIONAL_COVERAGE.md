@@ -1,5 +1,12 @@
 # 로컬 기능 검수 현황 — 2026-09-26
 
+## 최신 Field 삭제 원장 누락 검증 — c809c28 이후 작업트리
+
+- 실제 `pnpm test:db:field` **2217 30/30**, `/tmp/field-retention-checkpoint-final-db.log`, 임시 test/restore DB 제거. 기존 실제 PG17 dump/restore에서 missing directory·누락 entry·미대조 추가·checkpoint 변조는 원문/사진을 유지한 채 거절됐다. 별도 checkpoint export/restore CLI로 실제 삭제/원문 제거·반복0/재저장 거절과 기존 미확인 삭제 거절을 확인했다.
+- CLI 안전한 대상 구분: 현재 DB localhost alias, active media symlink alias, 잘못된 local port, 원장 안의 checkpoint 출력을 실제 거절했다. 보호된 독립 원장/최신 checkpoint가 필수이며 둘의 동시 과거 교체·legacy 누락/운영 보관 근거는 별도다.
+- 최종 typecheck **57849**, lint **78010**, Field API build **90668 exit0**. 새 CLI/복원 함수 변경으로 API/UI/migration/공개 계약 변경 없음. runtime **21041**을 유지하고 양 API ready를 실제 확인했다. 전체 HTTP/브라우저·AP DB/정식 QA/G는 반복하지 않았다. 직전 c809c28의 실제 reference/HTTP 검수와 구분한다.
+- 남음: AP 자체 익명30/업무180/사진90 보존·종결/hold·정리/독립 worker/복원, Field route key 수명·legacy 회수 baseline/미확인 삭제 추가 대조·신뢰 checkpoint/원장 동시 과거 교체·운영 공급사 복구, 전체 PRD/역할/QA/G·최종 사용자 인수. 전체 C03/F09 완료를 주장하지 않는다.
+
 ## 최신 Field 권한 회수·격리 복원 — e28229f 이후 작업트리
 
 - 실제 Field DB **8959 30/30**, `/tmp/field-revocation-complete-db.log`. 별도 PG17 test/restore DB와 테스트 전용 원장 정리. native 회수 3경로의 인증/반복·서명 실패·원장 실패503/DB rollback, AP ciphertext null/재활성화 거절, 늦은 token 발급/회수 경합을 확인했다.

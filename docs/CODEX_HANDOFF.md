@@ -7,6 +7,37 @@
 - 화면·기능 구현 중에도 해당 역할의 시안을 수시로 다시 확인한다. 경로 기록만으로 시안을 확인했다고 보고하지 말고, 실제 열어 본 화면과 비교 범위를 작업 기록에 남긴다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03/F09 Field 삭제 원장 누락 검증 (2026-09-26)
+
+- **목표/상태:** 전체 v3.0/C03 기능을 실제 독립 AP/Field 로컬 서비스로 끝까지 연결한다. 직전 c809c28는 회수/격리 복원 실제 검수·커밋 progress다. 이번 삭제 checkpoint도 progress이고 **AP 자체 보존/정리·Field route key 수명/legacy 회수 baseline/미확인 삭제 추가 대조·신뢰 checkpoint/원장 동시 과거 교체·운영 복구/전체 PRD/역할/QA/G·최종 사용자 시각/동선·실 공급사는 남아 전체/C03/F09 in_progress**다. 커밋은 git log로 확인한다. 기준 시안 경로는 상단에 유지한다.
+- **파일/요구:** 보안5.5·QA47/46/119/157/159 로컬 부분. Field `src/retention-{journal,restore,restore-cli}.ts`, 새 `src/retention-checkpoint-cli.ts`, 기존 `test/retention-purge.db.test.ts`/API package; phase plan/backup runbook/handoff/coverage/status/TASKS. UI/API route·migration/AP DB/domain·공개 계약 변경 없음.
+- **설계/완료:** Field 삭제 원장 밖에 보관한 최신 quiesced `retention-checkpoint`가 restore 함수와 CLI의 필수 입력이다. 전체 entry ID/canonical 내용 SHA-256을 HMAC 서명해 대조한 뒤 기존 미확인 file intent/job binding/사진 coverage를 검사한다. directory 전체 부재·한 entry 누락·미대조 추가·변조/회수 checkpoint 혼용은 파일/DB 변경 전에 실패한다. fresh worker의 read()는 새 환경 빈 원장만 허용하며 restore 성공으로 쓰지 않는다. CLI는 별도 local Field restore DB/현재 DB명 alias/active media realpath alias를 확인하고 checkpoint 출력은 journal 밖 새0600 파일이다. worker/API의 기존 append/read 동작과 현재 서비스는 바꾸지 않았다.
+- **실제 검수:** 최초 **44378** Missing expected rejection으로 없는 원장이 빈 restore 성공이던 버그를 재현했다. **79627** 30/30 후 실제 CLI 대상/출력 부정 검사를 추가했고 최종 `pnpm test:db:field` **2217 30/30**(`/tmp/field-retention-checkpoint-final-db.log`, 별도 test/restore DB 제거). 실제 PG17 dump/restore·원 사진 복원 후 missing directory/entry 누락/추가 미대조/checkpoint 변조가 원문/사진을 유지한 채 거절됐다. 별도 checkpoint export/restore CLI 실제 적용으로 파일 부재/원문 제거·repeat0/재저장 거절, 미확인 intent 거절을 확인했다. active DB localhost alias/active media symlink alias/잘못된 local port/journal 안 출력도 실제 거절했다. 전체 typecheck **57849**, lint **78010**, Field build **90668 exit0**(`/tmp/field-retention-checkpoint-{final-type,final-lint,build}.log`), diff check exit0.
+- **미검수/제한:** 기존 최신 checkpoint와 journal을 함께 과거로 바꾸거나 legacy 기록 자체가 없던 것을 이 검사가 탐지한다고 주장하지 않는다. 운영 보관 공급사/RPO/RTO·결과 미상 삭제의 추가 대조/route key 수명·legacy 회수 baseline은 남는다. 실제 운영 승인/자료 삭제/배포·청구·발송 없음. 테스트가 만든 synthetic 자료만 정리했다. 전체 HTTP/브라우저/AP DB/security/independence/정식 QA/G는 restore-only 변화로 반복하지 않았다. 시각/동선 기준 파일은 직전 c809c28에서 실제 Chromium admin/audit를 열어 확인한 범위이며 이번에는 UI 수정이 없다.
+- **현재 환경:** 확인된 **21041**(`/tmp/field-revocation-native-runtime.log`)을 그대로 유지했다. API/UI/worker의 사용하는 append/read 경로에 변화가 없어 재기동하지 않았다. AP http://localhost:3001/workspace, Field http://localhost:3002/workspace; 양 API ready를 실제 재확인했다. build90668은 새 복원 CLI를 반영한다. 제작 LLM model 미설정 blocked_integration은 외부 후속이며 내부 작업 중단 사유가 아니다.
+- **다음 작업:** AP 자체 보존 기반을 먼저 실제 native schema/소비자에서 조사·범위/QA/명령 기록 후 구현한다. 접수 없는 익명 대화30일/정식 문의180일/사진90일은 승인을 받은 자체 정책으로 분리하고 실제 종결/활동·분쟁 hold/예정 외부 업무·AI/전달/지원 pending을 대조해야 한다. 현재 AP 익명·정식 문의는 별도 테이블이 아니라 `ap.inquiries`의 mode/consent/submitted/contact state로 표현된다(`000011_customer_consultations.sql`). embed_sessions/first_party_handoffs가 같은 inquiry를 연결한다(`000012_embed_consultations.sql`). 기존 closed/reopened 원장은 migration59에 있으며 spam은 별도 보존 정책이 아닌 발송 중단 상태(migration61)다. AP 자체 retention 파일은 없고 다음 migration64부터 사용한다. Field 내부 retention 모듈을 AP가 import하지 않는다. UI/API/domain/DB/권한/감사/실행 worker/consumer/복원까지 이어가며 단순 정책/미리보기를 전체 기능 완료로 대체하지 않는다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -2 --oneline
+cat apps/agent-api/migrations/000011_customer_consultations.sql
+cat apps/agent-api/migrations/000012_embed_consultations.sql
+cat apps/agent-api/migrations/000059_inquiry_resolution_events.sql
+cat apps/agent-api/migrations/000061_inquiry_spam.sql
+cat apps/agent-api/migrations/000063_customer_support_access.sql
+cat apps/agent-api/migrations/000036_field_action_requests.sql
+rg --files apps/agent-api/migrations apps/agent-api/src apps/agent-web/src | rg '/[^/]*(agent|run|inquir|customer|support|admin|retention)[^/]*$'
+rg -n 'ai_runs|field_action_requests|consent_at|submitted_at|state.*closed' apps/agent-api/src/customer-consultations.ts apps/agent-api/src/inquiries.ts
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+pnpm test:db:field
+pnpm typecheck
+pnpm lint
+```
+
+파일 목록에서 정확한 경로를 확인한 뒤 읽는다. 탐색에서 옛 이름 `000010_agents.sql`/`000036_field_actions.sql`이 없어 실패했으며 실제 파일은 `000007_agents.sql`/`000036_field_action_requests.sql`이다. runtime21041은 생존 확인 후 유지하고 timeout만으로 재기동하지 않는다. 전체 기능 목표/상단 시안 경로를 보존한다.
+
 ## 최신 인수인계 — C03/F09 Field 권한 회수·격리 복원 (2026-09-26)
 
 - **현재 목표/상태:** 전체 v3.0/C03 기능을 실제 사용할 수 있는 독립 AP/Field 로컬 환경으로 끝까지 연결한다. e28229f 이후 이번 회수/복원 단계는 progress다. **전용 route key 수명·legacy 회수 baseline·신뢰 checkpoint/원장 동시 rollback·삭제 원장 전체 누락/운영 복구, AP 자체 보존·전체 PRD/역할/QA/G·사용자 최종 시각/동선·실 공급사는 남아 C03/F09/전체 목표 in_progress**다. 커밋은 `git log -1 --oneline`으로 확인한다. 상단 시안 경로를 유지한다.

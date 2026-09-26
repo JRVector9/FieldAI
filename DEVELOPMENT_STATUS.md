@@ -1,5 +1,9 @@
 # 개발 진행 상태 — 2026-09-26
 
+## 최신 C03/F09 Field 삭제 원장 누락 검증
+
+삭제 복원에는 별도 보관한 최신 quiesced 서명 checkpoint를 필수로 받는다. 없는 directory/누락 entry/미대조 추가/변조·회수 목록 혼용은 파일/DB 변경 전 실패한다. Field 신규 worker의 빈 read와 복원 승인을 구분했다. 실제 PG17 dump/restore·checkpoint export/restore CLI로 삭제 적용/반복0·미확인 의도 거절·현재 DB/파일 alias·잘못된 port·원장 내부 출력 거절을 확인했다. 최종 DB **2217 30/30**, type **57849**, lint **78010**, Field build **90668 exit0**. runtime21041 양 API ready를 유지한다. AP 자체 보존·신뢰 proof 동시 과거 교체/legacy 회수 baseline·전용 route key 수명/운영 복구·전체 PRD/QA/G·최종 사용자 UI/동선은 남고 C03/F09는 in_progress다.
+
 ## 최신 C03/F09 Field 권한 회수·격리 복원
 
 연결/선택 회수·인증된 원격 회수 수신은 별도 Field 서명 원장 기록 뒤 native DB를 commit하며 기록 실패는 503이다. 회수 AP access/refresh ciphertext를 즉시 비우고 DB가 재활성화/재저장을 거절한다. 발급 중인 token과 회수의 실제 경합도 직렬화한다. 해제 전 PG17 dump를 별도 DB에 복원해 기존 bearer 200을 확인한 뒤 별도 최신 checkpoint·원장을 검증/재적용해 bearer 401과 원래 고객 문의/확인키 보존을 확인했다. 수신 회수 ID와 미완료 원격 회수 blocked 상태도 복원한다. 실제 Field DB **8959 30/30**, typecheck **52968**, lint **45964**, Field build **73538 exit0**, 양제품 HTTP/320px **12875 1/1**. mock **21041** 양제품 API/웹 ready/Field retention worker ready다. migration61 이후 회수 상태/비밀값을 되살리지 않는다. 전용 route key 수명·legacy 회수 baseline·신뢰 checkpoint/원장 동시 rollback·기존 삭제 원장 전체 누락/운영 복구, AP 자체 보존·전체 PRD/QA/G·사용자 최종 화면/흐름/실 공급사는 남고 C03/F09는 in_progress다.

@@ -9,6 +9,7 @@
     "worker": "node dist/worker.js",
     "worker:retention": "node dist/retention-purge-worker.js",
     "restore:retention": "node dist/retention-restore-cli.js",
+    "checkpoint:retention": "node dist/retention-checkpoint-cli.js",
     "restore:revocations": "node dist/revocation-restore-cli.js",
     "checkpoint:revocations": "node dist/revocation-checkpoint-cli.js",
     "build": "tsc -p tsconfig.build.json",

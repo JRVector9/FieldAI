@@ -1,5 +1,16 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/F09 Field 삭제 원장 완전성 — 2026-09-26 작업 시작
+
+- 결과(부분 progress): 기존 missing directory 복원이 빈 성공이던 경로를 실제 red44378로 재현했다. 별도 최신 checkpoint를 restore 함수/CLI 필수 입력으로 연결하고 ID/hash 전체 대조 뒤 기존 의도/job binding/사진 coverage를 검사한다. 실제 checkpoint export/restore CLI로 PG17 격리 복원 삭제·반복0과 누락/없는 directory/미대조 추가/변조·active DB/media alias/잘못된 port/원장 안 출력 거절을 검수했다. 최종 Field DB2217 30/30, type57849/lint78010/build90668 exit0. API/UI/migration 변경 없어서 runtime21041 재기동/무관한 브라우저 반복 없이 양 API ready를 확인했다. 보호 proof의 동시 과거 교체/legacy/운영 복구·AP 보존·전체 C03은 여전히 미완료다.
+
+- Task/Product/Owner: C03/F09 / Field / 순차 실행, in_progress. 직전 c809c28 회수 원장/격리 복원은 실제 검수·커밋 progress다. 전체 기능 목표는 유지한다.
+- 요구/QA/Gate: 보안5.5의 삭제·revoke 원장 재적용, QA47/46/119/157/159의 로컬 부분. 삭제 원장이 없거나 일부 삭제 기록이 빠진 복원을 빈 성공으로 처리하지 않는다. 사용자 최종 UI/동선·실 운영 보관/RPO/RTO 인증은 별도다.
+- 파일 범위: Field retention-journal/restore/restore-cli, 새 retention-checkpoint-cli, 기존 실제 PG17 retention-purge DB 검사/API package, phase plan/backup runbook/handoff/coverage/status/TASKS. AP 내부·DB/공개 계약·UI·migration 변경 없음.
+- 설계: 삭제 원장 밖에 별도 보관한 최신 quiesced 서명 checkpoint의 전체 entry ID/내용 SHA-256과 원장을 일치 검증한다. restore 함수/CLI의 필수 입력으로 checkpoint를 받으며 전체 디렉터리 부재·누락·추가 미대조 entry·변조·회수 checkpoint 혼용은 DB/파일 변경 전에 실패한다. fresh worker의 read()는 신규 환경 빈 원장을 허용하되 restore는 허용하지 않는다. 기존 파일 의도/확인·job binding·사진 coverage 검사는 그대로 필요하다. checkpoint와 원장 동시 과거 교체·legacy baseline·운영 저장소 완전성은 별도 후속이다.
+- 검수: 기존 실제 PG17 dump/restore에서 원장 한 entry 제거·전체 directory 제거가 실제 복원 파일/원문을 보존한 채 실패하는 red→green, checkpoint export/restore CLI의 실제 적용·반복0/미확인 삭제 거절/active DB·media alias/잘못된 local DB 거절. `pnpm test:db:field`, `pnpm typecheck`, `pnpm lint`, `pnpm build:field`, native readiness. restore-only 변경으로 무관한 전체 UI 검사는 반복하지 않는다.
+- 다음 의존성: Field event route key 종료 수명/legacy 회수 baseline, AP 자체 익명/문의/사진 보존·독립 정리, 전체 PRD/역할/QA/G 대조를 이어간다. 삭제/회수 subset을 전체 목표로 바꾸지 않는다.
+
 ### C03/F09 Field 권한 회수·격리 복원 — 2026-09-26 작업 시작
 
 - 현재 결과: native 3경로의 사전 서명/fsync 기록·503 rollback, migration61의 AP ciphertext null/재활성화 거절·늦은 token 회수 경합, 별도 checkpoint/격리 복원 CLI·전체 검증/transaction·수신 ID/원격 재대조 blocked 상태를 구현했다. 최종 Field DB8959 30/30, 실제 PG17 dump/restore·CLI/누락/변조/전체 디렉터리 없음/미대조/실제 AP namespace/binding rollback·원문/확인키 보존·반복0, type52968/lint45964/build73538 exit0. native mock21041 HTTP/320px12875 1/1. 전체 운영 복구/C03 완료는 아니다.

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
@@ -132,6 +132,7 @@ test('Field executes only separately approved retention jobs and confirms file a
     const queue = await app.inject({ url: '/v1/admin/retention/jobs', headers: headers(auditor) });
     assert.equal(queue.statusCode, 200); assert.match(queue.body, /completed/); assert.doesNotMatch(queue.body, /PRIVATE_PURGE|object_key|sha256/);
     const proof = await journal.read(); assert.ok(proof.length); assert.equal(proof[0]!.product, 'field');
+    const checkpoint = await journal.checkpoint();
     assert.ok(proof.some(p => p.action === 'file_prepared')); assert.ok(proof.some(p => p.action === 'purge_prepared'));
     const uncertainJournal = new journalModule.FieldRetentionJournal(resolve(root, 'unconfirmed-journal'), 'synthetic-field-journal-secret');
     await uncertainJournal.append({ jobId: randomUUID(), organizationId: org, targetKind: 'inquiry', targetId: inquiry.id,
@@ -156,14 +157,49 @@ test('Field executes only separately approved retention jobs and confirms file a
       const restoreMedia = new FieldFileMediaStore(resolve(root, 'restored-photos'));
       await restoreMedia.put(key, originalPhoto);
       const recovery = await import('../src/retention-restore.js');
-      await assert.rejects(recovery.reapplyFieldRetentionJournal({ pool: restored, media: restoreMedia, journal: uncertainJournal }), /retention_file_intent_unconfirmed/);
+      await assert.rejects(recovery.reapplyFieldRetentionJournal({ pool: restored, media: restoreMedia, journal: uncertainJournal,
+        checkpoint: await uncertainJournal.checkpoint() }), /retention_file_intent_unconfirmed/);
       assert.ok(await restoreMedia.get(key));
-      const restoredResult = await recovery.reapplyFieldRetentionJournal({ pool: restored, media: restoreMedia, journal });
-      assert.ok(restoredResult.applied > 0); assert.equal(await restoreMedia.get(key), null);
+      const missingJournal = new journalModule.FieldRetentionJournal(resolve(root, 'missing-journal'), 'synthetic-field-journal-secret');
+      await assert.rejects(recovery.reapplyFieldRetentionJournal({ pool: restored, media: restoreMedia, journal: missingJournal, checkpoint }), /ENOENT|checkpoint/);
+      assert.ok(await restoreMedia.get(key));
+      assert.equal((await restored.query('select customer_name from field.inquiries where id=$1', [inquiry.id])).rows[0].customer_name, 'PRIVATE_PURGE_CUSTOMER');
+      const journalRoot = resolve(root,'journal'), removed = proof[0]!.id;
+      await rename(resolve(journalRoot,`${removed}.json`), resolve(root,'removed-deletion-entry'));
+      await assert.rejects(recovery.reapplyFieldRetentionJournal({ pool: restored, media: restoreMedia, journal, checkpoint }), /trusted checkpoint/);
+      assert.ok(await restoreMedia.get(key));
+      assert.equal((await restored.query('select customer_name from field.inquiries where id=$1', [inquiry.id])).rows[0].customer_name, 'PRIVATE_PURGE_CUSTOMER');
+      await rename(resolve(root,'removed-deletion-entry'), resolve(journalRoot,`${removed}.json`));
+      const unmatched = await journal.append({ jobId: randomUUID(), organizationId: org, targetKind: 'inquiry', targetId: inquiry.id, scope: 'work', action: 'purge_prepared' });
+      await assert.rejects(recovery.reapplyFieldRetentionJournal({ pool: restored, media: restoreMedia, journal, checkpoint }), /trusted checkpoint/);
+      await rm(resolve(journalRoot,`${unmatched.id}.json`));
+      await assert.rejects(recovery.reapplyFieldRetentionJournal({ pool: restored, media: restoreMedia, journal,
+        checkpoint: checkpoint.replace('retention-checkpoint','revocation-checkpoint') }), /signature mismatch/);
+      const checkpointFile = resolve(root,'trusted-retention-checkpoint');
+      const cliEnv = { ...process.env, FIELD_PROFILE: 'mock', FIELD_RETENTION_JOURNAL_DIRECTORY: journalRoot,
+        FIELD_RETENTION_JOURNAL_SECRET: 'synthetic-field-journal-secret', FIELD_RETENTION_CHECKPOINT_OUTPUT: checkpointFile,
+        FIELD_RETENTION_RESTORE_CHECKPOINT_FILE: checkpointFile, FIELD_RETENTION_RESTORE_DATABASE_URL: restoreUrl.toString(),
+        FIELD_INQUIRY_MEDIA_DIRECTORY: resolve(root,'photos'), FIELD_RETENTION_RESTORE_MEDIA_DIRECTORY: resolve(root,'restored-photos') };
+      await promisify(execFile)(process.execPath, ['--import','tsx','src/retention-checkpoint-cli.ts','--quiesced'], { env: cliEnv });
+      assert.equal((await journal.verifiedEntries(await readFile(checkpointFile,'utf8'))).length, proof.length);
+      const deniedCli = (script: string, flag: string, overrides: Record<string,string>, message: string) =>
+        assert.rejects(promisify(execFile)(process.execPath, ['--import','tsx',`src/${script}`,flag], { env: { ...cliEnv, ...overrides } }),
+          (error: unknown) => Boolean(error && typeof error === 'object' && 'stderr' in error && String(error.stderr).includes(message)));
+      const activeAlias = new URL(sourceDatabase); activeAlias.hostname='localhost';
+      await deniedCli('retention-restore-cli.ts','--offline-restored', { FIELD_RETENTION_RESTORE_DATABASE_URL: activeAlias.toString() }, 'must differ from the active Field database');
+      const wrongPort = new URL(restoreUrl); wrongPort.port='1';
+      await deniedCli('retention-restore-cli.ts','--offline-restored', { FIELD_RETENTION_RESTORE_DATABASE_URL: wrongPort.toString() }, 'local Field mock');
+      await symlink(resolve(root,'photos'), resolve(root,'active-media-alias'));
+      await deniedCli('retention-restore-cli.ts','--offline-restored', { FIELD_RETENTION_RESTORE_MEDIA_DIRECTORY: resolve(root,'active-media-alias') }, 'must differ from the active Field private media');
+      await deniedCli('retention-checkpoint-cli.ts','--quiesced', { FIELD_RETENTION_CHECKPOINT_OUTPUT: resolve(journalRoot,'invalid-checkpoint') }, 'outside the retention journal');
+      assert.ok(await restoreMedia.get(key));
+      const applyCli = await promisify(execFile)(process.execPath, ['--import','tsx','src/retention-restore-cli.ts','--offline-restored'], { env: cliEnv });
+      assert.match(applyCli.stdout,/Field restored deletion journal applied: [1-9]/);
+      assert.equal(await restoreMedia.get(key), null);
       assert.equal((await restored.query('select customer_name,customer_phone from field.inquiries where id=$1', [inquiry.id])).rows[0].customer_phone, '');
       assert.equal((await restored.query('select body from field.inquiry_messages where inquiry_id=$1', [inquiry.id])).rows[0].body, '[보존 기간 종료]');
       assert.ok((await restored.query('select retention_work_purged_at from field.inquiries where id=$1', [inquiry.id])).rows[0].retention_work_purged_at);
-      assert.equal((await recovery.reapplyFieldRetentionJournal({ pool: restored, media: restoreMedia, journal })).applied, 0);
+      assert.equal((await recovery.reapplyFieldRetentionJournal({ pool: restored, media: restoreMedia, journal, checkpoint })).applied, 0);
       await assert.rejects(restored.query("update field.inquiries set customer_name='RESTORED_PRIVATE_DATA' where id=$1", [inquiry.id]),
         (error: unknown) => (error as { code?: string }).code === 'PFR01');
       await writeFile(resolve(root, 'unconfirmed-journal', `${tampered.id}.json`), JSON.stringify({ data: JSON.stringify({ ...tampered, product: 'agent' }), signature: 'f'.repeat(64) }));

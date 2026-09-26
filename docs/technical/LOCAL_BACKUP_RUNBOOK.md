@@ -31,6 +31,17 @@ node tools/verify-product-backup.mjs field /absolute/protected/path/field-backup
 
 Field 보존 처리기는 `FIELD_RETENTION_JOURNAL_DIRECTORY`와 별도 `FIELD_RETENTION_JOURNAL_SECRET`을 사용한다. 실제 원문·전화·사진 bytes를 저장하지 않고 Field 업무/조직/job/사진 ID·범위·단계와 immutable 파일 키만 HMAC 서명·파일/디렉터리 fsync로 남긴다. 이 디렉터리와 서명 키는 DB 백업과 별도로 보호·보관해야 한다. 키를 새로 만들면 기존 원장을 검증할 수 없다.
 
+삭제 복원에는 원장 밖에 따로 보관한 최신 `retention-checkpoint`가 필수다. 모든 삭제 worker/원장 작성자를 중단한 뒤 전체 entry ID·내용 SHA-256을 서명해 내보낸다. 원장 directory 부재·한 entry 누락·미대조 추가 entry·변조·회수 checkpoint 혼용은 파일/DB 변경 전에 실패한다. 신규 worker의 빈 `read()`는 fresh 환경만을 위한 동작이며 복원 성공 근거가 아니다. checkpoint와 원장을 함께 과거로 바꾸는 경우와 legacy 누락·운영 공급사 보관 검수는 별도다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+# Field retention worker 등 모든 삭제 원장 작성자를 중단한 상태에서 실행한다.
+# 기존 DIRECTORY/SECRET, FIELD_PROFILE=mock, 아래 별도 새 출력 경로를 보호된 env에 지정한다.
+# FIELD_RETENTION_CHECKPOINT_OUTPUT=/absolute/protected/separate/field-deletions-latest.json
+node --env-file=/absolute/protected/path/field-journal.env \
+  apps/field-api/dist/retention-checkpoint-cli.js --quiesced
+```
+
 `file_prepared`는 삭제 의도이며 성공이 아니다. 파일 삭제 후 `get`으로 부재를 확인해야 `file_deleted`를 기록한다. 파일 부재와 SQL 정리 준비 후 `purge_prepared`를 commit 전에 기록하고 commit 후 `completed`를 기록한다. 마지막 기록 실패는 DB 정리 완료와 구분하며 worker가 증빙만 재시도한다. 미확인 파일 의도/서명 손상·job/대상 불일치·다른 제품 DB·미반영 사진은 재적용 실패이고 공개 서버를 재개할 근거가 아니다.
 
 직접 문의·예약·수신 사본의 개인정보/본문, 예약 이벤트 사유·달력 label·outbox 원문을 재적용하며 접수/처리/감사 ID와 기존 확인키 권한은 유지한다. 재적용 entry ID는 별도 `field.retention_restore_audit`에 기록한다. 반복 적용은 이미 적용된 entry를 재실행하지 않는다. Field 수신 사본 정리는 AP 원본 삭제가 아니다.
@@ -45,12 +56,15 @@ cd /Users/jr/Desktop/projects/FieldAI
 # FIELD_RETENTION_RESTORE_MEDIA_DIRECTORY=...
 # FIELD_RETENTION_JOURNAL_DIRECTORY=...
 # FIELD_RETENTION_JOURNAL_SECRET=... (기존 키)
+# FIELD_RETENTION_RESTORE_CHECKPOINT_FILE=/absolute/protected/separate/field-deletions-latest.json
 # FIELD_PROFILE=mock
 node --env-file=/absolute/protected/path/field-restored.env \
   apps/field-api/dist/retention-restore-cli.js --offline-restored
 ```
 
-실제 검수는 `pnpm test:db:field`의 합성 fixture로 한다. 격리 Field DB를 `pg_dump -Fc`로 백업하고 새 임시 DB에 PG17 `pg_restore`한 뒤, 정리 전 사진을 별도 파일 경로에 복원한다. 원장 재적용 후 파일 부재/원문 제거/재저장 거부/반복 적용을 검사한다. 이 삭제 검사는 회수 원장을 포함하지 않으며 아래 절의 별도 명령/검사를 함께 수행해야 한다. 운영 S3·백업 보관 공급사·삭제 원장 전체 유실/누락 탐지·삭제 결과 미상의 추가 대조·실 RPO/RTO·운영 복원 인증은 여전히 남아 있다.
+CLI는 로컬 Field mock binding(127.0.0.1/localhost:55432, field_local)과 별도 `fieldai_field_restore_<hex>` DB만 허용한다. checkpoint 출력은 journal 밖의 새 0600 파일이어야 하며 기존 checkpoint/원장 파일을 덮어쓰지 않는다.
+
+실제 검수는 `pnpm test:db:field`의 합성 fixture로 한다. 격리 Field DB를 `pg_dump -Fc`로 백업하고 새 임시 DB에 PG17 `pg_restore`한 뒤, 정리 전 사진을 별도 파일 경로에 복원한다. 전체 directory/entry 부재·미대조 추가·서명 변조/미확인 의도는 실패하고 원문/사진을 유지한다. checkpoint export/restore CLI 실제 적용 후 파일 부재/원문 제거/재저장 거부/반복0을 검사한다. active DB localhost alias·active media symlink alias/잘못된 local port/원장 안의 checkpoint 출력도 실제 거절한다. 이 삭제 검사는 회수 원장을 포함하지 않으며 아래 절의 별도 명령/검사를 함께 수행해야 한다. 운영 S3·보관 공급사·checkpoint/원장 동시 과거 교체·legacy 누락·삭제 결과 미상의 추가 대조·실 RPO/RTO·운영 복원 인증은 여전히 남아 있다.
 
 ## Field 연결·OAuth 권한 회수 원장 재적용
 
