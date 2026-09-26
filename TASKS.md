@@ -1,5 +1,7 @@
 # TASKS — 독립 제품 개발 작업 보드 v3.0
 
+최근 C03/I03 Field AP 설치 상태(2026-09-26): 사이트 초안 주소를 공개 주소로 표시하고 설치 조작을 노출하던 문제를 수정했다. Field 설치 조회의 실제 공개본 유무를 반환하고 초안/공개/조회 실패를 구분한다. AP 배포 조회 503도 활성 배포 0건과 구분해 재시도한다. Field DB 검사 red→2/2, 320px 브라우저 red→green, 기존 AP↔Field 연결 HTTP 1/1, Field API build·web typecheck·lint·Python 구문 exit 0. 새 mock **86290** 양제품 build/ready. 사용자 최종 화면 인수·실 공급사/정식 QA/G는 남아 C03/I03 `in_progress`다.
+
 최근 C03/QA57·119 AP/Field 사업자 키보드 초점(2026-09-26): 시안 v3 `owner/today` 320px을 다시 열고, 실제 신규 조직의 긴 폼을 Tab으로 이동할 때 두 제품 입력 초점이 하단 메뉴 뒤에 가리는 각 0/1 red를 확인했다. 모바일 작업실 스크롤 영역에 100px 초점 여유를 적용해 AP/Field 320/390px 키보드 초점·메뉴 Enter 이동 각 exit 0, 양 웹 typecheck·lint·Python 구문 exit 0. 새 mock **2358** 양제품 build/ready. 전체 키보드·스크린리더·실 200% 확대·사용자 시각/동선 인수는 남아 C03 `in_progress`다.
 
 최근 C03/I04 AP 고객 Field 전달 기록 부분 장애(2026-09-26): 기존 요청이 있는 320px 화면에서 전달 이력 GET 503 뒤 기록이 사라지는 0/1 red를 확인했다. 같은 문의·확인키의 재조회는 마지막으로 확인한 전달 기록/사진을 유지하고 새 문의·확인키는 초기화한다. 실패한 서비스 조회로 새 가격·시간·동의를 진행하지 않는다. 최종 양방향 연결 HTTP/브라우저 1/1, AP web typecheck·전체 lint·Python 구문 exit 0, 새 mock **7578** 네 HTTP 200. mock worker가 켜진 첫 green 실행의 수동 revoke `empty` 경합은 `FIELD_EVENT_WORKERS_RUNNING=1`로 실제 실행 환경을 명시한 최종 재실행에서 해소했다. 사용자 시각/동선·정식 QA/G·실 공급사는 남아 C03/I04 `in_progress`다.

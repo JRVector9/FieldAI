@@ -1,5 +1,7 @@
 # 2단계 화면 검토본 — 2차 검수
 
+2026-09-26 Field AP 설치 화면 상태 검수: 사이트 초안을 공개 주소처럼 보이게 하던 표시를 `사이트 초안 주소`로 구분하고 공개 전 증명/설치 조작을 숨겼다. 설치 상태 조회 503과 AP 배포 조회 503은 각각 확인 실패/재시도이며 정상 빈 배포와 구분한다. 새 mock **86290**의 신규 조직 320px Chromium에서 초안, 두 조회 실패·재시도, 가로 넘침/pageerror 0을 확인했다. 시안 원본은 `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`; 사용자 최종 시각·동선 인수는 이후다.
+
 2026-09-26 AP/Field 사업자 키보드 부분 검수: 원본 `reference/field_ui_prototype_v3.html`의 320px `owner/today`를 Chromium으로 다시 열어 하단 메뉴 구조를 확인했다. 실제 제품별 신규 조직 화면에서 Tab으로 긴 사업 정보 폼을 이동하면 Field 첫 입력의 하단 687px, AP `사업 소개` 입력의 하단 691px이 654px 하단 메뉴 뒤에 가려졌다. 모바일 작업실 스크롤 영역에 100px 초점 여유를 주고, 새 mock **2358**에서 두 제품의 320/390px Tab 초점·하단 메뉴 Enter 이동을 각각 확인했다. 이 검사는 사업자 초기 폼과 메뉴 경로이며 전체 역할 키보드·스크린리더·실 브라우저 200% 확대·사용자 최종 시각 인수는 아직 아니다.
 
 2026-09-26 기준 HTML 재확인: `reference/field_ui_prototype_v3.html` 자체를 Chromium에서 `FieldPrototype.seedDemo()`와 `owner/today`로 열어 `/tmp/field-reference-today-{1440,320}.png`를 새로 저장하고, 실제 Field 업무 320px 캡처 `/tmp/field-today-task-320.png`를 확인했다. 같은 날짜의 `/tmp/field-services-{prototype,current-1440}.png`, `/tmp/field-booking-{reference,actual}-1440.png`도 나란히 열어 서비스 카드·고객 예약 폼을 대조했다. 기본 밝은 회색 배경/흰 카드/파란 행동/모바일 하단 메뉴와 예약 2열 폼·요약은 참고 시안의 구조를 따른다. 시안 상단의 통합 역할 전환과 Field의 `외부 배포` 수치는 문서상 독립 제품 경계에 맞춰 운영 화면에 복제하지 않는다. 실제 Field의 네 번째 오늘 카드는 홈페이지 공개 상태이고 AP가 배포를 소유한다. 전체 시각·동선 동일성은 사용자가 최종 확인할 예정이며 현재 C03 완료 주장 근거는 아니다.

@@ -5,6 +5,29 @@
 - 시안 파일: `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03/I03 Field 사이트 AP 설치 상태 (2026-09-26)
+
+- **현재 목표:** 위 절대경로의 시안과 v3.0 문서에 맞춰 AP/Field 독립 서비스의 실제 기능을 완성한다. 사용자는 최종 디자인·동선 및 외부 공급사 연동을 직접 확인할 예정이다. C03 전체와 출시 승인은 미완료다.
+- **완료 작업:** Field AP 설치 조회가 사이트 공개본 존재 여부를 `published`로 반환한다. 설치 화면은 초안 주소/공개 주소/조회 실패를 구분한다. 초안에서도 AP 계정 연결을 시작할 수 있으나 사이트 증명/위젯 설치는 공개 뒤에만 노출한다. AP 배포 후보 503과 정상 빈 목록을 구분하고 재시도한다.
+- **수정 파일:** `apps/field-api/src/sites.ts`, `apps/field-api/test/sites.db.test.ts`, `apps/field-web/src/field-ap-connections.tsx`, 새 `tools/spikes/field-installation-state-browser.py`, `docs/technical/{PHASE_2_EXECUTION_PLAN,PHASE_2_UI_REVIEW}.md`, `TASKS.md`, `DEVELOPMENT_STATUS.md`, 이 파일. AP 코드/공개 계약/DB migration 변경 없음.
+- **핵심 설계 결정:** 공개 판단은 Field의 `site_releases` 원장이다. 설치/배포 조회 실패를 미개설·미공개·배포 없음으로 추측하지 않는다. 설치 기록의 `active`는 Field 설치 상태이며 AP 배포 활성 여부는 별도 조회다. Field 직접 문의·예약은 AP 없이 유지한다.
+- **실제 검사/환경/커밋:** 로컬 PostgreSQL 17·Field Valkey·mock. Field DB 테스트에서 초안 `published` 누락 `undefined !== false` red→`pnpm test:spike:sites:field` 최종 2/2 green. 새 320px 브라우저 검사는 기존 초안 라벨 부재 red→`/tmp/fieldai-ui-venv/bin/python tools/spikes/field-installation-state-browser.py` exit 0(초안/설치 조회 503→재시도/AP 배포 조회 503→정상 빈 목록, 가로 넘침·pageerror 0). `pnpm --filter @fieldai/field-api build`, `pnpm --filter @fieldai/field-web typecheck`, `pnpm lint`, 변경 Python `py_compile` exit 0. 새 `pnpm mock:run` PTY **86290**에서 AP/Field API·웹 build/ready, `FIELD_EVENT_WORKERS_RUNNING=1 pnpm test:spike:ap-field:http` 1/1. 커밋은 `git log -1 --oneline`으로 확인한다.
+- **실패한 접근:** 종전 설치 API는 초안에도 사이트 주소만 반환해 UI가 이를 공개 주소로 해석했다. 종전 UI는 비정상 GET을 미개설/배포 없음처럼 보이게 했다. DB 및 브라우저 검사를 먼저 실패시킨 뒤 수정했다.
+- **남은 작업:** C03 다른 역할·화면의 시안/기능 검수, 사용자 최종 시각·동선 인수, 정식 QA/G. 실 인증·LLM·알림·결제·DNS/TLS·백업 공급사는 `blocked_integration`; 운영 배포·고객 발송·청구 없음. 이 검사는 Field AP 설치 상태와 기존 연결 HTTP 경로에 한정한다.
+- **다음 에이전트 정확한 명령:**
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -1 --oneline
+sed -n '1,34p' docs/CODEX_HANDOFF.md
+pnpm test:spike:sites:field
+/tmp/fieldai-ui-venv/bin/python tools/spikes/field-installation-state-browser.py
+FIELD_EVENT_WORKERS_RUNNING=1 pnpm test:spike:ap-field:http
+```
+
+로컬 mock PTY **86290**가 살아 있으면 AP `http://localhost:3001/workspace`, Field `http://localhost:3002/workspace`다. 먼저 HTTP 200을 확인하고 종료되었을 때만 `pnpm mock:run`으로 다시 띄운다. 위 시안 절대경로를 화면 작업 때마다 직접 대조한다.
+
 ## 최신 인수인계 — C03/QA57·119 AP/Field 사업자 키보드 초점 (2026-09-26)
 
 - **현재 목표:** 위 시안과 v3.0 문서대로 AP/Field 독립 제품의 기능을 로컬에서 끝까지 사용할 수 있게 한다. 사용자는 최종 디자인·동선/외부 연동을 직접 확인할 예정이다. C03 전체/출시 승인은 미증명이다. 새 mock PTY **2358**: AP 웹 `http://localhost:3001/workspace`/API `127.0.0.1:4311`, Field 웹 `http://localhost:3002/workspace`/API `127.0.0.1:4321`.

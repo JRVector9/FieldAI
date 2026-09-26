@@ -1,5 +1,9 @@
 # 개발 진행 상태 — 2026-09-26
 
+## 최신 C03/I03 Field 사이트 AP 설치 상태 (2026-09-26)
+
+Field 사이트의 초안 주소와 실제 공개 주소를 분리했다. 설치 조회 API는 release 존재 여부를 반환하며 UI는 초안에서는 AP 계정 연결을 허용하되 사이트 증명/위젯 설치를 공개 뒤에만 보여준다. 설치 조회 503과 AP 배포 후보 조회 503은 확인 실패/재시도로 표시하고 정상 빈 배포와 구분한다. Field DB 검사 초안 `published` 누락 red→최종 2/2, 320px 새 조직/초안·조회 실패/재시도 브라우저 red→green 및 가로 넘침/pageerror 0, 기존 AP↔Field 연결 HTTP 1/1, Field API build·web typecheck·전체 lint·Python 구문 exit 0. 새 mock **86290** 양제품 build/ready. 사용자 최종 디자인/동선 인수·정식 QA/G·실 공급사는 미실행이며 C03/I03 `in_progress`다.
+
 ## 최신 C03/QA57·119 AP/Field 사업자 키보드 초점 (2026-09-26)
 
 원본 시안 HTML의 320px 사업자 `owner/today`를 Chromium에서 다시 열고 하단 메뉴를 확인했다. 실제 제품별 신규 조직 화면의 긴 폼에서 Tab 초점이 하단 메뉴 뒤로 내려가는 오류를 Field(입력 하단 687px)·AP(사업 소개 하단 691px) 각각 0/1 red로 재현했다. 모바일 작업실 내부 스크롤의 하단 여유 100px을 주어 초점이 보이게 했다. 새 mock **2358** 양제품 build/ready, AP/Field 각각 320/390px 폼 초점·모바일 메뉴 Enter 경로 검사 exit 0, 양 웹 typecheck·전체 lint·Python 구문 exit 0. 전체 화면 키보드/스크린리더·실 200% 확대·사용자 최종 시각/동선·정식 QA/G는 미실행으로 C03 `in_progress`다.

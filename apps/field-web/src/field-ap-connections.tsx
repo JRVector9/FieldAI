@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Brand } from "@fieldai/ui";
 import { requestJson } from "./field-api";
 import { FieldSourceRefresh } from "./field-source-refresh";
@@ -20,19 +20,42 @@ export function FieldApConnections() {
   const [status, setStatus] = useState("Field 사업장과 연결 상태를 확인하고 있습니다.");
   const [busy, setBusy] = useState(false);
   const [siteOrigin, setSiteOrigin] = useState<string | null>(null);
+  const [sitePublished, setSitePublished] = useState(false);
+  const [siteState, setSiteState] = useState<"idle" | "loading" | "ready" | "no_site" | "failed">("idle");
   const [installation, setInstallation] = useState<Installation | null>(null);
   const [connectionId, setConnectionId] = useState("");
   const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [deploymentState, setDeploymentState] = useState<"idle" | "loading" | "ready" | "failed">("idle");
+  const [deploymentRefresh, setDeploymentRefresh] = useState(0);
   const [deploymentId, setDeploymentId] = useState("");
   const [proof, setProof] = useState("");
   const [mode, setMode] = useState<"inline" | "floating">("floating");
   const [revokeCheckedId, setRevokeCheckedId] = useState("");
 
+  const loadInstallation = useCallback(async () => {
+    setSiteState("loading");
+    try {
+      const result = await requestJson("/v1/sites/ap-installation");
+      if (result.status === 200) {
+        const value = result.data as { siteOrigin: string | null; published: boolean;
+          installation: Installation | null };
+        setSiteOrigin(value.siteOrigin);
+        setSitePublished(value.published);
+        setInstallation(value.installation);
+        setSiteState("ready");
+      } else if (result.status === 404 && (result.data as { error?: string }).error === "site_not_found") {
+        setSiteOrigin(null);
+        setSitePublished(false);
+        setInstallation(null);
+        setSiteState("no_site");
+      } else setSiteState("failed");
+    } catch { setSiteState("failed"); }
+  }, []);
+
   useEffect(() => {
     const result = new URLSearchParams(location.search).get("result");
-    void Promise.all([requestJson("/v1/business/draft"), requestJson("/v1/connections/ap"),
-      requestJson("/v1/sites/ap-installation")])
-      .then(([business, list, saved]) => {
+    void Promise.all([requestJson("/v1/business/draft"), requestJson("/v1/connections/ap")])
+      .then(([business, list]) => {
         if (business.status === 401) { setStatus("Field 사업자 로그인이 필요합니다. 사업 운영 화면에서 로그인해 주세요."); return; }
         if (business.status !== 200) { setStatus("먼저 Field 사업장을 만들어 주세요."); return; }
         setOrganizationId((business.data as { organizationId: string }).organizationId);
@@ -40,10 +63,6 @@ export function FieldApConnections() {
         const records = (list.data as { connections: Connection[] }).connections;
         setConnections(records);
         setConnectionId(records.find(item => item.status === "review_required")?.id ?? "");
-        if (saved.status === 200) {
-          const value = saved.data as { siteOrigin: string | null; installation: Installation | null };
-          setSiteOrigin(value.siteOrigin); setInstallation(value.installation);
-        }
         setStatus(result === "denied" ? "AP 접근 동의가 거부됐습니다. Field 사이트와 직접 문의·예약은 계속 이용할 수 있습니다."
           : result === "unknown" ? "AP 승인 결과를 확인하지 못했습니다. 새 연결을 시작하기 전에 관리자에게 상태 확인을 요청해 주세요."
             : result === "pending_field_consent" ? "AP 접근이 승인됐습니다. Field 정보 제공의 별도 동의와 양쪽 조직 매핑은 아직 필요합니다."
@@ -52,15 +71,26 @@ export function FieldApConnections() {
   }, []);
 
   useEffect(() => {
-    if (!connectionId) { setDeployments([]); return; }
+    if (organizationId) void loadInstallation();
+  }, [organizationId, loadInstallation]);
+
+  useEffect(() => {
+    if (!connectionId || !siteOrigin || !sitePublished) {
+      setDeployments([]); setDeploymentId(""); setDeploymentState("idle"); return;
+    }
+    let active = true;
+    setDeploymentState("loading");
     void requestJson(`/v1/connections/ap/${connectionId}/deployments`).then(result => {
-      if (result.status !== 200) { setDeployments([]); return; }
+      if (!active) return;
+      if (result.status !== 200) { setDeployments([]); setDeploymentState("failed"); return; }
       const allowed = (result.data as { deployments: Deployment[] }).deployments
         .filter(item => item.kind === "owned_embed" && item.origin === siteOrigin);
       setDeployments(allowed);
       setDeploymentId(current => allowed.some(item => item.id === current) ? current : allowed[0]?.id ?? "");
-    }).catch(() => setDeployments([]));
-  }, [connectionId, siteOrigin]);
+      setDeploymentState("ready");
+    }).catch(() => { if (active) { setDeployments([]); setDeploymentState("failed"); } });
+    return () => { active = false; };
+  }, [connectionId, siteOrigin, sitePublished, deploymentRefresh]);
 
   async function storeProof() {
     setBusy(true);
@@ -74,7 +104,7 @@ export function FieldApConnections() {
   }
 
   async function install() {
-    if (!connectionId || !deploymentId) return;
+    if (!sitePublished || deploymentState !== "ready" || !connectionId || !deploymentId) return;
     setBusy(true);
     try {
       const result = await requestJson("/v1/sites/ap-installation", "POST", { connectionId, deploymentId, mode });
@@ -171,21 +201,30 @@ export function FieldApConnections() {
             </li>)}</ul>}
           <p>Field의 사이트 제작, 직접 문의와 예약은 AP 연결 없이 사용할 수 있습니다.</p></aside></div>
       <section className="special-panel field-ap-installation"><h2>Field 사이트에 AP 상담 설치</h2>
-        {siteOrigin ? <><p>Field 공개 사이트 주소: <code>{siteOrigin}</code></p><p><a href={`${siteOrigin}/site/${new URL(siteOrigin).hostname.split(".")[0]}`}>공개 사이트 열기</a></p>
+        {siteState === "idle" && <p>Field 사업자 계정과 사이트 상태를 확인한 뒤 설치할 수 있습니다.</p>}
+        {siteState === "loading" && <p role="status">사이트 설치 상태를 확인하고 있습니다.</p>}
+        {siteState === "failed" && <div className="state-message" role="alert"><p>사이트 설치 상태를 확인하지 못했습니다. 공개 여부나 기존 설치를 추측하지 않습니다.</p><button type="button" onClick={() => void loadInstallation()}>사이트 설치 상태 다시 확인</button></div>}
+        {siteState === "no_site" && <p>아직 Field 사이트를 만들지 않았습니다. <a href="/workspace/site">사이트 제작 시작하기</a></p>}
+        {siteState === "ready" && !sitePublished && <div className="state-message"><p>사이트 초안 주소: {siteOrigin ? <code>{siteOrigin}</code> : "주소 확인 불가"}</p><p>고객 사이트를 공개한 뒤 AP 배포의 소유 증명과 위젯 설치를 진행할 수 있습니다. AP 계정 연결은 위에서 먼저 시작할 수 있습니다.</p><a href="/workspace/site">사이트 편집·공개 열기</a></div>}
+        {siteState === "ready" && sitePublished && !siteOrigin && <div className="state-message" role="alert"><p>사이트는 공개됐지만 설치 주소를 확인하지 못했습니다. 기본 주소 설정을 확인해 주세요.</p><button type="button" onClick={() => void loadInstallation()}>사이트 설치 상태 다시 확인</button></div>}
+        {siteState === "ready" && sitePublished && siteOrigin && <><p>Field 공개 사이트 주소: <code>{siteOrigin}</code></p><p><a href={`${siteOrigin}/site/${new URL(siteOrigin).hostname.split(".")[0]}`}>공개 사이트 열기</a></p>
           <ol><li>AP의 <a href={`${apWebOrigin}/workspace/deployments`}>상담 배포 관리</a>에서 위 주소의 소유 사이트 위젯을 만들고 증명값을 복사합니다.</li>
             <li>아래에 증명값을 저장한 뒤 AP에서 소유 확인과 배포 활성화를 진행합니다.</li>
             <li>AP 접근을 다시 승인할 때 활성 배포를 선택하고, 양쪽 동의 후 이 화면에서 설치합니다.</li></ol>
           <label>AP 배포 증명값<input value={proof} onChange={event => setProof(event.target.value)} placeholder="AP 배포의 verification proof" /></label>
           <button type="button" disabled={busy || !/^[A-Za-z0-9_-]{32,64}$/.test(proof.trim())} onClick={() => void storeProof()}>사이트 증명값 저장</button>
           <p>선택한 연결: {connectionId || "없음"}</p>
-          {deployments.length ? <><label>허용된 AP 위젯 배포<select value={deploymentId} onChange={event => setDeploymentId(event.target.value)}>
+          {deploymentState === "idle" && <p>위 연결 기록에서 설치할 AP 연결을 선택해 주세요.</p>}
+          {deploymentState === "loading" && <p role="status">허용된 AP 위젯 배포를 확인하고 있습니다.</p>}
+          {deploymentState === "failed" && <div className="state-message" role="alert"><p>AP 배포 상태를 확인하지 못했습니다. 활성 배포가 없다고 판단하지 않습니다.</p><button type="button" onClick={() => setDeploymentRefresh(value => value + 1)}>AP 배포 다시 확인</button></div>}
+          {deploymentState === "ready" && deployments.length > 0 ? <><label>허용된 AP 위젯 배포<select value={deploymentId} onChange={event => setDeploymentId(event.target.value)}>
             {deployments.map(item => <option key={item.id} value={item.id}>{item.publicId} · {item.origin}</option>)}</select></label>
             <label>표시 방식<select value={mode} onChange={event => setMode(event.target.value as "inline" | "floating")}><option value="floating">화면 구석 버튼</option><option value="inline">본문에 표시</option></select></label>
             <button type="button" disabled={busy || !deploymentId} onClick={() => void install()}>AP 위젯 설치</button></>
-            : <p>이 사이트 주소에 허용된 활성 AP 위젯 배포가 없습니다. AP에서 배포를 활성화하고 접근 동의 때 선택해 주세요.</p>}
-          {installation && <p>현재 설치: {installation.publicId} · {installation.status === "active" ? "표시 중" : "중지됨"}</p>}
+            : deploymentState === "ready" && <p>이 사이트 주소에 허용된 활성 AP 위젯 배포가 없습니다. AP에서 배포를 활성화하고 접근 동의 때 선택해 주세요.</p>}
+          {installation && <p>Field 설치 기록: {installation.publicId} · {installation.status === "active" ? "설치 활성 · AP 배포 상태는 별도 확인" : "Field에서 중지됨"}</p>}
           {installation?.status === "active" && <button type="button" disabled={busy} onClick={() => void pause()}>Field 사이트에서 위젯 중지</button>}
-        </> : <p>먼저 Field 사이트를 공개해 주세요. 공개된 사업장별 주소가 있어야 소유 확인을 시작할 수 있습니다.</p>}
+        </>}
       </section>
     </main></div>;
 }

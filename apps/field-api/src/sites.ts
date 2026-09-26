@@ -131,12 +131,15 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     if (!organization) return reply;
     const site = await siteFor(runtime, organization.organization_id);
     if (!site) return reply.code(404).send({ error: 'site_not_found' });
+    const release = await runtime.pool.query<{ published: boolean }>(
+      'select exists (select 1 from field.site_releases where site_id = $1) as published', [site.id]);
     const found = await runtime.pool.query<{ connection_id: string; ap_deployment_id: string;
       ap_public_id: string; site_origin: string; mode: string; status: string }>(
       'select connection_id, ap_deployment_id, ap_public_id, site_origin, mode, status from field.site_ap_installations where site_id = $1',
       [site.id]);
     const row = found.rows[0];
     return reply.header('Cache-Control', 'private, no-store').send({ siteOrigin: publicSiteOrigin(site.slug),
+      published: release.rows[0]?.published ?? false,
       installation: row ? { connectionId: row.connection_id, deploymentId: row.ap_deployment_id,
         publicId: row.ap_public_id, origin: row.site_origin, mode: row.mode, status: row.status } : null });
   });

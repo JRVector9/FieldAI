@@ -1,5 +1,12 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/I03 Field 사이트 AP 설치의 초안·공개·조회 실패 구분 — 2026-09-26
+
+- 파일 범위: Field 내부 `apps/field-api/src/sites.ts`, `apps/field-api/test/sites.db.test.ts`, `apps/field-web/src/field-ap-connections.tsx`, 필요한 320px 브라우저 검사와 계획·상태·인수인계 문서. AP 제품/공개 연동 계약·DB migration은 변경하지 않는다.
+- 요구/QA/게이트: Field 사이트는 초안 생성과 실제 공개를 분리하며(I03/F04, QA71/86/94/119/128), AP 연결은 공개 전에도 시작할 수 있지만 사이트 위젯의 증명값·설치는 공개 후에만 가능하다. Field 내부 설치 조회 실패를 사이트 미개설이나 배포 없음으로 표시하지 않는다. AP 장애 시 Field 직접 문의·예약은 그대로 유지한다.
+- 검사/구현 순서: 실제 `GET /v1/sites/ap-installation`에 공개 여부를 추가하는 Field DB/API 검사 red→green, 로컬 신규 조직의 사이트 초안·조회 503 화면을 320px Chromium에서 red→green으로 확인한다. 설치 후보 AP 조회 실패도 정상 빈 후보와 구분한다. Field API build·web typecheck·lint, 새 mock build/ready와 필요한 기존 Field 연결 경로를 확인한다. 실 DNS/TLS·사용자 최종 인수는 이후다.
+- 실행 결과: Field API 설치 조회에 실제 사이트 release 존재 여부 `published`를 추가했다. Field DB 검사는 초안 응답 `undefined !== false` red→최종 2/2 green으로 초안 `false`/공개 `true`를 확인했다. 320px 새 조직 브라우저는 초안을 `사이트 초안 주소`로 표시하며 증명/설치 버튼을 숨기고 AP 계정 연결은 유지한다. 설치 조회 503은 공개 여부 확인 실패/재시도, 공개 상태의 AP 배포 GET 503은 배포 확인 실패/재시도이며 재조회 200의 실제 빈 목록과 구분한다. 기존 0/1 red→새 mock **86290** 최종 exit 0, 320px 가로 넘침/pageerror 0. 새 mock에서 양 API/웹 build/ready, Field API build·web typecheck·전체 lint·Python 구문 exit 0, `FIELD_EVENT_WORKERS_RUNNING=1 pnpm test:spike:ap-field:http` 1/1. 실제 AP 공급사/DNS/TLS·사용자 시각/동선 인수·정식 QA/G는 미실행이다. C03/I03은 `in_progress`다.
+
 ### C03/QA57·119 실제 AP/Field 사업자 키보드 조작 경로 — 2026-09-26
 
 - 파일 범위: 실제 AP/Field 작업실의 모바일 스크롤 CSS와 제품별 좁은 Playwright 회귀 검사, `docs/technical/PHASE_2_UI_REVIEW.md`, 계획·현황·인수인계 문서. 결함이 확인된 경로만 수정하며 양제품 API·DB·제품 간 계약은 변경하지 않는다.

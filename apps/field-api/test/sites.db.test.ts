@@ -81,6 +81,9 @@ test('Field publishes a site from a draft and restores design without restoring 
     const { slug } = created.json() as { slug: string };
     assert.match(slug, /^field-[a-f0-9]{12}$/);
     assert.equal((await app.inject({ url: `/v1/public/sites/${slug}` })).statusCode, 404);
+    const draftInstallation = await app.inject({ url: '/v1/sites/ap-installation', headers: { cookie: first.cookie } });
+    assert.equal(draftInstallation.statusCode, 200);
+    assert.equal(draftInstallation.json().published, false);
     assert.equal((await app.inject({ url: '/v1/sites/draft', headers: { cookie: second.cookie } })).statusCode, 404);
     const initial = await app.inject({ url: '/v1/sites/draft', headers: { cookie: first.cookie } });
     assert.equal((initial.json() as { revision: number }).revision, 0);
@@ -100,6 +103,9 @@ test('Field publishes a site from a draft and restores design without restoring 
     assert.equal((versions.json() as { releases: unknown[] }).releases.length, 1);
     const publicSite = await app.inject({ url: `/v1/public/sites/${slug}` });
     assert.equal(publicSite.statusCode, 200);
+    const publishedInstallation = await app.inject({ url: '/v1/sites/ap-installation', headers: { cookie: first.cookie } });
+    assert.equal(publishedInstallation.statusCode, 200);
+    assert.equal(publishedInstallation.json().published, true);
     assert.equal((publicSite.json() as { template: string; pages: unknown[]; catalogRevision: number }).template, 'editorial');
     assert.equal((publicSite.json() as { pages: unknown[] }).pages.length, 2);
     assert.equal((publicSite.json() as { catalogRevision: number }).catalogRevision, 1);
