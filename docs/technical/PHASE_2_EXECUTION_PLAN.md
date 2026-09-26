@@ -1,5 +1,15 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/I04·F-O09 외부 업무 수신 목적·보존 기준 — 2026-09-26
+
+- 상태: `in_progress`. 요구: Field PRD 3.6, 연동 계약 4.1/4.7, 보안 운영 5.5의 정식 문의/업무 종결 후 180일·사진 90일 **제안값**, QA139/153/155/159의 수신 원본 보존/권한 관련 부분. Field 업무 수신 기록과 AP 대화 원문은 별개다.
+- 현재 증거: Field migration 000025는 수신 시각·provider/connection/action/conversation/deployment·고객 동의 ID/시각·업무 snapshot을 저장한다. 전달 목적/보존 기준/동의 필드 목록은 저장하지 않는다. 연동 해제 시 기존 기록을 유지하며 현재 원본 API는 권한을 검사한다.
+- 범위: Field migration `000056_received_work_policy.sql`, 새 `src/received-work-record.ts`, `src/{bookings,reservation-export,operations-archive}.ts`, 기존 integrator/connection DB 검사; 웹 `src/field-api.ts`, 새 `src/FieldReceivedWorkRecord.tsx`, `src/{field-workspace,field-booking}.tsx`; 기존 양제품 HTTP/외부 문의 browser 및 필요 예약 consumer 검사; 현황/검수/인계. AP 코드/DB·제품 간 공개 계약 변경 없음.
+- 설계: 신규 수신 트랜잭션이 서버에서 목적(inquiry_reply/reservation_fulfillment), 검증한 transfer-v1 동의 필드, 문서 보존 제안 정책 버전/종결 기준/업무180일·사진90일을 nullable JSONB `processing_policy`에 기록한다. source/수신 시각은 기존 실제 열로 조합한다. 송신자가 정책을 정하지 못한다. 과거 기록은 null로 남겨 미기록임을 표시하며 동의/정책을 소급 생성하지 않는다. 멱등 재시도는 최초 정책·시각을 보존한다. 사업자 문의/예약 상세와 개별/전체 export에만 수신 기록을 포함한다. AP 권한/연결이 사라져도 Field 자체 수신 업무 기록은 보존한다.
+- 작업/검수: 기존 provider PG17 검사에 신규 inquiry/reservation 목적·동의·180/90·멱등 보존·권한/해제·exports 단언, legacy 소비자 null 단언을 red→구현→`pnpm test:db:field`. UI는 수신 기록의 목적·원본 제품·제안 보존 기준/미기록 사유를 설명한다. 320px 외부 문의 browser에 표시 단언 red→green, `pnpm typecheck`, `pnpm lint`, Python/diff, 새 mock build/ready·`FIELD_EVENT_WORKERS_RUNNING=1 FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python pnpm test:spike:ap-field:http`.
+- 운영 제한/복구: 이번 기록은 법무 승인/운영 보존 정책 확정·업무 종결 시각 산정/보존 연장·자동 삭제 worker의 완료 증거가 아니다. 제안임을 UI/원장에 남긴다. 만료나 해제만으로 원본/업무/사진을 삭제하지 않는다. nullable 열은 코드 롤백 시 보존한다.
+- 결과: 수신 기록 API 누락 red(Field 22/24)→최종 Field DB 24/24, 임시 DB 제거. 문의/예약 목적·검증 동의 필드·180/90 제안·멱등 보존·해제 후 원본/exports·legacy null·DB 목적/JSON null 거부 확인. 320px 표시 부재 red→mock **2217** 양제품 API/웹 build/ready에서 최종 양제품 HTTP/브라우저 1/1(session 93811), 문의·예약 수신 기록 표시/기존 원본 답변·스팸 소비·해제·알림 경로 포함. typecheck/lint·변경 Python/Node 구문/diff exit 0. `/tmp/field-received-work-320.png`를 열었다. 중간 HTTP 실행은 AP native 영업시간 필드 도입 전의 과도한 전체 지식 key 금지 단언에서 실패했다. AP 직접 승인값 보존 비교와 Field sourceFacts 시간/가격/연락처 복사 금지를 분리·강화한 최종 검사에서 통과했다. 자동 보존 정리·정식 QA/G·사용자 최종 인수·실 공급사는 미검수다.
+
 ### C03/A01·A02 AP native 지역·영업시간 — 2026-09-26
 
 - 상태: `in_progress`. 요구: AP PRD 2.2 순서 3·2.3·2.4, AP-O02/AP-C01, B01/B09/B10, QA57/119와 승인·권한 관련 로컬 부분. 기준 시안 `reference/field_ui_prototype_v3.html`의 승인 정보/사업 지역·운영시간과 상담 안내를 직접 대조한다.

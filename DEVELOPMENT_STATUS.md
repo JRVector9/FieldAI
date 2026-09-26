@@ -1,5 +1,9 @@
 # 개발 진행 상태 — 2026-09-26
 
+## 최신 C03/I04·F-O09 Field 업무 수신 기록 (2026-09-26)
+
+신규 외부 문의/예약 수신 트랜잭션에 처리 목적·검증한 동의 필드·문서 보존 제안 정책(업무 종결 후180일/사진90일)을 저장했다. 기존 수신 시각/출처와 함께 사업자 문의/예약 상세·개별/전체 내보내기에 표시한다. 같은 요청 재시도와 연결 해제 뒤 원본/수신 정책을 보존하며 과거 기록의 null 정책에 동의/목적을 소급 생성하지 않는다. Field DB red 22/24→최종 24/24, 320px 표시 부재 red→mock **2217**의 최종 양제품 HTTP/브라우저 1/1. typecheck/lint·Python/Node/diff exit 0·양제품 API/웹 build/ready·양 API ready 확인. AP native 시간과 Field 외부 sourceFacts를 구분하도록 오래된 전체 key 금지 단언을 바로잡고 외부 시간/가격/연락처 복사 금지는 유지·강화했다. Field migration000056·공개 계약/AP 코드/DB 변경 없음. 보존값은 proposed이며 운영 정책/종결 시각·연장·자동 정리/법무 승인/실 공급사·전체 C03/사용자 인수는 미완료다.
+
 ## 최신 C03/A01·A02 AP native 지역·영업시간 (2026-09-26)
 
 AP 직접 사업 지식에 선택 지역·영업시간 입력/자동 저장·revision 충돌 비교·owner 승인·고객 공개 표시·AI 근거를 연결했다. 미등록 값을 추정하지 않고 구버전 JSONB의 빈 값을 읽으며 승인본/해시는 변경하지 않는다. 미승인 지역·시간은 owner/customer AI 근거와 고객 표시에서 제외한다. 실제 AP DB red→23/23, 320px 입력 부재 red→mock **29076**의 AP 사업자 HTTP/브라우저 1/1·native 자동 저장 HTTP/브라우저 1/1(지역만 변경한 응답 분실/409 내 입력, 시간만 변경한 409 서버 입력 선택·공개본 보존), 전체 typecheck/lint·Python/diff exit 0, 양제품 API/웹 build/ready. 시안 `owner/agent-knowledge`를 직접 열었다. migration/Field/제품 간 계약 변경 없음. C03 전체 기능·사용자 최종 인수·실 공급사/G는 미완료다.

@@ -368,6 +368,23 @@ test('Field owner delegates only approved catalog facts to a selected OAuth clie
     assert.equal(exportedReservation.json().reservation.source, 'external_ap');
     assert.equal(exportedReservation.json().externalSource.actionRequestId, externalBody.actionRequestId);
     assert.equal(exportedReservation.json().externalSource.connectionId, connectionId);
+    const reservationRecord = exportedReservation.json().externalSource.receivedRecord;
+    assert.equal(reservationRecord.purpose, 'reservation_fulfillment');
+    assert.equal(reservationRecord.source.provider, 'agent-platform');
+    assert.equal(reservationRecord.source.actionRequestId, externalBody.actionRequestId);
+    assert.equal(reservationRecord.consent.recordId, externalBody.consent.recordId);
+    assert.deepEqual(reservationRecord.consent.items, externalBody.consent.items);
+    assert.deepEqual(reservationRecord.retention, { policyVersion: 'field-work-snapshot-v3.0-proposal',
+      state: 'proposed', startsAfter: 'field_work_closed', workDays: 180, photoDays: 90 });
+    const ownerReservation = await app.inject({ url: `/v1/owner/reservations/${accepted.json().reservationId}`,
+      headers: { cookie: owner.cookie } });
+    assert.deepEqual(ownerReservation.json().receivedRecord, reservationRecord);
+    for (const invalidPolicy of [{ purpose: 'inquiry_reply' }, { retention: { ...reservationRecord.retention, state: null } }]) {
+      await assert.rejects(pool.query(`update field.external_work_requests
+        set processing_policy = processing_policy || $2::jsonb where id = $1`,
+      [accepted.json().externalRequestId, JSON.stringify(invalidPolicy)]),
+      (error: unknown) => (error as { code?: string }).code === '23514');
+    }
     assert.doesNotMatch(exportedReservation.body, /clientSecret|eventSecret|accessToken|originConversationId/);
     const saved = await pool.query<{ source: string; state: string; visitor_key_hash: string | null }>(
       'select source,state,visitor_key_hash from field.reservations where id = $1',
@@ -611,6 +628,8 @@ test('Field owner delegates only approved catalog facts to a selected OAuth clie
       payload: externalBody, headers: externalHeaders });
     assert.equal(replayed.statusCode, 200, replayed.body);
     assert.equal(replayed.json().reservationId, accepted.json().reservationId);
+    assert.deepEqual((await app.inject({ url: `/v1/owner/reservations/${accepted.json().reservationId}`,
+      headers: { cookie: owner.cookie } })).json().receivedRecord, reservationRecord);
     const realNow = Date.now;
     Date.now = () => realNow() + 25 * 60 * 60_000;
     try {
@@ -638,6 +657,16 @@ test('Field owner delegates only approved catalog facts to a selected OAuth clie
     const inquiryAccepted = await submitVariant(inquiryBody);
     assert.equal(inquiryAccepted.statusCode, 201, inquiryAccepted.body);
     assert.equal(inquiryAccepted.json().reservationId, null);
+    const receivedInquiry = await app.inject({ url: `/v1/owner/external-requests/${inquiryAccepted.json().externalRequestId}`,
+      headers: { cookie: owner.cookie } });
+    const inquiryRecord = receivedInquiry.json().receivedRecord;
+    assert.equal(inquiryRecord.purpose, 'inquiry_reply');
+    assert.equal(inquiryRecord.consent.recordId, inquiryBody.consent.recordId);
+    assert.deepEqual(inquiryRecord.consent.items, inquiryBody.consent.items);
+    assert.equal(inquiryRecord.retention.workDays, 180);
+    assert.equal(inquiryRecord.retention.photoDays, 90);
+    assert.equal((await app.inject({ url: `/v1/owner/external-requests/${inquiryAccepted.json().externalRequestId}`,
+      headers: { cookie: outsider.cookie } })).statusCode, 404);
     const sourcePhotoId = randomUUID();
     const photoBody = { ...inquiryBody, actionRequestId: randomUUID(),
       attachmentRefs: [sourcePhotoId],
@@ -649,6 +678,9 @@ test('Field owner delegates only approved catalog facts to a selected OAuth clie
     assert.equal(photoAccepted.statusCode, 201, photoAccepted.body);
     assert.equal((await submitVariant(photoBody)).statusCode, 200);
     const photoRequestId = photoAccepted.json().externalRequestId as string;
+    const photoRecord = (await app.inject({ url: `/v1/owner/external-requests/${photoRequestId}`,
+      headers: { cookie: owner.cookie } })).json().receivedRecord;
+    assert.ok(photoRecord.consent.items.includes('attachments'));
     const photoRows = await pool.query<{ id: string; state: string }>(
       `select id,state from field.external_request_attachments where external_request_id = $1`,
       [photoRequestId]);
@@ -719,6 +751,7 @@ test('Field owner delegates only approved catalog facts to a selected OAuth clie
     assert.equal(inquiry?.customerPhone, '010-2222-3333');
     assert.equal(inquiry?.summary, 'AP 상담에서 전달한 문의');
     assert.equal((inquiry?.service as { name?: string })?.name, '공개 서비스');
+    assert.deepEqual(inquiry?.receivedRecord, inquiryRecord);
     assert.equal(externalInquiries.some(item => item.id === accepted.json().externalRequestId), false);
     const olderInquiryIds = Array.from({ length: 103 }, () => randomUUID());
     await pool.query(
@@ -795,6 +828,13 @@ test('Field owner delegates only approved catalog facts to a selected OAuth clie
       headers: { cookie: owner.cookie }, payload: contactBody })).statusCode, 409);
     assert.equal((await app.inject({ method: 'POST', url: `/v1/connections/ap/${connectionId}/revoke`,
       headers: { cookie: owner.cookie } })).statusCode, 200);
+    assert.deepEqual((await app.inject({ url: `/v1/owner/external-requests/${inquiryAccepted.json().externalRequestId}`,
+      headers: { cookie: owner.cookie } })).json().receivedRecord, inquiryRecord);
+    const workArchive = await app.inject({ url: `/v1/owner/organizations/${organizationId}/operations/export`,
+      headers: { cookie: owner.cookie } });
+    assert.equal(workArchive.statusCode, 200, workArchive.body);
+    assert.deepEqual(workArchive.json().externalRequests.find((item: { id: string }) =>
+      item.id === inquiryAccepted.json().externalRequestId).receivedRecord, inquiryRecord);
     const consentBody = { consentId: randomUUID(), consent: true };
     assert.equal((await app.inject({ method: 'POST', url: `${notificationRoutePath}/consent`,
       payload: consentBody })).statusCode, 401);

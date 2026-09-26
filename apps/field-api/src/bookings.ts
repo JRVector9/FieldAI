@@ -8,6 +8,7 @@ import { rejectExpiredTrial } from './trial-access.js';
 import { reservationAttachments } from './reservation-attachments.js';
 import { decodeOwnerListCursor, encodeOwnerListCursor } from './owner-list-cursor.js';
 import { parseRequestFallback, requestFallback, reviewRequestFallback, type FallbackRow } from './public-request-fallback.js';
+import { receivedWorkPolicy, receivedWorkRecord, type ReceivedWorkRow } from './received-work-record.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -553,16 +554,17 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
         (id,organization_id,provider,connection_id,client_id,field_grant_id,action_request_id,
          body_hash,origin_conversation_id,source_deployment_id,kind,service_id,catalog_revision,
          policy_revision,service_snapshot,customer_snapshot,request_snapshot,summary,
-         consent_record_id,consent_confirmed_at,conditions_hash,is_test,reservation_id,status)
+         consent_record_id,consent_confirmed_at,conditions_hash,is_test,reservation_id,status,processing_policy)
         values ($1,$2,'agent-platform',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,
-          $15::jsonb,$16::jsonb,$17,$18,$19,$20,$21,$22,'requested')
+          $15::jsonb,$16::jsonb,$17,$18,$19,$20,$21,$22,'requested',$23::jsonb)
         on conflict (provider,connection_id,action_request_id) do nothing returning id`,
       [externalRequestId, grant.organization_id, connectionId, grant.client_id, grant.id,
         actionRequestId, digest, body.originConversationId, source.deploymentId, body.kind,
         service.id, release.revision, policy.revision, JSON.stringify(service),
         JSON.stringify({ name: customer.name.trim(), phone: customer.phone.trim(), verified: customer.verified }),
         JSON.stringify(requestDetails), body.summary.trim(), consent.recordId, consent.confirmedAt,
-        consent.conditionsHash, process.env.FIELD_PROFILE === 'mock' ? true : source.isTest, reservationId]);
+        consent.conditionsHash, process.env.FIELD_PROFILE === 'mock' ? true : source.isTest, reservationId,
+        JSON.stringify(receivedWorkPolicy(body.kind, consentItems as string[]))]);
       if (!inserted.rowCount) {
         await db.query('rollback');
         const existing = await runtime.pool.query<{ id: string; body_hash: string;
@@ -666,10 +668,11 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
       : decodeOwnerListCursor(rawCursor, operator.id, 'external_request');
     if (rawCursor !== undefined && !cursor)
       return reply.code(400).send({ error: 'invalid_external_request_cursor' });
-    const result = await runtime.pool.query<{ id: string; service_snapshot: Service;
+    const result = await runtime.pool.query<ReceivedWorkRow & { id: string; service_snapshot: Service;
       customer_snapshot: { name: string; phone: string; verified: boolean };
       summary: string; status: string; received_at: Date; is_test: boolean; cursor_timestamp: string }>(
       `select id,service_snapshot,customer_snapshot,summary,status,received_at,is_test,
+         provider,connection_id,action_request_id,consent_record_id,consent_confirmed_at,processing_policy,
          to_char(received_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as cursor_timestamp
        from field.external_work_requests
        where organization_id = $1 and kind = 'inquiry'
@@ -681,7 +684,8 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
       inquiries: page.map(row => ({ id: row.id, service: row.service_snapshot,
         customerName: row.customer_snapshot.name, customerPhone: row.customer_snapshot.phone,
         customerVerified: row.customer_snapshot.verified, summary: row.summary,
-        status: row.status, receivedAt: row.received_at.toISOString(), isTest: row.is_test })),
+        status: row.status, receivedAt: row.received_at.toISOString(), isTest: row.is_test,
+        receivedRecord: receivedWorkRecord(row) })),
       nextCursor: result.rows.length > 100
         ? encodeOwnerListCursor(operator.id, 'external_request', page[page.length - 1]!.cursor_timestamp,
           page[page.length - 1]!.id) : null,
@@ -692,10 +696,11 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
     const operator = await operatorOrganization(request, reply, runtime);
     if (!operator) return reply;
     if (!uuid.test(request.params.id)) return reply.code(404).send({ error: 'external_request_not_found' });
-    const result = await runtime.pool.query<{ id: string; service_snapshot: Service;
+    const result = await runtime.pool.query<ReceivedWorkRow & { id: string; service_snapshot: Service;
       customer_snapshot: { name: string; phone: string; verified: boolean };
       summary: string; status: string; received_at: Date; is_test: boolean }>(
-      `select id,service_snapshot,customer_snapshot,summary,status,received_at,is_test
+      `select id,service_snapshot,customer_snapshot,summary,status,received_at,is_test,
+         provider,connection_id,action_request_id,consent_record_id,consent_confirmed_at,processing_policy
        from field.external_work_requests where organization_id=$1 and id=$2 and kind='inquiry'`,
       [operator.id, request.params.id]);
     const row = result.rows[0];
@@ -703,7 +708,8 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
     return reply.header('Cache-Control', 'private, no-store').send({ id: row.id, service: row.service_snapshot,
       customerName: row.customer_snapshot.name, customerPhone: row.customer_snapshot.phone,
       customerVerified: row.customer_snapshot.verified, summary: row.summary,
-      status: row.status, receivedAt: row.received_at.toISOString(), isTest: row.is_test });
+      status: row.status, receivedAt: row.received_at.toISOString(), isTest: row.is_test,
+      receivedRecord: receivedWorkRecord(row) });
   });
 
   app.get('/v1/booking-policy', async (request, reply) => {
@@ -1054,8 +1060,13 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
       'select * from field.reservations where id = $1 and organization_id = $2', [request.params.id, owner.id]);
     const row = found.rows[0];
     if (!row) return reply.code(404).send({ error: 'reservation_not_found' });
+    const received = row.source === 'external_ap' ? (await runtime.pool.query<ReceivedWorkRow>(
+      `select provider,connection_id,action_request_id,consent_record_id,consent_confirmed_at,
+         received_at,processing_policy from field.external_work_requests
+       where reservation_id=$1 and organization_id=$2`, [row.id, owner.id])).rows[0] : null;
     reply.header('Cache-Control', 'no-store');
     return { ...publicReservation(row), events: await eventsFor(runtime.pool, row.id),
+      receivedRecord: received ? receivedWorkRecord(received) : null,
       fallbackReview: await reviewRequestFallback(runtime.pool, row.organization_id, row),
       messages: row.source === 'public' ? await messagesFor(runtime.pool, row.id) : [],
       attachments: await reservationAttachments(runtime.pool, row.id) };

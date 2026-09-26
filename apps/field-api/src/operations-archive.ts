@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { PoolClient } from 'pg';
 import type { FieldBusinessRuntime } from './business.js';
 import { requestFallback, type FallbackRow } from './public-request-fallback.js';
+import { receivedWorkRecord, type ReceivedWorkRow } from './received-work-record.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const maxBytes = 64 * 1024 * 1024;
@@ -30,9 +31,9 @@ type EventRow = { reservation_id: string; revision: number; actor_type: string; 
   previous_state: string | null; next_state: string; detail: unknown; occurred_at: Date };
 type NotificationRow = { reservation_id: string; id: string; event_type: string; audience: string;
   channel: string; state: string; created_at: Date };
-type SourceRow = { reservation_id: string; id: string; provider: string; connection_id: string;
+type SourceRow = ReceivedWorkRow & { reservation_id: string; id: string; provider: string; connection_id: string;
   action_request_id: string; summary: string; consent_confirmed_at: Date; is_test: boolean; received_at: Date };
-type ExternalRequestRow = { id: string; provider: string; connection_id: string;
+type ExternalRequestRow = ReceivedWorkRow & { id: string; provider: string; connection_id: string;
   action_request_id: string; kind: string; service_snapshot: unknown;
   customer_snapshot: unknown; request_snapshot: unknown; summary: string;
   consent_confirmed_at: Date; is_test: boolean; reservation_id: string | null;
@@ -175,12 +176,12 @@ async function collect(db: PoolClient, organizationId: string) {
      order by r.id,n.created_at,n.id limit 10001`, [organizationId])).rows;
   const sources = (await db.query<SourceRow>(
      `select reservation_id,id,provider,connection_id,action_request_id,summary,
-       consent_confirmed_at,is_test,received_at from field.external_work_requests
+       consent_confirmed_at,is_test,received_at,consent_record_id,processing_policy from field.external_work_requests
      where organization_id=$1 and reservation_id is not null order by received_at,id limit 501`, [organizationId])).rows;
   const externalRequests = (await db.query<ExternalRequestRow>(
     `select id,provider,connection_id,action_request_id,kind,service_snapshot,
        customer_snapshot,request_snapshot,summary,consent_confirmed_at,is_test,
-       reservation_id,status,received_at from field.external_work_requests
+       reservation_id,status,received_at,consent_record_id,processing_policy from field.external_work_requests
      where organization_id=$1 order by received_at,id limit 501`, [organizationId])).rows;
   const externalAttachments = (await db.query<ExternalAttachmentRow>(
     `select id,external_request_id,source_attachment_id,state,object_key,sha256,
@@ -329,7 +330,8 @@ export function registerOperationsArchiveRoute(app: FastifyInstance, runtime: Fi
           contentType: 'image/webp', byteSize: item.byte_size, width: item.width,
           height: item.height, sha256: item.sha256,
           createdAt: item.created_at, dataBase64: photos.get(`reservation:${item.id}`) })),
-        externalSources: byReservationSources.get(row.id) ?? [],
+        externalSources: (byReservationSources.get(row.id) ?? []).map(source => ({
+          ...source, receivedRecord: receivedWorkRecord(source) })),
       })),
       externalRequests: snapshot.externalRequests.map(row => ({ id: row.id,
         provider: row.provider, connectionId: row.connection_id,
@@ -338,6 +340,7 @@ export function registerOperationsArchiveRoute(app: FastifyInstance, runtime: Fi
         requestSnapshot: row.request_snapshot, summary: row.summary,
         consentConfirmedAt: row.consent_confirmed_at, isTest: row.is_test,
         reservationId: row.reservation_id, status: row.status, receivedAt: row.received_at,
+        receivedRecord: receivedWorkRecord(row),
         attachments: (byExternalAttachments.get(row.id) ?? []).map(item => ({
           id: item.id, sourceAttachmentId: item.source_attachment_id, state: item.state,
           errorCode: item.error_code,

@@ -29,6 +29,12 @@ export type RequestFallback = { origin: "ap_customer_reported"; actionRequestId:
 export type FallbackCandidate = { externalRequestId: string; kind: "inquiry" | "reservation_request";
   reservationId: string | null; state: string; serviceName: string; receivedAt: string };
 export type FallbackReview = { candidates: FallbackCandidate[]; hasMore: boolean };
+export type ReceivedWorkRecord = { receivedAt: string;
+  source: { provider: string; connectionId: string; actionRequestId: string };
+  purpose: 'inquiry_reply' | 'reservation_fulfillment' | null;
+  consent: { recordId: string; confirmedAt: string; version: string | null; items: string[] | null };
+  retention: { policyVersion: string; state: 'proposed' | 'approved';
+    startsAfter: 'field_work_closed'; workDays: number; photoDays: number } | null };
 export type Inquiry = {
   id: string;
   state: string;
@@ -58,6 +64,7 @@ export type Reservation = {
   businessName?: string;
   fallback?: RequestFallback | null;
   fallbackReview?: FallbackReview;
+  receivedRecord?: ReceivedWorkRecord | null;
   bookingMode: "request" | "slot"; name: string; phone: string;
   preferredTimeText: string | null; requestMessage: string | null; visitRegion: string | null;
   requestedStartAt: string | null;

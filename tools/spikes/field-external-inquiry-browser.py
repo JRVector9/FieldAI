@@ -32,6 +32,13 @@ async def main():
             await panel.get_by_text("실제 HTTP로 전달하는 서비스 문의").wait_for()
             assert await panel.get_by_text("010-3333-4444", exact=False).count() > 0
             await panel.get_by_text("AP 원본 상태:", exact=False).wait_for()
+            receipt_record = panel.get_by_role("region", name="Field 업무 수신 기록")
+            await receipt_record.get_by_text("Field 업무 수신 기록", exact=True).click()
+            await receipt_record.get_by_text("문의 처리·회신", exact=True).wait_for()
+            await receipt_record.get_by_text("업무 종결 후 180일 · 사진 90일", exact=False).wait_for()
+            await receipt_record.get_by_text("운영 검수 전 제안 기준", exact=False).wait_for()
+            await receipt_record.scroll_into_view_if_needed()
+            await page.screenshot(path="/tmp/field-received-work-320.png")
             await panel.get_by_text("방문 상담을 받고 싶습니다.").wait_for()
             await panel.get_by_text("Field에서 AP 원본으로 답변했습니다.").wait_for()
             reply = panel.get_by_label("AP 원본 대화에 답변")

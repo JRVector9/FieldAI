@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
+import { receivedWorkRecord, type ReceivedWorkRow } from './received-work-record.js';
 import { requestFallback, type FallbackRow } from './public-request-fallback.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -73,12 +74,12 @@ export function registerReservationExportRoute(app: FastifyInstance, runtime: Fi
          order by n.created_at, n.id`,
         [row.organization_id, row.id],
       );
-      const external = await client.query<{
+      const external = await client.query<ReceivedWorkRow & {
         id: string; provider: string; connection_id: string; action_request_id: string;
         summary: string; consent_confirmed_at: Date; is_test: boolean; received_at: Date;
       }>(
         `select id, provider, connection_id, action_request_id, summary,
-          consent_confirmed_at, is_test, received_at
+          consent_confirmed_at, is_test, received_at, consent_record_id, processing_policy
          from field.external_work_requests
          where reservation_id = $1 and organization_id = $2`,
         [row.id, row.organization_id],
@@ -137,7 +138,8 @@ export function registerReservationExportRoute(app: FastifyInstance, runtime: Fi
           externalSource: source ? { id: source.id, provider: source.provider,
             connectionId: source.connection_id, actionRequestId: source.action_request_id,
             summary: source.summary, consentConfirmedAt: source.consent_confirmed_at,
-            isTest: source.is_test, receivedAt: source.received_at } : null,
+            isTest: source.is_test, receivedAt: source.received_at,
+            receivedRecord: receivedWorkRecord(source) } : null,
         });
     } catch (error) {
       await client.query('rollback');

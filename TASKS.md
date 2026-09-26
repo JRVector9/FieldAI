@@ -1,5 +1,7 @@
 # TASKS — 독립 제품 개발 작업 보드 v3.0
 
+최근 C03/I04·F-O09 Field 업무 수신 기록(2026-09-26): 신규 수신 목적/검증 동의 필드/업무180일·사진90일 제안 정책을 Field 원장·문의/예약 상세·개별/전체 export에 연결했다. 과거 정책 null·멱등/해제 뒤 보존과 목적/JSON null DB 제약을 Field DB red→24/24로 확인했다. 320px 표시 부재 red→mock **2217** 최종 양제품 HTTP/브라우저 1/1(문의/예약 표시·기존 원본 답변/해제/알림). typecheck/lint/구문/diff exit 0·양제품 build/ready. Field migration000056; AP 코드/DB·공개 계약 변경 없음. proposed 정책을 운영 승인이나 자동 정리 완료로 처리하지 않는다. 다음 확인된 기능 누락은 Field PRD 3.2의 업종 입력/저장이다. 전체 C03/사용자 최종 인수/실 공급사/G는 미완료다.
+
 최근 C03/A01·A02 AP native 지역·영업시간(2026-09-26): 선택값의 입력·자동 저장/충돌 비교·명시 승인·공개 상담 표시·AI 근거를 연결하고 구버전 JSONB/불변 승인본을 보존했다. 미승인 지역·시간은 고객 안내에 포함하지 않는다. 실제 AP DB red→23/23, mock **29076** AP 사업자 HTTP/브라우저 1/1·native 자동 저장 HTTP/브라우저 1/1(지역만 변경한 응답 분실/409, 시간만 변경한 409·서버 선택), typecheck/lint/Python/diff exit 0·양제품 build/ready. 시안 승인 정보 화면을 직접 확인했다. migration/Field/제품 간 계약 변경 없음. C03 전체·사용자 최종 인수·실 공급사/G는 미완료다.
 
 최근 C03/A06 AP 스팸 분류·알림 중단(2026-09-26): AP 권한/revision 분류·해제와 원본·고객 후속 메시지/사진·내부 메모 보존, 알림/공개 답변 중단, Field 초안 보존을 연결했다. AP DB 22/22·Field DB 24/24, typecheck/lint exit 0. mock **17560** 양제품 API/웹 build/ready, AP 사업자 HTTP/브라우저 1/1·양제품 HTTP/브라우저 1/1. Field 상태 주입 화면 검수와 실제 DB 거절/원장 검수를 구분한다. AP migration 000061; 공개 계약/Field DB/schema 변경 없음. 다음 내부 누락은 AP PRD 2.2 native 지역·영업시간이다. 전체 C03/사용자 최종 인수/실 공급사/G는 미완료다.
@@ -327,7 +329,7 @@ C03/F07 추가 로컬 근거: Field 시간표형 예약의 가능 시간 첫 조
 | D04 | in_progress | AP 배치 문의 시작·연락처 동의 접수를 DB 사건으로 1회 기록, 미리보기/테스트/식별된 봇 제외. 사업자·매체의 완료 UTC 주 8개만 5 미만 억제·구간값으로 JSON/CSV 제공. Field의 AP 수신 확정 사건을 같은 배포 문의에 귀속해 최초 예약 확정 1회만 구간 집계하고 미연결은 미지원, 매출·수금은 미측정으로 표시한다. AP owner가 매체 승인 배포를 명시 OAuth 선택하면 Field 소비자가 이를 읽고 사이트 설치에서는 제외한다. 실제 매체 카드→AP live 문의 5건→Field 예약/확정→서명 사건 AP 처리→완료 주 사업자/매체 JSON·CSV `5-9`와 320px 매체 화면 `5~9건` 양방향 HTTP/browser 1/1, AP DB 18/18·Field DB 17/17·계약 2+5 통과 | 실매체 DNS/TLS, 원래 사건 시각의 완료 주 도달/운영 데이터, 고도화 봇·복수 역할 차분 공격·정식 QA104~107/G-D2, 실매체 운영 검수 |
 | 나머지 9개 | planned | 개별 task의 완료 근거 없음 | 각 행의 Definition of Done과 QA·gate |
 
-실행 명령·환경·결과·미실행 항목은 `DEVELOPMENT_STATUS.md`, `docs/technical/SPIKE_REPORT.md`, `docs/CODEX_HANDOFF.md`에 기록한다. Git 저장소와 commit ID는 아직 없다.
+실행 명령·환경·결과·미실행 항목은 `DEVELOPMENT_STATUS.md`, `docs/technical/SPIKE_REPORT.md`, `docs/CODEX_HANDOFF.md`에 기록한다. 현재 Git 저장소가 있으며 최신 코드/저장 상태는 `git log -3 --oneline`과 `git status --short`로 확인한다. 아래 실행 현황의 오래된 검사 개수는 당시 증거이며 맨 위 후속 기록/coverage와 구분한다.
 
 ## 실행 순서와 독립 출시
 

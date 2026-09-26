@@ -365,6 +365,12 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
       apConversationId, apDeploymentId, randomUUID(), JSON.stringify({ id: randomUUID(), name: '상담' }),
       JSON.stringify({ name: '고객', phone: '01000000000', verified: false }), randomUUID(), 'b'.repeat(64)]);
     const conversationUrl = `/v1/owner/external-requests/${externalId}/conversation`;
+    const legacyReceived = await app.inject({ url: `/v1/owner/external-requests/${externalId}`,
+      headers: { cookie: owner.cookie } });
+    assert.equal(legacyReceived.statusCode, 200);
+    assert.equal(legacyReceived.json().receivedRecord.purpose, null);
+    assert.equal(legacyReceived.json().receivedRecord.retention, null);
+    assert.equal(legacyReceived.json().receivedRecord.consent.items, null);
     const draftUrl = `/v1/owner/external-requests/${externalId}/reply-draft`;
     const replyUrl = `/v1/owner/external-requests/${externalId}/replies`;
     const ownerHeaders = { cookie: owner.cookie, 'x-organization-id': organizationId };

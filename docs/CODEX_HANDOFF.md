@@ -6,6 +6,16 @@
 - 저장소 기준 경로: `reference/field_ui_prototype_v3.html`. 후속 에이전트도 이 파일을 화면·동선 구현 기준으로 사용하며, 인수인계 갱신 시 이 시안 경로를 상단에 유지한다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03/I04·F-O09 Field 업무 수신 기록 (2026-09-26)
+
+- **현재 목표:** 시안/v3.0 전체 기능을 실제 AP/Field 독립 로컬 서비스로 완성한다. C03 전체·사용자 최종 시각/동선·실 공급사/운영 검수는 미완료다.
+- **구현/파일:** Field nullable migration `000056_received_work_policy.sql`, 새 `src/received-work-record.ts`, API `src/{bookings,reservation-export,operations-archive}.ts`, 기존 integrator/connection DB 검사; 웹 새 `FieldReceivedWorkRecord.tsx`, `field-api.ts`, `field-workspace.tsx`, `field-booking.tsx`; 기존 external inquiry/event delivery 브라우저, 양제품 HTTP 검사와 실행 계획. 아직 미커밋이다. AP 코드/DB·공개 계약 변경 없음.
+- **설계:** 신규 수신과 같은 트랜잭션에 처리 목적·검증한 transfer-v1 동의 필드·문서 보존 제안 정책(업무 종결 후180일/사진90일)을 저장한다. 실제 수신 시각·출처는 기존 열을 읽고 최초 멱등 기록을 유지한다. legacy 정책은 null로 남기며 소급 동의/목적·운영 승인을 만들지 않는다. 사업자만 수신 문의/예약 상세와 개별/전체 export에서 확인하고, 연결 해제 뒤 Field 수신 업무를 보존한다. 보존 상태는 proposed이며 종결시각/보존 연장/삭제 worker·법무 승인은 완료가 아니다.
+- **실제 검사:** Field DB 22/24 red→최종 `pnpm test:db:field` 24/24(session 8998), 임시 DB 제거. 신규 inquiry/reservation 목적/동의·180/90·재시도/해제/내보내기·기존 정책 null·SQL 목적/JSON null 거부 포함. typecheck(session 52440), lint(85760/28548), 마지막 변경 test ESLint, Python 구문·Node 구문·diff exit 0. mock **2217** 양제품 API/웹 build/ready·양 API ready 확인. 최종 양제품 HTTP/브라우저 **93811** 1/1 exit 0(320px 문의/예약 기록·기존 위젯/원본 답변/스팸 소비/해제/알림). 이전 90829는 새 문의/예약 표시를 통과했지만 AP native 영업시간을 금지하는 오래된 단언에서 실패했다. `/tmp/field-received-work-320.png`를 열어 수신 기록 상세를 확인했다. 이번 필드 변경 뒤 독립성/전체 security/unit/E2E 표준 명령은 반복하지 않았으며 과거 검수와 구분한다.
+- **실패/수정:** 기존 수신 정책/표시 부재 red를 확인했다. AP native 지역/영업시간 도입 뒤 기존 연동 검사는 모든 KnowledgeRelease에서 openingHours 키 자체가 없어야 한다고 가정했다. AP 직접 승인본 값이 connector release에서 보존되는지 명시 비교하고, 외부 sourceFacts에는 Field 시간/가격/연락처가 복사되지 않는 기존 금지를 강화했다. 제품 버그에 맞춰 기대값을 낮춘 것이 아니다.
+- **남은 작업:** 전체 PRD별 누락 조사와 실제 기능 증빙을 계속한다. Field PRD 3.2의 업종 입력은 business Catalog/parseCatalog/사업 정보 UI에 없는 것으로 확인됐다. 다음 구현은 Field 자체 초안/승인/제작 snapshot의 업종 입력·재개와 기존 JSONB 미등록 호환이다. AP 공개 facts 계약은 임의로 늘리지 않는다. 실 공급사/출시 승인/보존 자동 정리·신고/이의/전체 PRD·QA/G는 미완료다.
+- **복구/다음 명령:** nullable 열은 코드 롤백 시 보존하며 기존 기록을 삭제하지 않는다. `git status --short`, `git log -3 --oneline`, `sed -n '29,67p' apps/field-api/src/business.ts`, `sed -n '931,945p' apps/field-web/src/field-workspace.tsx`, `rg -n 'SiteGenerationCatalog|catalog_snapshot|catalogSnapshot' apps/field-api/src/site-generation.ts apps/field-api/src/site-ai.ts`, `curl -fsS http://127.0.0.1:4311/health/ready`, `curl -fsS http://127.0.0.1:4321/health/ready`. 파일/요구/QA/명령을 기록한 뒤 업종 입력/저장 단언을 red 확인한다. mock **2217**이 살아 있으면 유지한다. 상단 시안 경로를 보존한다.
+
 ## 최신 인수인계 — C03/A01·A02 AP native 지역·영업시간 (2026-09-26)
 
 - **현재 목표:** 문서 전체 기능을 AP/Field 독립 로컬 서비스로 완성하고 사용자 검수를 위한 사용 환경을 유지한다. 전체 C03/실 공급사/사용자 최종 시각·동선 인수는 미완료다.

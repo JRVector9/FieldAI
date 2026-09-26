@@ -930,7 +930,12 @@ test('local AP OAuth code crosses HTTP into Field encrypted pending connection',
       'select source_kind, content from ap.knowledge_releases where id = $1', [published.value.releaseId]);
     assert.equal(publishedRelease.rows[0].source_kind, 'connector');
     assert.equal(publishedRelease.rows[0].content.sourceFacts.length, 2);
-    assert.doesNotMatch(JSON.stringify(publishedRelease.rows[0].content), /50000|contactPhone|openingHours/);
+    const nativeRelease = await apPool.query(`select content from ap.knowledge_releases
+      where organization_id=$1 and source_kind='native' order by revision desc limit 1`, [apOrganizationId]);
+    assert.equal(publishedRelease.rows[0].content.openingHours, nativeRelease.rows[0].content.openingHours ?? '');
+    assert.equal(publishedRelease.rows[0].content.region, nativeRelease.rows[0].content.region ?? '');
+    assert.doesNotMatch(JSON.stringify(publishedRelease.rows[0].content), /50000|contactPhone/);
+    assert.doesNotMatch(JSON.stringify(publishedRelease.rows[0].content.sourceFacts), /50000|contactPhone|openingHours|평일/);
     const staleAi = await json(`${ap}/v1/agents/test`, 'POST', { question: '상담은?' }, apOwner.cookie);
     assert.equal(staleAi.response.status, 409, JSON.stringify(staleAi.value));
     assert.equal(staleAi.value.error, 'knowledge_stale');
