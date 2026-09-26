@@ -9,11 +9,60 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
+## 현재 완료 checkpoint — 코드5ceec42 / 고정 화면 새 기능 통합 (2026-09-27)
+
+- **Current objective / State:** 전체 v3/C03 내부 기능과 독립 로컬 환경 구현 목표는 active다. 이번 네 내부 세부 범위만 implemented 및 아래 범위 local verified다. 기존40[x]와ef0dfd3는 유지하고 새4개를체크해 **TASKS44[x]/7[ ]**다. 전체서비스/부모Task/출시/실외부/QA160/최종사용자 화면 인수 완료가 아니다. 원본reference변경없음, 디자인고정/새기능만 `(추가)`를3병렬agent에재전달했다.
+- **Completed / Modified paths:** 코드 **5ceec42**, apps/tools90files. Root는 양web billing-client/mutation/return/settings·subscription·app/billing/return·headers·billingSnapshot currentPlan과 app/site resolver/receipt guard/proxy/layout/package/mock-run 중앙통합. Refund는 양API refund domain/routes/execution/worker/Toss/확정charge오류·AP79/Field70/tests. Delivery는 own customer channel/receipt/push client/SW/manifest/owner설정/API/검사. Public은 Field own BFF/intent/execution/connector/installcomponent·Field71 및 ownrunner/HTTPconsumer. 소스gitcommit뒤doc원장/phase/coverage/audit/인계/보고서를갱신한다.
+- **Decisions:** 승인 경제값/조건과현재구독의retired플랜원조건을분리표시, 카드인증완료≠결제완료. callback URL 일회용값먼저제거/ownuser-session-org-origin-nonce-customer 검증; rawauthKey/nonce/SDKclient키는browserstorage에저장하지않음. requestmetadata만context별sessionStorage에보존하며unknown동일UUID/body, foreign계정·조직의독립요청허용/원요청다른context전송금지. late view/SDKloader후에는UI/카드창폐기하되originalreceipt보존. 환불은고객요청→검토→다른승인/원provider거래한번, unknownGET-only. AP설치는설치목적명시scope·별도SDK승인과privateFieldBFF를사용, 양방향업무권한자동확대없음.
+- **Root tests actually run / Environment:** Node24.18.0, ownUUID PG17/합성fetch·provider·storage, 코드5ceec42 소스. callback12+mutation11 **양23/23 exit0 fail0skip0**, /tmp/{ap,field}-billing-client-final23.log. callback최초7→9→context10→late12까지actualred/green이력보존. retiredcurrentPlan ownnative단일파일각1/1(1119/35675 exit0) /tmp/{ap,field}-billing-current-plan-green.log. whole `pnpm typecheck` **73437 exit0**, `pnpm lint` **91115 exit0**, /tmp/fixed-design-new-functions-final-{type,lint}.log. mock managedguard2/2 exit0. 전체unit/DB/E2E를실행한것아님.
+- **Parallel evidence:** Refund nativeAP39861/Field3173 **각11/11**, adapter각2/2; Delivery 고객AP49974 **5/5**/Field58271 **6/6**, ownerkeylessactualOrigin94251/49665각1/1, browsermodel/SWVM각9/9; Public native13971 **14/14**, actualField→APHTTP5557 **1/1**, tenantconsumer95035 **1/1**. 해당phase파일에exact명령/로그/터미널/환경보존. 새refundguard때문에기존lifecycle refundfixture 직접UPDATE PAB06/PFB06을실제재현11834/70076→정당한ownerrequest/operatorreview/다른approve/합성worker로단일case각1/1(61750/99164) 복구; 기존cleanup기대값/guard/다른18case유지. native whole회귀를재실행한것아님.
+- **Independent review / Failed approaches:** root93322 P2 .96/.97 productwidekey→scoped저장, repair41864 추가P2 .92 lateorgresponse→epoch/SDKguard, 최종 **2382 exit0/noP1P2/.94**. Refundbackend58435 noP1P2/moderate(수치없음); Mutation75074 noP1P2/high(수치없음), malformedforeignlegacy 실제10/11red→11/11green, sessionStorage cross-tab live공유가정과DTO없는response필드요구는표준/ownbackend근거로falsepositive판정. Delivery96633 noP1P2/.88(SW동시slot2P2 red→green); Public97931 noP1P2/.88(localpause競合/remoteauthoritylossunknown/tenantfilter3지적red→green). 초기type/lint작성중오류·잘못추측한path·apply_patch verification실패·zshpath변수sed127은아래착수이력에보존, pass로승계하지않음. 리뷰는정적읽기만/실기기·supplier검수가아님.
+- **Current runtime / Recovery:** **managed43912** live, `/tmp/fixed-design-new-functions-managed.log`. 이전95896 actuallivepoll뒤Ctrl+C **terminalexit1** 종료관찰(정상0아님). 최신양API/web build·AP79/Field70+71 실제migrate/ready, 모델/알림/결제/도메인suppliers는blocked_integration. owncontroller **26830**, AP환불worker30020/Field30087 각각1개/동일parent; 프로세스증거 `/tmp/fixed-design-new-functions-process-evidence.log`. runtime증거 `/tmp/fixed-design-new-functions-runtime-evidence.log`: 양ready/workspace/callback200, callbackno-referrer/private,no-store, refund/Field설치API401. mockbootstrap은등록가능scope만업데이트, 기존grant자동확대없음. 운영메시지/청구/환불/DNS변경/배포/자료삭제없음. rollback은원provider/unknown원장을초기화하지말고consumer/worker정지후원래ID대조, 적용migration수정금지.
+- **Migration final numbering:** Field public 미적용000072→**000071_public_write_intents.sql** rename, before/afterSHA25611b96f3da2c2587da833dbbef2d5c0a31daf2e5f8ec9a844b9527defb0f9df66본문동일, 최초72UUID검사는이력. rootentitlement71예약은해제. 현재실제AP79/Field71적용확인했고 다음새schema는 **AP80/Field72**다. 적용79/70/71과이전schema는동결한다.
+- **Remaining / Not tested:** AIentitlement/실paidperiod 제공량·admin가격승인/환불검토화면, 일반OAuth token삭제/refreshfamily·legacy/Fieldroutekey 종료/복원. 이후전체문서잔여대조. 실제SDK/PG/MFA/메일/카카오/LLM/발송/VAPID/DNS/TLS/운영ACL·QA/G, 새설치purpose browserOAuth·모든역할/320px/접근성/사용자최종시각·동선/실단말수신미검수는사용자후속. 원본시안fileURL브라우저정책거부를HTTP/CDP다른surface로우회하지않는다.
+- **Local URLs:** AP **http://localhost:3001/workspace**, Field **http://127.0.0.1:3002/workspace**(ownOrigin). 최신본반영완료; 존재만으로최종화면/실기능공급사검수완료라고보고하지않는다.
+- **문서 검수/저장(실행 완료):** 완료 원장 Python 대조44[x]/7[ ]·ID중복0·AGENTS/TASKS/인계의 시안 경로와 `(추가)` 유지, `tools/build_report.py` 및 `tools/check_package.py` 각각 exit0. 마스터1857행/331684bytes·HTML377827bytes 재생성, DAG46/인수명세160/schema3 검사는 document_package_only이며 service_tests_executed=false다. 다음 명령의 추측 경로를 실제 `worker.ts`로 수정하고 오래된40[x] 문단을 이력으로 표시했다. 문서 변경으로 전체 서비스 검수를 재실행하지 않았다.
+
+### Exact commands for next agent
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+sed -n '1,100p' TASKS.md
+sed -n '1,65p' docs/CODEX_HANDOFF.md
+git status --short
+git log -3 --oneline
+cat docs/technical/A07_F09_PAID_EXECUTION_PLAN.md
+rg -n 'included_ai_units|budget|reserve|usage' apps/agent-api/src/{agents,customer-consultations,usage,subscription-access}.ts
+rg -n 'budget|reserve|usage|paid' apps/field-api/src/{site-generation,worker,usage,subscription-access}.ts
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+먼저미완료AI-ENTITLEMENT/admin범위의파일·요구/QA·명령을phase에기록한뒤작업한다. 이미완료된callback/refund/고객동의/공개설치를기억부재로다시만들지않는다. 현재43912는동일handlepoll, 필요없으면재시작하지않는다.
+
+## 이력 — 고정 화면의 새 기능 통합 착수/보완 (2026-09-27, 당시 미커밋)
+
+- 사용자 재확인: 디자인 자체 고정, 새 기능만 `(추가)`; AGENTS6.0/TASKS/인계 상단 기존 지침 보존. root는 active C03/v3 내부 기능 목표를 계속 진행한다. 코드 HEAD9a7fe33, 직전 구현ef0dfd3와40[x]/7[ ] 유지. 새 범위는 아직 원장 체크/commit하지 않았다.
+- root 변경: 양웹 billing-client/return/settings·own callback page/tests, subscription 유료 카드 연결. callback URL secret 즉시 제거, 원래 user/session/org/origin/nonce/customer binding, 저장된 UUID 동일checkout/confirm, 알려진 auth/sub receipt 보존, 실제 SDK는 명시 클릭에서만. supplier 부재/unknown/completed(card)≠paid를 구분. 원본 reference는 수정하지 않았다. 새 metadata-only 환불/해지 retry helper는 custom_domain agent가 별도 파일에서 작성 중이다.
+- 중앙 통합: 양API refund route 각1회(이미 native11/11 확인), package refund worker/adapter unit 추가 및 mock-run own worker 각1개 예정 등록; DB suite는 *.db.test.ts 자동검색으로 새 파일 포함. Field public route1회/sites publicInstallationFor/component lastchildren 등록, sdk_approved publicIntent 매칭 row는 legacy resolver에서 제외해 권한검사 우회 방지. 설치 GET의 publicIntent bool은 legacy 경고 구분만 사용. setup-mock-ap-connector 등록 가능scope2개 추가, 기존grant 동의 확대 없음. 양receipt abuse guard 새고객동의 GET/POST 같은subject/실패한도 mapping, Field customHost ownbinding proxy, ownmanifest/Apple metadata, callback no-referrer/no-store headers 추가.
+- root 실제검수: callbackfocused 최초red→7→8→9 green, 최종 현재 `/tmp/{ap,field}-billing-return-current.log` 양9/9 exit0. 최초웹 type21930/43120 exit2(root import/literal/union와당시병렬미완성); root `.js` dynamic import/Brand literalasconst/success union narrowing과agent자기오류보완 후 **전체type67510 exit0**, `/tmp/billing-customer-installation-type.log`. 최신 settings mutation 추가 후 재검수 필요. 실SDK/card/supplier/브라우저/전체E2E 미실행.
+- 병렬 완료 backend: RefundAP39861/Field3173 ownUUID PG17 각11/11 exit0, adapter각2/2, 양APItype55819/6070/build84081/93837·ownlint22450 exit0, CLI58435 noP1/P2/confidence moderate(수치없음). 새AP79/Field70 아직 managed미적용. Public 새Field72/BFF/component/HTTP focused 및customer consent/SW는 agents최종검수중(실제logs/끝status확인후체크).
+- 실패: 큰apply_patch는 줄전체 불일치로 검증실패해 아무수정없이종료, 정확원문string 최소patch로적용. 추측한runner/test경로없음은rg discovery로복구. Fieldpublic 강화native 실제apWidget object≠null red를agent재현했고 legacy notexists 수정, 같은focused green확인중. 실패기대값완화없음.
+- runtime: **95896**은 ef0dfd3 코드 live이며 이번미커밋변경은 반영 전. 소스안정·리뷰·검수 후1회제어종료/최신build/migrate재기동. 기존APhttp://localhost:3001/workspace, Fieldhttp://127.0.0.1:3002/workspace. 공급사blocked 유지. 실제 외부/운영변경/청구/발송 없음.
+- 남음: root settings의durable refund/cancel helper 통합/권한·늦은조회 fencing/선택플랜vs기존유료상태정확표시, admin billing UI·AI entitlement/AP80/Field71 미착수, 일반OAuth lifecycle/legacy/Field routekey, 최종사용자 화면/동선과실외부/QA/G. 이번 checkpoint를 전체완료로 해석하지 않는다.
+- 다음명령: `git status --short`; `tail -n 20 /tmp/billing-customer-installation-type.log`; `pnpm --filter @fieldai/agent-web exec tsx --test test/billing-return.test.tsx test/billing-mutation.test.tsx`(helper완성후), Field동일; agents최종결과수신→root통합→관련lint/type/read-only review→95896같은handle종료확인→`pnpm mock:run`(package 실제명령확인). 원본시안브라우저fileURL정책거부를HTTP/CDP다른도구로우회하지않는다.
+
+- 후속실제root검수: 전체type53462/32956/87019 exit0, wholelint68586 exit0(19219 rootunusedconst2red 제거,24164 agent작성중unusedsignature1red는agent최종본수정). rootreadonly93322 P2 0.96/0.97→scoped checkout/mutation key 및 legacycontext 분리; repair41864 두건수정확인 후추가P2 .92 늦은org응답→currentView/viewEpoch/continueCheckout/SDK loader후guard 보완. 새 checkout contextred 양exit1→최종12/12(3698/2590 exit0), knownreceipt원context보존/외계정·외조직별독립요청/late SDKwindow0. narrowlatefinalreview 진행중(결과확인전clean주장금지).
+- 현재plan UI: 양billingSnapshot currentPlan ownorg조회projection 추가, 판매중단뒤원래name/금액/AI제공량유지 native단일파일 red7043/66769(exit1 undefined≠원래name)→green1119/35675 각1/1 exit0; /tmp/{ap,field}-billing-current-plan-{red,green}.log. 새offer와기존subscribed조건분리하고internalUUID를owner안내에서제거했다. DB/승인정책/migration변경없음.
+- 최종 병렬 근거수신: Delivery 고객nativeAP49974 5/5/Field58271 6/6, keylessowneractualOrigin94251/49665 각1/1, SW/browser모델VM각9/9, finalrepair96633 noP1/P2/.88, 양웹build92394/69238·Field52543 exit0. 실device/발송·전체UI검수 아님. Refund helper context추가native11/11 진행보고, oldtype작성중오류는history; reviewer의same-tab vs shared-tab전제/서버정확DTO분류를근거로확인중. Publicnative13971 14/14·actualHTTP5557 1/1·tenantconsumer95035 1/1·APIbuild70479/web60132 exit0, repair97931결과대기.
+- 최종migration배정: rootField71 entitlement 미착수예약을해제하고 public의 미적용Field72를 **000071_public_write_intents.sql**로rename했다. before/after동일SHA25611b96f3da2c2587da833dbbef2d5c0a31daf2e5f8ec9a844b9527defb0f9df66, schema내용변경없음. 기존Field72 UUID검수는착수이력. managed최신적용후다음번호는 AP80/Field72 entitlement다. AP79/Field70 refund는그대로. 현재95896에는아직미반영.
+- 추가실패/복구: ancestor읽기 zshfor-loop에서path변수가PATH를바꿔sed notfound127; 별도정상shell에서 /Users/jr/AGENTS.md와~/.codex/AGENTS.md실제읽음(부작용다음command에없음). 추측한review로그명없음은agent최종제출로그를따름. 이후시스템변수이름재사용금지. 모든에러를pass로기록하지않았다.
+
 ## 필수 사용자 지침 — 완료 체크/재작업 금지 (2026-09-26)
 
 - 사용자가 **“완료된 작업은 체크하고, 에이전트가 잊고 같은 작업을 다시 하지 않도록 반드시 지켜”**라고 명시했다.
 - 작업 재개 전에 `TASKS.md` 상단 **완료 체크 — 재작업 방지 기준**을 먼저 읽는다. 이 목록이 완료 세부 ID의 기준 원장이다. 상세 규칙은 `AGENTS.md`6.1. 기억 부재/compaction으로 완료 항목을 재구현·검수 반복하지 않는다.
-- 현재 **내부40개[x]/잔여7개[ ]**다. 최신 추가 완료는 **ef0dfd3의4개 내부 세부 범위**이며 TASKS 상단이 기준 원장이다. 최초 체크 당시31개[x]/8개[ ]와 이후 단계의 개수는 이력이다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다.
+- 현재 **내부44개[x]/잔여7개[ ]**다. 최신 추가 완료는 **5ceec42의4개 내부 세부 범위**이며 TASKS 상단이 기준 원장이다. 최초 체크 당시31개[x]/8개[ ]와 이후 단계의 개수는 이력이다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다.
 - 신규 오류/요구변경/현재상태 불일치가 확인됐을 때만 같은 완료 ID에 재개 사유·증거·추가 범위를 먼저 기록한다. 이전 완료 근거/commit은 삭제하지 않는다.
 - 최초 체크 정리 당시 변경 파일: AGENTS.md·TASKS.md·PHASE_2_EXECUTION_PLAN·DEVELOPMENT_REMAINING_AUDIT·이 인계. 문서 변경으로 서비스 테스트 재실행 없이 diff 체크만 수행했고 당시 mock36780 양 ready/생존을 재확인했다. 지금 runtime/체크는 아래 최신 단계가 우선한다.
 - 원래 진행 목표는 계속 전체 v3/C03 로컬 기능이다. 체크 정리 당시 다음은 A05.WIDGET-END였으며 현재 진행 상태는 바로 아래 별도 세부 작업 기록을 따른다.

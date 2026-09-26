@@ -118,3 +118,79 @@ node --test tools/test/agent-integrator-contract.test.mjs
 - [x] **A09.PUBLIC-WRITE.CONTRACT-BACKEND** preview.9 공개 connection/deployment POST·명시 scope/actor/org/선택AI/exactorigin·UUID/If-Match·own client 배포 verify/activate/pause·selection 회수/늦은 활성화 차단·Field 공개 HTTP consumer·새scope 동의 설명. 코드 **ef0dfd3**, AP75/77·auth/integrator/public write·Field client·OpenAPI/계약03·permanent runner/native HTTP 검사. **66327 AP7/7**, Field5/5·실OAuth/HTTP83629 1/1·계약1/1 exit0; 정적66741 P1/P2 없음/0.91. **새Field durable intent BFF/화면·실DNS·최종 인수는 제외**한다.
 
 managed95896 AP78/Field69·최신 양API/web build/ready·양웹200·새API401·자체workers ready를 root가 실제 확인했다. 현재 TASKS40[x]/7[ ]이며 전체 출시 완료가 아니다. 상세 현재 결과/미실행/다음 명령은 CODEX_HANDOFF.md 상단을 따른다.
+
+## 현재 선택 — A09.PUBLIC-WRITE.FIELD-BFF-UI (2026-09-27)
+
+Task ID / Product / Owner: A09.PUBLIC-WRITE.FIELD-BFF-UI / Field / Public Agent, Coordinator=root
+State: in_progress
+
+- 착수 HEAD **9a7fe33**, TASKS40[x]/7[ ]·현재 소유 분할·인계·현재 구현을 읽었다. root의 TASKS/paid 계획 변경은 읽기만 했다. ef0dfd3의 CONTRACT-BACKEND와 native 설치/양방향 동의 완료는 보존한다.
+- 적용 요구: B03~B05/B08~B11, Field PRD3.5/3.6, 계약4.11/4.12, QA66/68/86/128/129/130/131/132/150. 이번 검수는 원래 intent/조직/actor/AI/origin/scope·unknown/replay/If-Match·현재 권한·SDK 승인·미연결 직접 경로의 focused 내부 증분이다. 전체 QA/G/실공급사/최종 시각·동선 인수를 통과 처리하지 않는다.
+- 신규 소유: Field `migrations/000071_public_write_intents.sql`(착수 예약72→Coordinator 최종71), `src/ap-public-installation-{routes,execution}.ts`, `test/ap-public-installation.db.test.ts`, `tools/run-field-public-write-db-tests.mjs`, `tools/spikes/field-public-installation-http.test.ts`, Field web `src/field-ap-public-installation.tsx`·`test/ap-public-installation.test.tsx`. 기존 own 공개 HTTP client 확장은 가능하나 이번에는 변경하지 않았고 AP 공개 계약/backend는 재구현하지 않는다. 새 CSS 없이 기존 스타일을 사용했다.
+- Coordinator 요청 중: 기존 `ap-connector.ts`의 명시 `purpose:'installation'` scope 요청과 새 installation-only 권한 helper, 기존 Field 설치 shell의 새 component mount 및 공개 site resolver의 새 helper 호출. 허가 전 기존 파일은 수정하지 않는다. 공통 app/server/business/package/mock-run/workspace/TASKS/handoff/git/runtime는 root만 수정한다.
+- Field71에는 AP OAuth 설치 scope 요청 사실과 Field durable intent/operation을 추가한다. AP PK는 외부 문자열 참조다. 이미 적용된 migration은 수정하지 않는다. managed migration/중앙 runtime은 root만 실행한다. 착수/UUID 검사 당시 파일번호72는 이력이며 root의 아직 미착수 entitlement71 예약 해제 후, managed 미적용인 같은 본문을71로 rename했다. 다음 AI entitlement는 root의 별도 Field72/AP80 범위다.
+
+### Field 내부 API 계약 → consumer 검사 → 구현
+
+1. `POST /v1/sites/ap-public-installations`: 현재 Field owner/session/org와 공개된 정확한 사이트 origin, 선택 AP connection/grant/org/AI, 표시 방식, 명시 설치 준비 승인을 UUID `requestKey`로 먼저 저장한다. 이 요청은 AP 설치/배포 활성화/Field 역방향 동의나 결제가 아니다.
+2. `GET /v1/sites/ap-public-installations`: 현재 owner의 own 조직·사이트·actor intent와 pending/unknown 원래 operation key/입력을 반환한다. 토큰/secret/원문은 반환하지 않는다.
+3. `POST /v1/sites/ap-public-installations/:id/actions`: `requestKey`, `action(connect|prepare|verify|activate|install|pause)`, `expectedRevision`을 고정한다. 원래 AP 입력·If-Match/Field revision을 operation에 commit한 뒤 공개 HTTP client를 호출한다. 동일 UUID·본문은 저장된 결과/원래 snapshot으로 복구하고 다른 본문은409. pending/unknown 중 새 operation은409로 차단한다.
+4. verify는 정확 사이트 origin의 Field 공개 소유 proof만 저장하고 AP 일반 소유 검증을 호출한다. activate와 SDK install은 별도 사용자 승인이다. AP 생성으로 기존 allowedDeploymentIds/대화 권한을 자동 추가하지 않는다. 설치만의 승인은 양방향 connected가 아니다.
+5. pause는 Field 표시를 먼저 중지하고 AP pause의 unknown을 원장에 남긴다. 회수/권한 변경은 새 설치와 저장 결과 접근을 차단하며 기존 직접 문의/예약·법정 원본을 유지한다.
+
+### 예정 검수와 실제 증거 기록 원칙
+
+- native red→green: `node tools/run-field-public-write-db-tests.mjs` (Field own UUID PG17 loopback55432, peer env 제거, child 실제 exit, app/pool 종료·own backend0 후 일반 DROP). 합성 own 계정/토큰만 사용한다.
+- actual HTTP consumer: `node --import tsx --test tools/spikes/field-public-installation-http.test.ts` (제품별 UUID DB·loopback AP/Field HTTP). 실 DNS/외부 설치/고객 발송이 아니다.
+- `pnpm --filter @fieldai/field-api typecheck`, `pnpm --filter @fieldai/field-web typecheck`; own 경로 scoped eslint; 양 Field API/web build. 전체 E2E 반복은 하지 않는다.
+- ak `gpt-6-sol/high` read-only 정확 own scope 정적 검토, 지적 시 재현/수정/좁은 재검수와 clean review. 실제 명령/log/exit/실패/미실행은 단계 말미에 추가한다.
+- 디자인 원문 `reference/field_ui_prototype_v3.html`의 v2Connect·Field 연결 설정 HTML/CSS를 읽었다. 원본 배치/색/글자/메뉴는 고정하고 새 설치 준비 기능만 기존 panel 안 `(추가)` 표시한다. file:// 보안 거부를 우회하지 않는다. 사용자가 최종 시각/동선을 검수하며 이번 browser 검수는 아직 미실행이다.
+
+- [x] durable intent/API/권한/오류/복구 구현 (native14/14·HTTP1/1 근거, 실제 공급사 제외)
+- [x] Field owner 새 component와 root shell 등록 patch (source/타입/빌드, 브라우저 최종 인수는 별도)
+- [x] native UUID PG17 red→green·actual HTTP consumer focused 검수
+- [x] own type/lint/build focused 검수
+- [x] ak 독립 clean 검토 (repair97931 exit0, 남은 P1/P2 없음, raw confidence0.88)
+- [ ] 실 DNS/공급사 설치·사용자 최종 시각/동선/전체 QA/G (`blocked_integration` 또는 미실행)
+
+### 실제 결과 — Field BFF/UI 내부 증분
+
+State: implemented / focused verified; 독립 repair review97931 clean, 출시 미완료.
+
+- AP preview.9/공개 backend/native 설치는 변경하지 않았다. 신규 Field own durable intent·단계별 원래 UUID/action/body/AP If-Match snapshot·현재 owner/session/org/actor/grant/AI/exactorigin·refresh·scope/selection 회수·소유 proof·명시 AP activation/SDK 승인·로컬/원격 pause의 분리와 outbox를 연결했다. AP 생성으로 Field reverse consent나 AP conversation 선택 목록을 확대하지 않는다.
+- owner component는 기존 설치 panel 마지막 children에 Coordinator가 연결했다. 신규 동작만 `(추가)`, 원문 v2Connect/settings3의 기존 클래스/스타일을 사용한다. 공개 SDK는 새 승인 intent가 매칭되면 own helper가 단독 판정하고, 기존 native SDK row는 기존 resolver를 유지한다. AP 서비스와 관계없는 기존 Field 로컬 중지/직접 문의·예약 코드는 유지한다. 현재 AP 상태와 마지막 확인된 AP 상태를 구별한다.
+- Field 새 작업에는 기존 독립 subscriptionAccess를 적용하고 cleanup/상태 확인/원래 결과 회복을 별도로 유지한다. 이 설치 요청 자체가 AI 생성·고객 발송·구독 시작/청구를 하지 않는다.
+- actual fixture의 AP DNS verification port는 합성 `verifyDomain`이다. HTTP 통신/DB commit/원래 UUID 복구는 실제 실행했고 실 DNS/외부 설치는 하지 않았다.
+
+| 실제 명령 | 결과 / handle / 로그 |
+|---|---|
+| `node tools/run-field-public-write-db-tests.mjs` 최초 | **10407 exit1**, 미구현 module8/8 red, `/tmp/field-public-installation-red.log` |
+| 동일 native 중앙등록 전 | **8093 exit1**,7/8; 새 SDK resolver 미등록으로apWidget=null, `/tmp/field-public-installation-second.log` |
+| 동일 native 중앙등록 후 | **94387 exit0**,12/12 fail0/skip0, `/tmp/field-public-installation-central-native.log` |
+| review connection selection 회수 강화 | **39944 exit1**,12중1fail, legacy resolver가새SDK승인row를 먼저 반환해apWidget object≠null, `/tmp/field-public-installation-resolver-fence.log`; root의 새intent 매칭 row 제외 뒤 **10000 exit0**,12/12, `/tmp/field-public-installation-native-final.log` |
+| 독립 리뷰3건 재현 native | **80647 exit1**,14중2fail: localpause/noSDKrow 경쟁200≠409·APcommit뒤sessionloss pendingOperation=null, `/tmp/field-public-installation-review-red.log` |
+| 최종 focused native | **13971 exit0**,**14/14 fail0/skip0**, `/tmp/field-public-installation-review-native-green.log` |
+| `node --import tsx --test tools/spikes/field-public-installation-http.test.ts` | 초기14354 exit0 1/1; 최종 **5557 exit0**,**1/1 fail0/skip0**, `/tmp/field-public-installation-review-http-green.log` |
+| `pnpm --filter @fieldai/field-web exec tsx --test test/ap-public-installation.test.tsx` | tenant 선택 red exit1 `/tmp/field-public-installation-ui-choice-red.log` → **95035 exit0**,**1/1**, `/tmp/field-public-installation-ui-choice-green.log` |
+| own8개 TS/TSX/mjs scoped eslint | **52536 exit0**, `/tmp/field-public-installation-review-lint.log` |
+| Field API / web typecheck | **28314/34351 exit0**, `/tmp/field-public-installation-review-{api,web}-type.log` |
+| Field API / web build | **70479/60132 exit0**, `/tmp/field-public-installation-{api,web}-build-final.log` (이후 UI plain text1곳의 캐시 상태 안내만 명확화; 최신 중앙 bundle은 root 근거로 기록) |
+| `git diff --check` | 실제 exit0, 소유 파일뿐 아니라 당시 shared diff에 whitespace 오류 없음. 서비스 테스트가 아니다. |
+
+환경은 Node24.18.0/각 제품 own UUID PostgreSQL17: Field127.0.0.1:55432/field_local, actual HTTP는 별도 AP127.0.0.1:55431/agent_local도 사용한다. fixture는 합성 actor/OAuth grant·loopback HTTP의 실제 서버/DB이며 production credential/고객 데이터/실 DNS를 쓰지 않는다. 네트워크 오류 후 새 key가 아니라 원래 key/본문으로 같은 AP row에 수렴함을 실제 AP DB count1로, Field sessionloss 뒤 새 명시 intent도 원래 key replay count2 유지로 확인했다. 일반 공개client 계약은 완료된preview.9 client 그대로다. 새 브라우저 OAuth callback/전체 사용자 시각·동선은 미실행이며 prior native OAuth 완료를 다시 검사한 것이 아니다.
+
+### 독립 정적 검토와 보완
+
+- `codex exec -m gpt-6-sol -c model_reasoning_effort='high' --sandbox read-only ...`: 최초 **22348 terminal exit0**, `/tmp/field-public-installation-audit-result.md`.
+- **P1/confidence0.96** local Field pause가 진행중SDK install에 덮임 → root localpause가SDK row 없을 때도 새intent revision을 증가시키고, SDK install최종transaction에서intent revision FOR UPDATE/현재session·owner를 재검사한다. 실패한 이전approval는409/local_visibility_changed, 새명시승인만 허용한다.
+- **P2/0.94** AP remote connect 성공 뒤Field session/authority변경을terminal rejected로 저장 → remote write는원래UUID/If-Match unknown으로 보존한다. 동일actor/currentgrant가복구되면 같은key로receipt를 회복한다. install/refresh의 순수조회는 새SDK승인이 필요해terminal rejection을 유지한다.
+- **P2/0.97** 다중Field조직 사용자에게다른조직AI 노출 → 응답 organizationId=currentorg·scope·status 필터를 UI선택 consumer에 적용했다.
+- 모두 실제 red→위14/14·HTTP1/1·UI1/1 green으로 반영했다. repair **97931 terminal exit0**, `/tmp/field-public-installation-repair-audit-result.md`: **No concrete remaining P1/P2**, raw confidence **0.88**. 두 CLI는 tests/browser/provider를 실행하지 않는다. 리뷰는 migration72 본문을 읽었고 이후71 rename은 위 동일 SHA256으로 확인했다.
+- 중간 FieldAPI/웹 typecheck exit2는 sibling/root TDD중간파일 타입 때문이었다. root가해당소유오류를고쳤고 위최종exit0이다. agent가상대파일/기대값을수정하지 않았다.
+
+### 최종 migration 번호/남은 통합
+
+- Coordinator가 미착수 entitlement의 Field71 예약을해제하고 본 scope를 **000071_public_write_intents.sql**로 최종배정했다. managed미적용 상태에서72→71 rename, 본문SHA256 **11b96f3da2c2587da833dbbef2d5c0a31daf2e5f8ec9a844b9527defb0f9df66** before=after 실제일치. 위UUID검사번호72는착수이력으로보존한다. 번호변경만으로 전체회귀를반복하지 않는다. 최초managed적용/pgmigrations catalog는root가확인한다. 다음 Field72/AP80 AI entitlement는이번완료범위에포함하지 않는다.
+- root는 중앙등록·legacy 새intent분기·localpause revision fence·mock client등록가능 write scopes를추가했다. 기존 token/consent/selection scopes는 자동확장하지 않는다. managed credential/bootstrap/재기동은 agent가실행하지 않았다.
+- code는 **HEAD9a7fe33 위uncommitted sharedworktree**, 포함commit은root가확정한다. root TASKS/handoff/master/runtime/git는수정하지 않았다. 본 실행기록/등록patch를root완료체크근거로제출한다.
+- 실 공급사/실 DNS·새purpose 브라우저OAuth/사용자최종화면·동선·전체 QA/G는미실행/`blocked_integration`이다. AP 설치API는기존완료범위, 이번durableBFF/API/component는내부증분이며 전체A09/출시를완료로합산하지 않는다.

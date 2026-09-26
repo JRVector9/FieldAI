@@ -1,6 +1,11 @@
 # 개발 진행 상태 — 2026-09-26
 
-**개발 잔여 대조(2026-09-26):** docs/technical/DEVELOPMENT_REMAINING_AUDIT.md에 TASKS46개 인벤토리/확인된 내부6묶음을 기록했다. native widget 종료, 유료 billing, 메시지 발송, 자체 domain, public client write 계약, OAuth/복원 수명 보완이 남는다. 외부 key 부재와 내부 미구현을 구분하며 전체/C03 in_progress. 코드 단계는 eab1d30 커밋/당시 status clean. 이 문서 대조는 테스트 실행/전체160 QA 통과가 아니다. 다음은 widget→billing/발송/주소/public client 구현이다.
+## 현재 checkpoint — 5ceec42 / 고정 디자인·네 내부 기능 통합
+
+TASKS44[x]/7[ ] 유지. 양제품 owner billing/callback·환불/확정거절 backend·고객채널/SW 내부·Field 공개설치 BFF/UI를 저장했다. whole type/lint와집중검수·독립repair 통과, managed43912에최신 양build/migrate/ready 반영. 원본시안변경없고 새기능만 `(추가)`. 전체서비스/출시/실공급사/사용자최종테스트는미완료다. 다음은AI제공량·admin가격/환불UI·일반OAuth수명이다. 상세근거/실패/정확명령은TASKS 및 docs/CODEX_HANDOFF 상단.
+
+
+**이력 — 개발 잔여 대조(2026-09-26):** docs/technical/DEVELOPMENT_REMAINING_AUDIT.md에 TASKS46개 인벤토리/확인된 내부6묶음을 기록했다. native widget 종료, 유료 billing, 메시지 발송, 자체 domain, public client write 계약, OAuth/복원 수명 보완이 남는다. 외부 key 부재와 내부 미구현을 구분하며 전체/C03 in_progress. 코드 단계는 eab1d30 커밋/당시 status clean. 이 문서 대조는 테스트 실행/전체160 QA 통과가 아니다. 다음은 widget→billing/발송/주소/public client 구현이다.
 
 
 **2026-09-26 AP native 회수 단계 최종:** AP74855 29/29·Field52785 30/30·전체 type/lint57153·최신 lint37774 exit0. 실제 Field 미배포 AP independence53496 exit0(own native 회수/token200→401 포함). 세 번째 review62519 P2 package cwd 문제는 AP 생성/기존 journal 경로 절대화·key/파일 보존으로 보완, actual 설정2/2와 마지막 repair review87113 exit0/추가P1/P2 없음. 리뷰 내부 test는 read-only EPERM 미실행이며 root 설정2/2와 구분한다. mock36780 양 API/웹·retention worker ready/health 실제 확인. 전체/C03/A08는 in_progress. 다음은 전체 문서 기능 대조로 남은 범위 확정이며 위젯/일반 OAuth lifecycle·legacy/Field key·유료 구독 원장/외부 발송 adapter·최종 사용자 화면/실 공급사·운영 QA/G는 완료되지 않았다. 자세한 현재 사실은 docs/CODEX_HANDOFF.md 상단 참조. 아래 누적 기록의 이전 handle/미완료는 당시 이력이다.

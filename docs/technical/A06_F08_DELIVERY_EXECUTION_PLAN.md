@@ -128,3 +128,95 @@ pnpm --filter @fieldai/field-api exec tsx --test test/notification-delivery.adap
 - [x] **A06.F08.DELIVERY.INTERNAL** 제품별 encrypted 동의/recipient·durable worker/lease/order/일일 시도 cap·unknown GET 대조/중복 방지·단일 알림 주체·확정 실패/명시 동의 SMS fallback·webpush port/404·410 회수·retention ciphertext 정리·owner 자기설정/철회·기존 이력 보존 UI. 코드 **ef0dfd3**, AP74/78·Field68·notification 모듈/검사·양관리실 component/CSS. own UUID PG17 각13/13+추가 설정/권한 각3/3, adapter 각5/5 exit0; backend7649/0.90·UI39859 재검토 P1/P2 없음. **고객 채널동의 UI/서비스워커·실발송·실기기/최종 화면 인수는 제외**한다.
 
 managed95896 AP78/Field69·최신 양API/web build/ready·양웹200·새API401·자체workers ready를 root가 실제 확인했다. 현재 TASKS40[x]/7[ ]이며 전체 출시 완료가 아니다. 상세 현재 결과/미실행/다음 명령은 CODEX_HANDOFF.md 상단을 따른다.
+
+## 현재 추가 단계 — A06.F08.CUSTOMER-CONSENT-PUSH (2026-09-27)
+
+Task ID / Product / Owner: A06.F08.CUSTOMER-CONSENT-PUSH / AP·Field 독립 / Delivery Agent
+State: verified (내부 범위) / 착수 HEAD9a7fe33, root TASKS·paid계획 변경중; 기존40[x]/DELIVERY.INTERNAL ef0dfd3 완료는 유지한다.
+
+- 소유: 양제품 새 customer-notification-consent model/component/CSS·notification-push-client model, public own notification-sw.js; own owner notification settings의실SW/구독 연결부; AP agent-public의 접수·후속대화 component삽입만, Field field-receipt/field-public/field-booking의component삽입만. 새 focused web unittests·기존 notification DBtest 추가case. 공동 app/server/business/package/mock-run/workspace/proxy/공통문서/Git/runtime는 root 소유. 실제 서비스워커/동의 흐름 외의 기존 화면 디자인/업무 로직을 재설계하지 않는다.
+- root 추가 승인: own notification-delivery-routes.ts의 기존 확인cap 기반 redacted 고객 GET와 contextkey 없는 false/false 철회·관련native만. 신규 schema 없음. 현재 POST만 있어 새 UI가 기존동의를 조회/응답유실후복구할 수 없고, false/false도key없음503이라 철회가막히는 현재코드가 구체적 추가근거다. 기존 ef0dfd3 원장/미상재발송 금지/worker/provider는 재구현하지 않는다.
+- 요구/QA: AP2.5/2.8, Field3.8, QA20/35~40/113/148~149/G-A3/G-F2. 자기접수cap만 사용, 번호/OTP/가입으로 대화 권한을 주지 않는다. 서비스알림과홍보동의분리, 채널별명시동의·번호재입력없는철회, 새동의의사건시각·원래단일주체/미상재발송 금지보존. native 업무종결/retention/현재cap와확인키교체를 존중한다.
+- 디자인기준: reference/field_ui_prototype_v3.html intake3·leadSuccess3·customerConversation3·access3·ownerNotifications3 원문을 직접읽었다. 현재서비스 화면삽입에원본 v3-soft/check/btn/card색·패딩·글자·간격값을재사용하며 시안없는 고객채널설정/푸시준비만 `(추가)`다. fileURL정책거부 이후 우회/다른browser표면사용없음. 실제실기기/전체시각/공급사발송은사용자후속이다.
+- 검수계획: 새client consent의 owncap/no-phone/no-marketing/응답유실GET복구·실SW등록/지원거부/permission거부/구독저장미상보존/철회구독정리 clientflow를 injected browser/fetch 단위로 실제 red→green. native고객GET cap/철회/key없음/기존번호동의·업무종류/배타적APField·unknown추가POST없음을 ownUUID PG17 test-name pattern으로 검수. public SW push/click handler는 node VM의합성event로 민감내용 미노출/own관리실만open/실showNotification promise검사. 양웹/APItype·ownlint·양웹build 및 승인fallbackgpt6sol/high 좁은readonlyreview clean. 전체기존E2E/QA와실기기/실provider/실permission성공은미실행으로남긴다.
+- Field customHost의 새고객동의path는 기존proxy deny목록에없으므로 root exactpatch로연결한다. backend ownorigin은기존운영승인customdomain을검증해야하며 타host·타업무는거부한다. 소유외proxy/공통등록은직접수정하지 않는다.
+
+### 이 단계 체크
+
+- [x] customer redacted GET/현재cap·key없는철회 native
+- [x] own 고객 서비스채널 component·접수/후속 UI 연결
+- [x] 실제SW/push 준비·구독등록/철회·미상복구 내부clientflow
+- [x] focused tests/type/lint/build 및 narrowCLI review
+- [x] root 통합patch·완료/미검수 보고
+
+### 푸시 내부 구성 추가와 중앙 patch
+
+- own public `{agent,field}-notifications.webmanifest`도 새 소유 범위로 추가한다. start_url은 own `/workspace`, scope `/`, standalone display다. 사용자 홈 화면 설치/실단말 인수는 미실행이다. 중앙 layout metadata manifest/Apple standalone 등록은 root exactpatch로 제안하며 직접 수정하지 않는다.
+- 실제 공식 문서 [WebKit iOS·iPadOS Web Push](https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/), [WebKit16.4](https://webkit.org/blog/13966/webkit-features-in-safari-16-4/), [MDN PushManager.subscribe](https://developer.mozilla.org/en-US/docs/Web/API/PushManager/subscribe)를 조회했다. iPhone/iPad 홈화면 standalone과 사용자 저장 클릭에서 permission을 바로 요청하는 내부 흐름을 적용한다. 사용자가 일반탭이면 정확한 홈화면 안내, 공급사/VAPID없으면 blocked이며 준비만으로 permission/발송 성공을 주장하지 않는다.
+- own cap/current source 재확인은 organization lock 뒤 같은 transaction source `FOR SHARE`와 retention 조건으로 수행한다. Field published slug/운영 승인 customHost가 source organization에 속할 때만 customer Origin을 허용한다. 명시된 cross-site·다른 Host/업무는 거부한다. root receipt-abuse guard와 customHost proxy patch가 등록돼야 최종 통합된다.
+- native 첫 red AP76084/Field24724 exit1 각0/2(GET404, cap회전경합200); 보완 green AP37920/Field19487 terminal exit0 각2/2 fail0 skip0. `/tmp/{ap,field}-customer-notification{-red,}-db.log`. 기존13/13완료 검사를 반복하지 않았다. unit red는 새model부재 module-load exit1이며 기능assertion red로 주장하지 않는다.
+- 중간 타입 API56474/38533 terminal exit0; 양웹12753 exit2/93188 exit1은 root작업중 billing-return만2오류였다. 자기모듈/import.meta 오류는 사라졌으며 root에 보고했다.
+
+- key없는철회 추가근거: 기존 ef0dfd3 `allowedOrigin(context?.webOrigin)`은 key 없는context에서 실제browser POST Origin을403으로거부한다. 기존 native noKey는 Origin없음이었다. own customer 신규경로에서만 제품 PUBLIC_WEB_ORIGIN(제품 mock 기본origin) 검사를 key와 독립시킨다. owner 기존경로/다른provider는 범위밖이다. actualbrowser같은 Origin·sec-fetch-site=same-origin native assertion을먼저확장한다.
+
+- 좁은 독립CLI61811 gpt-6-sol/high readonly는 설치/대기중 다른 SW를 active-only검사가 임의교체할수있는 P2 1건/rawconfidence0.88을 보고했다. 실test/browser/provider를 실행하지 않은 staticreview다. actual injected unit에 installing/waiting 다른ownoriginSW를 추가해 red먼저확인 후 모든worker slot검사로 보완한다. cap/발송키/원문을읽거나출력하지 않는다.
+
+- repair29772 static는 최초P2 repair확인과 mixed active own + foreign pending 상태의 enable/inspect 미차단 P2 1건/conf0.88 추가를보고했다. 동상태 actualunit을먼저red로확인후 준비뿐아니라inspect/enable에도foreignslot검사를연결한다.
+- root owner추가승인: ef0dfd3 owner key없는false철회의actualOrigin도403이므로 기존완료를유지하고 owner-only ownenv fallback 비교·기존focusedowner noKeycase의Origin assertion만추가한다. 권한/새번호/암호화정책/provider 변경은없다. 명령은 ownUUID runner의 test-name-pattern을 해당 owner settings expose1case만지정하여red→green하고 APItype/lint/readonly repair다.
+
+
+### 이 단계 실제 완료 증거 — 2026-09-27
+
+- 고객 own UUID PG17 최종: `node /tmp/ap-customer-notification-run-db.mjs` AP49974 terminal exit0 **5/5 fail0 skip0**; Field58271 **6/6 fail0 skip0**. `/tmp/{ap,field}-customer-integrated-final-db.log`. currentcap GET/no rawphone·번호접근금지/SMS-only거부/actualOrigin key없는철회·cap회전orglock경합·native payload purge경합·withdraw unknown원장의POST1회/같은시도lookup유지·기존receipt guard의새path→5번실패429/원source동일한도·성공후정리, Field reservation 별도cap/ownpublishedslug/현재verifiedcustomHost/foreign·expired403을 실제 검수했다. peerenv 제거/Node24.18.0/각 own55431 또는55432 PG17/테스트당새UUID DB, 테스트 provider는synthetic주입이다. 실제 provider발송없음.
+- key없는 actualOrigin 고객철회 actualred AP69730/Field70430 terminalexit1(403!==200)→30475/61403 exit0 각4/4·5/5. guard 미등록 red57821/40995 exit1(404!==429)→위final각5/5·6/6. 기대값/실패테스트삭제없음. 이전2/2·4/4·5/5는 단계이력이며 최종으로합산하지 않는다.
+- 추가 승인 owner actualOrigin: 기존 ef0dfd3 완료 유지. AP29541/Field46777 실제1/1 red exit1(403!==200)→최종94251/49665 terminalexit0 **각1/1 fail0 skip0**. `/tmp/{ap,field}-owner-keyless-origin-complete-db.log`. 기존owner masked/privacy·actor격리·동의유지검사의 noKey철회에 phonefalse/pushfalse actualownOrigin과foreign403만추가했다. 기존전체3/3/13/13를기억부재로반복하지 않았다.
+- Browser/client/worker unit: `pnpm --filter @fieldai/{agent,field}-web exec tsx --test test/customer-notification-consent.test.tsx` 최종19046/49962 terminalexit0 **각9/9 fail0 skip0**, `/tmp/{agent,field}-customer-notification-repaired-unit.log`. Browser환경/fetch/SW event는injected합성이고 실제기기권한/실push수신으로주장하지 않는다. SW install/activate waitUntil·generic push노출·own관리실click을nodeVM으로실행했다. lostPOST는GET1회로대조하고새POST없음, newlycreatedsubscription은unknown에보존하며확정거부만정리, 철회는server확정뒤ownactive subscription unsubscribe다.
+- SW P2 red: 설치/대기foreignslot actualunit각7/8 exit1→각8/8; ownactive+foreignpending actualunit각8/9 exit1→위최종각9/9. prepare/inspect/enable 모두경쟁worker검사이며 unrelatedSW를등록/교체/해제하지 않는다. disable은server동의철회후ownactive구독만정리한다.
+- 타입: APweb93918/Fieldweb8716/API14788/57399 **모두terminalexit0**, `/tmp/{agent,field}-{web,api}-customer-repaired-final-type.log`. own20파일 ESLint24992 **exit0**, `/tmp/customer-notification-repaired-final-lint.log`; serviceworkerJS도포함했다. booking 추가component를대화card안·기존tools앞의visible 위치로최초삽입누락을고친뒤 Fieldtype78399 exit0/해당filelint exit0. 기존예약업무/route부분은재배치하지 않았고, 외부AP예약의채널동의만으로담당이바뀌지않는설명을추가했다.
+- 양웹 build: AP92394/Field69238 **terminalexit0**, `/tmp/{agent,field}-customer-notification-complete-build.log`. booking삽입위치최종반영뒤 Field52543 **exit0**, `/tmp/field-customer-notification-placement-build.log`. 초기build91893/35962 exit1·types96844/53020 exit2는동시rootTDD중새billing-mutation-client module부재였고, root가구현완료통보한뒤위gate만다시실행했다. 실패를성공으로주장하거나타작업파일을직접수정하지않았다.
+- 독립 static CLI:61811 P2 1(conf0.88)→repair29772 기존repair확인+새P2 1(conf0.88)→최종96633 **terminalexit0 남은concreteP1/P2없음/rawconfidence0.88**. `/tmp/customer-notification-{audit,repair,final-repair}-result.md`와동명.log. 승인fallbackgpt-6-sol/high·read-only·명명scope에만수행했고 해당reviewer는tests/browser/실provider를실행하지않았다. owner Origin/finalSWrepair를함께확인했다. 최종추가booking위치는단순component삽입·안내이며타입/lint/build검수이고별도browser/기기review는하지않았다.
+- source와기존삽입부 `git diff --check` 실제exit0. 코드포함신규commit은root통합후기록한다. 이agent는Git stage/commit/switch·centralruntime재기동·운영삭제·실고객메시지/청구/외부배포를실행하지않았다.
+
+### 결정과 남은 인수
+
+- 신규schema/migration/package/외부공개계약 변경없음. 자기cap/source/retention만사용하고카카오/SMS동의는서비스알림에한정한다. 전화번호/OTP가입이조회권한이되지않으며원문번호/키/endpoint를GET에내보내지않는다. customerFalse/False와ownerFalse는key를재입력하지않고실제ownOrigin으로철회한다. 채널동의가알림담당을전환하지않는다.
+- 화면은 `reference/field_ui_prototype_v3.html` 고정원본HTML/CSS기준을보존했다. 접수성공/후속문의/예약card에고객옵션만추가하고제목/저장/푸시준비에 `(추가)`를표시한다. owner번호/Kakao/Push/저장·우측고객설명·하단원래이력은그대로며위치/색/글자/메뉴재디자인없음. CUAfileURL거부우회/다른surface사용없고시각판정은local source대조에한정한다.
+- root가receipt-abuse/proxy/layoutexactpatch를반영했다고알렸고현재코드에서확인했다. guard는위native에서실제소비했다. Fieldproxy/customHost의최종browser Host동선과metadata/SW 실제HTTP반영은root managed통합및사용자최종검수다. 중앙등록은마지막integrationpatch를따른다.
+- [ ] ownmanaged최신빌드/서비스워커·manifestHTTP/사업자로그인·고객동의화면실runtime연결은root중앙통합증거로기록.
+- [ ] 사용자실기기홈화면설치/실permission/실subscription·알림수신·최종320px전체시안/동선인수와실SOLAPI/VAPID/콜백 공급사검수. 미설정provider/VAPID는blocked_integration이며브라우저준비는발송성공이아니다.
+- [ ] 실제운영보안/가격·법무승인/전체QA-G는부모미완료원장에유지. 이전완료ef0dfd3/40[x]를되돌리거나재구현하지않는다. root TASKS/coverage/handoff/Git중앙등록은root가소유한다.
+
+### 새 범위의 정확한 후속 명령
+
+새 구체변경이 있는 경우에만:
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+node /tmp/ap-customer-notification-run-db.mjs
+node /tmp/field-customer-notification-run-db.mjs
+node /tmp/ap-owner-keyless-origin-run-db.mjs
+node /tmp/field-owner-keyless-origin-run-db.mjs
+pnpm --filter @fieldai/agent-web exec tsx --test test/customer-notification-consent.test.tsx
+pnpm --filter @fieldai/field-web exec tsx --test test/customer-notification-consent.test.tsx
+pnpm --filter @fieldai/agent-web typecheck
+pnpm --filter @fieldai/field-web typecheck
+```
+
+위 /tmp native runner는ownlocalmock URL/제품port/user guard뒤outerownUUID를생성하고peerenv제거+test-name-pattern(customer channel 또는owner settings expose)만실행한다. fixture도자체UUID를만들고현재own제품migration으로검사·정리한다. /tmp가없는다음환경은sameguard/selection으로재생성해야하며직접mock DB에이fixture를실행하지않는다. 기존완료테스트전체를다시실행할명령으로해석하지않는다.
+
+
+## root 승인 좁은 fixture 호환성 — A07.F09.RENEW-CANCEL-ACCESS.BACKEND (2026-09-27)
+
+- State: verified (fixture 호환성만). 기존 ef0dfd3[x]/RENEW-CANCEL-ACCESS.BACKEND를유지한다. root가새AP79/Field70 refund guard와기존billing-lifecycle.db.test.ts252 refunded_amount 직접UPDATE의구체PAB06/PFB06 충돌을보고하고단일casefixture보완을위임했다.
+- 소유: 양API `test/billing-lifecycle.db.test.ts`의 `refunded or test-only payment cannot reopen mock or live paid access` 1case + 해당case가정상환불원을만들수있는최소fixture port/approver 반환만. source/migration/다른case기대값/UI/공통rootpaidplan은수정하지않는다. 계획을이deliveryplan에먼저기록해rootpaidplan동시편집을피한다.
+- 요구/QA: 원래QA43~46/113/126/146의fullrefund는기존기간의paidaccess를되살리지않으며testmode결제로liveaccess를열지않는다. original cleanup_only 기대값을유지하고owner환불요청→operator검토→다른operator승인→syntheticrefundworker→확정원장으로정당한fullrefund를만든다. trigger우회/약화없음.
+- 검수명령: 기존ownUUID lifecycle runner를copy하고 `tsx --test --test-name-pattern 'refunded or test-only' test/billing-lifecycle.db.test.ts` 1case만실행한다. AP/Field실제red→green·양APItype·해당2filelint·diffcheck. 다른18case/전체회귀·실provider·runtime/git은실행하지않는다. 정상refunddbtest/workercontract를read-only대조했다. test-onlyfixture호환성이고운영source변경이아니므로독립review필요성은실제diff후판단한다.
+
+
+### fixture 호환성 실제 완료
+
+- [x] AP/Field 단일 기존case의원래 `cleanup_only` 기대값보존 +정상owner요청/operator검토/다른approver승인/syntheticworker환불원장으로fixture이행. 변경은두testfile 해당case와fixture return의approver 1property뿐이다.
+- actualred AP11834/Field70076 terminalexit1 **각0/1**: AP `PAB06`/Field `PFB06`, `billing_refunded_amount_guard`의원장없는직접UPDATE차단. `/tmp/{ap,field}-billing-lifecycle-refunded-red.log`.
+- actualgreen AP61750/Field99164 terminalexit0 **각1/1 fail0 skip0**, `/tmp/{ap,field}-billing-lifecycle-refunded-final.log`. `node /tmp/ap-billing-lifecycle-refunded-run-db.mjs`와Field명령. Node24.18.0/own55431 또는55432 PG17/peerenv제거/outer및fixtureUUID/migration포함, mocked refund port는해당case에서만주입했다. fullrefundstate/refunded_amount=total_amount·providerPOST정확1회·두기존접근제한assertion을실제유지했다.
+- 양APItypecheck46326/48201 terminalexit0, `/tmp/{agent,field}-billing-lifecycle-refunded-type.log`; `pnpm exec eslint apps/agent-api/test/billing-lifecycle.db.test.ts apps/field-api/test/billing-lifecycle.db.test.ts`34666 exit0(`/tmp/billing-lifecycle-refunded-lint.log`); 해당diffcheck exit0.
+- 미실행: 다른lifecycle18case·전체회귀·UI/browser/build·운영provider/실환불/runtime/git. source/trigger/schema/운영또는mockDB fixture는수정하지않았다. ak CLI는user-facing code변경시에필수이며이번test-only호환성은신규CLI생략했고cleanreview를새로주장하지않는다. 기존delivery검토와합산하지않는다. root가paidplan/TASKS/handoff에이재개증거/commit를연결한다. 기존ef0dfd3[x]를되돌리지않는다.

@@ -6,7 +6,7 @@
 
 근거 스냅샷: AP 실제29/29(`/tmp/ap-revocation-metadata-cache-db.log`)·Field30/30(`/tmp/ap-revocation-runner-field.log`), Node24.18.0/제품별 mock PG17, AP 단독 실행 실제통과(`/tmp/ap-revocation-independent-standalone.log`). 코드가 포함된 최신 commit **eab1d30** 및 이전 원본 구현 commit, `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`의 범위별 실제 결과. 아래 해당 native 테스트 파일과 현재 구현도 직접 대조했다. 이번 체크 정리는 테스트 재실행이 아니다.
 
-최신 추가 완료: **ef0dfd3**의 RENEW-CANCEL-ACCESS.BACKEND·DELIVERY.INTERNAL·CUSTOM-DOMAIN.INTERNAL·PUBLIC-WRITE.CONTRACT-BACKEND. 현재 내부 세부40개[x]/남은7개[ ]이며 실제 검수/환경은 인계 상단을 따른다. 부모 전체 출시 완료로 해석하지 않는다.
+최신 추가 완료: **5ceec42**의 BILLING-UI-CALLBACK·REFUND-DECLINE.BACKEND·CUSTOMER-CONSENT-PUSH.INTERNAL·PUBLIC-WRITE.FIELD-BFF-UI. 현재 내부 세부44개[x]/남은7개[ ]이며 실제 검수/환경은 인계 상단을 따른다. 직전ef0dfd3의4개도[x]로 유지한다. 부모 전체 출시 완료로 해석하지 않는다.
 
 이력 — 완료 표시 정합성 점검(2026-09-27, 당시 verified): 사용자 필수 지침/AGENTS.md6.1에 따라 이 원장·paid/phase 계획·coverage·잔여 audit·인계를 대조했다. 해당7문서만 수정했고 코드/API/schema 변경은 없다. paid 계획의 완료 동의/최초 청구가 미완료와 묶인 체크박스와 phase의 오래된 “owner 동의부터” 지시를 분리하고, 과거 착수 기록은 이력으로 표시했다. 근거는 기존 구현 commit/현재 native 테스트 소스와 보존된 검수 로그다. 실제 Python 문서 대조 exit0: 완료36/미완료7·세부 ID 중복0·완료4개 commit/남은 기능 체크/시안 경로 유지. 문서 diff 확인·`git diff --check` exit0. 서비스 테스트는 재실행하지 않았고 새 기능 완료를 추가한 것은 아니다.
 
@@ -59,7 +59,19 @@
 - [x] **F04.CUSTOM-DOMAIN.INTERNAL** 조직별 주소 등록/소유 TXT·DNS·trusted TLS/Host/site binding·짧은 증거 TTL·대표주소/기본주소 유지·disconnect/reconnect/release generation·own Host tenant/resource/확인키·AP 정확 origin별 설치/증명 보존·고정 시안 주소 UI. 코드 **ef0dfd3**, Field69·custom-domain 모듈/worker/검사·sites/Host/proof·domain-settings. 정상 createFieldApp own UUID PG17 **40510 11/11**, DNS2/2·Host3/3 exit0; 정적11413 P1/P2 없음/high(숫자없음). **실edge/DNS/TLS 공급사·실AP custom origin·사용자 최종 시각/동선 인수는 제외**한다.
 - [x] **A09.PUBLIC-WRITE.CONTRACT-BACKEND** preview.9 공개 connection/deployment POST·명시 scope/actor/org/선택AI/exactorigin·UUID/If-Match·own client 배포 verify/activate/pause·selection 회수/늦은 활성화 차단·Field 공개 HTTP consumer·새scope 동의 설명. 코드 **ef0dfd3**, AP75/77·auth/integrator/public write·Field client·OpenAPI/계약03·permanent runner/native HTTP 검사. **66327 AP7/7**, Field5/5·실OAuth/HTTP83629 1/1·계약1/1 exit0; 정적66741 P1/P2 없음/0.91. **새Field durable intent BFF/화면·실DNS·최종 인수는 제외**한다.
 
+- [x] **A07.F09.BILLING-UI-CALLBACK** 양제품 고정 구독 카드의 승인 플랜/조건·명시 동의·현재 구독/기간·갱신중지·결제/환불 요청/조회, own SDK callback 페이지·URL secret 제거·원래 user/session/org/origin/nonce/customer binding, unknown 같은 UUID/body·context별 재시도와 늦은 화면/SDK 응답 차단. 코드 **5ceec42**, 양웹 billing client/mutation/return/settings·subscription·callback headers와 billingSnapshot currentPlan. focused web 양 **23/23**(callback12+mutation11), 판매중단 원조건 유지 own PG17 각1/1, whole type73437/lint91115 exit0, 최종 root repair2382 P1/P2 없음/confidence0.94. **admin 가격/환불 UI·AI 제공량 강제·실 SDK/PG·사용자 최종 화면/동선 인수는 제외**한다.
+- [x] **A07.F09.REFUND-DECLINE.BACKEND** owner 요청→operator 검토→다른 승인→own durable 환불 worker·원 거래/부분합계·unknown GET-only/동일 provider 증거·설정/권한 변경 차단·확정 최초청구 거절과 과거unknown 구분. 코드 **5ceec42**, AP79/Field70·refund/Toss/charge 모듈 및 package/managed worker. own UUID PG17 AP39861/Field3173 각11/11·adapter각2/2, static58435 noP1/P2/confidence moderate(수치없음). 새 guard로 기존 lifecycle fixture 직접UPDATE가 PAB06/PFB06 red인 것은 정당한 요청/검토/다른승인/합성worker 원장으로 보완해 단일case 각1/1 green61750/99164, 원래 접근제한 기대값 유지. **실환불·MFA/법무·admin UI·전체QA/G는 제외**한다.
+- [x] **A06.F08.CUSTOMER-CONSENT-PUSH.INTERNAL** 현재 확인키 고객 채널 동의 GET/선택·무번호 재입력 철회·rotation/purge/Org lock 재검사·Field 예약/자체 공개host Origin·같은 source receipt 실패한도, own ServiceWorker/manifest·실제 브라우저 등록/permission/subscription 호출 경로·unknown 구독 유지와 외부SW 충돌 차단. 코드 **5ceec42**, 양API delivery/receipt guard·customer/owner component·push client·public assets·Field proxy/layout. own UUID PG17 AP5/5·Field6/6, owner keyless actualOrigin각1/1, browser model/SW VM각9/9, static96633 noP1/P2/confidence0.88. **실기기 설치/권한/수신·실발송·최종 사용자 인수는 제외**한다.
+- [x] **A09.PUBLIC-WRITE.FIELD-BFF-UI** Field own durable intent/원 UUID·If-Match·pending/unknown 복구·explicit 설치 purpose/scopes/현재 owner/org/session·새 SDK 승인·local pause/revision 경쟁 차단·조직별 선택/legacy resolver 분리와 고정 기존 설치 화면. 코드 **5ceec42**, 최종 Field71(미적용72에서 본문동일 rename)·ap connector/BFF/site resolver/component·새 own runner/HTTP consumer, mock client 등록 가능scope만 추가(기존grant 자동확대 없음). native13971 **14/14**·actual Field↔AP HTTP5557 **1/1**·UI tenantconsumer95035 **1/1**, repair97931 noP1/P2/confidence0.88. **실DNS·새 설치 purpose의 browser OAuth·전체 호환/최종 인수는 제외**한다.
+
 ### 남은 작업 — 여기서 다음 세부 ID를 선택한다
+
+**현재 다음:** A07.F09.AI-ENTITLEMENT 및 admin 가격/환불 화면, I06.AUTH-LIFECYCLE 내부 후속을 미완료 PAID/인증수명에서 선택한다. 최신 own mock은 AP79/Field71 적용·managed43912 live이며 다음 migration은 AP80/Field72다. 이전의 public Field72/entitlement Field71 예약은 이력이고 재사용하지 않는다. 기존44[x]·고정 시안·외부/사용자 최종 검수 분리를 유지한다.
+
+
+**착수/병렬 소유 이력 (2026-09-27, HEAD9a7fe33/clean, 아래4범위 현재5ceec42로 완료):** 기존40[x]는 유지한다. root는 **A07.F09.BILLING-UI-CALLBACK**의 양제품 web/src/*-subscription.tsx·새 billing UI/client/callback 및 app/billing/return·필요한 admin 화면 부분만 소유한다. 추가 **AI-ENTITLEMENT**는 각 새 helper/native 검사와 agents/site-generation/usage 연결이며 기존 billing/refund 모듈을 직접 수정하지 않는다. Refund Agent(custom_domain)는 양API 신규 refund routes/worker/domain/Toss port와 charge 확정오류 소비·**AP79/Field70**만 소유한다(기존 적용78/69 수정 금지). Public Agent는 새 Field durable public-write BFF/intent·**Field72** 및 Field 사이트의 새 설치 component만 소유하고 root workspace/site shell 변경은 요청한다. Delivery Agent는 새 고객 채널동의 component·receipt 관련 삽입·서비스워커와 own push 설정 연결만 소유한다. root entitlement schema 필요 시 **AP80/Field71** 예약. Delivery 추가 schema 필요 시 먼저 Coordinator에 요청한다. 공통 app/server/BusinessRuntime/package/lockfile/mock-run·체크원장/인계/master/runtime/git는 root만 통합한다. 각 agent는 수정 전 계획/요구/QA/명령을 기록하고 계약/등록 patch를 제출한다. 완료 backend/고정 디자인을 재구현하지 않는다. 실제 공급사 발송/청구/운영 삭제는 수행하지 않는다.
+
+
 
 **병렬 소유/착수 이력(2026-09-27, 현재3agent 완료)/Coordinator=root:** 구독 RENEW-CANCEL-ACCESS는 root가 기존 billing/subscription/trial-access·AP73/Field67을 소유한다. Delivery Agent는 A06.F08.DELIVERY의 신규 provider/발송 worker/별도 실행·콜백 모듈과 AP74/Field68만, Domain Agent는 F04.CUSTOM-DOMAIN의 신규 domain 모듈·Field69와 Field sites의 domain 연결부만, Public API Agent는 A09.PUBLIC-WRITE 계약/consumer·별도 public write 모듈과 필요 시 AP75/Field70만 소유한다. 각 Agent가 먼저 세부 파일/관련 요구/QA/명령을 기록한다. 공통 app.ts/server.ts/package.json/tools/mock-run.mjs·완료 원장·인계·runtime 재기동·git add/commit은 root만 변경한다. 다른 소유 파일 변경이 필요하면 Coordinator에 요청하고 먼저 덮어쓰지 않는다. 각 Agent는 자신의 scope 결과/실제검수/미검수/등록 patch를 제출하며 전체 출시 완료로 체크하지 않는다.
 
@@ -69,10 +81,10 @@
 
 **착수 이력 — FIRST-CHARGE 추가 범위(2026-09-27):** 당시 미완료 A07.F09.FIRST-CHARGE를 선택했다. 기존 PLAN-BASIS(b639a4d)·CONSENT-BACKEND(1a04815)의[x]는 유지한다. 최초 청구 연결을 위해 면세 미지정 legacy 차단/명시 승인 taxFreeAmount snapshot·owner 대조와 Toss adapter API-key fingerprint metadata만 확장한다. 현재 원장에 면세값이 없고 공식 멱등키가 API key에도 묶이는 구체적 근거는 paid 실행 계획에 기록했다. 가격/동의/인증 backend 자체를 재구현하지 않는다.
 
-- [ ] **A07.F09.PAID** HTTP 확정거절 분류·provider 환불/대조·AI entitlement/제공량·실 SDK 콜백/owner/admin 결제 UI. PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE·RENEW-CANCEL-ACCESS.BACKEND는 완료이며 반복하지 않는다. 전체 유료 흐름/실PG는 별도 미완료다.
-- [ ] **A06.F08.DELIVERY** 고객 채널별 동의/철회 UI·브라우저 서비스워커/푸시 등록 흐름·실발송/실기기/최종 화면 인수. DELIVERY.INTERNAL의 provider port/원장/worker/설정 화면은 완료이며 재구현하지 않는다.
+- [ ] **A07.F09.PAID** AI entitlement/제공량·admin 가격/환불 UI·실 SDK/PG 인수. HTTP 확정거절/환불backend·owner 결제UI/callback은 위5ceec42 내부 완료이며 반복하지 않는다. PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE·RENEW-CANCEL-ACCESS.BACKEND는 완료이며 반복하지 않는다. 전체 유료 흐름/실PG는 별도 미완료다.
+- [ ] **A06.F08.DELIVERY** 실발송/실기기 설치·권한·수신/최종 화면 인수. 고객 동의/철회 UI와 서비스워커/푸시 등록 호출 내부 흐름은5ceec42 완료다. DELIVERY.INTERNAL의 provider port/원장/worker/설정 화면은 완료이며 재구현하지 않는다.
 - [ ] **F04.CUSTOM-DOMAIN** 실edge/TLS 공급사 연결·실DNS/custom AP origin 검수·사용자 최종 화면/동선 인수. CUSTOM-DOMAIN.INTERNAL의 등록/상태/Host/대표주소 API·DB·UI는 완료다. 미연결은 blocked_integration 유지.
-- [ ] **A09.PUBLIC-WRITE** 새Field durable public-write intent BFF/화면 연결·실DNS/최종 인수. CONTRACT-BACKEND의 공개POST/scope/HTTP consumer는 완료이며 기존SDK 설치와 구분한다.
+- [ ] **A09.PUBLIC-WRITE** 실DNS·새 설치 purpose의 browser OAuth/최종 인수·전체 호환/범용 lifecycle 후속. Field durable intent BFF/화면은5ceec42 완료다. CONTRACT-BACKEND의 공개POST/scope/HTTP consumer는 완료이며 기존SDK 설치와 구분한다.
 - [ ] **I06.AUTH-LIFECYCLE** 일반 OAuth token 삭제/refresh family·legacy revoked baseline·Field route key 종료/복원 증빙.
 - [ ] **AUTH.LIVE / PROVIDERS.LIVE** 사용자가 후속으로 지정한 실메일/카카오/계정연결/번호변경/MFA·실LLM/PG/발송/DNS/TLS/운영저장소 연결·공급사 검수.
 - [ ] **R00.QA / R02.ACCEPTANCE** 추가 문서/역할 누락 대조·모든 적용QA evidence·사용자 최종 시안/동선/실기기·키보드/스크린리더/운영게이트.
@@ -82,7 +94,7 @@
 ---
 
 
-**최신 완료/잔여(2026-09-27):** 내부 세부40개[x]/잔여7개[ ]. 코드ef0dfd3·managed95896 AP78/Field69·최신 양API/web build/ready·양웹200·새worker blocked_integration ready. 다음 내부 범위는 PAID 확정HTTP거절/환불/제공량/SDK·UI, Field public-write BFF/UI, 고객 알림동의 UI/서비스워커, OAuth 수명이다. 고정 디자인/추가 표기를 지킨다. 전체46개Task/QA160/C03 완료라는 뜻이 아니다. 아래 과거 기록보다 상단 원장이 우선한다.
+**이력 — ef0dfd3 단계 완료/잔여(2026-09-27):** 당시 내부 세부40개[x]/잔여7개[ ]. 코드ef0dfd3·managed95896 AP78/Field69·양API/web build/ready·양웹200·새worker blocked_integration ready. 당시 다음 내부 범위는 PAID 확정HTTP거절/환불/제공량/SDK·UI, Field public-write BFF/UI, 고객 알림동의 UI/서비스워커, OAuth 수명이었다. 현재 완료/잔여는 이 파일 상단의44[x]/7[ ] 원장을 따른다. 전체46개Task/QA160/C03 완료라는 뜻이 아니다.
 
 
 **2026-09-26 AP native 회수 단계 최종:** AP74855 29/29·Field52785 30/30·전체 type/lint57153·최신 lint37774 exit0. 실제 Field 미배포 AP independence53496 exit0(own native 회수/token200→401 포함). 세 번째 review62519 P2 package cwd 문제는 AP 생성/기존 journal 경로 절대화·key/파일 보존으로 보완, actual 설정2/2와 마지막 repair review87113 exit0/추가P1/P2 없음. 리뷰 내부 test는 read-only EPERM 미실행이며 root 설정2/2와 구분한다. mock36780 양 API/웹·retention worker ready/health 실제 확인. 전체/C03/A08는 in_progress. 다음은 전체 문서 기능 대조로 남은 범위 확정이며 위젯/일반 OAuth lifecycle·legacy/Field key·유료 구독 원장/외부 발송 adapter·최종 사용자 화면/실 공급사·운영 QA/G는 완료되지 않았다. 자세한 현재 사실은 docs/CODEX_HANDOFF.md 상단 참조. 아래 누적 기록의 이전 handle/미완료는 당시 이력이다.

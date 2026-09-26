@@ -101,7 +101,7 @@ assert.equal(response.statusCode, 201, response.body);
 - [x] **CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE:** fixture provider를 native runtime에 주입하고 명시 동의→인증 binding→인증 발급→거래 pending→실행 성공/timeout→같은 주문 조회를 재현했다. auth6174/91110 각9/9·first-charge97718/12549 각12/12의 기존 결과이며 fixture는 테스트 주입에만 있다. 실 SDK/카드 인증 사용자 동선은4절 미완료다.
 - [x] **CONSENT-BACKEND(1a04815)**에서 Toss client/secret/MID·별도 billing 암호화 key와 product/profile 검증 완료. 서버 키/billingKey/authKey는 응답/로그/원본 export에 노출하지 않는다. 원시 카드 번호를 받지 않는다.
 - [x] **AUTH-ISSUE·FIRST-CHARGE:** 같은 요청 ID/claim을 DB에 저장한 뒤 provider를 호출하고, crashed processing/응답 유실은 원래 요청/같은 order로 대조한다. 금액/통화/MID/order/세금/승인시각을 검증해야 paid로 반영한다. 위 native 검사와 ed61b70/00c3e0d가 근거다.
-- [ ] 실제 SDK return 페이지의 현재 session/org/state 대조와 인증 결과 재조회 동선을 연결한다. callback query만으로 인증/결제 성공을 표시하지 않는다.
+- [x] **BILLING-UI-CALLBACK / 5ceec42 내부:** SDK return 페이지의 현재 session/org/state 대조와 인증 결과 재조회 동선을 연결했다. 공급사 실제SDK 인수는미실행이다. callback query만으로 인증/결제 성공을 표시하지 않는다.
 - [x] **RENEW-CANCEL-ACCESS.BACKEND / ef0dfd3:** 월 갱신은 기존 동의 금액/원래 기준일로 한 기간만 만든다. unknown이면 새 order를 만들지 않는다. 과거 여러 기간을 몰래 묶어 청구하지 않는다. 실패는 승인된 grace 기간/cleanup mode로 구분한다.
 - [x] **RENEW-CANCEL-ACCESS.BACKEND / ef0dfd3:** owner 해지는 아직 시작하지 않은 갱신을 중지하고 남은 paid 기간/기존 문의·예약·export를 유지한다. 이미 processing/unknown인 거래는 결과 확인 대상으로 남긴다. 다른 제품 구독을 호출하지 않는다.
 - [x] **CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE의 현재 서버/worker:** 공급사 부재는 blocked_integration, 이미 시작한 요청은 unknown으로 유지하며 같은 원장을 보존한다. product/profile/MID/키 binding 및 test/live 설정 분리를 구현·검수했다. managed65775의 각 auth/first-charge worker도 blocked_integration ready다. 향후 갱신/환불 worker의 동일 조건 검수와 실 공급사 검수는 미완료다.
@@ -110,8 +110,8 @@ assert.equal(response.statusCode, 201, response.body);
 
 **Files:** 각 billing modules·새 refund/usage 원장 migration, AP customer-consultations.ts/agents.ts, Field site-generation.ts/worker.ts 및 기존 trial-access.ts; 각 native DB 검사.
 
-- [ ] 고객 요청→operator 검토/다른 승인→provider cancel의 금액 상한/중복/timeout·동일 거래 조회를 재현한다.
-- [ ] 해지와 환불을 별도 기록한다. 완료 환불의 실제 provider transaction을 저장하며 기존 지불·환불을 덮어쓰지 않는다. 부분 환불 합계는 실제 paid 금액 이하, 미상 환불 중 추가 cancel은 차단한다. 불확실한 cancel를 다른 취소와 임의 매핑하지 않는다.
+- [x] **REFUND-DECLINE.BACKEND / 5ceec42:** 고객 요청→operator 검토/다른 승인→합성 provider cancel의 금액 상한/중복/timeout·동일 거래 조회를 own PG17에서 재현했다. 실환불은미실행이다.
+- [x] **REFUND-DECLINE.BACKEND / 5ceec42 내부:** 해지와 환불을 별도 기록한다. 완료 환불의 실제 provider transaction을 저장하며 기존 지불·환불을 덮어쓰지 않는다. 부분 환불 합계는 실제 paid 금액 이하, 미상 환불 중 추가 cancel은 차단한다. 불확실한 cancel를 다른 취소와 임의 매핑하지 않는다.
 - [ ] 승인된 제공량과 해당 paid period의 실제 소비/진행 중 예약을 제품별 원장으로 검사한다. 초과는 제한/경고이고 자동 추가 청구가 아니다. 기존 문의/예약 답변·확정·고객 확인키·export는 cleanup 상태에도 유지한다.
 - [x] **RENEW-CANCEL-ACCESS.BACKEND / ef0dfd3:** 저장된 환불 상태/유예 만료/worker 부재·mode의 시간 기반 접근 검수 각29/29. 실제 provider 환불 실행/대조는 위 미완료 항목에 남는다.
 
@@ -119,8 +119,9 @@ assert.equal(response.statusCode, 201, response.body);
 
 **Files:** 각 web/src/*-subscription.tsx·새 *Billing.tsx/*BillingAdmin.tsx·admin.tsx/admin-sections.ts·CSS; 필요한 own HTTP/browser fixture와 tools/run-e2e.mjs; TASKS/coverage/audit/PHASE_2_EXECUTION_PLAN/인계/일지.
 
-- [ ] owner/billing의 plan/금액·세금·제공량·별도 동의·현재 paid 기간·다음 갱신·해지·실패 유예·결제/환불 내역/결과 재조회와 admin/billing의 계획 승인·조회/환불 검토를 실제 API에 연결한다.
-- [ ] 공급사/가격 부재는 사유와 비활성 버튼으로 표시한다. mock fixture의 paid를 실 결제로 표시하지 않는다. 응답 유실은 저장한 request ID로 대조하고 재시도로 새 청구를 만들지 않는다.
+- [x] **BILLING-UI-CALLBACK / 5ceec42 내부:** owner/billing의 승인 plan/금액·세금·제공량·별도 동의·현재 paid 기간·갱신중지·실패 유예·결제/환불 요청/내역/재조회를 own API에 연결했다.
+- [ ] admin/billing의 가격 요청/다른승인·판매중단·환불검토/다른승인화면은다음범위다.
+- [x] **BILLING-UI-CALLBACK / 5ceec42 내부:** 공급사/가격 부재는 실제사유/API거절과 신청제한으로 표시한다. mock fixture의 paid를 실 결제로 표시하지 않는다. 응답 유실은 저장한 request ID로 대조하고 재시도로 새 청구를 만들지 않는다.
 - [ ] 변경 범위 DB/unit·type/lint/build, 좁은 native HTTP/320px 흐름, CLI 독립 리뷰를 실행한다. 무관한 완료 기능/전체 Field/AP 회귀를 이유 없이 반복하지 않는다. 사용자 전체 시안/동선/실 공급사 테스트는 미완료로 구분한다.
 - [x] **FIRST-CHARGE까지 runtime/완료 기록:** managed65775에 최신 build/migrate/각 worker를 반영하고 TASKS/phase/handoff에 00c3e0d·실제 검수·미검수/남은 항목을 기록했다. 이번 완료 표시 점검에서도 같은 session의 생존을 확인했으며 재시작하지 않았다.
 - [ ] 남은 갱신/해지/환불/제공량/UI를 구현한 단계마다 해당 범위의 검수·runtime 반영·완료 체크를 추가한다. A07.F09.PAID 전체 체크는1~4 내부 완료 후에만 한다.
@@ -154,3 +155,24 @@ pnpm build:web:field
 
 - 실제 own UUID PG17 최종70963/78883 각29/29 exit0 fail0/skip0, /tmp/{ap,field}-billing-expiry-gate-final.log. 네 경합/중단/만료 지적은 실제red 후 수정했고 최종65770 read-only review P1/P2 없음/confidence0.87. 전체 typecheck50703·lint12958 및 managed95896 최신 양API/web build·AP78/Field69 적용/ready 확인.
 - 전체 paid UI/실SDK/실PG·provider 환불/AI제공량·확정HTTP거절·QA/G는 미완료다. 과거 진행 중/다음 기록은 당시 이력이며 이 checkpoint와 TASKS를 우선한다.
+
+## 현재 후속 범위 — BILLING-UI-CALLBACK / AI-ENTITLEMENT (2026-09-27)
+
+- State: in_progress, Product AP/Field, Owner root. 착수 HEAD9a7fe33/clean·TASKS40[x]/7[ ]·managed95896 실제 live 확인. 기존 가격/동의/인증/청구/lifecycle는 완료 유지.
+- Files: 양web 기존 subscription component 및 새 billing client/model/UI/callback, app/billing/return, 필요 시 admin billing 삽입. entitlement는 새 own helper/native 검사·agents/site-generation/usage와 필요 시 AP80/Field71. 신규refund/Toss/charge오류 및 AP79/Field70은 별도 Refund Agent 소유, 중앙 app/server/package/runtime는 root만 통합한다.
+- Requirements/QA: AP2.8/Field3.8·보안5.4/5.5·QA43~46/113/126/146·UI14/16px·고정 owner/admin billing 구조. 명시 승인 가격/조건·자동갱신 동의·현재 own session/org/SDK state binding·pending/unknown/paid 구분·같은UUID 복구·남은paid/기존업무 보존. 시안 예시가격을 채택하지 않는다.
+- Verification: 카드 복귀 parsing/session/org/state binding·URL secret 제거·응답 유실 동일intent/confirm 복구를 focused web unit 및 own native HTTP로 먼저 실패 재현한다. 모델 제공량은 승인 period/진행 중 예약/동시한도·실제소비/실패해제·다른제품미접근을 own UUID PG17로 확인한다. 관련 변경 type/lint/build·독립 read-only review·최신managed 반영. 사용자 최종 화면/동선/실SDK/실PG는 미실행으로 남긴다.
+- Failure/recovery: callback query만으로 성공 표시 금지, 일회용 authKey/customerKey/state를 로그/URL export에 두지 않는다. 동일인증/같은조직/원래session으로만 queued 저장하며 재시도에서 새checkout/order 생성 금지. provider 없으면 실제 비활성 사유·blocked_integration. 기존 원장/unknown 유지.
+
+- UI 추가 범위/근거: 판매가 중단된 기존 승인 플랜도 현재 구독의 이름·금액·제공량으로 표시해야 한다. 양 billingSnapshot에 org별 current plan projection만 추가하고 기존 paid-billing native에 판매중단 후 원래 조건 유지 assert를 먼저 추가한다. 기존 PLAN-BASIS 완료 이력은 유지, migration/경제값/승인 정책 변경 없음. 검수는 own UUID PG17의 해당 단일 파일만이다.
+
+- Root static93322 P2/conf0.96 checkout·P2/conf0.97 mutation: productwide 한metadata key가 다른로그인/조직의새요청까지막음. 동일원요청binding은보존하면서 context별key/authorization receipt lookup으로격리한다. 기존unknown파기·자동새UUID금지, 서로다른account/org의독립새요청은허용. 집중nativeweb red→green 및narrowrepair로확인한다.
+
+- Root repair41864 P2/conf0.92: org전환 중 늦은checkout응답이 이전attempt를현재화면에넣고SDK를열수있음. view epoch/currentorg fencing 및 SDK loader완료후 guard, originalcontext receipt는 scoped저장보존. 늦은checkout/SDK focused red→green 후같은좁은scope재검토. 관련늦은refund/cancel/read결과도현재view에만UI반영, backend이미접수된자체원장은보존한다.
+
+## 현재 통합 완료 — 5ceec42 (2026-09-27)
+
+- [x] BILLING-UI-CALLBACK 내부/API·metadata재시도: 양웹23/23(callback12+mutation11), own retiredplannative각1/1, rootwholetype73437/lint91115, final2382 noP1P2/.94. rootSDK/실기기/user최종미실행.
+- [x] REFUND-DECLINE.BACKEND 내부: native각11/11+adapter2/2, operator현재권한/다른승인/부분합계/timeout/원키회전/미상GET-only, owner요청UI/mutation소비. fullrefundlifecyclefixture는정당원장단일case각1/1 red→green, 원래기대값유지.
+- [x] 최신managed43912에양build/AP79·Field70+71 migrate/ready·ownrefundworker각1개·callback200/privacyheaders·protectedAPI401반영, TASKS44[x]와phase/coverage/audit/handoff/보고서증거기록. 코드5ceec42.
+- [ ] 다음: AI-ENTITLEMENT actualpaidperiod제공량/모델inflight·usage 및admin가격/환불UI. 새migrationAP80/Field72(기존Field71예약해제/public최종71적용). 실제공급사/최종사용자화면/320px/전체QA/G별도미검수.

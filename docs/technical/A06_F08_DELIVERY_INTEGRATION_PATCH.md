@@ -96,3 +96,67 @@ props는 `{organizationId:string, defaultPhone?:string, children?:ReactNode}`다
 후속 각2/2 검사는 초기 이력이다. owner→editor 조직 lock 경합의 실제 red200!==404를 추가 재현하고 동의 변경의 transaction 재검사를 owner-only로 보완한 최종 native AP79740/Field23567 각3/3 exit0다. Push POST 응답 유실은 브라우저 구독을 삭제하지 않고 그대로 유지한 뒤 자체 GET으로 현재 저장 상태를 확인한다. 미상 응답을 성공/확정실패로 해석하지 않는다. 명시 precommit 거절/Push POST 전 실패일 때만 새 브라우저 구독 정리를 허용한다. 이 UI 경로는 static review/타입 검수이며 실제 browser 네트워크 장애 인수는 미실행이다.
 
 최종 UI repair static39859 terminal exit0: 두 P2 수정 확인/남은 P1·P2 없음, raw confidence0.97/0.96. 실제browser/provider결과는 이static검토에서 주장하지 않는다. 고정시안 component+중앙삽입 patch는 통합 준비 완료다.
+
+
+## CUSTOMER-CONSENT-PUSH 중앙 최소 patch — root 소유
+
+새 own customer component는 agent-public/field-receipt/field-public/field-booking 삽입부에 delivery agent가 직접 연결한다. 기존 workspace registration은 그대로다. 별도 schema/dependency/env 추가 없음. 기존 storage key와 provider/VAPID 미설정 blocked 유지.
+
+### receipt-abuse API guard
+
+AP `apps/agent-api/src/receipt-abuse.ts`:
+
+```ts
+const customerPathPattern = /^\/v1\/customer\/notification-consents\/inquiry\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i;
+// 기존 receiptErrors Set에 'notification_target_not_found' 추가.
+// targetId(request):
+const path = request.url.split('?', 1)[0]!;
+return (pathPattern.exec(path)?.[1] ?? customerPathPattern.exec(path)?.[1])?.toLowerCase() ?? null;
+```
+
+Field `apps/field-api/src/receipt-abuse.ts`:
+
+```ts
+const customerPathPattern = /^\/v1\/customer\/notification-consents\/(inquiry|reservation)\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i;
+// 기존 receiptErrors Set에 'notification_target_not_found' 추가.
+// target(request): 기존 work match를 먼저 반환 후
+const customer = customerPathPattern.exec(request.url.split('?', 1)[0]!);
+return customer ? { kind: customer[1]!, id: customer[2]!.toLowerCase() } : null;
+```
+
+동일 source kind/id/IP hash를 사용하므로 기존 inquiry/reservation와 새 고객동의 GET·POST의 실패 한도가 공유된다. cap/번호는 로그/subject 입력으로 넣지 않는다. root 적용 후 own focused tests에 guard를 실제 등록하여 확인한다.
+
+### Field customHost proxy
+
+`apps/field-web/src/proxy.ts` customHost 분기에서 기존 workApi 옆에 추가:
+
+```ts
+const notification = /^\/v1\/customer\/notification-consents\/(inquiry|reservation)\/([^/]+)\/?$/.exec(path);
+// 기존 if (receipt || workApi || asset) 에 notification 추가.
+// kind: receipt 우선 뒤 notification이면
+notification[1] === "inquiry" ? "inquiries" : "reservations"
+// id: receipt?.[2] ?? workApi?.[2] ?? notification?.[2] ?? asset![1]!
+```
+
+같은 `customHostResource(host, kind, id)` 검증을 통과해야 한다. 임의 Host 전체 `/v1/customer` 허용은 하지 않는다. own backend는 현재cap/source + verified published customHost/own slug Origin을 재검사한다. owner workspace/push worker는 customHost에서 열지 않는다.
+
+### own platform manifest/Apple standalone metadata
+
+각 `src/app/layout.tsx` 기존 metadata에만 추가:
+
+AP:
+```ts
+manifest: "/agent-notifications.webmanifest",
+appleWebApp: { capable: true, title: "Agent Platform", statusBarStyle: "default" },
+```
+Field:
+```ts
+manifest: "/field-notifications.webmanifest",
+appleWebApp: { capable: true, title: "Field", statusBarStyle: "default" },
+```
+
+manifest 자체는 delivery 소유 public asset으로 추가했다. 각 own `/workspace`가 시작페이지이며 SW는 사용자 `웹 푸시 준비 (추가)` 클릭에서 실제 등록된다. Field customHost는 workspace/worker/manifest를 열지 않으며 고객의 카카오/SMS 동의만 지원한다. iOS 홈 화면 설치/실permission/실VAPID 발송은 사용자 후속 인수다.
+
+### root 반영 확인/내부 전달 완료
+
+root는양receipt-abuse exact customer경로/error mapping·Fieldproxy ownresourcebinding·양layout ownmanifest/Apple metadata를반영했다고알렸고현재source에서확인했다. guard실소비nativeAP5/5·Field6/6, ownunit각9/9·API/webtype·focusedlint·webbuildexit0, 최종readonly96633 P1/P2없음(conf0.88)이다. 코드포함commit/managedHTTP·실browser/device/provider·시안최종인수는root/사용자후속이며이지침이운영출시승인인것은아니다. 상세failed/red→green명령/로그는executionplan마지막section이다.

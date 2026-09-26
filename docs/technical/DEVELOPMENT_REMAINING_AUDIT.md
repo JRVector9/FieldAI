@@ -1,6 +1,20 @@
 # 개발 종료까지 남은 범위 — 2026-09-26 1차 코드 대조
 
-## 최신 내부 완료 checkpoint — ef0dfd3 (2026-09-27)
+## 최신 내부 완료 checkpoint — 5ceec42 (2026-09-27)
+
+TASKS 상단 **44개[x]/7개[ ]**가 기준이다. 디자인 원본 reference/field_ui_prototype_v3.html은 그대로 유지하며 시안에 없는 기능만 `(추가)`다. 완료 기능을 기억 부재로 재작업하지 않는다.
+
+- [x] **A07.F09.BILLING-UI-CALLBACK** 양제품 고정 구독 카드의 승인 플랜/조건·명시 동의·현재 구독/기간·갱신중지·결제/환불 요청/조회, own SDK callback 페이지·URL secret 제거·원래 user/session/org/origin/nonce/customer binding, unknown 같은 UUID/body·context별 재시도와 늦은 화면/SDK 응답 차단. 코드 **5ceec42**, 양웹 billing client/mutation/return/settings·subscription·callback headers와 billingSnapshot currentPlan. focused web 양 **23/23**(callback12+mutation11), 판매중단 원조건 유지 own PG17 각1/1, whole type73437/lint91115 exit0, 최종 root repair2382 P1/P2 없음/confidence0.94. **admin 가격/환불 UI·AI 제공량 강제·실 SDK/PG·사용자 최종 화면/동선 인수는 제외**한다.
+- [x] **A07.F09.REFUND-DECLINE.BACKEND** owner 요청→operator 검토→다른 승인→own durable 환불 worker·원 거래/부분합계·unknown GET-only/동일 provider 증거·설정/권한 변경 차단·확정 최초청구 거절과 과거unknown 구분. 코드 **5ceec42**, AP79/Field70·refund/Toss/charge 모듈 및 package/managed worker. own UUID PG17 AP39861/Field3173 각11/11·adapter각2/2, static58435 noP1/P2/confidence moderate(수치없음). 새 guard로 기존 lifecycle fixture 직접UPDATE가 PAB06/PFB06 red인 것은 정당한 요청/검토/다른승인/합성worker 원장으로 보완해 단일case 각1/1 green61750/99164, 원래 접근제한 기대값 유지. **실환불·MFA/법무·admin UI·전체QA/G는 제외**한다.
+- [x] **A06.F08.CUSTOMER-CONSENT-PUSH.INTERNAL** 현재 확인키 고객 채널 동의 GET/선택·무번호 재입력 철회·rotation/purge/Org lock 재검사·Field 예약/자체 공개host Origin·같은 source receipt 실패한도, own ServiceWorker/manifest·실제 브라우저 등록/permission/subscription 호출 경로·unknown 구독 유지와 외부SW 충돌 차단. 코드 **5ceec42**, 양API delivery/receipt guard·customer/owner component·push client·public assets·Field proxy/layout. own UUID PG17 AP5/5·Field6/6, owner keyless actualOrigin각1/1, browser model/SW VM각9/9, static96633 noP1/P2/confidence0.88. **실기기 설치/권한/수신·실발송·최종 사용자 인수는 제외**한다.
+- [x] **A09.PUBLIC-WRITE.FIELD-BFF-UI** Field own durable intent/원 UUID·If-Match·pending/unknown 복구·explicit 설치 purpose/scopes/현재 owner/org/session·새 SDK 승인·local pause/revision 경쟁 차단·조직별 선택/legacy resolver 분리와 고정 기존 설치 화면. 코드 **5ceec42**, 최종 Field71(미적용72에서 본문동일 rename)·ap connector/BFF/site resolver/component·새 own runner/HTTP consumer, mock client 등록 가능scope만 추가(기존grant 자동확대 없음). native13971 **14/14**·actual Field↔AP HTTP5557 **1/1**·UI tenantconsumer95035 **1/1**, repair97931 noP1/P2/confidence0.88. **실DNS·새 설치 purpose의 browser OAuth·전체 호환/최종 인수는 제외**한다.
+
+- 최신 공통 gate: whole type73437/lint91115 exit0, managed43912가 양API/web 최신 build·AP79/Field70+71 migrate·ready200/양웹200을 실제 확인했다. callback200/no-referrer/private no-store, 새refund/설치API unauth401, own controller26830와 환불workerAP30020/Field30087 각1개/같은parent를 확인했다. logs: /tmp/fixed-design-new-functions-{managed,runtime-evidence,process-evidence}.log. provider/model/domain/push 미연결은blocked_integration이며 실제 청구/환불/고객발송/운영배포/삭제 없음.
+- 현재 내부 남음: AI entitlement/기간 제공량·admin 가격/환불 화면, 일반OAuth token/refresh family·legacy/Field routekey. 실제 외부·운영 QA/G·새OAuth browser·모든역할/320px/접근성/사용자 최종 화면·동선은 미검수다. 전체 부모Task/서비스 출시 완료가 아니다.
+- 정확한 다음: TASKS 상단과 CODEX_HANDOFF 최신 항목 읽기→git status/log→미완료ID의 파일/요구/QA/명령 기록→기존own model-budget/agents/customer-consultations 및 Fieldsite-generation/usage 대조. AP80/Field72는 새배정이고 기존AP79/Field70/71은적용되어 변경금지. managed43912는동일handle을poll하며 필요없으면재시작하지않는다.
+
+
+## 이력 — 내부 완료 checkpoint ef0dfd3 (2026-09-27)
 
 TASKS 상단 **40개[x]/7개[ ]**를 따른다. 고정 디자인은 reference/field_ui_prototype_v3.html이며 시안에 없는 기능만 `(추가)`로 표시한다. 원본 시안은 수정하지 않았다. 완료 backend/화면을 기억 부재로 다시 만들지 않는다.
 
