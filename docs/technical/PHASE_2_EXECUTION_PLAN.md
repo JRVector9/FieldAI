@@ -1892,3 +1892,10 @@ AP와 Field의 독립 웹 앱에서 문서의 역할별 화면·이동 경로·�
 - 범위: tools/setup-mock-env.mjs·tools/spikes/mock-retention-initialization.test.mjs의 AP 회수 directory만. 생성 설정을 절대 경로로 기록하고 기존 상대 경로를 같은 저장소 폴더로 해석해 정규화한다. 기존 signing key/원장 파일을 유지하며 유실된 keyed 폴더를 재생성하지 않는다.
 - 요구/QA: AP 단독 실행·QA121/150/151/160 로컬 부분. 세 번째 review62519 exit0의 P2 package cwd 문제.
 - 검수: node --test tools/spikes/mock-retention-initialization.test.mjs 실제 red exit1(/tmp/ap-revocation-package-path-red.log) 후 새 설정/기존 상대 경로·package cwd·원장 유실 재생성 금지, pnpm lint. DB/API/schema/UI 변화 없음.
+
+### R00/C03 전체 기능 잔여 범위 대조 (2026-09-26)
+
+- 사용자 질문: 개발 종료까지 남은 양. 이번 범위는 문서/코드 읽기와 docs/technical/DEVELOPMENT_REMAINING_AUDIT.md·TASKS/진행/인계·옵시디언 기록이다. 추가 API/DB/UI 변경 없음.
+- 기준: docs/00~04, docs/06 QA01~160, TASKS 원본46개 ID, 현재 native source/migration/계약 JSON/표준 runner. v3 요구를 코드 존재/이전 부분 테스트만으로 Done 처리하지 않는다.
+- 명령: rg --files·rg -n app routes/blocked 상태/청구·발송 schema, subscription/auth/deployments/sites/integrator source 직접 읽기, 계약 JSON methods 비교. 이번 문서 대조는 실행 테스트가 아니다.
+- 우선 목표: 외부 credential 부재와 내부 미구현을 구분하고 다음 구현 순서/완료 기준을 고정한다. 시안 최종 시각/동선은 사용자가 후속 검수하며 UI 구현 때 직접 시안을 다시 확인한다.

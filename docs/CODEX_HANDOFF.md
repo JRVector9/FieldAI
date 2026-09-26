@@ -8,6 +8,15 @@
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 - **사용자 요청:** `CODEX_HANDOFF.md`에 위 시안 경로를 계속 남긴다. 이 섹션은 인계파일 상단에 유지하고, 화면 구현을 재개할 때 `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`을 직접 연 뒤 해당 화면·기능·동선을 비교한다.
 
+## 현재 작업 — 개발 종료 범위 대조 (2026-09-26)
+
+- **목표/결과:** 전체 v3 기능/사용 가능한 로컬 환경 구축은 계속 active/in_progress다. 사용자의 종료 시점 질문에 대해 TASKS46개·QA160의 기능군과 양제품 PRD/계약을 코드와 대조한 `docs/technical/DEVELOPMENT_REMAINING_AUDIT.md`를 작성했다. 46개 완료/160개 통과나 최종 누락 확정을 주장하지 않는다.
+- **확인된 내부 누락6묶음:** native widget 종료/새 상담, 양제품 유료 billing 원장/상태·PG adapter, 양제품 메시지 발송/콜백/unknown·SMS fallback/webpush, Field 자체 domain 상태/등록/검증, PRD 최소 public POST connection/deployment·scope 계약 차이, 일반 OAuth lifecycle/legacy/Field route key 종료. 앞의 “3작업군”은 작은3개 Task/시간/완료율이 아니다. 단순 외부 key 연결만으로2~4가 완성되는 현재 상태도 아니다.
+- **코드 단계 저장:** AP native 회수/복원 29files는 **eab1d30**으로 커밋, 실제 직후 git status clean. 코드 검사/리뷰 사실은 바로 아래 완료 단계 기록. 이후 현재 변경은 이 audit/진행/phase plan/인계 문서뿐이다.
+- **검수/제한:** 이 단계는 read-only 코드/문서 대조이며 추가 DB/E2E/시안/기능 테스트는 미실행. 시안 경로는 위에 보존한다. 실 인증/MFA/외부 공급사·사용자 최종 화면 인수·운영 QA/G는 후속이며 내부 구현 중단/전체 완료 처리 근거로 사용하지 않는다.
+- **변경 파일:** 새 DEVELOPMENT_REMAINING_AUDIT·TASKS/status/coverage/PHASE_2_EXECUTION_PLAN/이 인계·옵시디언 native 회수 일지 commit 기록. PRD/공개 계약/schema/API 변경 없음.
+- **현재 환경:** mock36780과 양 ready 유지. timeout으로 재기동하지 않는다. 다음은 audit 순서1의 deployments.ts native widget 종료/새 대화 흐름을 시안 직접 확인→범위/QA/명령 기록→최소 구현, 이후 billing/발송/주소/public client 기능을 순차 완료한다. 작은 proof 검토만 끝없이 반복하지 않는다.
+
 ## 현재 인수인계 — AP native 회수·격리 복원 (2026-09-26, 단계 구현 완료)
 
 - **목표/상태:** 전체 v3.0/C03 기능을 독립 AP/Field 로컬 서비스로 완성한다. 직전 HEAD a5aee2b 이후 이번 native 회수/복원 단계는 implemented/부분 verified다. **전체/C03/A08는 in_progress**이고 출시 승인/전체 인수가 아니다. 단계 commit은 `git log -1 --oneline`으로 확인한다. 시안 경로는 상단에 유지한다.
