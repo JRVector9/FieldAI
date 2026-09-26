@@ -27,6 +27,7 @@ import { registerExternalRequestAttachmentRoutes } from './external-request-atta
 import { registerFieldAdminRoutes } from './admin.js';
 import { registerFieldModerationRoutes } from './site-moderation.js';
 import { registerFieldCustomerSupportRoutes } from './customer-support.js';
+import { registerFieldRetentionRoutes } from './retention-routes.js';
 
 export function createFieldApp(
   probe: () => Promise<void>,
@@ -41,6 +42,7 @@ export function createFieldApp(
     registerFieldAdminRoutes(app, businessRuntime);
     registerFieldModerationRoutes(app, businessRuntime);
     registerFieldCustomerSupportRoutes(app, businessRuntime);
+    registerFieldRetentionRoutes(app, businessRuntime);
     registerFieldReceiptAbuseGuard(app, businessRuntime);
     registerFieldReceiptRotationRoutes(app, businessRuntime);
     registerFieldBusinessRoutes(app, businessRuntime);

@@ -19,6 +19,8 @@ const suites = {
     ['Field administrator routes and permission boundary', 'field-admin-http.test.mjs'],
     ['Field report, approved support access, and owner appeal', 'field-moderation-http.test.mjs'],
     ['Field customer support scopes, owned snapshots, and private photo expiry', 'field-customer-support-http.test.mjs'],
+    ['Field retention legacy closure migration and immutable policy basis', 'field-retention-migration.test.mjs'],
+    ['Field retention approval, dispute holds, preview recovery, and owner work closure', 'field-retention-http.test.mjs'],
   ],
   distribution: [
     ['AP publisher recovery', 'publisher-recovery-http.test.mjs'],

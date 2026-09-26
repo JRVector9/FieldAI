@@ -3,9 +3,39 @@
 ## 사용자 지정 기준 시안 — 작업 재개 시 확인
 
 - 화면·기능·동선 구현 기준 시안: `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
-- 저장소 기준 경로: `reference/field_ui_prototype_v3.html`. 후속 에이전트도 이 파일을 화면·동선 구현 기준으로 사용하며, 인수인계 갱신 시 이 시안 경로를 상단에 유지한다.
+- 저장소 기준 경로: [reference/field_ui_prototype_v3.html](../reference/field_ui_prototype_v3.html). 후속 에이전트도 이 파일을 화면·동선 구현 기준으로 사용하며, 인수인계 갱신 시 이 시안 경로를 상단에 유지한다.
 - 화면·기능 구현 중에도 해당 역할의 시안을 수시로 다시 확인한다. 경로 기록만으로 시안을 확인했다고 보고하지 말고, 실제 열어 본 화면과 비교 범위를 작업 기록에 남긴다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
+
+## 최신 인수인계 — C03/F09 Field 보존·종결·분쟁 보류 기반 (2026-09-26)
+
+- **현재 목표/상태:** 시안/v3.0 전체 기능을 끝까지 연결하고 실제 사용할 수 있는 독립 AP/Field 로컬 환경을 유지한다. a13510e 기반 작업트리의 이번 단계는 정책·종결/재개 시각·보류·미리보기 UI/API/DB/권한/감사/복구를 연결한 progress다. 실제 정리 job/worker·개인정보/사진 제거·소비자/복원 원장 재적용은 필수로 남아 C03/F09/전체 목표는 미완료다. 단계 커밋은 `git log -1 --oneline`으로 확인한다.
+- **수정 파일/요구:** Field PRD3.6/3.7/3.8/3.9 F-A06·보안5.5·QA46/49/119/157/159 관련 로컬 부분. 새 `apps/field-api/migrations/000059_work_retention_basis.sql`, `src/work-retention.ts`, `src/retention-routes.ts`, `test/retention.db.test.ts`; 기존 API `src/{app,bookings}.ts`. 새 웹 `src/FieldRetentionAdmin.tsx`, `src/field-retention.{ts,css}`, 기존 `src/{field-admin,field-workspace}.tsx`/`src/app/layout.tsx`. 새 `tools/spikes/field-retention-{http.test.mjs,browser.py,migration.test.mjs}`, 기존 `tools/run-e2e.mjs`; 실행 계획/TASKS/DEVELOPMENT_STATUS/LOCAL_FUNCTIONAL_COVERAGE/이 인계. AP 내부/DB·제품 간 공개 계약 변경 없음.
+- **완료/설계:** 실제 active→terminal 전환만 DB clock으로 종결 시각을 기록하고 재개 시 제거한다. legacy는 현재 revision/state와 일치하는 실제 종결 사건만 backfill하고 updated_at을 추정 근거로 쓰지 않는다. 수신 문의는 Field own open/closed·revision과 owner/editor 종결 API/UI를 가지며 AP 원본/공개 requested status·알림을 바꾸지 않는다. 수신 예약은 Field 예약 종결을 읽는다. immutable1~3650일 work/photo<=work·참조/사유/UUID 멱등 정책→다른 operator 승인→중단, native3종/org FK hold(dispute/legal_record/investigation)→다른 operator의 사유 해제·기한 초과 자동 해제 없음, 별도 감사 원장을 연결했다. 180/90은 제안이며 mock 별도 승인은 법무/출시 인증이 아니다. non-mock admin은 MFA 미연결503이다.
+- **미리보기/복구:** native 업무 metadata만100개+microsecond cursor로 조회한다. 미승인 정책/활성 업무/종결 근거 없음/미래 일정·점유/양방향 연결 예약 hold·현재 지원 승인/고객 전달·수신 복사·미수락 답변 대기/최근 메시지·사진 activity/업무·사진 기한을 구분한다. 입력 실패를 빈 성공으로 바꾸지 않는다. UI는 요청 ACK 분실 때 같은 UUID/본문을 재사용하고, 목록503 때 metadata 유지·조작 잠금·기존 preview 폐기·재조회를 제공한다. preview503도 이전 결과를 폐기한다. owner 종결은 같은 expectedRevision 재전송으로 최초 clock을 보존한다. Field 수신 목록/대기 집계에서 native 종결을 반영하며 고객 원문/확인키·사진·예약/원장·점유를 정리하지 않았다.
+- **실제 검사:** 최초64044는 공개 fixture에 UUID submission key를 넣어400이었고 기존43자 계약에 맞춰 헤더를 제공하지 않도록 수정했다. `pnpm test:db:field` POST404 red **22865**→종결/정책/hold/권한/Origin·멱등·원본 보존 **76337 28/28**, 수신 복사 대기·수신 예약 미래/종결 기준·연결 예약의 hold·terminal 후 새 메시지 **80683 28/28**, 최종 cursor105개/microsecond 중복·누락 없음/조직 binding까지 **93261 28/28**(`/tmp/field-retention-pagination-green.log`, 각각 임시 DB 제거). `node --test tools/spikes/field-retention-migration.test.mjs` **1/1**(`/tmp/field-retention-migration.log`,58까지 별도 DB→실제 legacy fixture→59·current revision backfill/불일치/무사건 null/원본 불변/재개·새 종결/immutable 거부·임시 DB 제거). 최신 전체 **typecheck37941/lint57228 exit0**; 변경 검사/등록 ESLint5493, Python/Node 구문/diff exit0. 새 native 모듈의 AP 내부/DB 참조 rg 매치 없음(exit1).
+- **실제 HTTP/320px:** region 부재 **79185** red→mock **85257**에서 최종 **36901 1/1**(`/tmp/field-retention-recovery-browser.log`): 정책 ACK 분실/동일 요청·다른 승인/자기 승인 비노출, 보류/다른 해제, preview503 폐기/복구, 원장503 metadata 유지/잠금/복구, Field 수신 업무 종결 ACK 분실/최초 결과 재확인, 원본 불변·가로 넘침/pageerror0. 기존 **Field 관리자87655 1/1**(`/tmp/field-retention-admin.log`). Field 표준 E2E7개로 등록했으나 이번 턴 전체 명령은 미실행. AP DB/전체 회귀·정식 QA/G를 이번 Field 변경으로 다시 검수했다고 주장하지 않는다.
+- **실패/수정:** 첫 SQL의 없는 change_end_at은 실제 proposal_end_at/occupancy와 대조해 수정했다. 고객 문의 메시지 pending을 고객 발송으로 오인하던 preview 조건은 sender=owner로 한정했다. owner DTO missing red25955/7561을 확인해 Field 종결 필드를 추가했다. 첫 browser79826은 없는 /workspace/inbox로 접근했으며 실제 /workspace→모바일 문의 링크로 고쳤다. migration 검사 lint unused alias와 pagination TS7022는 실제 응답 구조/미사용 변수 제거로 고쳤다. 실패 기대값을 현재 결함에 맞추지 않았다.
+- **시안/제한:** 기준 HTML의 admin/audit를 실제320px로 열어 감사 기록/모바일 메뉴를 확인했다. `/tmp/field-retention-prototype-admin-320.png`와 실제 `/tmp/field-retention-policy-320.png`/`field-retention-admin-320.png`를 열었다. 시안에 없는 보존 세부 기능은 PRD/보안5.5에 맞춰 추가했다. 전체 화면 일치/사용자 최종 동선 인수·운영 MFA/법무/실 공급사·전체 PRD/QA/G는 미완료다. 기존 법정 청구 기록을 전체 대화 보존으로 확대하지 않는다.
+- **현재 환경/복구:** mock99529 생존 확인→Ctrl+C terminal exit1, 새81708 양제품 build/ready→확인 후 Ctrl+C exit130, 최종 **85257**(`/tmp/field-retention-final-runtime.log`) 양제품 build/migrate/ready. 마지막 양 API ready·양 웹200 실제 확인. AP http://localhost:3001/workspace, Field http://localhost:3002/workspace, Field 관리자 http://localhost:3002/admin/audit. Field 제작 LLM worker는 model 미설정 blocked_integration이다. 코드 롤백은 기존 원문/확인키·점유/사진·정책/hold/감사 열을 보존한다. 운영 배포/청구/고객 발송/실 고객·운영 데이터 삭제 없음; 검수에서 생성한 임시 DB/합성 계정/자료만 정리했다.
+- **다음 필수 작업:** 미리보기 결과/기한·현재 정책/hold·지원/전달/권한을 실행 직전에 재확인하는 Field 정리 job 요청/다른 승인/독립 worker, 실제 파일 삭제 확인/재시도·부분 실패, 개인정보 제거/tombstone·기존 receipt/export/support 소비자·수신 복사 재생성 방지, 복원 후 삭제/revoke 원장 재적용을 구현한다. AP 익명30/접수180/사진90은 AP 자체 원장/worker로 별도 구현한다. 삭제 메타데이터만 추가하고 보존 전체를 완료로 축소하지 않는다. 실제 사용자 자료 정리는 별도 운영 권한 없이 수행하지 않고 격리된 합성 fixture로만 검수한다. 이후 전체 문서 기능/역할·명령/G를 요구별로 대조한다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -2 --oneline
+sed -n '1,36p' docs/CODEX_HANDOFF.md
+sed -n '71,88p' docs/04_SECURITY_OPERATIONS_RELEASE.md
+cat apps/field-api/src/work-retention.ts
+cat apps/field-api/src/retention-routes.ts
+cat apps/field-api/src/external-request-attachment-worker.ts
+cat docs/technical/LOCAL_BACKUP_RUNBOOK.md
+rg -n 'visitor_key|customer_name|customer_snapshot|body|object_key|delivered_at' apps/field-api/src/{inquiries,bookings,reservation-export,operations-archive,customer-support}.ts
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+새 정리 실행 단계의 파일/요구/QA/명령을 먼저 기록하고 실제 격리 DB/파일에서 승인·보류 경합·기한·실패/재시도·복원 및 소비자 상태의 red부터 시작한다. 별도 retention worker는 제작 LLM/상대 제품 서버/비밀값에 의존하지 않아야 한다. mock85257은 현재 생존을 확인하고 build 반영 때만 정상 재시작한다. 상단 시안 경로를 유지한다.
 
 ## 최신 인수인계 — C03/F09 Field 업무별 고객정보 지원 열람 (2026-09-26)
 

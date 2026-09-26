@@ -6,6 +6,7 @@ import { fieldAdminSections as sections, type FieldAdminSection } from "./field-
 import "./field-admin.css";
 import { FieldModerationAdmin } from './FieldModerationAdmin';
 import { FieldCustomerSupport } from './FieldCustomerSupport';
+import { FieldRetentionAdmin } from './FieldRetentionAdmin';
 
 type Overview = {
   product: "field";
@@ -151,6 +152,7 @@ export function FieldAdmin({ section = "operations" }: { section?: FieldAdminSec
         </section>}
         {section === "audit" && <FieldModerationAdmin actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <FieldCustomerSupport actorUserId={overview.actorUserId} role={overview.role} />}
+        {section === "audit" && <FieldRetentionAdmin actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <section className="special-panel" aria-label="최근 관리자 조회"><h2>최근 관리자 조회</h2>
           {overview.recentAdminAccesses.length === 0 ? <p>조회 기록이 없습니다.</p>
             : <div className="field-admin-list">{overview.recentAdminAccesses.map((item, index) => <article key={`${item.actorUserId}-${item.accessedAt}-${index}`}>

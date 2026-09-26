@@ -670,9 +670,9 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
       return reply.code(400).send({ error: 'invalid_external_request_cursor' });
     const result = await runtime.pool.query<ReceivedWorkRow & { id: string; service_snapshot: Service;
       customer_snapshot: { name: string; phone: string; verified: boolean };
-      summary: string; status: string; received_at: Date; is_test: boolean; cursor_timestamp: string }>(
+      summary: string; status: string; received_at: Date; is_test: boolean; field_work_state: string; field_work_revision: number; retention_closed_at: Date | null; cursor_timestamp: string }>(
       `select id,service_snapshot,customer_snapshot,summary,status,received_at,is_test,
-         provider,connection_id,action_request_id,consent_record_id,consent_confirmed_at,processing_policy,
+         provider,connection_id,action_request_id,consent_record_id,consent_confirmed_at,processing_policy,field_work_state,field_work_revision,retention_closed_at,
          to_char(received_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as cursor_timestamp
        from field.external_work_requests
        where organization_id = $1 and kind = 'inquiry'
@@ -685,6 +685,7 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
         customerName: row.customer_snapshot.name, customerPhone: row.customer_snapshot.phone,
         customerVerified: row.customer_snapshot.verified, summary: row.summary,
         status: row.status, receivedAt: row.received_at.toISOString(), isTest: row.is_test,
+        fieldWorkState: row.field_work_state, fieldWorkRevision: row.field_work_revision, closedAt: row.retention_closed_at,
         receivedRecord: receivedWorkRecord(row) })),
       nextCursor: result.rows.length > 100
         ? encodeOwnerListCursor(operator.id, 'external_request', page[page.length - 1]!.cursor_timestamp,
@@ -698,9 +699,9 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
     if (!uuid.test(request.params.id)) return reply.code(404).send({ error: 'external_request_not_found' });
     const result = await runtime.pool.query<ReceivedWorkRow & { id: string; service_snapshot: Service;
       customer_snapshot: { name: string; phone: string; verified: boolean };
-      summary: string; status: string; received_at: Date; is_test: boolean }>(
+      summary: string; status: string; received_at: Date; is_test: boolean; field_work_state: string; field_work_revision: number; retention_closed_at: Date | null }>(
       `select id,service_snapshot,customer_snapshot,summary,status,received_at,is_test,
-         provider,connection_id,action_request_id,consent_record_id,consent_confirmed_at,processing_policy
+         provider,connection_id,action_request_id,consent_record_id,consent_confirmed_at,processing_policy,field_work_state,field_work_revision,retention_closed_at
        from field.external_work_requests where organization_id=$1 and id=$2 and kind='inquiry'`,
       [operator.id, request.params.id]);
     const row = result.rows[0];
@@ -709,6 +710,7 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
       customerName: row.customer_snapshot.name, customerPhone: row.customer_snapshot.phone,
       customerVerified: row.customer_snapshot.verified, summary: row.summary,
       status: row.status, receivedAt: row.received_at.toISOString(), isTest: row.is_test,
+      fieldWorkState: row.field_work_state, fieldWorkRevision: row.field_work_revision, closedAt: row.retention_closed_at,
       receivedRecord: receivedWorkRecord(row) });
   });
 

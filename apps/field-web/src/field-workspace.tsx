@@ -18,7 +18,7 @@ type OwnerNotification = { id: string; organizationId: string; targetId: string;
   eventType: string; createdAt: string; readAt: string | null };
 type ExternalInquiry = { id: string; service: Service; customerName: string; customerPhone: string;
   customerVerified: boolean; summary: string; status: "requested"; receivedAt: string; isTest: boolean;
-  receivedRecord?: ReceivedWorkRecord | null };
+  receivedRecord?: ReceivedWorkRecord | null; fieldWorkState: "open" | "closed"; fieldWorkRevision: number; closedAt: string | null };
 type OwnerInquirySummary = { id: string; state: string; customer_name: string;
   service_snapshot: Service; is_test: boolean; test_site_revision: number | null;
   created_at: string; updated_at: string };
@@ -290,6 +290,24 @@ export function FieldWorkspace() {
       return null;
     }
   }
+  async function closeReceivedWork(item: ExternalInquiry) {
+    if (!catalog || busy) return;
+    setBusy(true); setStatus("");
+    try {
+      const result = await requestJson(`/v1/owner/external-requests/${item.id}/close`, "POST",
+        { expectedRevision: item.fieldWorkRevision }, undefined, { "x-organization-id": catalog.organizationId });
+      if (result.status !== 200) {
+        setStatus(`Field 수신 업무를 종결하지 못했습니다 (${result.status}). 목록을 다시 확인해 주세요.`);
+        return;
+      }
+      const value = result.data as { state: "closed"; revision: number; closedAt: string };
+      setExternalInquiries(current => current.map(existing => existing.id === item.id
+        ? { ...existing, fieldWorkState: value.state, fieldWorkRevision: value.revision, closedAt: value.closedAt } : existing));
+      setStatus("Field 수신 업무의 종결을 확인했습니다. AP 대화 상태는 별도로 유지됩니다.");
+    } catch { setStatus("종결 응답을 확인하지 못했습니다. 같은 업무의 종결 버튼으로 결과를 다시 확인해 주세요."); }
+    finally { setBusy(false); }
+  }
+
   function selectExternal(item: ExternalInquiry) {
     setActiveInboxKey(`ap:${item.id}`);
     selectedExternalRef.current = item.id;
@@ -806,7 +824,7 @@ export function FieldWorkspace() {
     setManualDialogToken(crypto.randomUUID());
   }
   const pendingInquiries = inbox.filter(item => item.state === "needs_owner" && !item.is_test).length
-    + externalInquiries.filter(item => !item.isTest).length;
+    + externalInquiries.filter(item => !item.isTest && item.fieldWorkState !== "closed").length;
   const inquirySummaryState = inboxLoadState === "failed" || externalLoadState === "failed" ? "failed"
     : inboxLoadState === "loading" || externalLoadState === "loading" ? "loading" : "ready";
   const pendingReservations = reservations.filter(item =>
@@ -840,7 +858,7 @@ export function FieldWorkspace() {
       time: item.updated_at, isTest: item.is_test })),
     ...externalInquiries.map(item => ({ key: `ap:${item.id}`, source: "ap" as const, id: item.id,
       name: item.customerName, service: item.service.name, preview: item.summary,
-      status: "확인 필요", time: item.receivedAt, isTest: item.isTest })),
+      status: item.fieldWorkState === "closed" ? "처리 완료" : "확인 필요", time: item.receivedAt, isTest: item.isTest })),
     ...reservations.filter(item => item.source === "public").map(item => ({
       key: `reservation:${item.id}`, source: "reservation" as const, id: item.id,
       name: item.name, service: item.service.name,
@@ -964,7 +982,7 @@ export function FieldWorkspace() {
       </div>}</aside>
       <div className="field-owner-inbox-detail">{!shownInboxKey && <section className="field-owner-inbox-prompt"><span aria-hidden="true">▤</span><h2>문의·예약을 선택해 주세요.</h2><p>왼쪽 목록에서 고객 대화와 출처를 확인할 수 있습니다.</p></section>}
       <section id="external-inquiries" className={`special-panel field-owner-inbox-thread${shownInboxKey?.startsWith("ap:") ? " active" : ""}`}><div className="field-owner-inbox-source">AP 상담 · 전달 접수 · AP 원본</div><div className="panel-heading"><button className="field-owner-inbox-back" type="button" onClick={() => setActiveInboxKey(null)} aria-label="문의 목록으로">←</button><h2>AP에서 전달된 문의</h2><button type="button" onClick={() => void loadExternalInquiries(catalog.organizationId)}>새로고침</button></div><p>AP 상담 원문과 답변은 AP에 보관됩니다.</p>
-        {externalInquiries.filter(item => item.id === selectedExternalId).map(item => <div key={item.id} className="knowledge-source"><h3>{item.customerName} · {item.service.name}</h3><p>연락처: {item.customerPhone}{item.customerVerified ? " · 확인됨" : " · 본인 확인 전"}</p><p>전달 내용: {item.summary}</p><p>접수 시각: {new Date(item.receivedAt).toLocaleString("ko-KR")}</p><p>Field 접수 상태: {item.status === "requested" ? "사업자 확인 전" : item.status}</p><FieldReceivedWorkRecord record={item.receivedRecord} /><ExternalRequestPhotos requestId={item.id} organizationId={catalog.organizationId} /><button type="button" onClick={() => void loadApConversation(item.id, catalog.organizationId)}>AP 원본 새로고침</button>{apConversation && <><p>AP 원본 상태: {apConversation.state} · revision {apConversation.revision}</p>{apConversation.state === "spam" && <p role="status">AP에서 스팸으로 분류해 답변·알림을 중단했습니다. 원본과 작성 초안은 유지됩니다. AP 관리실에서 해제한 뒤 원본을 새로고침해 주세요.</p>}<ol className="field-owner-inbox-messages">{apMessages.map(message => <li key={message.id} className={message.actor === "owner" ? "mine" : "customer"}><strong>{message.actor === "owner" ? "사업자" : "고객"}</strong><p>{message.body}</p><small>AP #{message.sequence} · {new Date(message.createdAt).toLocaleString("ko-KR")}</small></li>)}</ol>{apMessages.length === 0 && <p>AP 원본 메시지가 없습니다.</p>}{apMessages.length > 0 && apMessages.length % 100 === 0 && <button type="button" onClick={() => void loadApConversation(item.id, catalog.organizationId, apNextAfter)}>다음 메시지 읽기</button>}</>}{apReplyDraft && <p role="status">{apReplyDraft.state === "delivery_unknown" ? "AP 저장 결과 확인 중 · Field에 원래 초안과 제출 키 보관" : apReplyDraft.state === "revision_conflict" ? "AP 대화 변경됨 · 초안 보관, 원본을 새로 확인한 뒤 제출" : "AP 미전송 초안이 Field에 보관됨"}</p>}<form className="form-fields" onSubmit={event => void sendApReply(event)}><label>AP 원본 대화에 답변<textarea required maxLength={5000} value={apReplyBody} onChange={event => setApReplyBody(event.target.value)} /></label><button type="submit" disabled={busy || !apConversation || apConversation.state === "closed" || apConversation.state === "spam"}>AP에 답변 저장</button></form>{!apConversation && <p>AP 원본을 열어야 답변을 제출할 수 있습니다. 보관된 초안은 계속 표시됩니다.</p>}<p>AP가 고객 알림을 담당합니다. 외부 발송 여부는 저장과 별도 상태입니다.</p></div>)}</section>
+        {externalInquiries.filter(item => item.id === selectedExternalId).map(item => <div key={item.id} className="knowledge-source"><h3>{item.customerName} · {item.service.name}</h3><p>연락처: {item.customerPhone}{item.customerVerified ? " · 확인됨" : " · 본인 확인 전"}</p><p>전달 내용: {item.summary}</p><p>접수 시각: {new Date(item.receivedAt).toLocaleString("ko-KR")}</p><p>Field 접수 상태: {item.status === "requested" ? "사업자 확인 전" : item.status}</p><p>{item.fieldWorkState === "closed" ? `Field 업무 종결됨 · ${item.closedAt ? new Date(item.closedAt).toLocaleString("ko-KR") : "종결 시각 미확인"}` : "Field 업무 처리 중"}</p>{item.fieldWorkState === "open" && <button type="button" disabled={busy} onClick={() => void closeReceivedWork(item)}>Field 수신 업무 종결</button>}<p>Field 수신 업무의 종결은 AP 원본 대화와 별도입니다. 기존 자료와 고객 접근 경로를 유지합니다.</p><FieldReceivedWorkRecord record={item.receivedRecord} /><ExternalRequestPhotos requestId={item.id} organizationId={catalog.organizationId} /><button type="button" onClick={() => void loadApConversation(item.id, catalog.organizationId)}>AP 원본 새로고침</button>{apConversation && <><p>AP 원본 상태: {apConversation.state} · revision {apConversation.revision}</p>{apConversation.state === "spam" && <p role="status">AP에서 스팸으로 분류해 답변·알림을 중단했습니다. 원본과 작성 초안은 유지됩니다. AP 관리실에서 해제한 뒤 원본을 새로고침해 주세요.</p>}<ol className="field-owner-inbox-messages">{apMessages.map(message => <li key={message.id} className={message.actor === "owner" ? "mine" : "customer"}><strong>{message.actor === "owner" ? "사업자" : "고객"}</strong><p>{message.body}</p><small>AP #{message.sequence} · {new Date(message.createdAt).toLocaleString("ko-KR")}</small></li>)}</ol>{apMessages.length === 0 && <p>AP 원본 메시지가 없습니다.</p>}{apMessages.length > 0 && apMessages.length % 100 === 0 && <button type="button" onClick={() => void loadApConversation(item.id, catalog.organizationId, apNextAfter)}>다음 메시지 읽기</button>}</>}{apReplyDraft && <p role="status">{apReplyDraft.state === "delivery_unknown" ? "AP 저장 결과 확인 중 · Field에 원래 초안과 제출 키 보관" : apReplyDraft.state === "revision_conflict" ? "AP 대화 변경됨 · 초안 보관, 원본을 새로 확인한 뒤 제출" : "AP 미전송 초안이 Field에 보관됨"}</p>}<form className="form-fields" onSubmit={event => void sendApReply(event)}><label>AP 원본 대화에 답변<textarea required maxLength={5000} value={apReplyBody} onChange={event => setApReplyBody(event.target.value)} /></label><button type="submit" disabled={busy || !apConversation || apConversation.state === "closed" || apConversation.state === "spam"}>AP에 답변 저장</button></form>{!apConversation && <p>AP 원본을 열어야 답변을 제출할 수 있습니다. 보관된 초안은 계속 표시됩니다.</p>}<p>AP가 고객 알림을 담당합니다. 외부 발송 여부는 저장과 별도 상태입니다.</p></div>)}</section>
       <section id="owner-inquiries" className={`special-panel field-owner-inbox-thread${shownInboxKey?.startsWith("field:") ? " active" : ""}`}><div className="field-owner-inbox-source">내 홈페이지 · 직접 접수 · Field 원본</div><div className="panel-heading"><button className="field-owner-inbox-back" type="button" onClick={() => setActiveInboxKey(null)} aria-label="문의 목록으로">←</button><h2>Field 직접 문의</h2><button type="button" onClick={() => void loadInbox()}>새로고침</button></div>
         {selected && <div className="knowledge-source"><div className="field-owner-inbox-direct-head"><h3>{selected.isTest ? "테스트 · " : ""}{selected.customerName} · {selected.service.name}</h3>{selected.state === "closed" ? <span>처리 완료</span> : <button type="button" disabled={busy || closeResultUnknown || selected.revision === undefined || Boolean(replyBody.trim() || noteBody.trim())} onClick={() => void closeSelectedInquiry()}>처리 완료</button>}</div>{selected.isTest ? <p>사이트 {selected.testSiteRevision}번 내부 확인 기록입니다. 실제 고객·동의·연락처가 없고 외부 알림·실적·예약 점유에 포함되지 않습니다.</p> : <p>연락처: {selected.customerPhone}</p>}{selected.visitRegion && <p>지역·이용 장소: {selected.visitRegion}</p>}<FieldFallbackReview fallback={selected.fallback} review={selected.fallbackReview} onOpenCandidate={candidate => void openFallbackCandidate(candidate)} /><p>상태: {selected.state === "needs_owner" ? "확인 필요" : selected.state === "waiting_customer" ? "고객 답변 대기" : selected.state === "closed" ? "처리 완료" : "상태 확인 필요"}</p>{selected.state === "closed" && <p>고객이 기존 확인키로 추가 질문을 남기면 다시 확인 필요로 열립니다.</p>}{Boolean(replyBody.trim() || noteBody.trim()) && selected.state !== "closed" && <p>작성 중인 답변·메모를 저장하거나 비우면 처리 완료를 선택할 수 있습니다.</p>}{closeFeedback && <p role="status" className="field-owner-inbox-close-feedback">{closeFeedback}</p>}{closeResultUnknown && <button type="button" className="field-owner-inbox-close-refresh" disabled={busy} onClick={() => void refreshCloseState(selected.id)}>현재 상태 다시 확인</button>}<p><a href={`/v1/owner/inquiries/${selected.id}/export`}>이 대화 기록 JSON 다운로드</a> · 사진 파일은 각 메시지의 사진 저장을 사용하세요.</p><ol className="field-owner-inbox-messages">{selected.messages.map(message => <li key={message.id} className={message.visibility === "internal" ? "internal" : message.sender === "owner" ? "mine" : "customer"}><strong>{message.visibility === "internal" ? "내부 메모" : message.sender === "owner" ? "사업자" : "고객"}</strong><p>{message.body}</p><small>{message.visibility === "internal" ? "고객 비공개 · 알림 없음" : inquiryDeliveryLabel(message.sender, message.delivery_state)}</small>
           {selected.attachments.filter(item => item.messageId === message.id).map((attachment, index) =>

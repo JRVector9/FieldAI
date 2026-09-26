@@ -1,5 +1,13 @@
 # 로컬 기능 검수 현황 — 2026-09-26
 
+## 최신 Field 보존 기반 — a13510e 이후 작업트리
+
+- 실제 검수: `pnpm test:db:field` **28/28,93261**(`/tmp/field-retention-pagination-green.log`, 임시 DB 제거); `node --test tools/spikes/field-retention-migration.test.mjs` **1/1**(`/tmp/field-retention-migration.log`,58→실제 legacy 자료→59·별도 DB 제거).
+- 실제 native HTTP/320px: `FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python node --test tools/spikes/field-retention-http.test.mjs` **1/1,36901**(`/tmp/field-retention-recovery-browser.log`); 기존 Field 관리자 **1/1,87655**. 현재 mock85257 양제품 API/웹 build/ready·웹200, 실제 시안 admin/audit와 새 캡처 확인.
+- 범위: 정책/다른 승인/immutable 기간·권한/Origin·ACK, 종결/재개·legacy unknown, 미래 예약/수신 예약 원본 기준·양방향 hold/검토 초과, pending 원문 전달·복사/현재 지원 승인, terminal 예약 새 메시지의 활동 시각, 개인정보 없는100개+microsecond cursor105개/조직 binding, preview/원장503 실패 폐기·metadata 유지/잠금/복구, 수신 업무 종결 ACK 복구·원본/확인키 보존·가로 넘침/pageerror0.
+- 최종 전체 typecheck37941/lint57228 exit0, 마지막 테스트 타입/등록 ESLint5493·Python/Node 구문/diff exit0. 표준 Field E2E7개 등록 뒤 전체 명령은 이번 변경으로 미실행이다. 아래 a023c67 기록을 현재 전체 회귀 검사로 확대하지 않는다.
+- 필수 남음: 실제 정리 job/worker·파일/원문 개인정보 제거 및 소비자 복원/삭제·revoke 원장 재적용, AP 자체 보존 기능·전체 PRD/QA/G. 운영 MFA·법무·실 공급사·사용자 최종 시각/동선은 미검수다. 180/90은 검토 제안이며 mock 정책 승인을 법무/출시 승인으로 주장하지 않는다.
+
 ## 범위
 
 - 검사 코드 커밋: `a023c67` (`Recheck Field AP connection and installed deployment state`). 이후 변경은 이 검수 기록이다.
