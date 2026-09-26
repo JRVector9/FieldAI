@@ -28,6 +28,7 @@ import { registerAgentUsageRoutes } from './usage.js';
 import { registerAgentSubscriptionRoutes } from './subscription.js';
 import { registerAgentAdminRoutes } from './admin.js';
 import { registerAgentModerationRoutes } from './deployment-moderation.js';
+import { registerCustomerSupportRoutes } from './customer-support.js';
 import { registerSourceRefreshRoutes } from './source-refreshes.js';
 
 export function createAgentApp(
@@ -77,6 +78,7 @@ export function createAgentApp(
     registerAgentSubscriptionRoutes(app, businessRuntime);
     registerAgentAdminRoutes(app, businessRuntime);
     registerAgentModerationRoutes(app, businessRuntime);
+    registerCustomerSupportRoutes(app, businessRuntime);
   }
   if (authHandler) {
     app.route({
