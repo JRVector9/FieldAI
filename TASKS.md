@@ -6,7 +6,7 @@
 
 근거 스냅샷: AP 실제29/29(`/tmp/ap-revocation-metadata-cache-db.log`)·Field30/30(`/tmp/ap-revocation-runner-field.log`), Node24.18.0/제품별 mock PG17, AP 단독 실행 실제통과(`/tmp/ap-revocation-independent-standalone.log`). 코드가 포함된 최신 commit **eab1d30** 및 이전 원본 구현 commit, `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`의 범위별 실제 결과. 아래 해당 native 테스트 파일과 현재 구현도 직접 대조했다. 이번 체크 정리는 테스트 재실행이 아니다.
 
-최신 추가 완료: **A07.F09.AUTH-ISSUE / ed61b70**. 현재 내부 세부35개[x]/남은7개[ ]이며 상세 실제 검수/현재 환경은 인계 상단을 따른다. 부모 전체 출시 완료로 해석하지 않는다.
+최신 추가 완료: **A07.F09.FIRST-CHARGE / 00c3e0d**. 현재 내부 세부36개[x]/남은7개[ ]이며 실제 검수/환경은 인계 상단을 따른다. 부모 전체 출시 완료로 해석하지 않는다.
 
 ### 완료된 내부 세부 작업 — 같은 범위를 다시 구현하지 않는다
 
@@ -32,6 +32,7 @@
 - [x] **A07.F09.PLAN-BASIS** 각 제품 가격 버전 요청·다른 운영자 승인·판매 중지·자체 조회·불변 승인 plan/동의 snapshot/기간 저장 기반·기간 중복/겹침 차단·KST 원래 월말 계산. 코드 **b639a4d**, AP69/Field63·각 billing modules/DB/calendar 검사. own PG17 최종38087/75037 각3/3(새1+관련trial2)·calendar95519 각1/1·type60326/21102·lint67398·build63017/63888 exit0, 최종 독립 repair4350 exit0/남은P1/P2 없음. managed53591에 migrate/build 반영·양ready/양웹200. **owner 유료 동의·카드 인증·실행 worker·결제/갱신/해지/유예/환불·제공량/UI·실 PG는 포함하지 않는다.** main A07.F09.PAID와 AUTH.LIVE/MFA는 미완료로 유지한다.
 - [x] **A07.F09.CONSENT-BACKEND** 제품별 owner 명시 가격/약관/자동갱신 동의·한 intent/같은UUID 복구·SDK nonce의 org/actor/session/mode/MID/TTL binding·암호화 authKey pending202·미시작 취소/비밀값 폐기, own Toss issue/charge/order lookup port와 strict 키/profile 설정. 코드 **1a04815**, AP70/Field64·각 consent/context/Toss modules·등록/새 DB/adapter 검사. native84322/76016 각3/3(새1+직접관련trial2), adapter static 각2/2·type25047/75781·lint58419·build62281/60371 exit0. audit92527 exit0/남은P1/P2 없음·raw confidence 미출력. managed73001 최신 양제품build/migrate/ready·양웹200·신규API401·실제 적용/binding조회. **인증 발급/실제 청구 worker·갱신/환불/제공량·SDK 콜백 페이지/결제 UI·실 PG는 제외하며, pending은 카드 인증/결제 성공이 아니다.** 이 backend를 다시 만들지 않고 worker부터 이어간다.
 - [x] **A07.F09.AUTH-ISSUE** 각 제품 자체 인증 발급 worker·호출 전 첫 시작/lease/claim 기록·같은 request key 미상/재시작 복구·늦은 결과 폐기·15일 멱등창 제한·암호화 credential 저장/일회용 ciphertext 폐기. 코드 **ed61b70**, AP71/Field65. own UUID PG17 최종6174/91110 각9/9(새8+관련consent1) fail0/skip0, type31179/46800·lint49686·build75046/34309 exit0. 독립 repair79675 exit0/P1·P2 없음/confidence0.88. managed48041 양제품build/migrate/ready·양웹200·인증 worker blocked_integration ready/실제 프로세스 확인. **구독 활성화·첫 청구·갱신/유예/환불/제공량·SDK/결제 UI·실 PG는 포함하지 않는다.** 인증 발급 worker를 다시 구현하지 않고 첫 청구부터 이어간다.
+- [x] **A07.F09.FIRST-CHARGE** 제품별 최초 period0/거래 원장·명시 면세 승인/동의 snapshot·기존 멱등 기록 복구·호출 전 MID/API-key fingerprint/본문/첫시작·동일 order 조회/replay 제한·stale 결과 폐기·실 승인시각 한 번 확정/기간 겹침 차단·암호화 paymentKey. 코드 **00c3e0d**, AP72/Field66. own UUID PG17 최종97718/12549 각12/12(새11+관련consent1), port4250/90058 각3/3·type34206/18899·lint35728·API build20074/26601 exit0. 독립26858 exit0/P1·P2 없음/confidence0.82. managed65775 최신build/migrate/양ready·양웹200·각 최초청구/인증worker ready(blocked_integration)·실제 프로세스/적용열 확인. **갱신/해지/유예·HTTP 확정거절 분류·환불/제공량/접근제한·SDK/결제UI·실PG는 포함하지 않는다.** 첫 청구를 다시 만들지 않고 갱신/해지/유예로 이어간다.
 - [x] **A08.ADMIN / F09.ADMIN** 각제품 관리자 membership·metadata 조회/감사·타제품 권한 차단·non-mock MFA 미연결 차단. 양제품 `admin.db.test.ts`. 실 MFA/모든 운영 메뉴 인수는 별도다.
 - [x] **A08.MODERATION / F09.MODERATION** 신고 snapshot·다른 운영자 승인 접근·대상 제한·사업자 알림/이의·기존 업무 유지. `moderation.db.test.ts`, AP9f08208/Field5bfe05e.
 - [x] **A08.SUPPORT / F09.SUPPORT** 업무별 사유/기간/scope·다른 운영자 승인·현재 membership/만료/회수 확인·원본/사진 읽기 감사. `customer-support.db.test.ts`, APcb98923/Fielda13510e.
@@ -51,7 +52,7 @@
 
 **2026-09-27 추가 범위 기록:** 미완료 A07.F09.FIRST-CHARGE를 선택했다. 기존 PLAN-BASIS(b639a4d)·CONSENT-BACKEND(1a04815)의[x]는 유지한다. 최초 청구 연결을 위해 면세 미지정 legacy 차단/명시 승인 taxFreeAmount snapshot·owner 대조와 Toss adapter API-key fingerprint metadata만 확장한다. 현재 원장에 면세값이 없고 공식 멱등키가 API key에도 묶이는 구체적 근거는 paid 실행 계획에 기록했다. 가격/동의/인증 backend 자체를 재구현하지 않는다.
 
-- [ ] **A07.F09.PAID** 남은 첫 청구/거래 worker·동일 주문 미상 대조·주기 생성·갱신/해지/유예/환불·entitlement·실 SDK 콜백/owner/admin UI. PLAN-BASIS(b639a4d)·CONSENT-BACKEND(1a04815)·AUTH-ISSUE(ed61b70)는 완료이며 다시 구현하지 않는다. 전체 카드 인증/결제 흐름과 유료 전체 완료 체크는 남은 기능까지 연결한 뒤 한다.
+- [ ] **A07.F09.PAID** 남은 갱신/해지/유예 worker·HTTP 확정거절 분류·환불·entitlement/접근제한·실 SDK 콜백/owner/admin UI. PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE(00c3e0d)는 완료이며 다시 구현하지 않는다. 전체 카드 인증/구독 흐름과 유료 전체 완료 체크는 남은 기능을 연결한 뒤 한다.
 - [ ] **A06.F08.DELIVERY** Kakao/SMS/webpush 발송·콜백/unknown 조회·중복/역순/한도·설정/실패확정 fallback.
 - [ ] **F04.CUSTOM-DOMAIN** 자체domain 등록/검증/연결/TLS/대표URL 상태·기본주소 유지/새AP origin.
 - [ ] **A09.PUBLIC-WRITE** PRD 최소 public connection/deployment POST·scope 계약 정리→consumer→구현/동등외부client.
@@ -64,7 +65,7 @@
 ---
 
 
-**최신 완료/잔여(2026-09-27):** 내부 세부35개[x]/잔여7개[ ]. AUTH-ISSUE(ed61b70) 추가 체크·managed48041 양제품build/migrate/ready·양웹200·각 인증 worker ready. 유료 전체 A07.F09.PAID는 첫 청구/거래·갱신/해지/유예/환불/제공량·SDK 콜백/결제 UI가 남는다. 다음은 PAID의 첫 청구 worker이며 인증 발급을 반복하지 않는다. 메시지 발송·자체domain·public write·OAuth 수명·외부/최종 인수도 남는다. 원본46개Task/QA160/전체C03 완료라는 뜻이 아니다. 아래 누적 기록은 당시 이력이며 상단 체크 원장이 우선한다.
+**최신 완료/잔여(2026-09-27):** 내부 세부36개[x]/잔여7개[ ]. FIRST-CHARGE(00c3e0d) 추가 체크·managed65775 양제품build/migrate/ready·양웹200·각 최초청구/인증worker ready. 다음은 PAID의 갱신/해지/유예이며 첫 청구를 반복하지 않는다. 환불/제공량·SDK/UI·발송·자체domain·public write·OAuth 수명·외부/최종 인수도 남는다. 전체46개Task/QA160/C03 완료라는 뜻이 아니다. 아래 과거 기록보다 상단 원장이 우선한다.
 
 
 **2026-09-26 AP native 회수 단계 최종:** AP74855 29/29·Field52785 30/30·전체 type/lint57153·최신 lint37774 exit0. 실제 Field 미배포 AP independence53496 exit0(own native 회수/token200→401 포함). 세 번째 review62519 P2 package cwd 문제는 AP 생성/기존 journal 경로 절대화·key/파일 보존으로 보완, actual 설정2/2와 마지막 repair review87113 exit0/추가P1/P2 없음. 리뷰 내부 test는 read-only EPERM 미실행이며 root 설정2/2와 구분한다. mock36780 양 API/웹·retention worker ready/health 실제 확인. 전체/C03/A08는 in_progress. 다음은 전체 문서 기능 대조로 남은 범위 확정이며 위젯/일반 OAuth lifecycle·legacy/Field key·유료 구독 원장/외부 발송 adapter·최종 사용자 화면/실 공급사·운영 QA/G는 완료되지 않았다. 자세한 현재 사실은 docs/CODEX_HANDOFF.md 상단 참조. 아래 누적 기록의 이전 handle/미완료는 당시 이력이다.

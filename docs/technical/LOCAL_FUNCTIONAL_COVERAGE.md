@@ -1,6 +1,16 @@
 # 로컬 기능 검수 현황 — 2026-09-27
 
-**최신 완료 원장:** TASKS 상단 내부35개[x]/남은7개[ ]를 따른다. WIDGET-END·PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE(ed61b70)는 완료 범위로 다시 구현하지 않는다. PAID의 첫 청구/거래·갱신/해지/유예/환불/제공량·실 SDK callback/owner/admin UI와 전체QA/최종 인수는 미완료다. 아래 과거 “남음/다음/runtime”은 당시 이력이며 최신 원장/인계가 우선한다.
+**최신 완료 원장:** TASKS 상단 내부36개[x]/7개[ ]를 따른다. WIDGET-END·PLAN-BASIS·CONSENT-BACKEND·AUTH-ISSUE·FIRST-CHARGE(00c3e0d)는 완료 범위다. PAID 갱신/해지/유예·환불/제공량·접근제한·SDK/UI와 전체QA/실 공급사/최종 인수는 미완료다. 아래 과거 “남음/다음/runtime”은 당시 이력이며 최신 원장/인계가 우선한다.
+
+## 최신 A07.F09.FIRST-CHARGE — 00c3e0d / 최초 청구 내부 완료 (2026-09-27)
+
+- AP72/Field66·각 charge-execution/worker/native 검사·billing/routes/consent tax 확장·Toss fingerprint/adapter 검사·package·managed 시작·PG 설명/착수 기록24파일. 먼저 period0/transaction/order/request를 저장, 첫 claim에 MID/key fingerprint/고정본문/암호화 billingKey/원래 started_at을 commit한다. 응답 유실은 동일 order GET, 없음 때만 원래 키/본문/멱등창으로 재시도. 키 회전·멱등창 종료2분 전에는 POST 중지/GET 대조 유지, stale claim은 폐기한다.
+- 명시 승인 taxFreeAmount만 charge 가능하며 미지정 legacy 가격/동의를 자동 채우지 않는다. 추가값이 없는 이전 idempotency digest는 그대로 복구한다. 실제 원격 DONE의 order/금액/잔액/세금/승인시각 검증 후 첫 기간을 approvedAt+KST 한 달로 확정, paymentKey 암호화와 원장 불변/기간 overlap을 유지한다. 조회된 ABORTED/EXPIRED만 해당 시도 실패 확정. 다른 HTTP 오류는 unknown이며 확정거절/유예·환불/제공량은 후속이다.
+- 실제 명령 `node /tmp/ap-billing-charge-run-db.mjs` **97718**, Field equivalent **12549 exit0 각12/12 fail0/skip0** /tmp/{ap,field}-billing-first-charge-final-db.log(새11+관련consent1). 새 파일/각 fixture 별도 UUID PG17, 원래 승인 전 날짜null·paid 한 번·no provider/no tax/stop·동시/만료 lease/stale 결과·응답유실 동일order·키 변경/15일창·금액/날짜 불일치·legacy replay·paid-date/overlap23P01/인접/날짜nullpaid23514·ABORTED를 확인했다. 공급사/auth는 synthetic fixture다. 실제 카드/PG/SDK/UI 증빙이 아니다.
+- 실제 adapter `tsx --test test/toss-billing.adapter.test.ts`4250/90058 각3/3(기존2+key fingerprint1), API type34206/18899·lint35728·API build20074/26601 exit0. 최초 native59091/24938 worker부재/면세 미반영 각8 red, port fingerprint 부재 각exit1→위3/3. 90235/12812은 이전 fixture의 미처리 구독이 다음 fixture에서 선택된 blocked red라 새 worker 파일의 각 fixture DB를 추가 격리했다. old checkout digest67416/91857 409≠200 red→항목 없는 legacy digest 보존. 테스트 기대값을 버그에 맞추지 않았다.
+- CLI26858 gpt-6-sol/high exit0 /tmp/billing-first-charge-audit-result.md: No concrete P1/P2 findings, confidence0.82. static/read-only·자체 tests/실 공급사 호출/수정 없음. 실제 root12/12와 구분한다.
+- 새 managed65775 /tmp/billing-first-charge-managed-runtime.log 양제품build/migrate/ready·양웹200·각 first charge/auth worker ready(blocked_integration)·retention ready. own DB AP000072/Field000066·명시tax/nullable dates/transaction binding11열을 실제 조회했다. controller40439 하나/각 auth42742·42793/firstcharge42743·42794 하나씩 동일parent40439 snapshot. 이전48041은 실제live 확인 뒤 Ctrl+C terminalexit1/ELIFECYCLE로 종료 관찰, 정상0이라고 기록하지 않는다. 적용/커밋72/66 수정 금지·다음 schema73/67. 실 PGkey/가격승인/청구/발송/운영삭제/배포 없음.
+- TASKS36[x]/7[ ]이며 FIRST-CHARGE 내부만 완료다. 다음 갱신/해지/유예·HTTP 확정거절 분류·환불/entitlement·SDK callback/owner/admin UI, 전체QA/G/실 공급사/사용자 최종 시각 인수는 계속 미완료다. 이전 기간/키/unknown을 초기화하거나 fake paid로 rollback하지 않는다.
 
 ## 최신 A07.F09.AUTH-ISSUE — ed61b70 / 인증 발급 worker 내부 완료 (2026-09-27)
 

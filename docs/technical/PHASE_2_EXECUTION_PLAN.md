@@ -1,6 +1,6 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
-**현재 완료 체크 기준:** TASKS.md 상단 내부35개[x]/7개[ ]가 우선이다. 최신 AUTH-ISSUE(ed61b70)는 완료 체크했으며 다음은 PAID의 첫 청구/거래 worker다. 아래 과거 handle·진행중·다음 작업 문구는 당시 이력이다. 완료한 발급/동의/가격·위젯·회수를 기억 부재로 다시 구현하지 않는다.
+**현재 완료 체크 기준:** TASKS.md 상단 내부36개[x]/7개[ ]가 우선이다. FIRST-CHARGE(00c3e0d)는 완료 체크했으며 다음은 PAID 갱신/해지/유예다. 아래 과거 handle/진행중/다음 문구는 당시 이력이다. 완료한 첫 청구/발급/동의/가격·위젯·회수를 재구현하지 않는다.
 
 
 ### C03/A08 AP 권한 회수·격리 복원 — 2026-09-26 작업 시작
@@ -1956,3 +1956,14 @@ AP와 Field의 독립 웹 앱에서 문서의 역할별 화면·이동 경로·�
 - 독립 review92981 exit0/P2 1건·raw confidence0.88: 설정 부재/변경 때 만료된 미시작 auth ciphertext를 계속 보존. native95293/67597 blocked≠failed red 후 만료 판단을 설정보다 먼저 처리했다. 최종 repair79675 exit0/남은P1·P2 없음/confidence0.88. 두 검토는 read-only/static이며 자체 테스트/실 공급사 호출/수정 없음.
 - runtime: 살아 있는73001 확인 뒤 Ctrl+C terminalexit1/ELIFECYCLE을 관찰했고 정상exit0로 보고하지 않는다. 최신48041 /tmp/billing-authorization-managed-runtime.log 양제품build/migrate/ready·각 인증 worker ready(blocked_integration)·양web200. 실제 own DB AP000071/Field000065/claim_token/next_attempt_at 조회, controller72041 하나와 자체 인증 workers76804/76841 각각 하나/동일parent를 확인했다. 기존71/65는 적용/커밋됐으며 다음 schema는72/66. 실 PG키는 넣지 않았다.
 - TASKS[x]는 인증 발급/미상 복구 내부 범위만이다. 첫 청구·같은 주문 결과 조회·갱신/해지/유예·환불/entitlement·실 SDK callback/owner/admin UI·실 PG/최종 사용자 인수는 남는다. 이미 완료한 가격/동의/발급 worker를 다시 만들지 않는다.
+
+### A07.F09.FIRST-CHARGE — 내부 완료 checkpoint (2026-09-27)
+
+- [x] **A07.F09.FIRST-CHARGE** 제품별 최초 period0/거래 원장·명시 면세 승인/동의 snapshot·기존 멱등 기록 복구·호출 전 MID/API-key fingerprint/본문/첫시작·동일 order 조회/replay 제한·stale 결과 폐기·실 승인시각 한 번 확정/기간 겹침 차단·암호화 paymentKey. 코드 **00c3e0d**, AP72/Field66. own UUID PG17 최종97718/12549 각12/12(새11+관련consent1), port4250/90058 각3/3·type34206/18899·lint35728·API build20074/26601 exit0. 독립26858 exit0/P1·P2 없음/confidence0.82. managed65775 최신build/migrate/양ready·양웹200·각 최초청구/인증worker ready(blocked_integration)·실제 프로세스/적용열 확인. **갱신/해지/유예·HTTP 확정거절 분류·환불/제공량/접근제한·SDK/결제UI·실PG는 포함하지 않는다.** 첫 청구를 다시 만들지 않고 갱신/해지/유예로 이어간다.
+- AP72/Field66·각 charge-execution/worker/native 검사·billing/routes/consent tax 확장·Toss fingerprint/adapter 검사·package·managed 시작·PG 설명/착수 기록24파일. 먼저 period0/transaction/order/request를 저장, 첫 claim에 MID/key fingerprint/고정본문/암호화 billingKey/원래 started_at을 commit한다. 응답 유실은 동일 order GET, 없음 때만 원래 키/본문/멱등창으로 재시도. 키 회전·멱등창 종료2분 전에는 POST 중지/GET 대조 유지, stale claim은 폐기한다.
+- 명시 승인 taxFreeAmount만 charge 가능하며 미지정 legacy 가격/동의를 자동 채우지 않는다. 추가값이 없는 이전 idempotency digest는 그대로 복구한다. 실제 원격 DONE의 order/금액/잔액/세금/승인시각 검증 후 첫 기간을 approvedAt+KST 한 달로 확정, paymentKey 암호화와 원장 불변/기간 overlap을 유지한다. 조회된 ABORTED/EXPIRED만 해당 시도 실패 확정. 다른 HTTP 오류는 unknown이며 확정거절/유예·환불/제공량은 후속이다.
+- 실제 명령 `node /tmp/ap-billing-charge-run-db.mjs` **97718**, Field equivalent **12549 exit0 각12/12 fail0/skip0** /tmp/{ap,field}-billing-first-charge-final-db.log(새11+관련consent1). 새 파일/각 fixture 별도 UUID PG17, 원래 승인 전 날짜null·paid 한 번·no provider/no tax/stop·동시/만료 lease/stale 결과·응답유실 동일order·키 변경/15일창·금액/날짜 불일치·legacy replay·paid-date/overlap23P01/인접/날짜nullpaid23514·ABORTED를 확인했다. 공급사/auth는 synthetic fixture다. 실제 카드/PG/SDK/UI 증빙이 아니다.
+- 실제 adapter `tsx --test test/toss-billing.adapter.test.ts`4250/90058 각3/3(기존2+key fingerprint1), API type34206/18899·lint35728·API build20074/26601 exit0. 최초 native59091/24938 worker부재/면세 미반영 각8 red, port fingerprint 부재 각exit1→위3/3. 90235/12812은 이전 fixture의 미처리 구독이 다음 fixture에서 선택된 blocked red라 새 worker 파일의 각 fixture DB를 추가 격리했다. old checkout digest67416/91857 409≠200 red→항목 없는 legacy digest 보존. 테스트 기대값을 버그에 맞추지 않았다.
+- CLI26858 gpt-6-sol/high exit0 /tmp/billing-first-charge-audit-result.md: No concrete P1/P2 findings, confidence0.82. static/read-only·자체 tests/실 공급사 호출/수정 없음. 실제 root12/12와 구분한다.
+- 새 managed65775 /tmp/billing-first-charge-managed-runtime.log 양제품build/migrate/ready·양웹200·각 first charge/auth worker ready(blocked_integration)·retention ready. own DB AP000072/Field000066·명시tax/nullable dates/transaction binding11열을 실제 조회했다. controller40439 하나/각 auth42742·42793/firstcharge42743·42794 하나씩 동일parent40439 snapshot. 이전48041은 실제live 확인 뒤 Ctrl+C terminalexit1/ELIFECYCLE로 종료 관찰, 정상0이라고 기록하지 않는다. 적용/커밋72/66 수정 금지·다음 schema73/67. 실 PGkey/가격승인/청구/발송/운영삭제/배포 없음.
+- TASKS36[x]/7[ ]이며 FIRST-CHARGE 내부만 완료다. 다음 갱신/해지/유예·HTTP 확정거절 분류·환불/entitlement·SDK callback/owner/admin UI, 전체QA/G/실 공급사/사용자 최종 시각 인수는 계속 미완료다. 이전 기간/키/unknown을 초기화하거나 fake paid로 rollback하지 않는다.

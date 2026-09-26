@@ -12,10 +12,42 @@
 
 - 사용자가 **“완료된 작업은 체크하고, 에이전트가 잊고 같은 작업을 다시 하지 않도록 반드시 지켜”**라고 명시했다.
 - 작업 재개 전에 `TASKS.md` 상단 **완료 체크 — 재작업 방지 기준**을 먼저 읽는다. 이 목록이 완료 세부 ID의 기준 원장이다. 상세 규칙은 `AGENTS.md`6.1. 기억 부재/compaction으로 완료 항목을 재구현·검수 반복하지 않는다.
-- 최초 체크 정리는 로컬 완료31개[x]/잔여8개[ ]였고 위젯(fe6a524)·PLAN-BASIS(b639a4d)를 거쳐 **CONSENT-BACKEND(1a04815)** 추가로 현재 **35개[x]/7개[ ]**다(AUTH-ISSUE ed61b70 추가). TASKS 상단이 최신 세부 원장이며 과거 개수는 당시 이력이다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다.
+- 최초 체크 정리는 로컬 완료31개[x]/잔여8개[ ]였고 위젯(fe6a524)·PLAN-BASIS(b639a4d)를 거쳐 **CONSENT-BACKEND(1a04815)** 추가로 현재 **36개[x]/7개[ ]**다(FIRST-CHARGE 00c3e0d 추가). TASKS 상단이 최신 세부 원장이며 과거 개수는 당시 이력이다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다.
 - 신규 오류/요구변경/현재상태 불일치가 확인됐을 때만 같은 완료 ID에 재개 사유·증거·추가 범위를 먼저 기록한다. 이전 완료 근거/commit은 삭제하지 않는다.
 - 최초 체크 정리 당시 변경 파일: AGENTS.md·TASKS.md·PHASE_2_EXECUTION_PLAN·DEVELOPMENT_REMAINING_AUDIT·이 인계. 문서 변경으로 서비스 테스트 재실행 없이 diff 체크만 수행했고 당시 mock36780 양 ready/생존을 재확인했다. 지금 runtime/체크는 아래 최신 단계가 우선한다.
 - 원래 진행 목표는 계속 전체 v3/C03 로컬 기능이다. 체크 정리 당시 다음은 A05.WIDGET-END였으며 현재 진행 상태는 바로 아래 별도 세부 작업 기록을 따른다.
+
+## 현재 인수인계 — A07.F09.FIRST-CHARGE 완료 (2026-09-27)
+
+- **목표/착수/진행 분류:** 전체 v3/C03 기능과 usable 독립 로컬 환경은 active/in_progress. 이번 FIRST-CHARGE/AP·Field 자체 소유 경로/순차 Coordinator·AP·Field는 아래 내부 범위 implemented/verified. 착수 HEAD76a094a/status clean·완료35/잔여7·managed48041 actuallive를 확인했다. 직전 AUTH-ISSUE와 이번 first-charge 코딩/검수/커밋/환경/체크는 progress다. 부모 PAID/QA160/출시를 완료 처리하지 않는다.
+- **완료/commit/변경:** 코드 **00c3e0d**, AP72/Field66, 각 charge-execution/worker/native 검사·billing/routes/consent tax 확장·Toss fingerprint/adapter 검사·package·managed worker 시작, PG 설명·TASKS 추가 범위/paid 착수24파일. 완료 기록 TASKS/paid plan/phase/coverage/audit/인계/옵시디언을 같은 checkpoint로 갱신하며 TASKS **36[x]/7[ ]**. PLAN-BASIS/CONSENT-BACKEND의 재개는 원장에 기록한 명시tax와key fingerprint/legacy digest 추가 범위뿐이다. 승인 가격 자동 변경/기존 backend 재구현/인증 발급 worker 수정은 없다.
+- **요구/계약/설계:** AP PRD2.8·Field3.8·보안5.4/5.5·QA43~46/113/126/146 최초 거래/미상 부분. 제품 DB/domain/keys/worker를 공유하지 않으며 공개 cross-product 계약 변경 없음. 인증 completed 뒤 첫 period0/order/transaction pending을 저장하며 날짜는 실제 승인까지 null. 첫 claim에 원래 API-key fingerprint/MID/본문/customer/orderName/암호화 billingKey/started_at을 commit,180초 lease/stale token을 사용한다. unknown은 GET same order로 대조, 원래 키/본문/15일창 종료2분 전 조건일 때만 동일 request key POST. 창 만료/키변경 뒤 GET만 유지한다. 첫 원격 DONE의 order/금액/잔액/면세/vat/승인시각 검증 후 approvedAt KST period를 한 번 확정하고 paymentKey 암호화/불변원장 유지. ABORTED/EXPIRED만 해당 시도를 실패 확정하며 다른 HTTP 오류/부분취소는 unknown/대조다. 명시tax는 null legacy를 자동 채우지 않고 block; 항목 없는 old digest는 변경하지 않는다.
+- **실제 명령/결과/환경:** Node24.18.0/각 own UUID PG17. `node /tmp/ap-billing-charge-run-db.mjs` **97718**, Field equivalent **12549 exit0 각12/12 fail0/skip0** /tmp/{ap,field}-billing-first-charge-final-db.log(새11+relatedconsent1). fixture당 별도 자체 UUID DB·migrate/native app/SQL 검수, 이전AP29/Field30/전체QA를 합산하지 않는다. `pnpm --filter @fieldai/agent-api exec tsx --test test/toss-billing.adapter.test.ts`4250 / Field90058 각3/3 exit0(기존2+새fp1). API type **34206/18899**, lint **35728**, API build **20074/26601 exit0**. 실제 공급사/auth는 synthetic fixture며 실제카드/PG/SDK/로그인/browser 증빙이 아니다. 자기 UUID DB만 정리했다. 전체unit/DB/E2E·UI/실기기/QA/G는 미실행.
+- **실패/폐기한 접근:** native59091/24938 각8 worker 부재/가격tax미반영 red·port fingerprint 부재red→native/metadata 구현. 90235/12812 blocked 실패는 앞 fixture의 미처리 구독을 다음 fixture worker가 선택해 별도 암호화 key로 읽던 테스트 setup 오류였다. 원래 기대값을 바꾸지 않고 fixture당 DB를 추가 격리했다. 첫 tax 추가에서 old checkout digest67416/91857 409≠200 red→면세항목 없는 old checkout/가격 digest의 구조를 유지했고 최종 legacy재시도200을 확인했다. 날짜 null paid23514/overlap23P01/인접과 ABORTED는 현재 새 migration의 직접 검수이며 기존 가격 기능 전체를 반복한 것이 아니다.
+- **독립 검토:** gpt-6-sol/high **26858 exit0**, /tmp/billing-first-charge-audit-result.md: **No concrete P1/P2 findings**, static confidence0.82. read-only/static·자체tests/실 호출/수정 없음. actual root12/12와 구분한다.
+- **현재 서버/적용 상태:** 확인된48041에 Ctrl+C 후 terminalexit1/ELIFECYCLE을 관찰(정상0로 주장하지 않음). 새 **65775**, /tmp/billing-first-charge-managed-runtime.log 최신 양제품build/migrate/API ready·양웹200·각 최초청구/인증 worker ready(blocked_integration)·retention ready. actual own DB AP000072/Field000066와 tax/dates/binding11열을 조회했고 controller40439 하나·AP auth42742/charge42743·Field auth42793/charge42794 각 한 개/동일parent40439 snapshot. AP http://localhost:3001/workspace / Field http://localhost:3002/workspace(실제canonical 안내127.0.0.1:3002). Field 제작모델/PG미설정 blocked 유지. 적용/커밋72/66 수정 금지, 다음 migration **AP73/Field67**.
+- **남은 범위/복구/권한:** 다음 **갱신/해지/유예·HTTP 확정거절 분류→환불/entitlement/접근제한→SDK callback/owner/admin UI**. 현 최초청구 worker는 period0만 처리한다. 신규 갱신은 원래 anchor/동의/제공량/1기간·same-order reconcile로 연결하고, owner 해지는 미시작 중지·남은 paid 접근/기존 업무/export를 보존해야 한다. 이미 시작한 unknown을 새 주문/키로 reset하지 않는다. 현재 실제 paid 유효기간이 있어도 trial-access는 기존 만료 조건이므로 entitlement 다음 단계가 필요하다. /billing/return 아직없고 UI때 canonical web origin/cookie/session/선택org를 실제 대조해야 한다. backend 단계 새UI/시안비교를 실행하지 않았다. 실PG/MFA/가격·법무/계약/G/사용자 최종시각 인수는 별도며 실청구/고객발송/운영삭제/외부배포 없음.
+
+| 독립 검토 | level / raw confidence | 반영/한계 |
+|---|---|---|
+| gpt-6-sol/high26858 | P1/P2 없음 / 0.82 | static 검토 완료, 실제 native/HTTP fixture 결과는 root 검수 |
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+sed -n '1,68p' TASKS.md
+git status --short
+git log -2 --oneline
+sed -n '1,105p' docs/technical/A07_F09_PAID_EXECUTION_PLAN.md
+cat apps/agent-api/src/billing-charge-execution.ts
+cat apps/agent-api/migrations/000072_billing_first_charge.sql
+cat apps/agent-api/src/trial-access.ts
+cat apps/agent-api/src/subscription.ts
+cat docs/technical/BILLING_PROVIDER_SETUP.md
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+다음 갱신/해지/유예 범위/파일/QA/검수 명령을 paid plan에 먼저 기록하고 새 native 실패부터 구현한다. 완료한 최초 청구/동의/발급을 재구현하지 않는다. 26858은 terminal이므로 반복 poll/재검토하지 않는다. 65775는 실제 생존 확인해 유지하며 source 반영이 필요할 때만 종료/재기동한다. timeout으로 중복실행하지 않는다. 시안 경로는 상단에 계속 유지한다.
 
 ## 현재 인수인계 — A07.F09.AUTH-ISSUE 완료 (2026-09-27)
 

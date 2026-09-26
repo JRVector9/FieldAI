@@ -22,7 +22,7 @@
 - [x] native plan route404와 승인/권한/멱등/불변 가격·월말 규칙의 실패를 먼저 실행한다. AP24059·Field10713 plan404, AP53054/calendar 부재 실제 red 기록.
 - [x] **A07.F09.PLAN-BASIS 완료 checkpoint / b639a4d:** plan 요청/다른 operator 승인/판매 중지·자체 read API와 immutable plan/consent/기간 저장 기반, 월말 계산. 최종 repair4350 exit0/남은P1/P2 없음·focused DB 각3/3·managed53591 migrate/build/ready·양웹200, TASKS도 같은 세부 ID로 체크했다. owner 동의와 결제 성공 범위는 포함하지 않는다.
 - [x] **A07.F09.CONSENT-BACKEND / 1a04815:** owner/current session의 명시 plan/terms/자동갱신/첫 승인 시각 정책 동의→한 consent/authorization·동일 UUID 복구, org/actor/session/mode/MID/nonce/TTL binding·암호화 authKey pending202·미시작 cancel/비밀값 폐기와 product-owned Toss/context port. native84322/76016 각3/3·adapter 각2/2·마지막 type/lint/build·독립92527 exit0/추가P1/P2 없음, managed73001 반영. **인증 발급/청구 worker·실 SDK 화면/카드 인증 성공은 포함하지 않는다.**
-- [ ] 첫 transaction/period 생성·authorization 발급/청구 실행은 다음 worker 단계다. 한 조직의 동시 활성 구독/미확인 결제는 한 개이며 기존 pending을 fake paid로 바꾸지 않는다.
+- [x] **AUTH-ISSUE(ed61b70)·FIRST-CHARGE(00c3e0d)**에서 첫 transaction/period 생성·authorization 발급·첫 청구/동일order 미상 복구 완료. 한 조직의 동시 활성 구독/미확인 결제는 한 개이며 기존 pending을 fake paid로 바꾸지 않는다.
 - [x] 최초 기준일(Asia/Seoul)을 유지해 1월31→2월말→3월31로 계산한다. 실제 기간은 `(subscription_id,billing_period)` 유일하고 계획된 금액/세금·consent version은 수정하지 않는다. 승인 plan과 consent binding·기간 overlap23P01/인접 허용까지 native DB38087/75037 각3/3·calendar95519 각1/1 실제 확인했다. 최초 결제 기준시각 채택은 provider 실행 단계에서 추가한다.
 - [ ] 격리 DB에서 owner/editor/외부 org·동의 누락·미승인 plan·불변 원장·현재 상태를 검수한다.
 
@@ -64,7 +64,7 @@ assert.equal(response.statusCode, 201, response.body);
 - 요구/검수: AP PRD2.8·Field3.8·보안5.4/5.5·QA43~46/113/126/146 첫 거래/미상 복구 부분. native 승인 plan→동의→인증발급→period/transaction pending→durable claim→fixture charge/timeout→같은 order 조회를 먼저 red로 재현한다. 동시/미시작 stop·MID/key 변경·암호문·stale result·금액/세금/날짜 불일치·15일창을 own UUID PG17에 검사한다. supplier HTTP는 synthetic fetcher만 사용하며 실제 카드 청구/PG·UI·전체 QA는 미실행이다.
 - 다음 갱신/해지/유예·확정 오류 분류·환불/entitlement·SDK callback/owner/admin UI는 별도 남은 PAID다. 이번 active/paid 반영은 해당 원격 DONE 검증에만 한정하며 production fixture/fake 성공은 없다.
 
-- [ ] 첫 청구 실행과 동일 order 결과 미상 복구를 구현·검수하고 세부 완료 원장에 체크한다.
+- [x] **A07.F09.FIRST-CHARGE / 00c3e0d:** 최초 거래/기간/명시tax·동일order 조회·원래 키/본문/시작시각·멱등창/stale fencing·실 승인시각 한 번 확정 완료. native97718/12549 각12/12·port 각3/3·type/lint/build·CLI26858 P1/P2 없음(confidence0.82), managed65775 적용. TASKS36[x]/7[ ]·관련 문서를 같은 checkpoint로 체크. **갱신/해지/유예/환불/제공량/UI/실PG는 남는다.**
 
 ### 현재 선택 — A07.F09.AUTH-ISSUE (2026-09-26)
 
@@ -108,7 +108,7 @@ assert.equal(response.statusCode, 201, response.body);
 - [ ] owner/billing의 plan/금액·세금·제공량·별도 동의·현재 paid 기간·다음 갱신·해지·실패 유예·결제/환불 내역/결과 재조회와 admin/billing의 계획 승인·조회/환불 검토를 실제 API에 연결한다.
 - [ ] 공급사/가격 부재는 사유와 비활성 버튼으로 표시한다. mock fixture의 paid를 실 결제로 표시하지 않는다. 응답 유실은 저장한 request ID로 대조하고 재시도로 새 청구를 만들지 않는다.
 - [ ] 변경 범위 DB/unit·type/lint/build, 좁은 native HTTP/320px 흐름, CLI 독립 리뷰를 실행한다. 무관한 완료 기능/전체 Field/AP 회귀를 이유 없이 반복하지 않는다. 사용자 전체 시안/동선/실 공급사 테스트는 미완료로 구분한다.
-- [ ] 실제 살아 있는 managed48041을 확인하고 필요한 시점에만 정상 종료/최신 mock build 반영한다. 완료 하위 범위·코드 commit·실제 검사·미검수/남은 항목을 TASKS/phase/handoff에 체크한다. A07.F09.PAID 전체 체크는1~4 내부 완료 후에만 한다.
+- [ ] 실제 살아 있는 managed65775을 확인하고 필요한 시점에만 정상 종료/최신 mock build 반영한다. 완료 하위 범위·코드 commit·실제 검사·미검수/남은 항목을 TASKS/phase/handoff에 체크한다. A07.F09.PAID 전체 체크는1~4 내부 완료 후에만 한다.
 
 ## 검수 명령
 
