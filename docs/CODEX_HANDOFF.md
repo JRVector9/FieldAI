@@ -1,5 +1,10 @@
 # CODEX 인수인계 — 2026-09-26
 
+## 화면 시안 원본 — 작업 재개 시 확인
+
+- 시안 파일: `/Users/jr/Desktop/projects/FieldAI/reference/field_ui_prototype_v3.html`
+- 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
+
 ## 최신 인수인계 — C03/A00/F00 홈 로그인 진입·분배 E2E (2026-09-26)
 
 - **현재 목표:** `reference/field_ui_prototype_v3.html`와 docs의 AP/Field 독립 제품 기능을 끝까지 구현해 로컬에서 사용할 수 있게 한다. 사용자는 최종 화면 디자인·동선/실 외부 연동을 직접 확인할 예정이다. C03 전체 완료와 출시 승인은 아직 미증명이다. 새 mock PTY **1896**: AP 웹 `http://localhost:3001/workspace`/API `127.0.0.1:4311`, Field 웹 `http://localhost:3002/workspace`/API `127.0.0.1:4321`; 양 API ready·양 웹 HTTP 200을 실제 재확인했다.
