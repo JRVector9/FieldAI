@@ -1,5 +1,26 @@
+.agent-field-layout{display:grid;gap:20px;width:min(100%,920px);margin:24px auto 0}
+.agent-field-layout>.special-panel{min-width:0}
+.agent-field-layout button{display:inline-flex;align-items:center;justify-content:center;max-width:100%;min-height:44px;padding:10px 15px;border:1px solid #b9cbe0;border-radius:10px;background:#fff;color:#15558f;font-size:15px;font-weight:650;line-height:1.4;text-align:center;white-space:normal;overflow-wrap:anywhere;cursor:pointer}
+.agent-field-layout button:hover:not(:disabled){background:#eff5fd;border-color:#89b6e7}
+.agent-field-layout button:focus-visible{outline:3px solid #82b7f1;outline-offset:2px}
+.agent-field-layout button:disabled{border-color:#d8e0e9;background:#f3f5f8;color:#657181;cursor:not-allowed}
+.agent-field-layout>section>button{margin-top:16px;background:#0066cc;border-color:#0066cc;color:#fff}
+.agent-field-layout>section>button:hover:not(:disabled){background:#07579e;border-color:#07579e}
 .agent-field-connections{min-width:0;overflow-wrap:anywhere}
 .agent-field-connections>ul,.agent-field-connections>ul>li{min-width:0}
+.agent-field-connections>ul{display:grid;gap:16px;list-style:none;padding:0;margin:18px 0 0}
+.agent-field-connections>ul>li{padding:20px;border:1px solid #dce5ef;border-radius:14px;background:#fbfcfe}
+.agent-field-connections>ul>li>strong{font-size:16px}
+.agent-field-connections>ul>li>button{margin:0 8px 8px 0}
+.agent-field-connections>section{margin-top:24px;padding-top:24px;border-top:1px solid #dce5ef}
+.agent-field-connections>section dl{display:grid;gap:10px;margin:10px 0 18px}
+.agent-field-connections>section dl>div{padding:12px 14px;border:1px solid #dce5ef;border-radius:10px;background:#f7fafc}
+.agent-field-connections>section dt{font-size:15px;font-weight:700}
+.agent-field-connections>section dd{margin:5px 0 0;font-size:15px;line-height:1.6}
+.agent-field-connections>section label:has(>input[type="checkbox"]){display:flex;align-items:flex-start;gap:9px;font-size:15px;line-height:1.6}
+.agent-field-connections>section input[type="checkbox"]{width:20px;height:20px;flex:none;margin:2px 0 0}
+.agent-field-connections>section .form-fields>button{justify-self:start;margin-top:8px;background:#0066cc;border-color:#0066cc;color:#fff}
+.agent-field-connections>section .form-fields>button:disabled{border-color:#d8e0e9;background:#f3f5f8;color:#657181}
 .agent-field-revoke{margin-top:16px;padding-top:14px;border-top:1px solid #dce5ef}
 .agent-field-revoke label{display:flex;align-items:flex-start;gap:9px;min-width:0;font-size:15px;line-height:1.6}
 .agent-field-revoke input[type="checkbox"]{width:19px;height:19px;flex:none;margin-top:3px}
@@ -11,3 +32,4 @@
 .agent-service-choice label{display:flex;align-items:flex-start;gap:9px;min-width:0;font-size:15px;line-height:1.6}
 .agent-service-choice label+label{display:block;margin-top:9px}
 .agent-service-choice select{display:block;width:100%;min-width:0;min-height:44px;margin-top:5px;font-size:16px}
+@media(max-width:480px){.agent-field-layout{gap:14px}.agent-field-layout>.special-panel{padding:19px}.agent-field-connections>ul>li{padding:15px}.agent-field-connections>ul>li>button{width:100%;margin-right:0}}

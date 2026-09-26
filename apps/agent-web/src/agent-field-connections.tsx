@@ -290,7 +290,7 @@ export function AgentFieldConnections() {
         <label>이메일<input type="email" required value={email} onChange={event => setEmail(event.target.value)} /></label>
         <label>비밀번호<input type="password" required value={password} onChange={event => setPassword(event.target.value)} /></label>
         <button type="submit" disabled={busy}>로그인</button></form><p>AP 계정이 없다면 <a href="/workspace">사업 정보 화면</a>에서 만드세요.</p></section>}
-      {phase === "ready" && <div className="special-grid"><section className="special-panel"><h2>Field 사업장 승인</h2>
+      {phase === "ready" && <div className="agent-field-layout"><section className="special-panel"><h2>Field 사업장 승인</h2>
         <p>Field 연결 기록에서 이동한 AP owner만 시작할 수 있습니다. Field 로그인 화면에서 별도 사업장과 공개 정보 읽기 범위를 선택합니다.</p>
         <button type="button" disabled={busy || !hasReference} onClick={() => void start()}>Field 사업장 정보 제공 동의 시작</button>
         {!hasReference && <p>먼저 <a href={fieldWorkspaceUrl}>Field의 연결 기록</a>에서 이어 진행해 주세요.</p>}

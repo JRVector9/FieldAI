@@ -63,7 +63,7 @@ async def main():
             await request(FIELD,'/api/auth/sign-in/email','POST',{'email':field_email,'password':PASSWORD})
             created=await request(FIELD,'/v1/organizations','POST',{'name':'Browser Field organization'})
             field_org=created['id']
-            await request(FIELD,'/v1/business/draft','PUT',{'expectedRevision':0,'businessName':'Browser Field organization','introduction':'승인된 소개','region':'서울','openingHours':'평일','contactPhone':'010-1111-2222','defaultBookingMode':'request','services':[{'id':str(uuid.uuid4()),'name':'상담','description':'Field에서 승인한 상담 설명','bookingMode':'request','durationMinutes':30,'priceAmount':None}]})
+            await request(FIELD,'/v1/business/draft','PUT',{'expectedRevision':0,'businessName':'Browser Field organization','introduction':'승인된 소개','region':'서울','openingHours':'평일','contactPhone':'010-1111-2222','defaultBookingMode':'request','services':[{'id':str(uuid.uuid4()),'name':'상담','description':'Field에서 승인한 상담 설명','bookingMode':'request','durationMinutes':30,'priceAmount':None}],'faqs':[{'question':'방문 전 준비는?','answer':'상담 내용을 미리 적어주세요.'}]})
             await request(FIELD,'/v1/catalog/releases','POST',{'expectedRevision':1})
             await page.goto(FIELD+'/workspace/integrations')
             await page.get_by_role('button',name='AP 계정 연결 시작').click()
@@ -99,12 +99,14 @@ async def main():
             await page.get_by_text('외부 문의·예약 요청: 지원').wait_for()
             await page.get_by_role('button',name='Field 승인 정보 가져와 검토').click()
             await page.get_by_text('Field 원본 개정 1 · AP 공개 전 검토 자료').wait_for()
+            await page.get_by_text('방문 전 준비는?',exact=True).wait_for()
+            await page.get_by_text('상담 내용을 미리 적어주세요.',exact=True).wait_for()
             await page.get_by_text('Field 승인 정보를 AP 검토 원장에 저장했습니다. AP 고객 상담에는 아직 반영되지 않았습니다.').wait_for()
             await page.reload()
             await page.get_by_role('button',name='보관된 검토 자료 열기').click()
             await page.get_by_text('AP에 보관된 Field 검토 자료입니다. 현재 Field 값과 다를 수 있습니다.').wait_for()
             await page.get_by_text('Field 원본 개정 1 · AP 공개 전 검토 자료').wait_for()
-            await page.get_by_label('표시된 Field 원본 개정과 서비스를 검토했습니다.').check()
+            await page.get_by_label('표시된 Field 원본 개정과 서비스·FAQ를 검토했습니다.').check()
             await page.get_by_role('button',name='이 Field 정보 출처 승인').click()
             await page.get_by_text('AP 정보 출처 검토 승인 완료 · 고객 AI 반영 대기').wait_for()
             await page.reload()
@@ -112,6 +114,15 @@ async def main():
             await page.get_by_text('AP 정보 출처 검토 승인 완료 · 고객 AI 반영 대기').wait_for()
             await page.get_by_text('AP 직접 승인 지식 1번째 공개본').wait_for()
             await page.get_by_label('사업장 소개와 지역').check()
+            await page.get_by_label('승인된 FAQ 1건').check()
+            saved_button=page.get_by_role('button',name='보관된 검토 자료 열기')
+            assert await saved_button.evaluate('(button) => button.getBoundingClientRect().height') >= 44
+            await page.screenshot(path='/tmp/field-ap-faq-320.png',full_page=True)
+            await page.set_viewport_size({'width':1440,'height':900})
+            setup_height=await page.locator('.agent-field-layout > section.special-panel').evaluate('(panel) => panel.getBoundingClientRect().height')
+            assert setup_height < 500,setup_height
+            await page.screenshot(path='/tmp/field-ap-faq-1440.png',full_page=True)
+            await page.set_viewport_size({'width':320,'height':720})
             await page.get_by_label('상담 설명').check()
             publish_button=page.get_by_role('button',name='선택한 설명을 AP 지식 공개본으로 만들기')
             assert await publish_button.is_disabled()
@@ -124,6 +135,7 @@ async def main():
             await page.get_by_role('button',name='보관된 검토 자료 열기').click()
             await page.get_by_role('link',name='AI 설정에서 새 지식 버전 승인').wait_for()
             assert await page.get_by_label('출처 처리').input_value() == 'field:0'
+            assert await page.get_by_label('승인된 FAQ 1건').is_checked()
             ap_dimensions=await page.evaluate('({body:document.body.scrollWidth,viewport:innerWidth})')
             assert ap_dimensions['body']<=ap_dimensions['viewport'],ap_dimensions
             await page.goto(FIELD+'/workspace/integrations')

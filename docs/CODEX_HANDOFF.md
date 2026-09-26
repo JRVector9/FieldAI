@@ -1,5 +1,30 @@
 # CODEX 인수인계 — 2026-09-26
 
+## 최신 인수인계 — C03/F-O12 AP 연결 FAQ 선택 화면 (2026-09-26)
+
+- **현재 목표:** `reference/field_ui_prototype_v3.html`과 v3 문서대로 AP/Field 독립 제품의 기능·화면을 로컬에서 사용할 수 있게 한다. 사용자는 최종 시각·동선 테스트와 실 외부 연동을 직접 진행한다. 이 단계는 AP 연결 화면과 FAQ 선택 검수이며 전체 C03/제품 완료는 미증명이다. 로컬 mock PTY **27712**: AP `http://localhost:3001/workspace`, API `127.0.0.1:4311`; Field `http://localhost:3002/workspace`, API `127.0.0.1:4321`. 양 API `/health/ready`와 양 웹 `/workspace`는 각각 ready/HTTP 200을 실제 확인했다.
+- **완료 작업:** Field 승인 FAQ를 포함한 별도 AP/Field 양방향 연결 뒤 AP owner의 source 가져오기·검토·승인·FAQ 선택·AP 지식 공개 및 재진입 유지 흐름을 실제 브라우저로 확인했다. 1440px에서 연결 시작 카드가 긴 검토 카드 높이로 늘고 320px 작업 버튼이 44px 미만인 화면 결함을 고쳤다. AP 연결 화면은 최대 920px 세로 카드, 연결별 기록 카드, 44px 이상 버튼, FAQ 문답 카드로 구성한다. 이전 최초 Git 커밋 `3446330`은 이미 저장됐다.
+- **수정 파일:** `apps/agent-web/src/{agent-field-connections.tsx,agent-field-connections.css}`, `tools/spikes/ap-field-connection-browser.py`, `docs/technical/{PHASE_2_EXECUTION_PLAN.md,PHASE_2_UI_REVIEW.md}`, `TASKS.md`, `DEVELOPMENT_STATUS.md`, 이 파일. 이번 단계의 API/DB/migration/공개 계약 변경 없음.
+- **핵심 설계 결정:** AP와 Field 별도 조직/동의/원장은 유지한다. AP는 보관된 Field 사실을 명시 검토하고 선택한 FAQ만 AP 지식 공개본에 포함한다. 화면은 연결 시작과 긴 검토 기록을 세로로 배치해 양쪽 카드가 서로의 높이에 영향을 주지 않도록 한다. 320px 행동 버튼의 실제 목표 높이를 브라우저에서 확인한다.
+- **실제 검사/환경/커밋:** 로컬 PostgreSQL 17·Field Valkey·mock, 새 서버 PTY **27712**의 양 API/웹 build/ready. 실제 AP/Field 양방향 연결 브라우저는 시각 수정 전 1/1 두 차례(FAQ 가져오기·owner 승인·선택·공개·재진입). 버튼 높이 신규 assertion 0/1 red 뒤 수정하고 `/tmp/fieldai-ui-venv/bin/python tools/spikes/ap-field-connection-browser.py` 최종 1/1(320px 버튼 ≥44px·1440px 시작 카드 <500px·320px 문서 가로 넘침 0·pageerror 0). `/tmp/field-ap-faq-{320,1440}.png`를 열어 배치·FAQ 문답·줄바꿈을 확인했다. `pnpm --filter @fieldai/agent-web typecheck`, `pnpm lint`, `git diff --check` exit 0. 이번 변경 커밋 해시는 `git log -1 --oneline`으로 확인한다.
+- **실패한 접근:** 기존 공통 `special-grid`의 두 열은 긴 오른쪽 검토 카드에 맞춰 왼쪽 시작 카드까지 늘렸다. 버튼은 브라우저 기본 높이에 머물러 320px 높이 assertion이 실패했다. 전용 레이아웃·버튼 CSS 적용 후 같은 전체 연결 검사가 통과했다.
+- **남은 작업:** 다른 시안 역할/기능·오류 경로와 200% 확대·전체 키보드/스크린리더, 사용자 시각·동선/최종 인수, 제품별 정식 QA/G. 실 인증/LLM/알림 공급사/결제/DNS/TLS/백업은 `blocked_integration`; 운영 배포·고객 발송·청구 없음. 다음 단계 시작 전 파일 범위·요구/QA·명령을 실행 계획 맨 위에 기록하고 시안과 실제 화면을 대조한다.
+- **다음 에이전트 정확한 명령:**
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short --branch
+git log -2 --oneline
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+sed -n '1,20p' docs/technical/PHASE_2_EXECUTION_PLAN.md
+pnpm --filter @fieldai/agent-web typecheck
+pnpm lint
+/tmp/fieldai-ui-venv/bin/python tools/spikes/ap-field-connection-browser.py
+```
+
+서버가 내려갔으면 `pnpm mock:run`을 먼저 실행한다. 실 공급사 연결·최종 사용자 검사는 이 명령의 성공으로 대체하지 않는다.
+
 ## 최신 인수인계 — C03/F-O12 Field 승인 FAQ와 최초 Git 저장 (2026-09-26)
 
 - **현재 목표:** `reference/field_ui_prototype_v3.html`과 v3 문서대로 AP/Field 독립 제품의 UI·기능을 로컬 사용 가능하게 완성한다. 사용자는 시각·동선/최종 인수 테스트와 실 외부 연동을 이후 직접 진행한다. C03/F-O12는 구현됐으나 전체 C03/제품 완료는 미증명이다. 새 mock PTY **47796**: AP 웹 `http://localhost:3001/workspace`/API `127.0.0.1:4311`, Field 웹 `http://localhost:3002/workspace`/API `127.0.0.1:4321`; 두 API `/health/ready`와 두 웹 `/workspace` HTTP 200.

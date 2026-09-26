@@ -1,5 +1,9 @@
 # 개발 진행 상태 — 2026-09-26
 
+## 최신 C03/F-O12 AP 연결 FAQ 선택 화면 (2026-09-26)
+
+Field 승인 FAQ가 AP 별도 출처 검토·owner 승인·선택·지식 공개·재진입까지 이어지는 실제 양방향 연결 브라우저 최종 1/1. 1440px에서 늘어난 시작 카드와 320px 44px 미만 버튼을 확인해 AP 연결 화면의 카드/버튼/FAQ 문답을 정리했다. 버튼 높이 0/1 red→새 mock **27712** 최종 1/1, 320px 가로 넘침·pageerror 0, 1440px 시작 카드 높이<500px. `/tmp/field-ap-faq-{320,1440}.png` 시각 확인, AP web typecheck·전체 lint·diff 검사 exit 0. 기존 FAQ 기능의 제품별 원장/권한은 유지하고 API/DB/계약 변경 없음. 사용자 최종 인수·정식 QA/G·실 공급사는 남아 C03/F-O12 `in_progress`다. 이전 최초 Git 저장은 `3446330`이다.
+
 ## 최신 C03/F-O12 승인 FAQ 공개·연결 (2026-09-26)
 
 Field 사업 정보에 질문·답변 초안 입력/자동 저장/충돌 비교·명시 승인을 추가했다. 승인 전 문답은 비공개, 승인본은 공개 사이트의 FAQ 섹션과 Field `field.facts.read` preview.8에만 포함된다. 사이트는 공개 당시의 승인 카탈로그를 유지하고 이후 개정은 stale로 표시한다. AP는 Field 공개 문답을 정규화해 별도 source 검토 원장에 저장하고, AP 사업자가 FAQ 선택·지식 공개·AI 버전 승인을 거쳐 상담 근거로 쓴다. 기존 릴리스/클라이언트의 FAQ 누락은 빈 배열로 읽는다. 계약 red→1/1, Field 격리 DB red→5/5, AP 격리 DB red→1/1, Field 실제 320px 전체 브라우저 red→최종 1/1 두 차례(FAQ와 기존 문의·예약), 320/1440px 캡처·가로 넘침 0, 양 API build/양 웹 typecheck/lint exit 0. mock **47796** 양제품 build/ready. AP 선택 화면 실브라우저·사용자 최종 인수·정식 QA/G·실 공급사는 미실행이며 C03/F-O12 `in_progress`. DB migration·Git 커밋 없음.

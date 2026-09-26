@@ -1,5 +1,12 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/F-O12 AP 연결 화면의 Field FAQ 선택 검수 — 2026-09-26
+
+- 파일 범위: `tools/spikes/ap-field-connection-browser.py`, `apps/agent-web/src/{agent-field-connections.tsx,agent-field-connections.css}`, 계획/상태/화면 검토/인수인계 문서. 제품별 DB·세션 경계는 유지한다.
+- 요구/QA/게이트: Field 승인 FAQ가 공개 facts를 통해 AP 별도 source 검토/owner 승인/FAQ 선택/지식 공개까지 이어져야 한다(F-O12, B09/B20, QA57/119 및 연결·권한, G-A2/G-F2 로컬 부분). 시안의 승인 정보·FAQ 동선을 320px에서 확인한다.
+- 검사: 기존 실제 양방향 OAuth 브라우저 흐름의 Field 승인 카탈로그에 FAQ를 넣고, AP 검토 카드 문답 표시·새 확인 문구·FAQ 선택/재진입 유지·공개 sourceFacts를 단언한다. 기존 실제 연결/갱신/가로 넘침 오류는 유지한다. 해당 브라우저 검사 뒤 변경 파일 lint, 네 로컬 endpoint, Git 상태를 확인한다. 사용자 최종 인수와 실 공급사 검수는 이후다.
+- 실행 결과: 실제 320px 양방향 연결→Field 공개 사실 가져오기→AP owner 원본 검토·승인→FAQ 선택·지식 공개→새로고침 유지 브라우저 1/1 두 차례. 1440px 캡처에서 연결 시작 카드가 오른쪽 긴 검토 카드와 같이 늘어나고 320px 작업 버튼 높이가 44px 미만인 결함을 확인했다. 버튼 높이 assertion 0/1 red 후, AP 연결 화면을 폭 920px 이하 세로 카드·연결별 기록 카드·44px 이상 버튼·FAQ 문답 카드로 정리했다. 새 mock **27712** 양제품 build/ready에서 브라우저 최종 1/1(320px 버튼 높이·1440px 시작 카드 높이<500px·문서 가로 넘침 0·pageerror 0), `/tmp/field-ap-faq-{320,1440}.png`를 열어 시각 확인. AP web typecheck·전체 lint·`git diff --check` exit 0. AP/Field 내부 API·DB·계약 변경 없음. 사용자 최종 인수, 실제 공급사·정식 QA/G는 남아 C03/F-O12 `in_progress`다.
+
 ### C03/F-O12 Field 승인 FAQ의 사이트·AP 공개 경로 — 2026-09-26
 
 - 파일 범위: Field 카탈로그 API/격리 DB 검사, Field 공개 facts 계약과 검사, AP 공개 facts 소비·선택 승인 경로와 관련 검사, Field 사업 정보 편집·사이트 FAQ 표시/CSS, 계획·현황·인수인계 문서. 별도 제품 DB나 세션을 공유하지 않는다. 기존 JSONB 카탈로그에 선택 필드를 추가하므로 migration은 필요하지 않다.
