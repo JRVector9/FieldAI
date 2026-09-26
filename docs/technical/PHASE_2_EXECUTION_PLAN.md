@@ -1956,4 +1956,3 @@ AP와 Field의 독립 웹 앱에서 문서의 역할별 화면·이동 경로·�
 - 독립 review92981 exit0/P2 1건·raw confidence0.88: 설정 부재/변경 때 만료된 미시작 auth ciphertext를 계속 보존. native95293/67597 blocked≠failed red 후 만료 판단을 설정보다 먼저 처리했다. 최종 repair79675 exit0/남은P1·P2 없음/confidence0.88. 두 검토는 read-only/static이며 자체 테스트/실 공급사 호출/수정 없음.
 - runtime: 살아 있는73001 확인 뒤 Ctrl+C terminalexit1/ELIFECYCLE을 관찰했고 정상exit0로 보고하지 않는다. 최신48041 /tmp/billing-authorization-managed-runtime.log 양제품build/migrate/ready·각 인증 worker ready(blocked_integration)·양web200. 실제 own DB AP000071/Field000065/claim_token/next_attempt_at 조회, controller72041 하나와 자체 인증 workers76804/76841 각각 하나/동일parent를 확인했다. 기존71/65는 적용/커밋됐으며 다음 schema는72/66. 실 PG키는 넣지 않았다.
 - TASKS[x]는 인증 발급/미상 복구 내부 범위만이다. 첫 청구·같은 주문 결과 조회·갱신/해지/유예·환불/entitlement·실 SDK callback/owner/admin UI·실 PG/최종 사용자 인수는 남는다. 이미 완료한 가격/동의/발급 worker를 다시 만들지 않는다.
-
