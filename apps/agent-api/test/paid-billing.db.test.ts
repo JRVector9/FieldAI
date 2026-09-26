@@ -95,6 +95,11 @@ test('AP owns approved immutable price versions, period constraints and blocked 
       { reason: '새 판매만 중단하고 기존 동의는 유지합니다.' })).statusCode, 200);
     assert.equal((await call('GET', '/v1/subscription/plans')).json().plans.length, 0);
     assert.equal((await call('GET', '/v1/subscription/billing')).json().periods[0].totalAmount, 11000);
+    const currentPlan=(await call('GET','/v1/subscription/billing')).json().currentPlan;
+    assert.equal(currentPlan?.name,body.name);
+    assert.equal(currentPlan?.totalAmount,11000);
+    assert.equal(currentPlan?.includedAiUnits,500);
+    assert.equal(currentPlan?.state,'retired');
     await assert.rejects(insertConsent(randomUUID(), plan.id, 11000, 'synthetic-terms-v1'), { code: 'PAB01' });
 
   } finally { await app.close(); await pool.end(); }

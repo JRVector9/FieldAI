@@ -89,7 +89,7 @@ async function fixture(taxFreeAmount: number | null = 0,initialPaid=true,start=n
     return runBillingChargeOnce({pool,billing:context,now});
   };
   if(initialPaid)assert.equal(await run(),'paid');
-  return {pool,billing,calls,lookups,run,call,owner,operator,org,plan,subscriptionId,approvedAt,price,consent,
+  return {pool,billing,calls,lookups,run,call,owner,operator,approver,org,plan,subscriptionId,approvedAt,price,consent,
     row:async()=>(await pool.query('select t.* from ap.billing_transactions t join ap.billing_periods p on p.id=t.period_id where p.subscription_id=$1 order by p.billing_period desc limit 1',[subscriptionId])).rows[0],
     due:()=>pool.query('update ap.billing_transactions set next_attempt_at=now() where period_id in (select id from ap.billing_periods where subscription_id=$1)',[subscriptionId]),
     session(value:boolean){sessionAvailable=value;},setNow(value:Date){now=value;},now:()=>now, setMode(value:typeof mode){mode=value;},setRemote(value:BillingPayment|null){remote=value;},
@@ -252,7 +252,23 @@ test('AP an unsuccessful first payment grants neither paid access nor paid grace
 test('AP refunded or test-only payment cannot reopen mock or live paid access',async()=>{
   const f=await fixture();try {
     process.env.AP_PROFILE='live';assert.equal((await access(f)).mode,'cleanup_only');process.env.AP_PROFILE='mock';
-    await f.pool.query("update ap.billing_periods set state='refunded',refunded_amount=total_amount");
+    const transaction=await f.row(),payment=await f.billing.provider.lookup(transaction.order_id);assert.ok(payment);
+    f.setRemote({...payment,cancels:[],isPartialCancelable:true});
+    let refundPosts=0;
+    f.billing.provider.refund=async input=>{
+      refundPosts++;assert.equal(input.paymentKey,payment.paymentKey);assert.equal(input.orderId,payment.orderId);assert.equal(input.amount,payment.totalAmount);
+      const canceled:BillingPayment={...payment,status:'CANCELED',balanceAmount:0,taxFreeAmount:0,suppliedAmount:0,vat:0,
+        cancels:[{transactionKey:`synthetic-refund-${randomUUID()}`,cancelAmount:input.amount,taxFreeAmount:input.taxFreeAmount,
+          cancelReason:input.reason,canceledAt:new Date().toISOString(),cancelStatus:'DONE',refundableAmount:0}]};
+      f.setRemote(canceled);return canceled;
+    };
+    const requested=await f.call('POST','/v1/subscription/refunds',{periodId:transaction.period_id,amount:payment.totalAmount,reason:'Synthetic full refund request'});assert.equal(requested.statusCode,201,requested.body);
+    const refundId=requested.json().id as string;f.as(f.operator);
+    const reviewed=await f.call('POST',`/v1/admin/billing/refunds/${refundId}/review`,{reason:'Synthetic full refund operator review',reference:'SYNTHETIC',taxFreeAmount:0});assert.equal(reviewed.statusCode,200,reviewed.body);
+    f.as(f.approver);const approved=await f.call('POST',`/v1/admin/billing/refunds/${refundId}/approve`,{reason:'Synthetic different operator approval'});assert.equal(approved.statusCode,200,approved.body);
+    const {runBillingRefundOnce}=await import('../src/billing-refund-execution.js');assert.equal(await runBillingRefundOnce({pool:f.pool,billing:f.billing}),'succeeded');
+    assert.equal(refundPosts,1);const refunded=(await f.pool.query('select state,refunded_amount,total_amount from ap.billing_periods where id=$1',[transaction.period_id])).rows[0];
+    assert.equal(refunded.state,'refunded');assert.equal(refunded.refunded_amount,refunded.total_amount);
     assert.equal((await access(f)).mode,'cleanup_only');
   }finally{process.env.AP_PROFILE='mock';await f.close();}
 });

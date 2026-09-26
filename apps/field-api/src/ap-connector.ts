@@ -19,6 +19,7 @@ const requiredScopes = ['ap.agent.read', 'ap.conversations.read'];
 const requestedScopes = ['openid', 'offline_access', ...requiredScopes,
   'ap.conversations.reply', 'ap.sources.refresh'];
 const tokenScopes = ['offline_access', ...requiredScopes];
+const installationScopes = ['ap.connections.create', 'ap.deployments.manage'];
 
 function hash(value: string) { return createHash('sha256').update(value).digest('hex'); }
 function seal(value: string, key: Buffer) {
@@ -139,6 +140,61 @@ export function authorizedApConversationAccess(runtime: Pick<FieldBusinessRuntim
 export function authorizedApSourceAccess(runtime: Pick<FieldBusinessRuntime, 'pool' | 'apConnector'>,
   organizationId: string, userId: string, connectionId: string) {
   return authorizedApAccess(runtime, organizationId, userId, connectionId, null, 'ap.sources.refresh');
+}
+
+// Installation consent does not grant reverse Field tools or extend the selected conversation deployments.
+export async function authorizedApInstallationAccess(runtime: Pick<FieldBusinessRuntime, 'pool' | 'apConnector'>,
+  organizationId: string, userId: string, connectionId: string): Promise<{error:string;status:number}|{
+    token:string;apiOrigin:string;grantId:string;organizationId:string;agentId:string;clientId:string;issuer:string}> {
+  const config = runtime.apConnector;
+  if (!config) return { error: 'blocked_integration', status: 503 } as const;
+  const db = await runtime.pool.connect();
+  try {
+    await db.query('begin');
+    const found = await db.query<{ ap_issuer:string; ap_client_id:string; ap_grant_id:string;
+      ap_organization_id:string; ap_agent_id:string; scopes:string[]; access_token_cipher:Buffer;
+      refresh_token_cipher:Buffer; access_expires_at:Date }>(
+      `select c.* from field.ap_connections c
+       where c.id=$1 and c.organization_id=$2 and c.initiator_user_id=$3
+         and c.status in ('pending_field_consent','review_required')
+         and exists(select 1 from field.memberships m where m.organization_id=c.organization_id
+           and m.user_id=$3 and m.role='owner')
+         and (c.status='pending_field_consent' or (c.field_actor_user_id=$3 and exists(
+           select 1 from field.oauth_selections s where s.id::text=c.field_grant_id
+             and s.organization_id=c.organization_id and s.actor_user_id=$3 and s.revoked_at is null)))
+       for update of c`, [connectionId, organizationId, userId]);
+    const row = found.rows[0];
+    if (!row || row.ap_issuer !== config.issuer || row.ap_client_id !== config.clientId) {
+      await db.query('rollback'); return { error:'connection_not_ready',status:409 } as const;
+    }
+    if (!installationScopes.every(scope=>row.scopes.includes(scope))) {
+      await db.query('rollback'); return {error:'ap_installation_scope_required',status:403} as const;
+    }
+    let access = row.access_token_cipher;
+    if (row.access_expires_at.getTime() <= Date.now()+30_000) {
+      const refreshed = await refreshStoredApGrant(config,row.refresh_token_cipher).catch(()=>null);
+      if (!refreshed) { await db.query('commit'); return {error:'ap_grant_refresh_unknown',status:503} as const; }
+      access=refreshed.accessCipher;
+      await db.query(`update field.ap_connections set access_token_cipher=$2,refresh_token_cipher=$3,
+        access_expires_at=now()+($4::text||' seconds')::interval,updated_at=now() where id=$1`,
+      [connectionId,access,refreshed.refreshCipher,refreshed.expiresIn]);
+    }
+    const token=unseal(access,config.tokenKey);
+    let response:Response, me:Record<string,unknown>|null;
+    try {
+      response=await (config.fetcher??fetch)(`${apResource(config)}/me`,{
+        headers:{authorization:`Bearer ${token}`},redirect:'error',signal:AbortSignal.timeout(8000)});
+      me=asObject(await response.json());
+    } catch { await db.query('commit');return {error:'ap_unavailable',status:503} as const; }
+    if(!response.ok) {await db.query('commit');return {error:'ap_grant_unavailable',status:response.status===401?401:503} as const;}
+    if(me?.grantId!==row.ap_grant_id || me.organizationId!==row.ap_organization_id || me.agentId!==row.ap_agent_id
+      || me.state!=='active' || !Array.isArray(me.scopes) || !installationScopes.every(scope=>(me.scopes as unknown[]).includes(scope))) {
+      await db.query('commit');return {error:'ap_grant_scope_changed',status:409} as const;
+    }
+    await db.query('commit');
+    return {token,apiOrigin:new URL(config.issuer).origin,grantId:row.ap_grant_id,
+      organizationId:row.ap_organization_id,agentId:row.ap_agent_id,clientId:row.ap_client_id,issuer:row.ap_issuer};
+  }catch(error){await db.query('rollback');throw error;}finally{db.release();}
 }
 
 export function apConnectorFromEnvironment(): ApConnectorConfig | undefined {
@@ -371,18 +427,22 @@ export function registerApConnectorRoutes(app: FastifyInstance, runtime: FieldBu
       "select 1 from field.memberships where organization_id = $1 and user_id = $2 and role = 'owner'",
       [organizationId, userId]);
     if (!member.rowCount) return reply.code(404).send({ error: 'organization_not_found' });
+    const purpose = asObject(request.body)?.purpose;
+    if (purpose !== undefined && purpose !== 'installation') return reply.code(400).send({ error: 'invalid_connection_purpose' });
     const config = runtime.apConnector;
     if (!config || !validConfiguration(config)) return reply.code(503).send({ error: 'blocked_integration' });
+    if (purpose === 'installation' && request.headers.origin !== config.webOrigin)
+      return reply.code(403).send({ error: 'invalid_origin' });
     const state = randomBytes(32).toString('base64url');
     const verifier = randomBytes(32).toString('base64url');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
     await runtime.pool.query(
       `insert into field.ap_oauth_attempts(id, organization_id, initiator_user_id, state_hash,
-         verifier_cipher, expires_at) values ($1,$2,$3,$4,$5,now() + interval '10 minutes')`,
-      [randomUUID(), organizationId, userId, hash(state), seal(verifier, config.tokenKey)]);
+         verifier_cipher, expires_at, requested_installation) values ($1,$2,$3,$4,$5,now() + interval '10 minutes',$6)`,
+      [randomUUID(), organizationId, userId, hash(state), seal(verifier, config.tokenKey), purpose === 'installation']);
     const authorization = new URL(`${config.issuer.replace(/\/$/, '')}/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code', client_id: config.clientId,
-      redirect_uri: config.redirectUri, scope: requestedScopes.join(' '), state,
+      redirect_uri: config.redirectUri, scope: [...requestedScopes, ...(purpose === 'installation' ? installationScopes : [])].join(' '), state,
       code_challenge: challenge, code_challenge_method: 'S256', resource: apResource(config) })) {
       authorization.searchParams.set(key, value);
     }
@@ -400,7 +460,7 @@ export function registerApConnectorRoutes(app: FastifyInstance, runtime: FieldBu
     try {
       await db.query('begin');
       const found = await db.query<{ id: string; organization_id: string; initiator_user_id: string;
-        verifier_cipher: Buffer; status: string; connection_id: string | null; expires_at: Date }>(
+        verifier_cipher: Buffer; status: string; connection_id: string | null; expires_at: Date; requested_installation: boolean }>(
         'select * from field.ap_oauth_attempts where state_hash = $1 for update', [hash(state)]);
       const attempt = found.rows[0];
       if (!attempt || attempt.expires_at.getTime() <= Date.now()) {
@@ -448,7 +508,8 @@ export function registerApConnectorRoutes(app: FastifyInstance, runtime: FieldBu
           || typeof token.refresh_token !== 'string' || !token.refresh_token
           || token.token_type !== 'Bearer' || typeof token.expires_in !== 'number'
           || token.expires_in < 60 || typeof token.scope !== 'string'
-          || !tokenScopes.every(scope => (token.scope as string).split(' ').includes(scope))) {
+          || ![...tokenScopes, ...(attempt.requested_installation ? installationScopes : [])]
+            .every(scope => (token.scope as string).split(' ').includes(scope))) {
           throw new Error('invalid_token_response');
         }
         const headers = { authorization: `Bearer ${token.access_token}` };
@@ -467,7 +528,7 @@ export function registerApConnectorRoutes(app: FastifyInstance, runtime: FieldBu
       const meScopes = Array.isArray(me.scopes) ? me.scopes : [];
       if (!uuid.test(String(me.grantId)) || !uuid.test(String(me.organizationId))
         || !uuid.test(String(me.agentId)) || me.state !== 'active'
-        || !requiredScopes.every(scope => meScopes.includes(scope))
+        || ![...requiredScopes, ...(attempt.requested_installation ? installationScopes : [])].every(scope => meScopes.includes(scope))
         || !Array.isArray(me.deploymentIds) || me.deploymentIds.some(value => typeof value !== 'string' || !uuid.test(value))
         || me.organizationId !== agent.organizationId || me.agentId !== agent.agentId
         || typeof agent.name !== 'string' || !agent.name || typeof agent.revision !== 'number'

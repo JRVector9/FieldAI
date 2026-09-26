@@ -10,6 +10,7 @@ import { FieldRetentionNotice } from "./FieldRetentionNotice";
 import { consumeReceiptHandoff } from "./receipt-handoff";
 import { PrivateInquiryPhoto } from "./private-inquiry-photo";
 import { ReceiptRotationPanel } from "./receipt-rotation";
+import { FieldCustomerNotificationConsent } from "./field-customer-notification-consent";
 import { inquiryDeliveryLabel } from "./field-notification-label";
 import { clearPendingPublicSubmission, publicSubmissionFingerprint, readPendingPublicSubmission,
   writePendingPublicSubmission, type PendingPublicSubmission } from "./pending-public-submission";
@@ -534,6 +535,7 @@ export function InquiryPage({ id }: { id: string }) {
         <FieldRetentionNotice retention={inquiry.retention} />
         {!inquiry.retention?.workPurgedAt && <form className="field-conversation-composer" onSubmit={event => void reply(event)}><label className="sr-only" htmlFor="field-conversation-reply">추가 질문</label><textarea id="field-conversation-reply" required maxLength={5000} value={body} onChange={event => setBody(event.target.value)} placeholder="추가 내용을 남겨주세요" /><button type="submit" disabled={busy || recoveringMessage}>추가 질문 저장</button></form>}
         <p className="field-conversation-foot">내부 메모는 고객 대화에 표시하지 않습니다. 외부 알림 발송 상태는 각 메시지에 표시됩니다.</p>
+        {!inquiry.retention?.workPurgedAt && <FieldCustomerNotificationConsent kind="inquiry" id={id} receiptKey={key} />}
         <details className="field-conversation-tools"><summary>확인키·사진 관리</summary><div><h2>확인키 관리</h2><p>다른 문의를 열 때는 현재 대화를 닫고 새 확인키를 입력합니다.</p><button className="field-conversation-switch-key" type="button" disabled={hasPendingMessage || busy} onClick={() => { setInquiry(null); setKey(""); clearPhotoSelection(); setPendingPhotoMessageId(null); setRefreshNeeded(false); }}>다른 확인키로 열기</button>{hasPendingMessage ? <p>이전 추가 질문 결과를 확인한 뒤 확인키를 교체할 수 있습니다.</p> : <ReceiptRotationPanel path={`/v1/inquiries/${id}/receipt-key/rotate`} label="문의" currentKey={key} onRotated={onReceiptRotated} />}<div className="knowledge-source"><label className="inquiry-photo-label">문의 사진 첨부 (선택, 최대 5장·장당 8MB)<input ref={photoInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy || Boolean(inquiry?.retention?.workPurgedAt)} onChange={event => {
           const result = selectedInquiryPhotos(event.currentTarget.files);
           if (result.error) { event.currentTarget.value = ""; setStatus(result.error); return; }

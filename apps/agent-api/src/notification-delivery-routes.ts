@@ -5,7 +5,7 @@ import { sealNotification, unsealNotification, type NotificationContext } from '
 import { validPushSubscription } from './notification-web-push.js';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const object=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:null;
-function allowedOrigin(request:FastifyRequest,context:NotificationContext|undefined){return (!request.headers.origin||request.headers.origin===context?.webOrigin)&&request.headers['sec-fetch-site']!=='cross-site';}
+function allowedOrigin(request:FastifyRequest,context:NotificationContext|undefined){const origin=context?.webOrigin??process.env.AP_PUBLIC_WEB_ORIGIN??(process.env.AP_PROFILE==='mock'?'http://localhost:3001':undefined);return (!request.headers.origin||request.headers.origin===origin)&&request.headers['sec-fetch-site']!=='cross-site';}
 export function registerAgentDeliveryRoutes(app:FastifyInstance,runtime:Pick<BusinessRuntime,'pool'|'resolveUserId'|'resolveSession'>,context?:NotificationContext){
  async function organization(request:FastifyRequest,reply:FastifyReply,owner=false){
   const userId=await runtime.resolveUserId(request.headers);if(!userId){reply.code(401).send({error:'authentication_required'});return null;}
@@ -35,9 +35,16 @@ export function registerAgentDeliveryRoutes(app:FastifyInstance,runtime:Pick<Bus
   }catch(e){await db.query('rollback');throw e;}finally{db.release();}
   return {dailyAttemptLimit:limit};
  });
- async function saveConsent(organizationId:string,kind:string,target:string,audience:string,phone:string|undefined,body:Record<string,unknown>,actor:string|null,push=false){
+ function customerOrigin(request:FastifyRequest){return allowedOrigin(request,context);}
+ async function customerSource(kind:string,id:string,capHash:string,db:Pick<typeof runtime.pool,'query'>=runtime.pool,lock=false){
+  if(kind!=='inquiry')return null;
+  const table='ap.inquiries';
+  return (await db.query<{organization_id:string;customer_phone:string}>(`select organization_id,customer_phone from ${table} where id=$1 and visitor_key_hash=$2 and consent_at is not null and retention_work_purged_at is null and mode='human'${lock?' for share':''}`,[id,capHash])).rows[0]??null;
+ }
+ async function saveConsent(organizationId:string,kind:string,target:string,audience:string,phone:string|undefined,body:Record<string,unknown>,actor:string|null,push=false,capHash?:string){
   const db=await runtime.pool.connect();try{await db.query('begin');await db.query('select id from ap.organizations where id=$1 for update',[organizationId]);
    if(actor&&!(await db.query("select 1 from ap.memberships where organization_id=$1 and user_id=$2 and role='owner' for share",[organizationId,actor])).rowCount){await db.query('rollback');return null;}
+   if(capHash){const source=await customerSource(kind,target,capHash,db,true);if(!source||source.organization_id!==organizationId){await db.query('rollback');return null;}phone=source.customer_phone;}
    const active=(await db.query<{id:string;recipient_ciphertext:string|null;kakao:boolean;sms:boolean;push:boolean}>('select id,recipient_ciphertext,kakao,sms,push from ap.notification_recipients where organization_id=$1 and target_kind=$2 and target_id=$3 and push=$4 and revoked_at is null for update',[organizationId,kind,target,push])).rows[0];
    const enabled=push?body.push===true:body.kakao===true||body.sms===true;
    if(enabled&&phone===undefined&&active?.recipient_ciphertext&&context){try{phone=unsealNotification(active.recipient_ciphertext,context.key,`recipient:${active.id}`);}catch{/* A new recipient is required when the stored value cannot be opened. */}}
@@ -64,15 +71,26 @@ export function registerAgentDeliveryRoutes(app:FastifyInstance,runtime:Pick<Bus
   const id=await saveConsent(actor.organizationId,'owner',actor.userId,'owner',subscription?JSON.stringify(subscription):undefined,body,actor.userId,true);
   if(!id)return reply.code(404).send({error:'organization_not_found'});return {recipientId:id,providerState:context?.pushProvider?'configured':'blocked_integration'};
  });
- app.post<{Params:{kind:string;id:string}}>('/v1/customer/notification-consents/:kind/:id',async(request,reply)=>{
+ app.get<{Params:{kind:string;id:string}}>('/v1/customer/notification-consents/:kind/:id',async(request,reply)=>{
+  reply.header('Cache-Control','no-store');
   const token=request.headers.authorization?.startsWith('Bearer ')?request.headers.authorization.slice(7):'',kind=request.params.kind;
-  if(kind!=='inquiry'||!uuid.test(request.params.id)||!/^[A-Za-z0-9_-]{43}$/.test(token))return reply.code(404).send({error:'notification_target_not_found'});
-  const found=(await runtime.pool.query<{organization_id:string;customer_phone:string}>('select organization_id,customer_phone from ap.inquiries where id=$1 and visitor_key_hash=$2 and consent_at is not null and mode=\'human\' and retention_work_purged_at is null',[request.params.id,createHash('sha256').update(token).digest('hex')])).rows[0];
-  if(!found)return reply.code(404).send({error:'notification_target_not_found'});if(!allowedOrigin(request,context))return reply.code(403).send({error:'origin_not_allowed'});
-  if(!context)return reply.code(503).send({error:'notification_configuration_missing',state:'blocked_integration'});
+  if(!uuid.test(request.params.id)||!/^[A-Za-z0-9_-]{43}$/.test(token))return reply.code(404).send({error:'notification_target_not_found'});
+  const found=await customerSource(kind,request.params.id,createHash('sha256').update(token).digest('hex'));
+  if(!found)return reply.code(404).send({error:'notification_target_not_found'});if(!customerOrigin(request))return reply.code(403).send({error:'origin_not_allowed'});
+  const active=(await runtime.pool.query<{kakao:boolean;sms:boolean}>("select kakao,sms from ap.notification_recipients where organization_id=$1 and target_kind=$2 and target_id=$3 and audience='customer' and not push and revoked_at is null and retention_purged_at is null",[found.organization_id,kind,request.params.id])).rows[0];
+  return {kakao:active?.kakao===true,sms:active?.sms===true,state:active?'consented':'withdrawn',phoneVerified:false,storageState:context?'configured':'blocked_integration',providerState:context?.provider?'configured':'blocked_integration'};
+ });
+ app.post<{Params:{kind:string;id:string}}>('/v1/customer/notification-consents/:kind/:id',async(request,reply)=>{
+  reply.header('Cache-Control','no-store');
+  const token=request.headers.authorization?.startsWith('Bearer ')?request.headers.authorization.slice(7):'',kind=request.params.kind;
+  if(!uuid.test(request.params.id)||!/^[A-Za-z0-9_-]{43}$/.test(token))return reply.code(404).send({error:'notification_target_not_found'});
+  const capHash=createHash('sha256').update(token).digest('hex'),found=await customerSource(kind,request.params.id,capHash);
+  if(!found)return reply.code(404).send({error:'notification_target_not_found'});if(!customerOrigin(request))return reply.code(403).send({error:'origin_not_allowed'});
   const body=object(request.body);if(!body||body.consentVersion!=='notification-v1'||typeof body.kakao!=='boolean'||typeof body.sms!=='boolean'||body.sms===true&&body.kakao!==true)return reply.code(400).send({error:'invalid_notification_consent'});
-  const id=await saveConsent(found.organization_id,kind,request.params.id,'customer',found.customer_phone,body,null);
-  return reply.header('Cache-Control','no-store').send({recipientId:id,state:id==='withdrawn'?'withdrawn':'consented',providerState:context?.provider?'configured':'blocked_integration'});
+  if((body.kakao||body.sms)&&!context)return reply.code(503).send({error:'notification_configuration_missing',state:'blocked_integration'});
+  const id=await saveConsent(found.organization_id,kind,request.params.id,'customer',found.customer_phone,body,null,false,capHash);
+  if(!id)return reply.code(404).send({error:'notification_target_not_found'});
+  return {recipientId:id,state:id==='withdrawn'?'withdrawn':'consented',providerState:context?.provider?'configured':'blocked_integration'};
  });
  app.post('/integrations/v1/notifications/solapi',async(request,reply)=>{
   const hash=context?.callbackSecret?createHash('sha1').update(context.callbackSecret).digest('hex'):undefined,received=request.headers['x-solapi-secret'];

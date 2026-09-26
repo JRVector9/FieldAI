@@ -30,10 +30,11 @@ export async function proxy(request: NextRequest) {
       if (report) return report[1] === mapping.slug ? NextResponse.next() : notFound();
       const receipt = /^\/(inquiry|reservation)\/([^/]+)\/?$/.exec(path);
       const workApi = /^\/v1\/(inquiries|reservations)\/([^/]+)(?:\/.*)?$/.exec(path);
+      const notification = /^\/v1\/customer\/notification-consents\/(inquiry|reservation)\/([^/]+)\/?$/.exec(path);
       const asset = /^\/v1\/public\/site-assets\/([^/]+)$/.exec(path);
-      if (receipt || workApi || asset) {
-        const kind = receipt ? receipt[1] === "inquiry" ? "inquiries" : "reservations" : workApi ? workApi[1]! as "inquiries" | "reservations" : "site-assets";
-        const id = receipt?.[2] ?? workApi?.[2] ?? asset![1]!;
+      if (receipt || workApi || notification || asset) {
+        const kind = receipt ? receipt[1] === "inquiry" ? "inquiries" : "reservations" : workApi ? workApi[1]! as "inquiries" | "reservations" : notification ? notification[1] === "inquiry" ? "inquiries" : "reservations" : "site-assets";
+        const id = receipt?.[2] ?? workApi?.[2] ?? notification?.[2] ?? asset![1]!;
         return await customHostResource(host, kind, id) ? NextResponse.next() : notFound();
       }
       if (path === "/" || /^\/[a-z0-9][a-z0-9-]{0,39}\/?$/.test(path)

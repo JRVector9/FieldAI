@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FieldCustomerNotificationConsent } from "./field-customer-notification-consent";
 import { writeReceiptHandoff } from "./receipt-handoff";
 
 export function FieldReceipt({ kind, businessName, id, receiptKey, notice, busy }: {
@@ -29,6 +30,7 @@ export function FieldReceipt({ kind, businessName, id, receiptKey, notice, busy 
       <p>확인키는 다른 사람과 공유하지 마세요. 전화번호나 알림 링크만으로 원문을 열 수 없습니다.</p>
       {copyStatus && <p role="status">{copyStatus}</p>}
     </div>
+    <FieldCustomerNotificationConsent kind={kind} id={id} receiptKey={receiptKey} />
     {notice && <p className="field-receipt-notice" role="status">{notice}</p>}
     {busy ? <p className="field-receipt-wait" role="status">선택한 사진의 첨부 결과를 확인하고 있습니다. 잠시만 기다려 주세요.</p>
       : <a className="field-receipt-open" href={reservation ? `/reservation/${id}` : `/inquiry/${id}`}

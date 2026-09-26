@@ -1,0 +1,18 @@
+/* Added service consent inside existing receipt/conversation; prototype v3 form/check/soft/button values. */
+.field-customer-notification-consent{--ink:#1d1d1f;--muted:#63636a;--blue:#0066cc;margin-top:24px;padding-top:24px;border-top:1px solid #e9e9ed;text-align:left;color:var(--ink);font-size:16px;min-width:0}
+.field-customer-notification-consent *{box-sizing:border-box}
+.field-customer-notification-consent h3{font-size:18px;line-height:1.4;letter-spacing:-.4px;margin:0}
+.field-customer-notification-consent p{margin:0;line-height:1.65}
+.field-customer-notification-consent .intro{font-size:14px;color:var(--muted);margin-top:8px}
+.field-customer-notification-consent form{display:flex;flex-direction:column;gap:21px;margin-top:18px}
+.field-customer-notification-consent .v3-check{font-size:14px;font-weight:400;line-height:1.7;display:flex;align-items:flex-start;gap:10px}
+.field-customer-notification-consent .v3-check input{margin-top:5px;width:18px;height:18px;flex-shrink:0}
+.field-customer-notification-consent .v3-soft,.field-customer-notification-consent .notice{padding:17px 19px;background:#f4f6f9;border-radius:14px;color:#626e7f;font-size:14px;line-height:1.65}
+.field-customer-notification-consent .v3-soft p+p{margin-top:8px}
+.field-customer-notification-consent .notice{margin-top:16px}
+.field-customer-notification-consent .actions{display:flex;gap:12px;flex-wrap:wrap}
+.field-customer-notification-consent .btn{border:1px solid transparent;min-height:44px;border-radius:12px;padding:10px 17px;font-size:15px;font-weight:600;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:8px;line-height:1.4;cursor:pointer;white-space:normal}
+.field-customer-notification-consent .btn-primary{background:var(--blue);color:#fff}
+.field-customer-notification-consent .btn-secondary{background:#fff;color:var(--ink);border-color:#dfdfe5}
+.field-customer-notification-consent .btn:disabled{cursor:not-allowed;opacity:.43}
+.field-customer-notification-consent button:focus-visible,.field-customer-notification-consent input:focus-visible{outline:3px solid #88b7ee;outline-offset:3px}

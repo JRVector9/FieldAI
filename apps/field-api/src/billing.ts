@@ -22,6 +22,8 @@ export async function billingSnapshot(db: Pool | PoolClient, organizationId: str
     `select id,plan_id,state,anchor_at,cancel_requested_at,terminated_at from field.paid_subscriptions
      where organization_id=$1 order by created_at desc,id desc limit 1`, [organizationId]);
   const current = subscriptions.rows[0];
+  const currentPlan=current ? (await db.query<BillingPlan>(
+    "select * from field.billing_plans where id=$1",[current.plan_id])).rows[0] : null;
   const periods = await db.query(
     `select p.id,p.subscription_id as "subscriptionId",p.billing_period as "billingPeriod",p.starts_at as "startsAt",p.ends_at as "endsAt",
        p.total_amount as "totalAmount",p.supply_amount as "supplyAmount",p.vat_amount as "vatAmount",p.tax_free_amount as "taxFreeAmount",p.currency,p.state,
@@ -34,7 +36,7 @@ export async function billingSnapshot(db: Pool | PoolClient, organizationId: str
      from field.billing_transactions t join field.billing_periods p on p.id=t.period_id
      join field.paid_subscriptions s on s.id=p.subscription_id where s.organization_id=$1
      order by t.created_at desc,t.id desc limit 100`, [organizationId]);
-  return { product: 'field', organizationId, access:await subscriptionAccess(db,organizationId),subscription: current ? { id: current.id, planId: current.plan_id,
+  return { product: 'field', organizationId, currentPlan:currentPlan?planView(currentPlan):null, access:await subscriptionAccess(db,organizationId),subscription: current ? { id: current.id, planId: current.plan_id,
     state: current.state, anchorAt: current.anchor_at, cancelRequestedAt: current.cancel_requested_at,
     terminatedAt: current.terminated_at } : null, periods: periods.rows, transactions: transactions.rows };
 }

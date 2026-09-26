@@ -33,6 +33,7 @@ import { registerFieldConnectionRevokeRoutes } from './field-connection-revoke.j
 import { registerAgentUsageRoutes } from './usage.js';
 import { registerAgentSubscriptionRoutes } from './subscription.js';
 import { registerAgentBillingRoutes } from './billing-routes.js';
+import { registerBillingRefundRoutes } from './billing-refund-routes.js';
 import { registerAgentAdminRoutes } from './admin.js';
 import { registerAgentModerationRoutes } from './deployment-moderation.js';
 import { registerCustomerSupportRoutes } from './customer-support.js';
@@ -89,6 +90,7 @@ export function createAgentApp(
     registerAgentUsageRoutes(app, businessRuntime);
     registerAgentSubscriptionRoutes(app, businessRuntime);
     registerAgentBillingRoutes(app, businessRuntime);
+    registerBillingRefundRoutes(app, businessRuntime);
     registerAgentBillingConsentRoutes(app, businessRuntime);
     registerAgentAdminRoutes(app, businessRuntime);
     registerAgentModerationRoutes(app, businessRuntime);

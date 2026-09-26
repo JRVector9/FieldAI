@@ -1,5 +1,7 @@
 "use client";
 
+import { AgentCustomerNotificationConsent } from "./agent-customer-notification-consent";
+
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
 import { AgentRetentionNotice } from './AgentRetentionNotice';
@@ -621,6 +623,7 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
       {!knowledge && <p>승인된 사업 정보를 불러온 뒤 문의를 접수할 수 있습니다.</p>}
       <p>회원가입·OTP 없이 접수하며, 번호 소유 확인 상태로 표시하지 않습니다.</p></form>}</section></div>
     {receipt?.state === 'external_ready' && <section className="special-panel"><label className="inquiry-photo-label">AP 대화 사진 추가 (선택, 최대 8MB)<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label><p>사진을 AP 원본에 첨부해도 Field에는 자동 전달되지 않습니다. 아래에서 전달 사진을 따로 선택하고 동의해 주세요.</p></section>}
+    {receipt && receipt.state !== "external_ready" && <AgentCustomerNotificationConsent kind="inquiry" id={receipt.id} receiptKey={receipt.receiptKey} />}
     {receipt && photo && <section className="special-panel"><p>AP 대화 원본은 저장됐습니다. 선택한 사진 {photo.name}을 첨부하거나 다시 시도할 수 있습니다.</p><button type="button" disabled={busy} onClick={() => void retryDirectPhoto()}>사진 첨부 또는 재시도</button>{receipt.state === 'external_ready' && <button type="button" disabled={busy} onClick={() => setPhoto(null)}>사진 없이 Field 조건 확인</button>}</section>}
     {receipt && (receipt.state !== 'external_ready' || !photo) && <AgentFieldAction inquiryId={receipt.id} receiptKey={receipt.receiptKey}
       initialSummary={receipt.state === 'external_ready' ? message : ''}
@@ -811,7 +814,7 @@ export function InquiryPage({ id }: { id: string }) {
       }}>이전 시도 포기하고 새 질문</button></div>}
     {inquiry && <div><h2>{inquiry.service?.name ?? "일반 문의"} · {inquiryStateLabel(inquiry.state)}</h2><AgentRetentionNotice retention={inquiry.retention}/>{inquiry.state === 'closed'&&!inquiry.retention?.workPurgedAt && <p>처리 완료된 문의도 추가 질문을 남기면 다시 사업자 확인 필요로 열립니다.</p>}{inquiry.state === 'spam' && <p>이 문의는 알림 중단 상태입니다. 추가 메시지는 보존되며 사업자 알림은 발송하지 않습니다.</p>}{refreshNeeded && <button type="button" disabled={busy} onClick={() => void refreshInquiry()}>문의 내용 다시 확인</button>}{hasPendingMessage ? <p>이전 추가 질문 결과를 확인한 뒤 확인키를 교체할 수 있습니다.</p> : <ReceiptRotationPanel inquiryId={id} currentKey={key} onRotated={onReceiptRotated} />}<ol>{inquiry.messages.map(message => <li key={message.id}><strong>{message.actor === "owner" ? "사업자" : message.actor === "assistant" ? "AI" : "고객"}</strong> {message.body} <small>알림 {deliveryLabel(message.delivery_state)}</small>
     {inquiry.attachments.filter(item => item.messageId === message.id).map((attachment, index) =>
-      <PrivateInquiryPhoto key={attachment.id} inquiryId={id} attachmentId={attachment.id} receiptKey={key} label={`고객 첨부 사진 ${index + 1}`} />)}</li>)}</ol>{!inquiry.retention?.workPurgedAt&&<><form className="form-fields" onSubmit={event => void followup(event)}><label>추가 질문<textarea required maxLength={5000} value={body} onChange={event => setBody(event.target.value)} /></label><button type="submit" disabled={busy || recoveringMessage}>추가 질문 저장</button></form>
+      <PrivateInquiryPhoto key={attachment.id} inquiryId={id} attachmentId={attachment.id} receiptKey={key} label={`고객 첨부 사진 ${index + 1}`} />)}</li>)}</ol>{inquiry.state !== "external_ready" && !inquiry.retention?.workPurgedAt && <AgentCustomerNotificationConsent kind="inquiry" id={id} receiptKey={key} />}{!inquiry.retention?.workPurgedAt&&<><form className="form-fields" onSubmit={event => void followup(event)}><label>추가 질문<textarea required maxLength={5000} value={body} onChange={event => setBody(event.target.value)} /></label><button type="submit" disabled={busy || recoveringMessage}>추가 질문 저장</button></form>
     <div className="knowledge-source"><label className="inquiry-photo-label">문의 사진 첨부 (선택, 최대 8MB)<input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label>{photo && <><p>선택한 사진: {photo.name}</p><button type="button" disabled={busy} onClick={() => void retryPhoto()}>사진만 첨부 또는 재시도</button></>}</div></>}
     </div>}</section>{inquiry&&!inquiry.retention?.workPurgedAt && <AgentFieldAction key={`${inquiry.state}:${fieldAttachmentRevision}`}
       inquiryId={id} receiptKey={key} externalReady={inquiry.state === 'external_ready'}

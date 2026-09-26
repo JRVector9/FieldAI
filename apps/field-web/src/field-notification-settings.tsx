@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import "./field-notification-settings.css";
+import { browserPushEnvironment, inspectNotificationPush, prepareNotificationPush, changeNotificationPush, type PushChangeResult } from "./field-notification-push-client";
 
 type Delivery = { id: string; channel: string; state: string; updated_at: string; fallback_of: string | null };
 type Settings = {
@@ -23,10 +24,6 @@ async function request(path: string, organizationId: string, method = "GET", bod
   });
   const data = await response.json().catch(() => ({}));
   return { status: response.status, data };
-}
-function applicationKey(key: string) {
-  const raw = atob(key.replaceAll("-", "+").replaceAll("_", "/") + "=".repeat((4 - key.length % 4) % 4));
-  return Uint8Array.from(raw, char => char.charCodeAt(0));
 }
 function errorMessage(error: unknown) {
   const code = error instanceof Error ? error.message : "";
@@ -77,13 +74,19 @@ export function FieldNotificationSettings({ organizationId, defaultPhone = "", c
   }, [refresh]);
   useEffect(() => {
     let alive = true;
-    const update = (reason: string) => { if (alive) setBrowserPushReason(reason); };
-    if (!window.isSecureContext) update("웹 푸시는 보안 연결에서만 사용할 수 있습니다.");
-    else if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) update("이 브라우저는 웹 푸시를 지원하지 않습니다.");
-    else if (Notification.permission === "denied") update("브라우저가 알림 권한을 차단했습니다. 브라우저 설정에서 허용해 주세요.");
-    else void navigator.serviceWorker.getRegistration().then(registration => update(registration?.active ? "" : "웹 푸시 서비스 워커가 연결되지 않았습니다.")).catch(() => update("웹 푸시 서비스 워커를 확인하지 못했습니다."));
+    if (data) void inspectNotificationPush(data).then(value => { if (alive) setBrowserPushReason(value.reason); });
     return () => { alive = false; };
-  }, [data?.pushState]);
+  }, [data]);
+  async function preparePush() {
+    if (busy || !canManage) return;
+    const current = generation.current; setBusy(true); setNotice("");
+    const result = await prepareNotificationPush();
+    if (current !== generation.current) return;
+    const currentPush = data ? await inspectNotificationPush(data) : null;
+    if (current !== generation.current) return;
+    if (currentPush) setBrowserPushReason(currentPush.reason);
+    if (current === generation.current) { setNotice(result.state === "ready" ? "이 브라우저의 푸시 서비스 워커를 준비했습니다. 알림 권한·구독 저장·실제 발송은 별도입니다." : result.reason); setBusy(false); }
+  }
   const canManage = data?.canManage === true;
   const pushReason = !data ? (loading ? "웹 푸시 설정을 확인 중입니다." : "웹 푸시 설정을 확인하지 못했습니다.") : data.pushState !== "configured" || !data.pushPublicKey
     ? "웹 푸시 공급사·VAPID가 연결되지 않았습니다." : browserPushReason;
@@ -96,47 +99,43 @@ export function FieldNotificationSettings({ organizationId, defaultPhone = "", c
     if (kakao && !cleanPhone && !data.ownerConsent.kakao) { setNotice("카카오 업무 알림을 받을 휴대전화 번호를 입력해 주세요."); return; }
     if (push && !data.ownerConsent.push && pushReason) { setNotice(pushReason); return; }
     setBusy(true); setNotice(""); let phoneSaved = false;
-    let subscription: PushSubscription | null = null, createdSubscription = false;
-    let pushSaveAttempted = false, pushSaveRejected = false;
-    try {
-      if (push && !data.ownerConsent.push) {
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") { if (permission === "denied") setBrowserPushReason("브라우저가 알림 권한을 차단했습니다. 브라우저 설정에서 허용해 주세요."); throw new Error("push_permission_denied"); }
-        const registration = await navigator.serviceWorker.getRegistration();
-        if (!registration?.active || !data.pushPublicKey) throw new Error("push_unavailable");
-        subscription = await registration.pushManager.getSubscription();
-        const wantedKey = applicationKey(data.pushPublicKey), existingKey = subscription?.options.applicationServerKey;
-        if (subscription && (!existingKey || new Uint8Array(existingKey).length !== wantedKey.length
-          || new Uint8Array(existingKey).some((byte, index) => byte !== wantedKey[index]))) throw new Error("push_key_mismatch");
-        if (!subscription) { subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: applicationKey(data.pushPublicKey) }); createdSubscription = true; }
-      }
-      if (current !== generation.current) { if (createdSubscription) await subscription?.unsubscribe().catch(() => false); return; }
+    async function savePhone() {
+      if (current !== generation.current) return false;
       const saved = await request("/v1/owner/notification-consent", organizationId, "POST", {
         ...(kakao && cleanPhone ? { phone: cleanPhone } : {}), kakao, sms: false, consentVersion: "notification-v1",
       });
       if (saved.status !== 200) throw new Error(saved.data.error); phoneSaved = true;
-      if (current !== generation.current) { if (createdSubscription) await subscription?.unsubscribe().catch(() => false); return; }
-      if (push !== data.ownerConsent.push) {
-        pushSaveAttempted = true;
-        const result = await request("/v1/owner/push-subscriptions", organizationId, "POST", {
-          push, ...(push && subscription ? { subscription: subscription.toJSON() } : {}), consentVersion: "notification-v1",
+      return current === generation.current;
+    }
+    try {
+      let pushResult: PushChangeResult = { outcome: "confirmed" };
+      if (push !== data.ownerConsent.push || push && !pushReason) {
+        // Permission is requested from this submit action before saving the phone settings.
+        pushResult = await changeNotificationPush({ enabled: push, pushState: data.pushState, pushPublicKey: data.pushPublicKey }, async body => {
+          if (current !== generation.current) return { outcome: "rejected" };
+          if (!await savePhone()) return { outcome: "rejected" };
+          try {
+            const result = await request("/v1/owner/push-subscriptions", organizationId, "POST", body);
+            return result.status === 200 ? { outcome: "confirmed" } : {
+              outcome: [400, 401, 403, 404, 429, 503].includes(result.status) ? "rejected" : "unknown", error: result.data.error,
+            };
+          } catch { return { outcome: "unknown" }; }
         });
-        if (result.status !== 200) { pushSaveRejected = [400, 401, 403, 404, 503].includes(result.status); throw new Error(result.data.error); }
-        if (!push && "serviceWorker" in navigator) {
-          const registration = await navigator.serviceWorker.getRegistration().catch(() => undefined);
-          const oldSubscription = await registration?.pushManager.getSubscription().catch(() => null);
-          await oldSubscription?.unsubscribe().catch(() => false);
-        }
-      }
+      } else await savePhone();
       if (current !== generation.current) return;
       const refreshed = await refresh();
-      if (current === generation.current) setNotice(refreshed ? "설정을 저장했습니다. 실제 발송·수신·열람은 아래 이력에서 따로 확인합니다." : "설정 저장 응답을 받았지만 현재 상태를 다시 조회하지 못했습니다. 다시 확인해 주세요.");
+      if (current !== generation.current) return;
+      const currentPush = await inspectNotificationPush(data, browserPushEnvironment());
+      if (current !== generation.current) return;
+      setBrowserPushReason(currentPush.reason);
+      setNotice(pushResult.outcome === "unknown" ? `${phoneSaved ? "카카오 설정은 저장됐습니다. " : ""}푸시 저장 결과는 미상입니다. 실제 브라우저 구독을 유지하며 현재 설정을 다시 확인해 주세요.`
+        : pushResult.outcome === "rejected" ? `${phoneSaved ? "카카오 설정은 저장됐습니다. " : ""}웹 푸시 설정: ${errorMessage(new Error(pushResult.error))}`
+        : pushResult.cleanup === "failed" ? "서버의 푸시 동의 철회를 확인했습니다. 이 브라우저 구독 정리는 완료하지 못했습니다. 브라우저 사이트 설정을 확인해 주세요."
+        : refreshed ? "설정을 저장했습니다. 실제 발송·수신·열람은 아래 이력에서 따로 확인합니다." : "설정 저장 응답을 받았지만 현재 상태를 다시 조회하지 못했습니다. 다시 확인해 주세요.");
     } catch (error) {
-      // A lost POST response may already have committed consent. Preserve that real browser subscription.
-      if (createdSubscription && (!pushSaveAttempted || pushSaveRejected)) await subscription?.unsubscribe().catch(() => false);
       if (current !== generation.current) return;
       const message = errorMessage(error); await refresh();
-      if (current === generation.current) setNotice(phoneSaved ? `카카오 설정은 저장됐습니다. 웹 푸시 설정: ${message}` : message);
+      if (current === generation.current) { const currentPush = await inspectNotificationPush(data); if (current === generation.current) { setBrowserPushReason(currentPush.reason); setNotice(phoneSaved ? `카카오 설정은 저장됐습니다. 웹 푸시 설정: ${message}` : message); } }
     } finally { if (current === generation.current) setBusy(false); }
   }
   async function saveLimit(event: FormEvent) {
@@ -162,7 +161,7 @@ export function FieldNotificationSettings({ organizationId, defaultPhone = "", c
         <div className="field"><label htmlFor={phoneId}>사업자 알림 번호</label><input id={phoneId} className="input" name="phone" inputMode="tel" autoComplete="tel" maxLength={30} value={phone} placeholder={data?.ownerConsent.maskedPhone ?? "휴대전화 번호"} disabled={loading || busy || !canManage} required={kakao && !data?.ownerConsent.kakao} onChange={event => setPhone(event.target.value)} />{data?.ownerConsent.maskedPhone && <p className="field-note">저장된 번호: {data.ownerConsent.maskedPhone} · 변경할 때만 입력하세요.</p>}</div>
         <label className="v3-check"><input type="checkbox" name="kakao" checked={kakao} disabled={loading || busy || !canManage || data?.storageState !== "configured" && !data?.ownerConsent.kakao} onChange={event => setKakao(event.target.checked)} />카카오톡 업무 알림</label>
         <label className="v3-check"><input type="checkbox" name="push" checked={push} disabled={loading || busy || !canManage || Boolean(pushReason) && !data?.ownerConsent.push} onChange={event => setPush(event.target.checked)} />웹 푸시 알림</label>
-        <div className="v3-soft">카카오 템플릿·발신번호·푸시 권한·플랫폼 승인은 운영 연동에서 검증합니다.<p className="mt8">공급사 상태 (추가): {loading ? "확인 중" : providerLabel}</p>{pushReason && <p className="mt8">{pushReason}</p>}{data && !canManage && <p className="mt8">알림 설정과 비용 상한은 사업체 소유자만 변경할 수 있습니다.</p>}<p className="mt8">웹 푸시 구독 (추가): 새 브라우저 구독을 저장하면 이전 사업자 구독을 대체합니다.</p></div>
+        <div className="v3-soft">카카오 템플릿·발신번호·푸시 권한·플랫폼 승인은 운영 연동에서 검증합니다.<p className="mt8">공급사 상태 (추가): {loading ? "확인 중" : providerLabel}</p>{pushReason && <p className="mt8">{pushReason}</p>}{data && !canManage && <p className="mt8">알림 설정과 비용 상한은 사업체 소유자만 변경할 수 있습니다.</p>}<p className="mt8">웹 푸시 구독 (추가): 새 브라우저 구독을 저장하면 이전 사업자 구독을 대체합니다.</p><button className="btn btn-secondary btn-small mt16" type="button" disabled={loading || busy || !canManage} onClick={() => void preparePush()}>웹 푸시 준비 (추가)</button>{data?.ownerConsent.push && !pushReason && <p className="mt8">설정 저장을 누르면 이 브라우저의 실제 구독을 다시 연결합니다. 이전 브라우저 구독을 대체할 수 있습니다.</p>}</div>
         <button className="btn btn-primary" type="submit" disabled={loading || busy || !data || !canManage}>{busy ? "저장 중…" : "설정 저장"}</button>
       </form>
       <aside className="v3-card"><h2>고객 답변 알림</h2><p className="mt16">카카오톡 우선 → 발송 실패 시 문자</p><p className="mt8">읽지 않은 메시지를 문자로 중복 발송하지 않습니다.</p><p className="v3-note-plain">사업자에게 자동 SMS 대체는 제공하지 않습니다.</p>

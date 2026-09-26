@@ -3,10 +3,12 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { BusinessRuntime } from './business.js';
 
 const pathPattern = /^\/v1\/inquiries\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?:\/|$)/i;
-const receiptErrors = new Set(['receipt_key_required', 'invalid_receipt_key', 'inquiry_not_found']);
+const customerPathPattern = /^\/v1\/customer\/notification-consents\/inquiry\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i;
+const receiptErrors = new Set(['notification_target_not_found', 'receipt_key_required', 'invalid_receipt_key', 'inquiry_not_found']);
 
 function targetId(request: FastifyRequest) {
-  return pathPattern.exec(request.url.split('?', 1)[0]!)?.[1]?.toLowerCase() ?? null;
+  const path=request.url.split('?',1)[0]!;
+  return (pathPattern.exec(path)?.[1] ?? customerPathPattern.exec(path)?.[1])?.toLowerCase() ?? null;
 }
 
 export function registerAgentReceiptAbuseGuard(app: FastifyInstance, runtime: BusinessRuntime) {

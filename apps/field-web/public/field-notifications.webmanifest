@@ -1,0 +1,10 @@
+{
+  "id": "/field-notifications",
+  "name": "Field",
+  "short_name": "Field",
+  "start_url": "/workspace",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f5f7",
+  "theme_color": "#1d2e40"
+}

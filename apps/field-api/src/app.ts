@@ -8,6 +8,7 @@ import { registerInquiryRoutes } from './inquiries.js';
 import { registerInquiryAttachmentRoutes } from './inquiry-attachments.js';
 import { registerFieldNotificationRoutes } from './notifications.js';
 import { registerSiteRoutes } from './sites.js';
+import { registerApPublicInstallationRoutes } from './ap-public-installation-routes.js';
 import { registerSiteGenerationRoutes } from './site-generation.js';
 import { registerBookingRoutes } from './bookings.js';
 import { registerReservationExportRoute } from './reservation-export.js';
@@ -27,6 +28,7 @@ import { registerExternalReservationNotificationRoute } from './external-reserva
 import { registerFieldUsageRoutes } from './usage.js';
 import { registerFieldSubscriptionRoutes } from './subscription.js';
 import { registerFieldBillingRoutes } from './billing-routes.js';
+import { registerBillingRefundRoutes } from './billing-refund-routes.js';
 import { registerExternalRequestAttachmentRoutes } from './external-request-attachments.js';
 import { registerFieldAdminRoutes } from './admin.js';
 import { registerFieldModerationRoutes } from './site-moderation.js';
@@ -61,6 +63,7 @@ export function createFieldApp(
     registerFieldNotificationRoutes(app, businessRuntime);
     registerFieldDeliveryRoutes(app, businessRuntime, businessRuntime.notification);
     registerSiteRoutes(app, businessRuntime);
+    registerApPublicInstallationRoutes(app, businessRuntime);
     registerCustomDomainRoutes(app, businessRuntime, businessRuntime.customDomain);
     registerSiteGenerationRoutes(app, businessRuntime);
     registerBookingRoutes(app, businessRuntime);
@@ -80,6 +83,7 @@ export function createFieldApp(
     registerFieldUsageRoutes(app, businessRuntime);
     registerFieldSubscriptionRoutes(app, businessRuntime);
     registerFieldBillingRoutes(app, businessRuntime);
+    registerBillingRefundRoutes(app, businessRuntime);
     registerFieldBillingConsentRoutes(app, businessRuntime);
   }
   if (authHandler) {

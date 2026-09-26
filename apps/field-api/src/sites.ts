@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
 import { normalizeSiteImage } from './site-media.js';
 import { authorizedApDeployments } from './ap-connector.js';
+import { publicInstallationFor } from './ap-public-installation-execution.js';
 import { rejectExpiredTrial } from './trial-access.js';
 import { activeSiteOrigin, primarySiteOrigin, resolvedCustomHost } from './custom-domains.js';
 
@@ -140,13 +141,18 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
       [site.id]);
     const origin = await primarySiteOrigin(runtime.pool, site.id, publicSiteOrigin(site.slug));
     const row = found.rows.find(item => item.site_origin === origin);
+    const publicInstallation = row && await runtime.pool.query(
+      `select 1 from field.ap_public_installation_intents where site_id=$1 and site_origin=$2
+       and connection_id=$3 and deployment->>'id'=$4 and sdk_approved_at is not null limit 1`,
+      [site.id,row.site_origin,row.connection_id,row.ap_deployment_id]);
     return reply.header('Cache-Control', 'private, no-store').send({ siteOrigin: origin,
       defaultOrigin: publicSiteOrigin(site.slug),
       published: release.rows[0]?.published ?? false,
       installations: found.rows.map(item => ({ connectionId: item.connection_id, deploymentId: item.ap_deployment_id,
         publicId: item.ap_public_id, origin: item.site_origin, mode: item.mode, status: item.status })),
       installation: row ? { connectionId: row.connection_id, deploymentId: row.ap_deployment_id,
-        publicId: row.ap_public_id, origin: row.site_origin, mode: row.mode, status: row.status } : null });
+        publicId: row.ap_public_id, origin: row.site_origin, mode: row.mode, status: row.status,
+        publicIntent: Boolean(publicInstallation?.rowCount) } : null });
   });
 
   app.post('/v1/sites/ap-installation', async (request, reply) => {
@@ -217,6 +223,7 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     const db = await runtime.pool.connect();
     try {
       await db.query('begin');
+      await db.query('update field.ap_public_installation_intents set revision=revision+1,updated_at=now() where site_id=$1',[site.id]);
       const paused = await db.query(
         "update field.site_ap_installations set status = 'paused', updated_at = now() where site_id = $1 and status = 'active' returning connection_id",
         [site.id]);
@@ -600,13 +607,19 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
       `select i.ap_public_id, i.mode from field.site_ap_installations i
        join field.ap_connections c on c.id = i.connection_id
        where i.site_id = $1 and i.site_origin = $2 and i.status = 'active'
-         and c.status = 'review_required' limit 1`, [row.site_id, requestOrigin]);
+         and c.status = 'review_required'
+         and not exists(select 1 from field.ap_public_installation_intents p
+           where p.site_id=i.site_id and p.site_origin=i.site_origin and p.connection_id=i.connection_id
+             and p.deployment->>'id'=i.ap_deployment_id::text and p.sdk_approved_at is not null)
+         limit 1`, [row.site_id, requestOrigin]);
+    const publicInstallation = requestOrigin && await publicInstallationFor(runtime.pool,row.site_id,requestOrigin);
+    const widget = installation && installation.rows[0] || publicInstallation;
     const sdkSrc = runtime.apConnector && new URL('/sdk/v1.js', runtime.apConnector.issuer).toString();
     return { siteId: row.site_id, organizationId: row.organization_id, slug: request.params.slug,
       siteOrigin, defaultOrigin, requestOrigin, siteRevision: row.revision,
       catalogRevision: row.catalog_revision, latestCatalogRevision: row.latest_catalog_revision,
       stale: row.catalog_revision < row.latest_catalog_revision, ...row.content, catalog: row.catalog,
-      apWidget: installation && installation.rows[0] && sdkSrc
-        ? { publicId: installation.rows[0].ap_public_id, mode: installation.rows[0].mode, sdkSrc } : null };
+      apWidget: widget && sdkSrc
+        ? { publicId: widget.ap_public_id, mode: widget.mode, sdkSrc } : null };
   });
 }

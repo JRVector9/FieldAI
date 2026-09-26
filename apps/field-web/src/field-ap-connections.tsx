@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Brand } from "@fieldai/ui";
 import { requestJson } from "./field-api";
 import { FieldSourceRefresh } from "./field-source-refresh";
+import { FieldApPublicInstallation } from "./field-ap-public-installation";
 
 type Connection = { id: string; organizationId: string; apOrganizationId: string;
   apGrantId: string; apAgentId: string; apAgentName: string; scopes: string[];
@@ -11,7 +12,7 @@ type Connection = { id: string; organizationId: string; apOrganizationId: string
 type Deployment = { id: string; publicId: string;
   kind: "link" | "owned_embed" | "placement_embed"; origin: string | null };
 type Installation = { connectionId: string; deploymentId: string; publicId: string;
-  origin: string; mode: "inline" | "floating"; status: "active" | "paused" };
+  origin: string; mode: "inline" | "floating"; status: "active" | "paused"; publicIntent?: boolean };
 const apWebOrigin = process.env.NEXT_PUBLIC_AGENT_WEB_URL ?? "http://localhost:3001";
 
 export function FieldApConnections() {
@@ -232,17 +233,19 @@ export function FieldApConnections() {
           {deploymentState === "idle" && <p>위 연결 기록에서 설치할 AP 연결을 선택해 주세요.</p>}
           {deploymentState === "loading" && <p role="status">허용된 AP 위젯 배포를 확인하고 있습니다.</p>}
           {deploymentState === "failed" && <div className="state-message" role="alert"><p>AP 배포 상태를 확인하지 못했습니다. 활성 배포가 없다고 판단하지 않습니다.</p><button type="button" onClick={() => setDeploymentRefresh(value => value + 1)}>AP 배포 다시 확인</button></div>}
-          {installation?.status === "active" && connectionState === "ready" && installedConnection?.status !== "review_required" && <p role="alert" className="state-message">설치된 AP 연결을 현재 사용할 수 없습니다. Field 공개 사이트에서는 이 연결의 위젯을 표시하지 않습니다. 새로 승인된 연결로 설치하거나 아래에서 Field 위젯을 중지해 주세요. 직접 문의와 예약은 계속 열려 있습니다.</p>}
+          {installation?.status === "active" && !installation.publicIntent && connectionState === "ready" && installedConnection?.status !== "review_required" && <p role="alert" className="state-message">설치된 AP 연결을 현재 사용할 수 없습니다. Field 공개 사이트에서는 이 연결의 위젯을 표시하지 않습니다. 새로 승인된 연결로 설치하거나 아래에서 Field 위젯을 중지해 주세요. 직접 문의와 예약은 계속 열려 있습니다.</p>}
           {connectionState === "ready" && installation?.status === "active" && installedConnection?.status === "review_required" && installedConnection.id !== connectionId && <p>설치된 연결은 다른 AP 연결입니다. <button type="button" onClick={() => setConnectionId(installedConnection.id)}>설치된 연결 선택</button></p>}
-          {selectedInstallation && deploymentState === "ready" && !installedDeploymentAvailable && <p role="status" className="state-message">설치된 AP 배포를 현재 사용할 수 없습니다. Field 설치 기록은 남아 있습니다. AP 배포와 접근 권한을 확인하거나 아래에서 Field 위젯을 중지해 주세요. 직접 문의와 예약은 계속 열려 있습니다.</p>}
+          {selectedInstallation && !installation?.publicIntent && deploymentState === "ready" && !installedDeploymentAvailable && <p role="status" className="state-message">설치된 AP 배포를 현재 사용할 수 없습니다. Field 설치 기록은 남아 있습니다. AP 배포와 접근 권한을 확인하거나 아래에서 Field 위젯을 중지해 주세요. 직접 문의와 예약은 계속 열려 있습니다.</p>}
           {deploymentState === "ready" && deployments.length > 0 ? <><label>허용된 AP 위젯 배포<select value={deploymentId} onChange={event => setDeploymentId(event.target.value)}>
             {deployments.map(item => <option key={item.id} value={item.id}>{item.publicId} · {item.origin}</option>)}</select></label>
             <label>표시 방식<select value={mode} onChange={event => setMode(event.target.value as "inline" | "floating")}><option value="floating">화면 구석 버튼</option><option value="inline">본문에 표시</option></select></label>
             <button type="button" disabled={busy || !deploymentId} onClick={() => void install()}>AP 위젯 설치</button></>
-            : deploymentState === "ready" && !selectedInstallation && <p>이 사이트 주소에 허용된 활성 AP 위젯 배포가 없습니다. AP에서 배포를 활성화하고 접근 동의 때 선택해 주세요.</p>}
+            : deploymentState === "ready" && !selectedInstallation && !installation?.publicIntent && <p>이 사이트 주소에 허용된 활성 AP 위젯 배포가 없습니다. AP에서 배포를 활성화하고 접근 동의 때 선택해 주세요.</p>}
           {installation && <p>Field 설치 기록: {installation.publicId} · {installation.status === "active" ? "설치 활성 · AP 배포 상태는 별도 확인" : "Field에서 중지됨"}</p>}
           {installation?.status === "active" && <button type="button" disabled={busy} onClick={() => void pause()}>Field 사이트에서 위젯 중지</button>}
         </>}
+        <FieldApPublicInstallation organizationId={organizationId} siteOrigin={siteOrigin}
+          published={sitePublished && siteState === "ready"} onInstalled={() => { void loadInstallation(); }} />
       </section>
     </main></div>;
 }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { sealBilling, unsealBilling, type BillingContext } from './billing-context.js';
 import { periodAt } from './billing-period.js';
-import type { BillingPayment } from './toss-billing.js';
+import { BillingProviderError,type BillingPayment } from './toss-billing.js';
 
 type Charge = { id:string;period_id:string;subscription_id:string;organization_id:string;plan_id:string;created_by:string;
   order_id:string;request_key:string;order_name:string;customer_key:string;state:string;mode:string;provider_mid:string;
@@ -228,7 +228,7 @@ export async function runBillingChargeOnce(input:{pool:Pool;billing?:BillingCont
   await finishCanceledSubscriptions(input.pool,now);
   const claimed=await claim(input.pool,input.billing,now);if(typeof claimed==='string')return claimed;
   const {row,token,context,initial,billingKey}=claimed;
-  let payment:BillingPayment|null=null,code='payment_provider_result_unknown';
+  let payment:BillingPayment|null=null,code='payment_provider_result_unknown',declined=false;
   try {
     if(!initial)payment=await context.provider.lookup(row.order_id);
     if(!payment) {
@@ -236,7 +236,10 @@ export async function runBillingChargeOnce(input:{pool:Pool;billing?:BillingCont
         ||!billingKey||row.cancel_requested_at||row.terminated_at))code='payment_reconciliation_required';
       else {payment=await chargeWithCancellationGate(input.pool,claimed,currentTime);if(!payment)code='payment_reconciliation_required';}
     }
-  } catch { /* 응답 원문/비밀값 대신 불확실한 기존 주문을 보존한다. */ }
+  } catch(error) {
+    // 이전 unknown의 재요청 거절은 최초 시도의 실패를 증명하지 않는다.
+    if(initial&&error instanceof BillingProviderError&&error.kind==='declined'){declined=true;code=`payment_declined_${error.code}`;}
+  }
   const db=await input.pool.connect();
   try {
     await db.query('begin');await db.query('select id from ap.organizations where id=$1 for update',[row.organization_id]);
@@ -244,6 +247,12 @@ export async function runBillingChargeOnce(input:{pool:Pool;billing?:BillingCont
     if(!current){await db.query('rollback');return 'superseded';}
     if(!payment&&current.dispatch_tracking_version===1&&!current.dispatched_at&&(current.cancel_requested_at||current.terminated_at)) {
       await closeCanceledBeforeDispatch(db,current);await db.query('commit');return 'canceled';
+    }
+    if(declined&&current.dispatched_at){
+      await db.query("update ap.billing_transactions set state='failed',error_code=$2,completed_at=now(),claim_token=null,lease_expires_at=null,billing_key_ciphertext=null where id=$1",[row.id,code]);
+      await db.query("update ap.billing_periods set state='failed' where id=$1",[row.period_id]);
+      await db.query("update ap.paid_subscriptions set state=case when cancel_requested_at is null then 'past_due' else 'canceled' end where id=$1",[row.subscription_id]);
+      await event(db,current,'failed',code);await db.query('commit');return 'failed';
     }
     if(!payment){const state=await pause(db,current,code);await db.query('commit');return state;}
     if(payment.orderId===row.order_id&&payment.totalAmount===row.total_amount&&['ABORTED','EXPIRED'].includes(payment.status)) {

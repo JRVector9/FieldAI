@@ -82,7 +82,8 @@ test('Field owner settings expose only self masked consent and withdraw without 
  const pushSettings=await f.app.inject({method:'GET',url:'/v1/owner/notification-deliveries',headers});assert.equal(pushSettings.json().ownerConsent.push,true);assert.equal(pushSettings.body.includes(subscription.endpoint),false);
  assert.equal((await f.app.inject({method:'POST',url:pushUrl,headers,payload:{push:false,consentVersion:'notification-v1'}})).statusCode,200);assert.equal((await f.pool.query("select count(*) from field.notification_recipients where push and revoked_at is null")).rows[0].count,'0');
  const resave=await f.app.inject({method:'POST',url,headers,payload:{phone:'01087654321',kakao:true,sms:false,consentVersion:'notification-v1'}});assert.equal(resave.statusCode,200);
- const noKey=Fastify();try{registerFieldDeliveryRoutes(noKey,{pool:f.pool,resolveUserId:async()=>f.owner,resolveSession:async()=>({id:f.owner,userId:f.owner})});assert.equal((await noKey.inject({method:'POST',url,headers,payload:{kakao:false,sms:false,consentVersion:'notification-v1'}})).statusCode,200);}finally{await noKey.close();}assert.equal(f.calls.length,0);
+ assert.equal((await f.app.inject({method:'POST',url:pushUrl,headers,payload:{push:true,subscription,consentVersion:'notification-v1'}})).statusCode,200);
+ const noKey=Fastify();try{registerFieldDeliveryRoutes(noKey,{pool:f.pool,resolveUserId:async()=>f.owner,resolveSession:async()=>({id:f.owner,userId:f.owner})});assert.equal((await noKey.inject({method:'POST',url,headers:{...headers,origin:process.env.FIELD_PUBLIC_WEB_ORIGIN??'http://127.0.0.1:3002','sec-fetch-site':'same-origin'},payload:{kakao:false,sms:false,consentVersion:'notification-v1'}})).statusCode,200);assert.equal((await noKey.inject({method:'POST',url:pushUrl,headers:{...headers,origin:process.env.FIELD_PUBLIC_WEB_ORIGIN??'http://127.0.0.1:3002','sec-fetch-site':'same-origin'},payload:{push:false,consentVersion:'notification-v1'}})).statusCode,200);assert.equal((await noKey.inject({method:'POST',url,headers:{...headers,origin:'https://foreign.synthetic.example.com'},payload:{kakao:false,sms:false,consentVersion:'notification-v1'}})).statusCode,403);}finally{await noKey.close();}assert.equal(f.calls.length,0);
  }finally{await f.close();}});
 
 test('Field integrated application registers delivery once with own runtime context',async()=>{const f=await fixture();let app:ReturnType<typeof Fastify>|undefined;try{
@@ -99,3 +100,73 @@ test('Field owner settings recheck owner role after waiting for organization loc
  await demoter.query("update field.memberships set role='editor' where organization_id=$1 and user_id=$2",[f.org,f.owner]);await demoter.query('commit');
  const result=await running;assert.equal(result.statusCode,404,result.body);assert.equal((await f.pool.query("select count(*) from field.notification_recipients where target_kind='owner'")).rows[0].count,'0');
  }finally{await demoter.query('rollback');demoter.release();await f.close();}});
+
+
+test('Field customer channel read and keyless withdrawal use only the current receipt capability',async()=>{const f=await fixture();const noKey=Fastify();try{
+ const url=`/v1/customer/notification-consents/inquiry/${f.inquiry}`,headers={authorization:`Bearer ${f.cap}`};
+ const own=await f.app.inject({method:'GET',url,headers});assert.equal(own.statusCode,200,own.body);assert.equal(own.json().kakao,true);assert.equal(own.json().sms,true);assert.equal(own.json().phoneVerified,false);assert.equal(own.body.includes('01012345678'),false);assert.equal(own.body.includes(f.cap),false);
+ assert.equal((await f.app.inject({method:'GET',url,headers:{authorization:'Bearer 01012345678'}})).statusCode,404);assert.equal((await f.app.inject({method:'GET',url})).statusCode,404);assert.equal((await f.app.inject({method:'POST',url,headers,payload:{kakao:false,sms:true,consentVersion:'notification-v1'}})).statusCode,400);
+ registerFieldDeliveryRoutes(noKey,{pool:f.pool,resolveUserId:async()=>null});const actualHeaders={...headers,origin:process.env.FIELD_PUBLIC_WEB_ORIGIN??'http://127.0.0.1:3002','sec-fetch-site':'same-origin'};const withdrawn=await noKey.inject({method:'POST',url,headers:actualHeaders,payload:{kakao:false,sms:false,consentVersion:'notification-v1'}});assert.equal(withdrawn.statusCode,200,withdrawn.body);
+ const settings=await noKey.inject({method:'GET',url,headers});assert.equal(settings.json().kakao,false);assert.equal(settings.json().sms,false);assert.equal(settings.json().providerState,'blocked_integration');
+ await f.pool.query('update field.inquiries set visitor_key_hash=$2 where id=$1',[f.inquiry,createHash('sha256').update(randomBytes(32)).digest('hex')]);assert.equal((await f.app.inject({method:'GET',url,headers})).statusCode,404);assert.equal((await f.app.inject({method:'POST',url,headers,payload:{kakao:true,sms:false,consentVersion:'notification-v1'}})).statusCode,404);assert.equal(f.calls.length,0);
+ }finally{await noKey.close();await f.close();}});
+
+test('Field customer channel save rechecks rotated receipt after organization lock wait',async()=>{const f=await fixture();const rotator=await f.pool.connect();try{
+ await rotator.query('begin');await rotator.query('select id from field.organizations where id=$1 for update',[f.org]);
+ const running=Promise.resolve(f.app.inject({method:'POST',url:`/v1/customer/notification-consents/inquiry/${f.inquiry}`,headers:{authorization:`Bearer ${f.cap}`},payload:{kakao:true,sms:false,consentVersion:'notification-v1'}}));
+ let waited=false;for(let i=0;i<200;i++){if((await f.pool.query("select 1 from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like 'select id from field.organizations%' ")).rowCount){waited=true;break;}await new Promise(r=>setTimeout(r,5));}assert.equal(waited,true);
+ await rotator.query('update field.inquiries set visitor_key_hash=$2 where id=$1',[f.inquiry,createHash('sha256').update(randomBytes(32)).digest('hex')]);await rotator.query('commit');const result=await running;assert.equal(result.statusCode,404,result.body);assert.equal((await f.pool.query('select sms from field.notification_recipients where id=$1',[f.recipient])).rows[0].sms,true);
+ }finally{await rotator.query('rollback');rotator.release();await f.close();}});
+
+
+test('Field customer channel withdrawal preserves started unknown and never posts again',async()=>{const f=await fixture();try{
+ await f.event();f.mode('lost');assert.equal(await f.run(),'unknown');f.remote(null);
+ const url=`/v1/customer/notification-consents/inquiry/${f.inquiry}`,headers={authorization:`Bearer ${f.cap}`};
+ assert.equal((await f.app.inject({method:'POST',url,headers,payload:{kakao:false,sms:false,consentVersion:'notification-v1'}})).statusCode,200);
+ assert.equal((await f.app.inject({method:'GET',url,headers})).json().state,'withdrawn');
+ await f.due();assert.equal(await f.run(),'unknown');assert.equal(f.calls.length,1);assert.equal((await f.row()).length,1);
+ }finally{await f.close();}});
+
+test('Field customer channel save rejects retention purge completed while waiting for organization lock',async()=>{const f=await fixture();const purge=await f.pool.connect();try{
+ await purge.query('begin');await purge.query('select id from field.organizations where id=$1 for update',[f.org]);
+ const url=`/v1/customer/notification-consents/inquiry/${f.inquiry}`,headers={authorization:`Bearer ${f.cap}`};
+ const running=Promise.resolve(f.app.inject({method:'POST',url,headers,payload:{kakao:true,sms:false,consentVersion:'notification-v1'}}));
+ let waited=false;for(let i=0;i<200;i++){if((await f.pool.query("select 1 from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like 'select id from field.organizations%' ")).rowCount){waited=true;break;}await new Promise(r=>setTimeout(r,5));}assert.equal(waited,true);
+ const {removeRetainedPayload}=await import('../src/retention-purge.js');await removeRetainedPayload(purge,'inquiry',f.inquiry,new Date());await purge.query('commit');
+ assert.equal((await running).statusCode,404);assert.equal((await f.app.inject({method:'GET',url,headers})).statusCode,404);
+ const recipients=(await f.pool.query('select recipient_ciphertext,retention_purged_at from field.notification_recipients')).rows;assert.equal(recipients.length,1);assert.equal(recipients[0].recipient_ciphertext,null);assert.ok(recipients[0].retention_purged_at);assert.equal(f.calls.length,0);
+ }finally{await purge.query('rollback');purge.release();await f.close();}});
+
+
+test('Field customer channel reservation receipt is distinct and accepts only own published site or current verified custom origin',async()=>{const f=await fixture();try{
+ const reservation=randomUUID(),cap=randomBytes(32).toString('base64url'),site=randomUUID(),slug=`field-${randomBytes(6).toString('hex')}`,catalog=randomUUID();
+ await f.pool.query("insert into field.reservations(id,organization_id,catalog_revision,service_id,service_snapshot,booking_mode,customer_name,customer_phone,visitor_key_hash,preferred_time_text,timezone,state,consent_at,source) values($1,$2,1,$3,'{}','request','Synthetic','01012345678',$4,'합성 요청','Asia/Seoul','requested',now(),'public')",[reservation,f.org,randomUUID(),createHash('sha256').update(cap).digest('hex')]);
+ await f.pool.query('insert into field.sites(id,organization_id,slug) values($1,$2,$3)',[site,f.org,slug]);
+ await f.pool.query("insert into field.catalog_releases(id,organization_id,revision,content,content_hash,approved_by) values($1,$2,1,'{}','synthetic',$3)",[catalog,f.org,f.owner]);
+ await f.pool.query("insert into field.site_releases(id,site_id,revision,content,content_hash,catalog_release_id,catalog_revision,published_by) values($1,$2,1,'{}','synthetic',$3,1,$4)",[randomUUID(),site,catalog,f.owner]);
+ const domain=randomUUID(),host='own.synthetic.example.com';
+ await f.pool.query("insert into field.site_domains(id,organization_id,site_id,hostname,request_key,created_by,ownership_token,hostname_claimed,state,ownership_state,dns_state,tls_state,binding_state,valid_until,certificate_expires_at) values($1,$2,$3,$4,$5,$6,$7,true,'connected','verified','verified','ready','ready',now()+interval '1 hour',now()+interval '2 hour')",[domain,f.org,site,host,randomUUID(),f.owner,randomBytes(32).toString('base64url')]);
+ const url=`/v1/customer/notification-consents/reservation/${reservation}`,headers={authorization:`Bearer ${cap}`},payload={kakao:true,sms:true,consentVersion:'notification-v1'};
+ assert.equal((await f.app.inject({method:'GET',url,headers:{authorization:`Bearer ${f.cap}`}})).statusCode,404);
+ assert.equal((await f.app.inject({method:'GET',url,headers:{...headers,origin:'http://field-aaaaaaaaaaaa.localhost:3002'}})).statusCode,403);
+ assert.equal((await f.app.inject({method:'POST',url,headers:{...headers,origin:`http://${slug}.localhost:3002`},payload})).statusCode,200);
+ assert.equal((await f.app.inject({method:'GET',url,headers:{...headers,origin:`https://${host}`}})).json().sms,true);
+ assert.equal((await f.app.inject({method:'POST',url,headers:{...headers,origin:`https://${host}`},payload:{...payload,kakao:false,sms:false}})).statusCode,200);
+ assert.equal((await f.app.inject({method:'GET',url,headers:{...headers,origin:'https://foreign.synthetic.example.com'}})).statusCode,403);
+ assert.equal((await f.app.inject({method:'POST',url,headers:{...headers,origin:`https://${host}`,'sec-fetch-site':'cross-site'},payload})).statusCode,403);
+ await f.pool.query("update field.site_domains set valid_until=now()-interval '1 second' where id=$1",[domain]);
+ assert.equal((await f.app.inject({method:'GET',url,headers:{...headers,origin:`https://${host}`}})).statusCode,403);
+ assert.equal(f.calls.length,0);
+ }finally{await f.close();}});
+
+
+test('Field customer channel failed capability shares existing source receipt abuse limit',async()=>{const f=await fixture();try{
+ const {registerFieldReceiptAbuseGuard}=await import('../src/receipt-abuse.js');registerFieldReceiptAbuseGuard(f.app,{pool:f.pool,resolveUserId:async()=>null});
+ const url=`/v1/customer/notification-consents/inquiry/${f.inquiry}`,headers={authorization:`Bearer ${randomBytes(32).toString('base64url')}`};
+ for(let i=0;i<5;i++)assert.equal((await f.app.inject({method:'GET',url,headers})).statusCode,404);
+ assert.equal((await f.app.inject({method:'GET',url,headers})).statusCode,429);
+ assert.equal((await f.app.inject({method:'GET',url:`/v1/inquiries/${f.inquiry}`,headers})).statusCode,429);
+ await f.pool.query("update field.receipt_attempts set blocked_until=now()-interval '1 second'");
+ assert.equal((await f.app.inject({method:'GET',url,headers:{authorization:`Bearer ${f.cap}`}})).statusCode,200);
+ assert.equal((await f.pool.query('select count(*) from field.receipt_attempts')).rows[0].count,'0');assert.equal(f.calls.length,0);
+ }finally{await f.close();}});

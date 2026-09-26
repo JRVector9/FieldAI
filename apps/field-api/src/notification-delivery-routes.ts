@@ -1,3 +1,4 @@
+import { resolvedCustomHost } from './custom-domains.js';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
@@ -5,7 +6,7 @@ import { sealNotification, unsealNotification, type NotificationContext } from '
 import { validPushSubscription } from './notification-web-push.js';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const object=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:null;
-function allowedOrigin(request:FastifyRequest,context:NotificationContext|undefined){return (!request.headers.origin||request.headers.origin===context?.webOrigin)&&request.headers['sec-fetch-site']!=='cross-site';}
+function allowedOrigin(request:FastifyRequest,context:NotificationContext|undefined){const origin=context?.webOrigin??process.env.FIELD_PUBLIC_WEB_ORIGIN??(process.env.FIELD_PROFILE==='mock'?'http://127.0.0.1:3002':undefined);return (!request.headers.origin||request.headers.origin===origin)&&request.headers['sec-fetch-site']!=='cross-site';}
 export function registerFieldDeliveryRoutes(app:FastifyInstance,runtime:Pick<FieldBusinessRuntime,'pool'|'resolveUserId'|'resolveSession'>,context?:NotificationContext){
  async function organization(request:FastifyRequest,reply:FastifyReply,owner=false){
   const userId=await runtime.resolveUserId(request.headers);if(!userId){reply.code(401).send({error:'authentication_required'});return null;}
@@ -35,9 +36,27 @@ export function registerFieldDeliveryRoutes(app:FastifyInstance,runtime:Pick<Fie
   }catch(e){await db.query('rollback');throw e;}finally{db.release();}
   return {dailyAttemptLimit:limit};
  });
- async function saveConsent(organizationId:string,kind:string,target:string,audience:string,phone:string|undefined,body:Record<string,unknown>,actor:string|null,push=false){
+ async function customerSource(kind:string,id:string,capHash:string,db:Pick<typeof runtime.pool,'query'>=runtime.pool,lock=false){
+  if(!['inquiry','reservation'].includes(kind))return null;
+  const table=kind==='inquiry'?'field.inquiries':'field.reservations';
+  return (await db.query<{organization_id:string;customer_phone:string}>(`select organization_id,customer_phone from ${table} where id=$1 and visitor_key_hash=$2 and consent_at is not null and retention_work_purged_at is null ${kind==='inquiry'?'and is_test=false':''}${lock?' for share':''}`,[id,capHash])).rows[0]??null;
+ }
+ async function customerOrigin(request:FastifyRequest,organizationId:string,db:Pick<typeof runtime.pool,'query'>=runtime.pool,lock=false){
+  if(request.headers['sec-fetch-site']==='cross-site')return false;
+  const webOrigin=context?.webOrigin??process.env.FIELD_PUBLIC_WEB_ORIGIN??(process.env.FIELD_PROFILE==='mock'?'http://127.0.0.1:3002':undefined);
+  if(!request.headers.origin||request.headers.origin===webOrigin)return true;
+  let origin:URL;try{origin=new URL(request.headers.origin);}catch{return false;}
+  if(origin.origin!==request.headers.origin||origin.username||origin.password)return false;
+  const base=process.env.FIELD_SITE_BASE_DOMAIN??(process.env.FIELD_PROFILE==='mock'?'localhost:3002':undefined);
+  if(base){const site=(await db.query<{slug:string}>(`select s.slug from field.sites s where s.organization_id=$1 and exists(select 1 from field.site_releases r where r.site_id=s.id)${lock?' for share of s':''}`,[organizationId])).rows[0];
+   if(site&&origin.origin===`${process.env.FIELD_PROFILE==='mock'?'http':'https'}://${site.slug}.${base}`)return true;}
+  if(origin.protocol!=='https:'||origin.port)return false;
+  const host=await resolvedCustomHost(db,origin.hostname,lock);return host?.organization_id===organizationId;
+ }
+ async function saveConsent(organizationId:string,kind:string,target:string,audience:string,phone:string|undefined,body:Record<string,unknown>,actor:string|null,push=false,capHash?:string,customerRequest?:FastifyRequest){
   const db=await runtime.pool.connect();try{await db.query('begin');await db.query('select id from field.organizations where id=$1 for update',[organizationId]);
    if(actor&&!(await db.query("select 1 from field.memberships where organization_id=$1 and user_id=$2 and role='owner' for share",[organizationId,actor])).rowCount){await db.query('rollback');return null;}
+   if(capHash){const source=await customerSource(kind,target,capHash,db,true);if(!source||source.organization_id!==organizationId||customerRequest&&!await customerOrigin(customerRequest,organizationId,db,true)){await db.query('rollback');return null;}phone=source.customer_phone;}
    const active=(await db.query<{id:string;recipient_ciphertext:string|null;kakao:boolean;sms:boolean;push:boolean}>('select id,recipient_ciphertext,kakao,sms,push from field.notification_recipients where organization_id=$1 and target_kind=$2 and target_id=$3 and push=$4 and revoked_at is null for update',[organizationId,kind,target,push])).rows[0];
    const enabled=push?body.push===true:body.kakao===true||body.sms===true;
    if(enabled&&phone===undefined&&active?.recipient_ciphertext&&context){try{phone=unsealNotification(active.recipient_ciphertext,context.key,`recipient:${active.id}`);}catch{/* A new recipient is required when the stored value cannot be opened. */}}
@@ -64,15 +83,26 @@ export function registerFieldDeliveryRoutes(app:FastifyInstance,runtime:Pick<Fie
   const id=await saveConsent(actor.organizationId,'owner',actor.userId,'owner',subscription?JSON.stringify(subscription):undefined,body,actor.userId,true);
   if(!id)return reply.code(404).send({error:'organization_not_found'});return {recipientId:id,providerState:context?.pushProvider?'configured':'blocked_integration'};
  });
- app.post<{Params:{kind:string;id:string}}>('/v1/customer/notification-consents/:kind/:id',async(request,reply)=>{
+ app.get<{Params:{kind:string;id:string}}>('/v1/customer/notification-consents/:kind/:id',async(request,reply)=>{
+  reply.header('Cache-Control','no-store');
   const token=request.headers.authorization?.startsWith('Bearer ')?request.headers.authorization.slice(7):'',kind=request.params.kind;
-  if(!['inquiry','reservation'].includes(kind)||!uuid.test(request.params.id)||!/^[A-Za-z0-9_-]{43}$/.test(token))return reply.code(404).send({error:'notification_target_not_found'});
-  const found=(await runtime.pool.query<{organization_id:string;customer_phone:string}>(`select organization_id,customer_phone from field.${kind==='inquiry'?'inquiries':'reservations'} where id=$1 and visitor_key_hash=$2 and consent_at is not null and retention_work_purged_at is null`,[request.params.id,createHash('sha256').update(token).digest('hex')])).rows[0];
-  if(!found)return reply.code(404).send({error:'notification_target_not_found'});if(!allowedOrigin(request,context))return reply.code(403).send({error:'origin_not_allowed'});
-  if(!context)return reply.code(503).send({error:'notification_configuration_missing',state:'blocked_integration'});
+  if(!uuid.test(request.params.id)||!/^[A-Za-z0-9_-]{43}$/.test(token))return reply.code(404).send({error:'notification_target_not_found'});
+  const found=await customerSource(kind,request.params.id,createHash('sha256').update(token).digest('hex'));
+  if(!found)return reply.code(404).send({error:'notification_target_not_found'});if(!(await customerOrigin(request,found.organization_id)))return reply.code(403).send({error:'origin_not_allowed'});
+  const active=(await runtime.pool.query<{kakao:boolean;sms:boolean}>("select kakao,sms from field.notification_recipients where organization_id=$1 and target_kind=$2 and target_id=$3 and audience='customer' and not push and revoked_at is null and retention_purged_at is null",[found.organization_id,kind,request.params.id])).rows[0];
+  return {kakao:active?.kakao===true,sms:active?.sms===true,state:active?'consented':'withdrawn',phoneVerified:false,storageState:context?'configured':'blocked_integration',providerState:context?.provider?'configured':'blocked_integration'};
+ });
+ app.post<{Params:{kind:string;id:string}}>('/v1/customer/notification-consents/:kind/:id',async(request,reply)=>{
+  reply.header('Cache-Control','no-store');
+  const token=request.headers.authorization?.startsWith('Bearer ')?request.headers.authorization.slice(7):'',kind=request.params.kind;
+  if(!uuid.test(request.params.id)||!/^[A-Za-z0-9_-]{43}$/.test(token))return reply.code(404).send({error:'notification_target_not_found'});
+  const capHash=createHash('sha256').update(token).digest('hex'),found=await customerSource(kind,request.params.id,capHash);
+  if(!found)return reply.code(404).send({error:'notification_target_not_found'});if(!(await customerOrigin(request,found.organization_id)))return reply.code(403).send({error:'origin_not_allowed'});
   const body=object(request.body);if(!body||body.consentVersion!=='notification-v1'||typeof body.kakao!=='boolean'||typeof body.sms!=='boolean'||body.sms===true&&body.kakao!==true)return reply.code(400).send({error:'invalid_notification_consent'});
-  const id=await saveConsent(found.organization_id,kind,request.params.id,'customer',found.customer_phone,body,null);
-  return reply.header('Cache-Control','no-store').send({recipientId:id,state:id==='withdrawn'?'withdrawn':'consented',providerState:context?.provider?'configured':'blocked_integration'});
+  if((body.kakao||body.sms)&&!context)return reply.code(503).send({error:'notification_configuration_missing',state:'blocked_integration'});
+  const id=await saveConsent(found.organization_id,kind,request.params.id,'customer',found.customer_phone,body,null,false,capHash,request);
+  if(!id)return reply.code(404).send({error:'notification_target_not_found'});
+  return {recipientId:id,state:id==='withdrawn'?'withdrawn':'consented',providerState:context?.provider?'configured':'blocked_integration'};
  });
  app.post('/integrations/v1/notifications/solapi',async(request,reply)=>{
   const hash=context?.callbackSecret?createHash('sha1').update(context.callbackSecret).digest('hex'):undefined,received=request.headers['x-solapi-secret'];

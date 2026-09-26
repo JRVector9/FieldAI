@@ -86,7 +86,8 @@ test('AP owner settings expose only self masked consent and withdraw without pho
  const pushSettings=await f.app.inject({method:'GET',url:'/v1/owner/notification-deliveries',headers});assert.equal(pushSettings.json().ownerConsent.push,true);assert.equal(pushSettings.body.includes(subscription.endpoint),false);
  assert.equal((await f.app.inject({method:'POST',url:pushUrl,headers,payload:{push:false,consentVersion:'notification-v1'}})).statusCode,200);assert.equal((await f.pool.query("select count(*) from ap.notification_recipients where push and revoked_at is null")).rows[0].count,'0');
  const resave=await f.app.inject({method:'POST',url,headers,payload:{phone:'01087654321',kakao:true,sms:false,consentVersion:'notification-v1'}});assert.equal(resave.statusCode,200);
- const noKey=Fastify();try{registerAgentDeliveryRoutes(noKey,{pool:f.pool,resolveUserId:async()=>f.owner,resolveSession:async()=>({id:f.owner,userId:f.owner})});assert.equal((await noKey.inject({method:'POST',url,headers,payload:{kakao:false,sms:false,consentVersion:'notification-v1'}})).statusCode,200);}finally{await noKey.close();}assert.equal(f.calls.length,0);
+ assert.equal((await f.app.inject({method:'POST',url:pushUrl,headers,payload:{push:true,subscription,consentVersion:'notification-v1'}})).statusCode,200);
+ const noKey=Fastify();try{registerAgentDeliveryRoutes(noKey,{pool:f.pool,resolveUserId:async()=>f.owner,resolveSession:async()=>({id:f.owner,userId:f.owner})});assert.equal((await noKey.inject({method:'POST',url,headers:{...headers,origin:process.env.AP_PUBLIC_WEB_ORIGIN??'http://localhost:3001','sec-fetch-site':'same-origin'},payload:{kakao:false,sms:false,consentVersion:'notification-v1'}})).statusCode,200);assert.equal((await noKey.inject({method:'POST',url:pushUrl,headers:{...headers,origin:process.env.AP_PUBLIC_WEB_ORIGIN??'http://localhost:3001','sec-fetch-site':'same-origin'},payload:{push:false,consentVersion:'notification-v1'}})).statusCode,200);assert.equal((await noKey.inject({method:'POST',url,headers:{...headers,origin:'https://foreign.synthetic.example.com'},payload:{kakao:false,sms:false,consentVersion:'notification-v1'}})).statusCode,403);}finally{await noKey.close();}assert.equal(f.calls.length,0);
  }finally{await f.close();}});
 
 test('AP integrated application registers delivery once with own runtime context',async()=>{const f=await fixture();let app:ReturnType<typeof Fastify>|undefined;try{
@@ -103,3 +104,51 @@ test('AP owner settings recheck owner role after waiting for organization lock',
  await demoter.query("update ap.memberships set role='editor' where organization_id=$1 and user_id=$2",[f.org,f.owner]);await demoter.query('commit');
  const result=await running;assert.equal(result.statusCode,404,result.body);assert.equal((await f.pool.query("select count(*) from ap.notification_recipients where target_kind='owner'")).rows[0].count,'0');
  }finally{await demoter.query('rollback');demoter.release();await f.close();}});
+
+
+test('AP customer channel read and keyless withdrawal use only the current receipt capability',async()=>{const f=await fixture();const noKey=Fastify();try{
+ const url=`/v1/customer/notification-consents/inquiry/${f.inquiry}`,headers={authorization:`Bearer ${f.cap}`};
+ const own=await f.app.inject({method:'GET',url,headers});assert.equal(own.statusCode,200,own.body);assert.equal(own.json().kakao,true);assert.equal(own.json().sms,true);assert.equal(own.json().phoneVerified,false);assert.equal(own.body.includes('01012345678'),false);assert.equal(own.body.includes(f.cap),false);
+ assert.equal((await f.app.inject({method:'GET',url,headers:{authorization:'Bearer 01012345678'}})).statusCode,404);assert.equal((await f.app.inject({method:'GET',url})).statusCode,404);assert.equal((await f.app.inject({method:'POST',url,headers,payload:{kakao:false,sms:true,consentVersion:'notification-v1'}})).statusCode,400);
+ registerAgentDeliveryRoutes(noKey,{pool:f.pool,resolveUserId:async()=>null});const actualHeaders={...headers,origin:process.env.AP_PUBLIC_WEB_ORIGIN??'http://localhost:3001','sec-fetch-site':'same-origin'};const withdrawn=await noKey.inject({method:'POST',url,headers:actualHeaders,payload:{kakao:false,sms:false,consentVersion:'notification-v1'}});assert.equal(withdrawn.statusCode,200,withdrawn.body);
+ const settings=await noKey.inject({method:'GET',url,headers});assert.equal(settings.json().kakao,false);assert.equal(settings.json().sms,false);assert.equal(settings.json().providerState,'blocked_integration');
+ await f.pool.query('update ap.inquiries set visitor_key_hash=$2 where id=$1',[f.inquiry,createHash('sha256').update(randomBytes(32)).digest('hex')]);assert.equal((await f.app.inject({method:'GET',url,headers})).statusCode,404);assert.equal((await f.app.inject({method:'POST',url,headers,payload:{kakao:true,sms:false,consentVersion:'notification-v1'}})).statusCode,404);assert.equal(f.calls.length,0);
+ }finally{await noKey.close();await f.close();}});
+
+test('AP customer channel save rechecks rotated receipt after organization lock wait',async()=>{const f=await fixture();const rotator=await f.pool.connect();try{
+ await rotator.query('begin');await rotator.query('select id from ap.organizations where id=$1 for update',[f.org]);
+ const running=Promise.resolve(f.app.inject({method:'POST',url:`/v1/customer/notification-consents/inquiry/${f.inquiry}`,headers:{authorization:`Bearer ${f.cap}`},payload:{kakao:true,sms:false,consentVersion:'notification-v1'}}));
+ let waited=false;for(let i=0;i<200;i++){if((await f.pool.query("select 1 from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like 'select id from ap.organizations%' ")).rowCount){waited=true;break;}await new Promise(r=>setTimeout(r,5));}assert.equal(waited,true);
+ await rotator.query('update ap.inquiries set visitor_key_hash=$2 where id=$1',[f.inquiry,createHash('sha256').update(randomBytes(32)).digest('hex')]);await rotator.query('commit');const result=await running;assert.equal(result.statusCode,404,result.body);assert.equal((await f.pool.query('select sms from ap.notification_recipients where id=$1',[f.recipient])).rows[0].sms,true);
+ }finally{await rotator.query('rollback');rotator.release();await f.close();}});
+
+
+test('AP customer channel withdrawal preserves started unknown and never posts again',async()=>{const f=await fixture();try{
+ await f.event();f.mode('lost');assert.equal(await f.run(),'unknown');f.remote(null);
+ const url=`/v1/customer/notification-consents/inquiry/${f.inquiry}`,headers={authorization:`Bearer ${f.cap}`};
+ assert.equal((await f.app.inject({method:'POST',url,headers,payload:{kakao:false,sms:false,consentVersion:'notification-v1'}})).statusCode,200);
+ assert.equal((await f.app.inject({method:'GET',url,headers})).json().state,'withdrawn');
+ await f.due();assert.equal(await f.run(),'unknown');assert.equal(f.calls.length,1);assert.equal((await f.row()).length,1);
+ }finally{await f.close();}});
+
+test('AP customer channel save rejects retention purge completed while waiting for organization lock',async()=>{const f=await fixture();const purge=await f.pool.connect();try{
+ await purge.query('begin');await purge.query('select id from ap.organizations where id=$1 for update',[f.org]);
+ const url=`/v1/customer/notification-consents/inquiry/${f.inquiry}`,headers={authorization:`Bearer ${f.cap}`};
+ const running=Promise.resolve(f.app.inject({method:'POST',url,headers,payload:{kakao:true,sms:false,consentVersion:'notification-v1'}}));
+ let waited=false;for(let i=0;i<200;i++){if((await f.pool.query("select 1 from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query like 'select id from ap.organizations%' ")).rowCount){waited=true;break;}await new Promise(r=>setTimeout(r,5));}assert.equal(waited,true);
+ const {removeRetainedPayload}=await import('../src/retention-purge.js');await removeRetainedPayload(purge,'inquiry',f.inquiry,new Date());await purge.query('commit');
+ assert.equal((await running).statusCode,404);assert.equal((await f.app.inject({method:'GET',url,headers})).statusCode,404);
+ const recipients=(await f.pool.query('select recipient_ciphertext,retention_purged_at from ap.notification_recipients')).rows;assert.equal(recipients.length,1);assert.equal(recipients[0].recipient_ciphertext,null);assert.ok(recipients[0].retention_purged_at);assert.equal(f.calls.length,0);
+ }finally{await purge.query('rollback');purge.release();await f.close();}});
+
+
+test('AP customer channel failed capability shares existing source receipt abuse limit',async()=>{const f=await fixture();try{
+ const {registerAgentReceiptAbuseGuard}=await import('../src/receipt-abuse.js');registerAgentReceiptAbuseGuard(f.app,{pool:f.pool,resolveUserId:async()=>null});
+ const url=`/v1/customer/notification-consents/inquiry/${f.inquiry}`,headers={authorization:`Bearer ${randomBytes(32).toString('base64url')}`};
+ for(let i=0;i<5;i++)assert.equal((await f.app.inject({method:'GET',url,headers})).statusCode,404);
+ assert.equal((await f.app.inject({method:'GET',url,headers})).statusCode,429);
+ assert.equal((await f.app.inject({method:'GET',url:`/v1/inquiries/${f.inquiry}`,headers})).statusCode,429);
+ await f.pool.query("update ap.receipt_attempts set blocked_until=now()-interval '1 second'");
+ assert.equal((await f.app.inject({method:'GET',url,headers:{authorization:`Bearer ${f.cap}`}})).statusCode,200);
+ assert.equal((await f.pool.query('select count(*) from ap.receipt_attempts')).rows[0].count,'0');assert.equal(f.calls.length,0);
+ }finally{await f.close();}});

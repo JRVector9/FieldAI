@@ -29,12 +29,18 @@ if (present.length === fields.length) {
         || case when coalesce(scopes, '[]'::jsonb) ? 'ap.conversations.reply'
           then '[]'::jsonb else '["ap.conversations.reply"]'::jsonb end
         || case when coalesce(scopes, '[]'::jsonb) ? 'ap.sources.refresh'
-          then '[]'::jsonb else '["ap.sources.refresh"]'::jsonb end,
+          then '[]'::jsonb else '["ap.sources.refresh"]'::jsonb end
+        || case when coalesce(scopes, '[]'::jsonb) ? 'ap.connections.create'
+          then '[]'::jsonb else '["ap.connections.create"]'::jsonb end
+        || case when coalesce(scopes, '[]'::jsonb) ? 'ap.deployments.manage'
+          then '[]'::jsonb else '["ap.deployments.manage"]'::jsonb end,
         "updatedAt" = now()
       where "clientId" = $1 and (not (coalesce(scopes, '[]'::jsonb) ? 'ap.conversations.reply')
-        or not (coalesce(scopes, '[]'::jsonb) ? 'ap.sources.refresh'))
+        or not (coalesce(scopes, '[]'::jsonb) ? 'ap.sources.refresh')
+        or not (coalesce(scopes, '[]'::jsonb) ? 'ap.connections.create')
+        or not (coalesce(scopes, '[]'::jsonb) ? 'ap.deployments.manage'))
       returning "clientId"`, [clientId]);
-    if (updated.rowCount) process.stdout.write('AP mock client permits reply and source refresh scopes. Existing grants still require fresh owner consent.\n');
+    if (updated.rowCount) process.stdout.write('AP mock client permits reply, source refresh, and installation scopes. Existing grants still require fresh owner consent.\n');
   } finally { await pool.end(); }
   process.stdout.write('Field mock AP connector is configured. Restart Field API to load it.\n');
   process.exit(0);
@@ -64,7 +70,7 @@ const registration = await request('/oauth2/create-client', {
   token_endpoint_auth_method: 'client_secret_basic',
   grant_types: ['authorization_code', 'refresh_token'],
   response_types: ['code'],
-  scope: 'openid offline_access ap.agent.read ap.conversations.read ap.conversations.reply ap.sources.refresh',
+  scope: 'openid offline_access ap.agent.read ap.conversations.read ap.conversations.reply ap.sources.refresh ap.connections.create ap.deployments.manage',
 }, cookie);
 if (!registration.ok) throw new Error(`AP mock OAuth client registration failed (${registration.status}); restart AP API with current code`);
 const client = await registration.json();

@@ -3,12 +3,15 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
 
 const pathPattern = /^\/v1\/(inquiries|reservations)\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?:\/|$)/i;
-const receiptErrors = new Set(['receipt_key_required', 'receipt_required', 'invalid_receipt_key',
+const customerPathPattern = /^\/v1\/customer\/notification-consents\/(inquiry|reservation)\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i;
+const receiptErrors = new Set(['notification_target_not_found', 'receipt_key_required', 'receipt_required', 'invalid_receipt_key',
   'inquiry_not_found', 'reservation_not_found']);
 
 function target(request: FastifyRequest) {
   const match = pathPattern.exec(request.url.split('?', 1)[0]!);
-  return match ? { kind: match[1] === 'inquiries' ? 'inquiry' : 'reservation', id: match[2]!.toLowerCase() } : null;
+  if(match)return {kind:match[1]==='inquiries'?'inquiry':'reservation',id:match[2]!.toLowerCase()};
+  const customer=customerPathPattern.exec(request.url.split('?',1)[0]!);
+  return customer ? {kind:customer[1]!,id:customer[2]!.toLowerCase()} : null;
 }
 
 export function registerFieldReceiptAbuseGuard(app: FastifyInstance, runtime: FieldBusinessRuntime) {

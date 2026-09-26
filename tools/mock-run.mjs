@@ -191,6 +191,11 @@ async function main() {
         environment, managed, error => {
           process.stderr.write(`${error.message}; ${prefix} core remains ready, billing charge processing is unavailable\n`);
         }, root, false);
+      start(`${prefix} billing refund worker`, process.execPath,
+        [`--env-file=infra/${product}/.env`, `apps/${product}-api/dist/billing-refund-worker.js`],
+        environment, managed, error => {
+          process.stderr.write(`${error.message}; ${prefix} core remains ready, billing refund processing is unavailable\n`);
+        }, root, false);
       start(`${prefix} notification worker`, process.execPath,
         [`--env-file=infra/${product}/.env`, `apps/${product}-api/dist/notification-delivery-worker.js`],
         environment, managed, error => {

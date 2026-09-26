@@ -3,6 +3,10 @@ if (process.env.APP_PROFILE === "live") throw new Error("Agent web design previe
 const apiBase = process.env.AP_API_BASE_URL ?? "http://127.0.0.1:4311";
 const config: NextConfig = {
   transpilePackages: ["@fieldai/ui"],
+  async headers() {
+    return [{source:"/billing/return",headers:[{key:"Referrer-Policy",value:"no-referrer"},
+      {key:"Cache-Control",value:"private, no-store"},{key:"X-Robots-Tag",value:"noindex, nofollow"}]}];
+  },
   async rewrites() {
     return [
       { source: "/api/auth/:path*", destination: `${apiBase}/api/auth/:path*` },
