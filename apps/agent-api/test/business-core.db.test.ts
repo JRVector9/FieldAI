@@ -71,15 +71,20 @@ test('AP owner approves a native draft; another owner cannot edit it; public see
     const initial = await app.inject({ url: '/v1/knowledge/draft', headers: { cookie: owner.cookie } });
     assert.equal(initial.statusCode, 200);
     assert.equal((initial.json() as { revision: number }).revision, 0);
+    assert.equal(initial.json().region, '');
+    assert.equal(initial.json().openingHours, '');
 
     const draft = {
       expectedRevision: 0, businessName: '실제 상호', introduction: '사업자가 작성한 소개',
+      region: ' 서울 강남구·서초구 ', openingHours: ' 평일 09:00–18:00 ',
       services: [{ name: '상담', description: '서비스 설명' }],
       faqs: [{ question: '어디에서 운영하나요?', answer: '서울에서 운영합니다.' }],
     };
     const saved = await app.inject({ method: 'PUT', url: '/v1/knowledge/draft', headers: { cookie: owner.cookie }, payload: draft });
     assert.equal(saved.statusCode, 200);
     assert.equal((saved.json() as { revision: number }).revision, 1);
+    assert.equal(saved.json().region, '서울 강남구·서초구');
+    assert.equal(saved.json().openingHours, '평일 09:00–18:00');
 
     const beforeApproval = await app.inject({ url: `/v1/public/organizations/${organizationId}` });
     assert.equal(beforeApproval.statusCode, 404);
@@ -102,9 +107,11 @@ test('AP owner approves a native draft; another owner cannot edit it; public see
     const publicView = await app.inject({ url: `/v1/public/organizations/${organizationId}` });
     assert.equal(publicView.statusCode, 200);
     assert.equal((publicView.json() as { businessName: string }).businessName, '실제 상호');
+    assert.equal(publicView.json().region, '서울 강남구·서초구');
+    assert.equal(publicView.json().openingHours, '평일 09:00–18:00');
     assert.doesNotMatch(publicView.body, /approvedBy|ownerUserId/);
 
-    const nextDraft = await app.inject({ method: 'PUT', url: '/v1/knowledge/draft', headers: { cookie: owner.cookie }, payload: { ...draft, expectedRevision: 1, introduction: '아직 승인하지 않은 문구' } });
+    const nextDraft = await app.inject({ method: 'PUT', url: '/v1/knowledge/draft', headers: { cookie: owner.cookie }, payload: { ...draft, expectedRevision: 1, introduction: '아직 승인하지 않은 문구', region: '미승인 지역', openingHours: '미승인 시간' } });
     assert.equal(nextDraft.statusCode, 200);
     assert.equal((nextDraft.json() as { revision: number }).revision, 2);
     const ownerVersion = await app.inject({ url: '/v1/knowledge/draft', headers: { cookie: owner.cookie } });
@@ -113,6 +120,8 @@ test('AP owner approves a native draft; another owner cannot edit it; public see
     const stillPublic = await app.inject({ url: `/v1/public/organizations/${organizationId}` });
     assert.equal(stillPublic.statusCode, 200);
     assert.doesNotMatch(stillPublic.body, /아직 승인하지 않은 문구/);
+    assert.equal(stillPublic.json().region, '서울 강남구·서초구');
+    assert.equal(stillPublic.json().openingHours, '평일 09:00–18:00');
 
     const invalidPublicId = await app.inject({ url: '/v1/public/organizations/------------------------------------' });
     assert.equal(invalidPublicId.statusCode, 404);
@@ -128,6 +137,14 @@ test('AP owner approves a native draft; another owner cannot edit it; public see
     const editorPatch = await app.inject({ method: 'PATCH', url: '/v1/knowledge/draft', headers: { cookie: other.cookie, 'x-organization-id': organizationId }, payload: { expectedRevision: 2, introduction: '편집자가 보완한 초안' } });
     assert.equal(editorPatch.statusCode, 200);
     assert.equal((editorPatch.json() as { revision: number }).revision, 3);
+    assert.equal(editorPatch.json().region, '미승인 지역');
+    assert.equal(editorPatch.json().openingHours, '미승인 시간');
+    for (const invalid of [{ region: 1 }, { region: null }, { region: '가'.repeat(501) },
+      { openingHours: false }, { openingHours: null }, { openingHours: '가'.repeat(1001) }]) {
+      const rejected = await app.inject({ method: 'PATCH', url: '/v1/knowledge/draft',
+        headers: { cookie: owner.cookie }, payload: { expectedRevision: 3, ...invalid } });
+      assert.equal(rejected.statusCode, 400, rejected.body);
+    }
     const stalePatch = await app.inject({ method: 'PATCH', url: '/v1/knowledge/draft', headers: { cookie: other.cookie, 'x-organization-id': organizationId }, payload: { expectedRevision: 2, introduction: '오래된 수정' } });
     assert.equal(stalePatch.statusCode, 409);
   } finally {
@@ -177,9 +194,46 @@ test('AP retains incomplete native knowledge privately and rejects approval unti
     assert.equal(publicView.statusCode, 200);
     assert.equal(publicView.json().services[0].name, '상담');
     assert.equal(publicView.json().faqs[0].answer, '확인된 답변');
+    assert.equal(publicView.json().region, '');
+    assert.equal(publicView.json().openingHours, '');
   } finally {
     await app.close();
     await pool.query('DELETE FROM ap.organizations WHERE owner_user_id = (SELECT id FROM "user" WHERE email = $1)', [owner.email]).catch(() => undefined);
     await authPool.query('DELETE FROM "user" WHERE email = $1', [owner.email]);
+  }
+});
+
+test('AP reads older native JSONB drafts and immutable releases without inventing region or hours', async () => {
+  const owner = await createOwner();
+  const app = createAgentApp(async () => undefined, auth.handler, base, undefined, {
+    pool, resolveUserId: async (headers: IncomingHttpHeaders) =>
+      (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+  });
+  try {
+    const created = await app.inject({ method: 'POST', url: '/v1/organizations',
+      headers: { cookie: owner.cookie }, payload: { name: '구버전 AP 조직' } });
+    assert.equal(created.statusCode, 201);
+    const organizationId = created.json().id as string;
+    await pool.query(`update ap.knowledge_drafts set revision = 1,
+      content = content - 'region' - 'openingHours' where organization_id = $1`, [organizationId]);
+    const resumed = await app.inject({ url: '/v1/knowledge/draft', headers: { cookie: owner.cookie } });
+    assert.equal(resumed.json().region, '');
+    assert.equal(resumed.json().openingHours, '');
+    const approved = await app.inject({ method: 'POST', url: '/v1/knowledge/releases',
+      headers: { cookie: owner.cookie }, payload: { expectedRevision: 1 } });
+    assert.equal(approved.statusCode, 201, approved.body);
+    const original = await pool.query<{ content: Record<string, unknown>; content_hash: string }>(
+      'select content, content_hash from ap.knowledge_releases where id = $1', [approved.json().releaseId]);
+    assert.ok(!('region' in original.rows[0]!.content));
+    const publicView = await app.inject({ url: `/v1/public/organizations/${organizationId}` });
+    assert.equal(publicView.json().region, '');
+    assert.equal(publicView.json().openingHours, '');
+    const afterRead = await pool.query(
+      'select content, content_hash from ap.knowledge_releases where id = $1', [approved.json().releaseId]);
+    assert.deepEqual(afterRead.rows, original.rows);
+  } finally {
+    await app.close();
+    await pool.query('delete from ap.organizations where owner_user_id = (select id from "user" where email = $1)', [owner.email]);
+    await authPool.query('delete from "user" where email = $1', [owner.email]);
   }
 });

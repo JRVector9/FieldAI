@@ -1,5 +1,9 @@
 # 개발 진행 상태 — 2026-09-26
 
+## 최신 C03/A01·A02 AP native 지역·영업시간 (2026-09-26)
+
+AP 직접 사업 지식에 선택 지역·영업시간 입력/자동 저장·revision 충돌 비교·owner 승인·고객 공개 표시·AI 근거를 연결했다. 미등록 값을 추정하지 않고 구버전 JSONB의 빈 값을 읽으며 승인본/해시는 변경하지 않는다. 미승인 지역·시간은 owner/customer AI 근거와 고객 표시에서 제외한다. 실제 AP DB red→23/23, 320px 입력 부재 red→mock **29076**의 AP 사업자 HTTP/브라우저 1/1·native 자동 저장 HTTP/브라우저 1/1(지역만 변경한 응답 분실/409 내 입력, 시간만 변경한 409 서버 입력 선택·공개본 보존), 전체 typecheck/lint·Python/diff exit 0, 양제품 API/웹 build/ready. 시안 `owner/agent-knowledge`를 직접 열었다. migration/Field/제품 간 계약 변경 없음. C03 전체 기능·사용자 최종 인수·실 공급사/G는 미완료다.
+
 ## 최신 C03/A06 AP 스팸 분류·알림 중단 (2026-09-26)
 
 AP owner/editor가 revision으로 스팸 분류·해제한다. 원문·고객 추가 메시지/사진·내부 메모·확인키·기존 예약을 보존하고 고객/사업자 알림과 공개 답변을 중단한다. 해제는 needs_owner이며 과거 중단 알림을 재발송하지 않는다. Field는 공개 AP 상태를 표시하고 답변 초안을 유지하며 확정 거절을 결과 미상으로 처리하지 않는다. 실제 AP DB 22/22·Field DB 24/24, 전체 typecheck/lint exit 0. mock **17560** 양제품 API/웹 build/ready에서 AP 사업자 HTTP/브라우저 1/1, 양제품 HTTP/브라우저 1/1. Field 화면의 spam 소비자 검사는 상태 주입이며 API의 실제 거절/원장/권한은 DB 검사다. AP 320px 캡처를 열었다. AP migration 000061, 기존 공개 계약/Field DB/schema 변경 없음. 다음 확인된 내부 누락은 AP PRD 2.2의 native 지역·영업시간 입력/공개/AI 근거다. C03 전체와 사용자 최종 시각/동선·실 공급사/G는 미완료다.

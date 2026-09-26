@@ -10,6 +10,7 @@ export { approvedConnectorFacts } from './connector-facts-live.js';
 export type AgentConfig = { name: string; tone: 'clear' | 'warm' | 'formal'; guideScope: string; handoffText: string };
 export type Knowledge = {
   businessName: string; introduction: string;
+  region?: string; openingHours?: string;
   services: { name: string; description: string }[];
   faqs: { question: string; answer: string }[];
 };
@@ -52,6 +53,8 @@ async function organizationFor(request: FastifyRequest, reply: FastifyReply, run
 export function factsFor(knowledge: Knowledge, sourceFacts: AgentFact[] = []): AgentFact[] {
   return [
     { id: 'business', text: `상호: ${knowledge.businessName}. 소개: ${knowledge.introduction}` },
+    ...(knowledge.region?.trim() ? [{ id: 'region', text: `활동 지역: ${knowledge.region}` }] : []),
+    ...(knowledge.openingHours?.trim() ? [{ id: 'opening_hours', text: `영업시간: ${knowledge.openingHours}` }] : []),
     ...knowledge.services.map((item, index) => ({ id: `service:${index}`, text: `서비스: ${item.name}. ${item.description}` })),
     ...knowledge.faqs.map((item, index) => ({ id: `faq:${index}`, text: `질문: ${item.question}. 승인 답변: ${item.answer}` })),
     ...sourceFacts,

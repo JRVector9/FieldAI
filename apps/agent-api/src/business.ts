@@ -21,7 +21,8 @@ export type BusinessRuntime = {
 
 type Service = { name: string; description: string };
 type Faq = { question: string; answer: string };
-type Content = { businessName: string; introduction: string; services: Service[]; faqs: Faq[] };
+type Content = { businessName: string; introduction: string; region: string; openingHours: string;
+  services: Service[]; faqs: Faq[] };
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -37,7 +38,9 @@ function shortText(value: unknown, max: number, required = false): string | null
 function contentFrom(value: Record<string, unknown>, allowIncomplete = false): Content | null {
   const businessName = shortText(value.businessName, 160, !allowIncomplete);
   const introduction = shortText(value.introduction, 5000);
-  if (businessName === null || introduction === null || !Array.isArray(value.services)
+  const region = shortText(value.region === undefined ? '' : value.region, 500);
+  const openingHours = shortText(value.openingHours === undefined ? '' : value.openingHours, 1000);
+  if (businessName === null || introduction === null || region === null || openingHours === null || !Array.isArray(value.services)
       || !Array.isArray(value.faqs) || value.services.length > 50 || value.faqs.length > 100) return null;
   const services: Service[] = [];
   const faqs: Faq[] = [];
@@ -55,7 +58,7 @@ function contentFrom(value: Record<string, unknown>, allowIncomplete = false): C
     if (question === null || answer === null) return null;
     faqs.push({ question, answer });
   }
-  return { businessName, introduction, services, faqs };
+  return { businessName, introduction, region, openingHours, services, faqs };
 }
 
 function expectedRevision(body: unknown): number | null {
@@ -107,7 +110,7 @@ export function registerBusinessRoutes(app: FastifyInstance, runtime: BusinessRu
       await client.query("insert into ap.memberships(organization_id, user_id, role) values ($1, $2, 'owner')", [id, userId]);
       await client.query(
         'insert into ap.knowledge_drafts(organization_id, content, updated_by) values ($1, $2::jsonb, $3)',
-        [id, JSON.stringify({ businessName: name, introduction: '', services: [], faqs: [] }), userId],
+        [id, JSON.stringify({ businessName: name, introduction: '', region: '', openingHours: '', services: [], faqs: [] }), userId],
       );
       await client.query(
         `insert into ap.agent_drafts(organization_id, agent_id, content, updated_by)
@@ -142,6 +145,7 @@ export function registerBusinessRoutes(app: FastifyInstance, runtime: BusinessRu
        where organization_id = $1 order by revision desc limit 1`, [organizationId],
     );
     return { organizationId, revision: draft.rows[0]!.revision, ...draft.rows[0]!.content,
+      region: draft.rows[0]!.content.region ?? '', openingHours: draft.rows[0]!.content.openingHours ?? '',
       releaseRevision: release.rows[0]?.revision ?? null,
       releaseDraftRevision: release.rows[0]?.draft_revision ?? null };
   });
@@ -247,6 +251,7 @@ export function registerBusinessRoutes(app: FastifyInstance, runtime: BusinessRu
     const content = result.rows[0].content;
     return { organizationId: request.params.id, revision: result.rows[0].revision,
       businessName: content.businessName, introduction: content.introduction,
+      region: content.region ?? '', openingHours: content.openingHours ?? '',
       services: content.services, faqs: content.faqs };
   });
 }

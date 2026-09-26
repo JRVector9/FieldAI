@@ -1,5 +1,14 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/A01·A02 AP native 지역·영업시간 — 2026-09-26
+
+- 상태: `in_progress`. 요구: AP PRD 2.2 순서 3·2.3·2.4, AP-O02/AP-C01, B01/B09/B10, QA57/119와 승인·권한 관련 로컬 부분. 기준 시안 `reference/field_ui_prototype_v3.html`의 승인 정보/사업 지역·운영시간과 상담 안내를 직접 대조한다.
+- 범위: `apps/agent-api/src/{business,agents}.ts`, 기존 `test/{business-core,agents,customer-consultations}.db.test.ts`의 해당 경로; `apps/agent-web/src/{workspace,agent-public}.tsx` 및 필요 공개 CSS; 기존 `tools/spikes/{agent-owner-flow,agent-knowledge-autosave}-browser.py`; 현황/TASKS/coverage/인계. AP 기존 JSONB native 초안/불변 승인본만 사용하며 migration·Field 코드·제품 간 계약 변경 없음.
+- 설계: AP 직접 입력의 `region`(최대 500자), `openingHours`(최대 1000자)는 선택 문자열이며 미등록을 AI가 추정하지 않는다. 구버전 저장본/요청의 누락은 빈 값으로 읽고 null/숫자/초과 값은 400이다. PATCH는 다른 기존 값을 유지하고 같은 revision 경합은 409다. owner만 승인하며 새 초안이 공개본을 바꾸지 않는다. 승인본에만 native 지역·영업시간 근거를 만들고 기존 connector facts와 자동 병합하지 않는다.
+- 작업/검수 순서: 기존 실제 PG17 business 검사에 저장/검증/권한/승인 전후·미승인 수정/PATCH 보존/구버전 JSONB 단언을 추가하고 `pnpm test:db:agent` red 확인. 기존 AI owner/customer 검사에 승인 지역·시간 evidence와 미승인 제외를 단언한다. API 구현→PG17 green. 기존 320px owner browser에 입력/승인/공개 상담 표시를, autosave browser에 지역만 바뀌는 응답 분실/충돌 비교를 추가해 UI red 확인한다. UI 구현→`pnpm typecheck`, `pnpm lint`, 변경 Python 구문·diff, 확인된 mock 세션 정상 종료 후 `pnpm mock:run`, 좁은 owner/autosave HTTP 브라우저 green.
+- 복구/미검수: DB 구조 변경 없이 이전 코드로 롤백하면 새 문자열은 JSONB에 남지만 표시/근거 사용이 중단된다. 승인본/해시를 수정하지 않는다. 실제 공급사·사용자 최종 디자인/흐름·전체 QA/G는 미검수로 유지한다.
+- 결과: 지역/시간 필드와 AI 근거 누락을 실제 PG17 검사에서 red(18/23)로 확인한 뒤 AP DB 최종 23/23. owner/customer AI 근거에 승인값만 포함되고 미승인값이 제외되며 기존 JSONB/불변 해시를 보존한다. 320px 활동 지역 입력 부재 red→mock **29076**의 AP 사업자 HTTP/브라우저 1/1(승인→공개 상담 표시·기존 문의/스팸/위젯), native autosave HTTP/브라우저 1/1(지역만 변경한 응답 분실·409 비교/내 입력, 시간만 변경한 409/서버 입력 선택·공개본 유지). 전체 typecheck/lint·변경 Python 구문/diff exit 0, 양제품 API/웹 build/ready. 시안 `owner/agent-knowledge`를 실제 320px Chromium에서 열어 입력 구조를 확인했다. `/tmp/agent-native-knowledge-320.png`는 검사 종료 시 공개 상태 영역 캡처이며 전체 입력 영역의 시각 인수 증거는 아니다.
+
 ### C03/A06 AP 문의 스팸 분류·알림 중단 — 2026-09-26
 
 - 상태: `in_progress`. 요구: AP PRD 2.7, A06/C03, QA40/48/57/119/157 관련 로컬 부분. 원본/증빙 보존과 발송 중단을 분리한다.

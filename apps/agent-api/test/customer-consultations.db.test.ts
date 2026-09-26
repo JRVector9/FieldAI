@@ -94,6 +94,7 @@ test('AP link keeps anonymous AI guidance and consented human followup in one co
     const organizationId = organization.json().id as string;
     assert.equal((await app.inject({ method: 'PUT', url: '/v1/knowledge/draft', headers: { cookie: ownerCookie }, payload: {
       expectedRevision: 0, businessName: 'AP 상담 검수', introduction: '사람 상담도 가능합니다.',
+      region: '승인된 AP 지역', openingHours: '평일 09:00–18:00',
       services: [{ name: '상담 서비스', description: '예약 가능 시간은 담당자가 확인합니다.' }], faqs: [],
     } })).statusCode, 200);
     assert.equal((await app.inject({ method: 'POST', url: '/v1/knowledge/releases', headers: { cookie: ownerCookie },
@@ -103,6 +104,8 @@ test('AP link keeps anonymous AI guidance and consented human followup in one co
     } })).statusCode, 200);
     assert.equal((await app.inject({ method: 'POST', url: '/v1/agents/releases', headers: { cookie: ownerCookie },
       payload: { expectedRevision: 1, expectedKnowledgeRevision: 1 } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'PATCH', url: '/v1/knowledge/draft', headers: { cookie: ownerCookie },
+      payload: { expectedRevision: 1, region: '미승인 비공개 지역', openingHours: '미승인 비공개 시간' } })).statusCode, 200);
     const link = await app.inject({ method: 'POST', url: '/v1/deployments', headers: { cookie: ownerCookie }, payload: { kind: 'link' } });
     assert.equal(link.statusCode, 201);
     const publicId = link.json().publicId as string;
@@ -144,6 +147,9 @@ test('AP link keeps anonymous AI guidance and consented human followup in one co
     assert.deepEqual(answer.json().evidenceIds, ['service:0']);
     assert.equal(seen.length, 1);
     assert.ok(seen[0]?.facts.some(fact => fact.id === 'service:0'));
+    assert.ok(seen[0]?.facts.some(fact => fact.id === 'region' && fact.text === '활동 지역: 승인된 AP 지역'));
+    assert.ok(seen[0]?.facts.some(fact => fact.id === 'opening_hours' && fact.text === '영업시간: 평일 09:00–18:00'));
+    assert.ok(!seen[0]?.facts.some(fact => fact.text.includes('미승인 비공개')));
     const ownerSession = await auth.api.getSession({ headers: new Headers({ cookie: ownerCookie }) });
     assert.ok(ownerSession);
     const registered = await auth.handler(new Request(`${base}/api/auth/oauth2/create-client`, {

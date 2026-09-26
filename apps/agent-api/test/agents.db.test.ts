@@ -57,6 +57,7 @@ test('AP owner tests only approved knowledge with server-checked evidence and no
       payload: { question: '무엇을 하나요?' } });
     assert.equal(beforeRelease.statusCode, 409);
     const knowledge = { expectedRevision: 0, businessName: '검수 상호', introduction: '서울에서 상담합니다.',
+      region: '서울 강남구·서초구', openingHours: '평일 09:00–18:00',
       services: [{ name: '상담 서비스', description: '상담 안내' }],
       faqs: [{ question: '문의 방법은?', answer: '직접 문의를 남겨 주세요.' }] };
     assert.equal((await app.inject({ method: 'PUT', url: '/v1/knowledge/draft', headers: { cookie: first.cookie }, payload: knowledge })).statusCode, 200);
@@ -87,6 +88,8 @@ test('AP owner tests only approved knowledge with server-checked evidence and no
     assert.equal((answer.json() as { answer: string }).answer, output.answer);
     assert.equal((answer.json() as { evidenceIds: string[] }).evidenceIds[0], 'service:0');
     assert.ok(seen[0]!.facts.some(fact => fact.id === 'service:0'));
+    assert.ok(seen[0]!.facts.some(fact => fact.id === 'region' && fact.text === '활동 지역: 서울 강남구·서초구'));
+    assert.ok(seen[0]!.facts.some(fact => fact.id === 'opening_hours' && fact.text === '영업시간: 평일 09:00–18:00'));
     assert.ok(!seen[0]!.facts.some(fact => fact.text.includes('미승인')));
     output = { answer: '승인되지 않은 사실입니다.', evidenceIds: ['faq:99'], unknowns: [], handoffRecommended: false };
     const forged = await app.inject({ method: 'POST', url: '/v1/agents/test', headers: { cookie: first.cookie },

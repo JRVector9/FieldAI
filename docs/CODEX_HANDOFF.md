@@ -6,6 +6,17 @@
 - 저장소 기준 경로: `reference/field_ui_prototype_v3.html`. 후속 에이전트도 이 파일을 화면·동선 구현 기준으로 사용하며, 인수인계 갱신 시 이 시안 경로를 상단에 유지한다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03/A01·A02 AP native 지역·영업시간 (2026-09-26)
+
+- **현재 목표:** 문서 전체 기능을 AP/Field 독립 로컬 서비스로 완성하고 사용자 검수를 위한 사용 환경을 유지한다. 전체 C03/실 공급사/사용자 최종 시각·동선 인수는 미완료다.
+- **완료/파일:** AP `src/{business,agents}.ts`, `test/{business-core,agents,customer-consultations}.db.test.ts`, 웹 `src/{workspace,agent-public}.tsx`, `agent-public.css`, 기존 owner/knowledge-autosave 브라우저와 실행 계획/현황/TASKS/coverage/인계. 지역(500자)/영업시간(1000자) 선택값을 입력·저장·승인·공개 표시·AI 근거에 연결했다. 직전 스팸 기능 커밋은 `06e7314`다.
+- **설계:** AP 기존 native JSONB·revision·owner 승인을 사용하며 미등록을 추정하지 않는다. 구버전 누락은 빈 값으로 읽고 새 승인본 해시를 쓰되 기존 불변 승인본은 수정하지 않는다. PATCH는 다른 값을 보존하며 미승인 수정은 고객 표시·AI 근거에 넣지 않는다. Field connector 정보와 자동 병합하지 않는다. migration·Field 코드/DB·제품 간 공개 계약 변경 없음.
+- **실제 검사:** PG17 신규 단언 red(18/23)→`pnpm test:db:agent` 최종 23/23(session 53863), 임시 DB 제거. 전체 typecheck(session 8640)/lint(session 9741), Python 구문/diff exit 0. 320px 활동 지역 입력 부재 red→mock **29076** 양제품 API/웹 build/ready에서 AP 사업자 HTTP/브라우저(session 38555) 1/1, `AP_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python node --env-file=infra/agent/.env --test tools/spikes/agent-knowledge-autosave-http.test.mjs`(48865) 1/1. 지역만 바뀐 응답 분실/409 내 입력 비교, 시간만 바뀐 409 서버 선택·공개본 유지 포함. 시안 `owner/agent-knowledge`를 Chromium 320px에서 실제 열었다. `/tmp/agent-native-knowledge-320.png`는 종료 시 공개 상태 영역으로 입력 전체의 시각 인수 증거는 아니다.
+- **실패 접근:** 탐색에서 존재하지 않는 옛 test/schema 경로를 읽으려 한 뒤 rg 파일 목록으로 정확 경로를 찾았다. 시안의 `agent/knowledge`는 존재하지 않아 routes로 확인하고 `owner/agent-knowledge`를 열었다. 기능 검사 실패는 기존 필드/근거 부재 red였고 기대값을 완화하지 않았다.
+- **남은 작업:** 전체 PRD·역할별 실제 기능/증빙 대조를 계속한다. 다음 조사 대상은 Field PRD 3.6의 외부 업무 수신 snapshot 목적·출처·보존기간이다. 현재 external_work_requests에 수신 시각/고객·업무 snapshot/consent는 있으나 목적·보존 정책은 아직 확인해야 한다. 운영 보존 정책/실 공급사·정식 QA/G·최종 사용자 인수는 미완료다.
+- **복구:** 코드 롤백 시 JSONB 새 값은 남지만 표시/AI 근거 사용이 중단된다. 원본·승인본 해시를 바꾸지 않는다. 운영 배포·청구·실 고객 발송·운영 삭제 없음.
+- **다음 정확한 명령:** `git status --short`, `git log -2 --oneline`, `cat apps/field-api/migrations/000025_external_work_requests.sql`, `sed -n '465,580p' apps/field-api/src/bookings.ts`, `rg -n 'retention|purpose|external_work_requests' apps/field-api/src/operations-archive.ts docs/04_SECURITY_OPERATIONS_RELEASE.md`, `curl -fsS http://127.0.0.1:4311/health/ready`, `curl -fsS http://127.0.0.1:4321/health/ready`. mock **29076**가 살아 있으면 유지한다. 상단 시안 경로를 계속 보존한다.
+
 ## 최신 인수인계 — C03/A06 AP 스팸 분류·알림 중단 (2026-09-26)
 
 - **현재 목표:** 전체 문서 기능을 AP/Field 독립 로컬 서비스로 완성한다. 이번 범위는 AP PRD 2.7의 스팸 분류·해제, 원본/증빙 보존, 알림 중단과 Field 소비자의 답변 거절 처리다. C03 전체와 사용자 최종 화면·동선 인수는 미완료다.

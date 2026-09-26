@@ -75,3 +75,8 @@
 .agent-consult-qr img{display:block;width:100%;max-width:320px;height:auto;aspect-ratio:1;background:#fff;margin:12px 0}
 .agent-consult-qr button,.agent-consult-qr a{display:inline-flex;align-items:center;min-height:44px;padding:10px 14px;border:1px solid #cad5e0;border-radius:10px;background:#fff;color:#234a73;font-size:16px;cursor:pointer}
 .agent-consult-qr :is(a,button):focus-visible{outline:2px solid #1762a6;outline-offset:3px}
+.agent-public-business-facts{margin:16px 0;padding:14px 16px;background:#f5f7fa;border-radius:12px;text-align:left;font-size:16px}
+.agent-public-business-facts dl{display:grid;gap:10px;margin:0}
+.agent-public-business-facts dl>div{display:grid;grid-template-columns:72px minmax(0,1fr);gap:12px}
+.agent-public-business-facts dt{color:#5b6779;font-size:14px}
+.agent-public-business-facts dd{margin:0;overflow-wrap:anywhere;white-space:pre-wrap;line-height:1.6}

@@ -11,6 +11,8 @@ type Draft = {
   releaseDraftRevision?: number | null;
   businessName: string;
   introduction: string;
+  region: string;
+  openingHours: string;
   services: { name: string; description: string }[];
   faqs: { question: string; answer: string }[];
 };
@@ -45,6 +47,7 @@ const completeDraft = (value: Draft) => Boolean(value.businessName.trim()
 function sameDraftContent(left: Draft, right: Draft) {
   const content = (value: Draft) => JSON.stringify({ businessName: value.businessName.trim(),
     introduction: value.introduction.trim(),
+    region: (value.region ?? '').trim(), openingHours: (value.openingHours ?? '').trim(),
     services: value.services.map(service => ({ name: service.name.trim(), description: service.description.trim() })),
     faqs: value.faqs.map(faq => ({ question: faq.question.trim(), answer: faq.answer.trim() })) });
   return content(left) === content(right);
@@ -283,6 +286,8 @@ export function AgentWorkspace() {
         expectedRevision: snapshot.revision,
         businessName: snapshot.businessName,
         introduction: snapshot.introduction,
+        region: snapshot.region ?? '',
+        openingHours: snapshot.openingHours ?? '',
         services: snapshot.services,
         faqs: snapshot.faqs,
       });
@@ -526,6 +531,9 @@ export function AgentWorkspace() {
           <form noValidate onSubmit={event => void saveDraft(event)} className="form-fields">
             <label>상호<input required maxLength={160} value={draft.businessName} onChange={event => change({ businessName: event.target.value })} /></label>
             <label>사업 소개<textarea aria-label="사업 소개" maxLength={5000} value={draft.introduction} onChange={event => change({ introduction: event.target.value })} /></label>
+            <label>활동 지역<input maxLength={500} value={draft.region ?? ""} onChange={event => change({ region: event.target.value })} placeholder="예: 서울 강남구·서초구" /></label>
+            <label>영업시간<textarea aria-label="영업시간" maxLength={1000} value={draft.openingHours ?? ""} onChange={event => change({ openingHours: event.target.value })} placeholder="확인된 운영 요일·시간·휴무를 입력해 주세요." /></label>
+            <p>지역·영업시간은 선택 정보입니다. 등록하지 않은 값은 AI가 추정하지 않으며 승인 전 변경은 고객에게 보이지 않습니다.</p>
             <h3>서비스</h3>
             {draft.services.map((service, index) => <div key={index} className="knowledge-source">
               <label>서비스 이름<input required maxLength={160} value={service.name} onChange={event => updateService(index, { name: event.target.value })} /></label>
@@ -542,7 +550,7 @@ export function AgentWorkspace() {
             <button type="button" disabled={draft.faqs.length >= 100} onClick={() => change({ faqs: [...draft.faqs, { question: "", answer: "" }] })}>질문 추가</button>
             <button type="submit" disabled={busy || saveState === "saving" || saveState === "conflict"}>초안 저장</button>
           </form>
-          {saveState === "conflict" && conflictDraft && <div className="knowledge-source" role="region" aria-label="지식 초안 저장 충돌"><h3>지식 초안 저장 충돌</h3><p>서버 {conflictDraft.revision}번과 현재 화면의 미저장 입력을 비교해 주세요. 고객 공개 정보는 바뀌지 않았습니다.</p><details><summary>서버에 저장된 초안 보기</summary><p><strong>상호:</strong> {conflictDraft.businessName}</p><p><strong>사업 소개:</strong> {conflictDraft.introduction}</p><ul>{conflictDraft.services.map((service, index) => <li key={index}>서비스: {service.name} · {service.description}</li>)}{conflictDraft.faqs.map((faq, index) => <li key={`faq-${index}`}>질문: {faq.question} · {faq.answer}</li>)}</ul></details><div className="preview-action"><button type="button" disabled={busy || !online} onClick={() => void resolveConflict(true)}>내 입력으로 다시 저장</button><button type="button" disabled={busy || !online} onClick={() => void resolveConflict(false)}>서버 초안 사용</button></div><p>내 입력을 선택하면 서버 변경을 대체합니다. 현재 입력은 위 편집 칸에서 확인할 수 있습니다.</p></div>}
+          {saveState === "conflict" && conflictDraft && <div className="knowledge-source" role="region" aria-label="지식 초안 저장 충돌"><h3>지식 초안 저장 충돌</h3><p>서버 {conflictDraft.revision}번과 현재 화면의 미저장 입력을 비교해 주세요. 고객 공개 정보는 바뀌지 않았습니다.</p><details><summary>서버에 저장된 초안 보기</summary><p><strong>상호:</strong> {conflictDraft.businessName}</p><p><strong>사업 소개:</strong> {conflictDraft.introduction}</p><p><strong>활동 지역:</strong> {conflictDraft.region || "미등록"}</p><p><strong>영업시간:</strong> {conflictDraft.openingHours || "미등록"}</p><ul>{conflictDraft.services.map((service, index) => <li key={index}>서비스: {service.name} · {service.description}</li>)}{conflictDraft.faqs.map((faq, index) => <li key={`faq-${index}`}>질문: {faq.question} · {faq.answer}</li>)}</ul></details><div className="preview-action"><button type="button" disabled={busy || !online} onClick={() => void resolveConflict(true)}>내 입력으로 다시 저장</button><button type="button" disabled={busy || !online} onClick={() => void resolveConflict(false)}>서버 초안 사용</button></div><p>내 입력을 선택하면 서버 변경을 대체합니다. 현재 입력은 위 편집 칸에서 확인할 수 있습니다.</p></div>}
         </section>
         <aside className="special-panel"><h2>공개 상태</h2><p>현재 승인 버전: {releaseRevision === null ? "없음" : `${releaseRevision}번`}</p><p>미저장 변경과 미승인 초안은 고객에게 보이지 않습니다.</p><button type="button" disabled={busy || dirty || saveState !== "idle" || !completeDraft(draft) || draft.revision === 0 || draft.revision === approvedDraftRevision} onClick={() => void approve()}>현재 초안 승인</button>{!completeDraft(draft) && <p>상호·서비스 이름·질문과 확인된 답변을 완성해야 승인할 수 있습니다.</p>}{dirty && <p>변경 내용을 먼저 저장해 주세요.</p>}{releaseRevision !== null && <p><a href={`/public/${draft.organizationId}`}>고객 직접 문의 화면 열기</a></p>}<p><a href="/workspace/ai">AI 설정·답변 테스트 열기</a></p><p><a href="/workspace/deployments">상담 링크·사이트 위젯 관리</a></p><p><a href="/workspace/campaigns">홍보 카드 관리</a></p><p><a href="/workspace/usage">실제 사용량 보기</a></p><p><a href="/workspace/subscription">구독·데이터 관리</a></p><p>AI 응대는 별도 활성화 단계가 필요합니다. 이 승인만으로 AI가 고객에게 답변하지 않습니다.</p></aside>
       </div>}

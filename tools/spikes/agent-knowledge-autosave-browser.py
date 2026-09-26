@@ -54,6 +54,8 @@ async def main():
             await intro.fill("첫 번째 자동 저장")
             await asyncio.wait_for(first_saved.wait(), timeout=8)
             await intro.fill("저장 응답 중 이어 쓴 소개")
+            await panel.get_by_label("활동 지역", exact=True).fill("서울 강남구·서초구")
+            await panel.get_by_label("영업시간", exact=True).fill("평일 09:00–18:00")
             release_first.set()
             await expect(revision_line).not_to_contain_text("미저장", timeout=10000)
             assert await intro.input_value() == "저장 응답 중 이어 쓴 소개"
@@ -61,6 +63,8 @@ async def main():
             current = await current_response.json()
             assert current_response.status == 200
             assert current["introduction"] == "저장 응답 중 이어 쓴 소개"
+            assert current["region"] == "서울 강남구·서초구"
+            assert current["openingHours"] == "평일 09:00–18:00"
             assert current["revision"] >= 2
 
             await panel.get_by_role("button", name="서비스 추가").click()
@@ -88,6 +92,8 @@ async def main():
             published = await page.request.get(f"{web}/v1/public/organizations/{os.environ['AP_TEST_ORGANIZATION_ID']}")
             assert published.status == 200
             approved_intro = (await published.json())["introduction"]
+            approved_region = (await published.json())["region"]
+            approved_hours = (await published.json())["openingHours"]
 
             fail_next = True
             await intro.fill("요청 실패 중 입력")
@@ -97,10 +103,10 @@ async def main():
             await expect(revision_line).not_to_contain_text("미저장", timeout=8000)
 
             drop_after_commit = True
-            await intro.fill("저장 뒤 응답만 사라짐")
+            await panel.get_by_label("활동 지역", exact=True).fill("응답 분실 후 보존할 지역")
             await expect(revision_line).to_contain_text("저장 실패", timeout=8000)
             current = await (await page.request.get(f"{web}/v1/knowledge/draft")).json()
-            assert current["introduction"] == "저장 뒤 응답만 사라짐"
+            assert current["region"] == "응답 분실 후 보존할 지역"
             committed_revision = current["revision"]
             await panel.get_by_role("button", name="초안 저장").click()
             await expect(revision_line).not_to_contain_text("미저장", timeout=8000)
@@ -118,30 +124,35 @@ async def main():
             current = await (await page.request.get(f"{web}/v1/knowledge/draft")).json()
             assert current["introduction"] == "오프라인에서 쓴 소개"
 
-            external = {key: current[key] for key in ("businessName", "introduction", "services", "faqs")}
+            external = {key: current[key] for key in ("businessName", "introduction", "region", "openingHours", "services", "faqs")}
             external["expectedRevision"] = current["revision"]
-            external["introduction"] = "다른 편집자의 소개"
+            external["region"] = "다른 편집자의 지역"
             assert (await page.request.put(f"{web}/v1/knowledge/draft", data=external)).status == 200
-            await intro.fill("내 충돌 소개")
+            await panel.get_by_label("활동 지역", exact=True).fill("내 충돌 지역")
             await page.get_by_role("heading", name="지식 초안 저장 충돌").wait_for()
-            assert await intro.input_value() == "내 충돌 소개"
+            assert await panel.get_by_label("활동 지역", exact=True).input_value() == "내 충돌 지역"
+            await page.get_by_text("서버에 저장된 초안 보기", exact=True).click()
+            await page.get_by_role("region", name="지식 초안 저장 충돌").get_by_text("다른 편집자의 지역", exact=False).wait_for()
             page.once("dialog", lambda dialog: asyncio.create_task(dialog.accept()))
             await page.get_by_role("button", name="내 입력으로 다시 저장").click()
             await expect(revision_line).not_to_contain_text("미저장", timeout=8000)
             current = await (await page.request.get(f"{web}/v1/knowledge/draft")).json()
-            assert current["introduction"] == "내 충돌 소개"
+            assert current["region"] == "내 충돌 지역"
 
-            external = {key: current[key] for key in ("businessName", "introduction", "services", "faqs")}
+            external = {key: current[key] for key in ("businessName", "introduction", "region", "openingHours", "services", "faqs")}
             external["expectedRevision"] = current["revision"]
-            external["introduction"] = "서버에서 선택할 소개"
+            external["openingHours"] = "주말 10:00–15:00"
             assert (await page.request.put(f"{web}/v1/knowledge/draft", data=external)).status == 200
-            await intro.fill("버릴 로컬 소개")
+            await panel.get_by_label("영업시간", exact=True).fill("버릴 로컬 시간")
             await page.get_by_role("heading", name="지식 초안 저장 충돌").wait_for()
             page.once("dialog", lambda dialog: asyncio.create_task(dialog.accept()))
             await page.get_by_role("button", name="서버 초안 사용").click()
-            await expect(intro).to_have_value("서버에서 선택할 소개")
+            await expect(panel.get_by_label("영업시간", exact=True)).to_have_value("주말 10:00–15:00")
             published = await page.request.get(f"{web}/v1/public/organizations/{os.environ['AP_TEST_ORGANIZATION_ID']}")
             assert (await published.json())["introduction"] == approved_intro
+            assert (await published.json())["region"] == approved_region
+            assert (await published.json())["openingHours"] == approved_hours
+            await page.screenshot(path="/tmp/agent-native-knowledge-320.png")
             assert await page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             assert not errors, errors
             print("AP knowledge autosave browser: passed")

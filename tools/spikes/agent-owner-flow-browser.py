@@ -83,6 +83,8 @@ async def main():
             await recovery.close()
 
             await panel.get_by_label("사업 소개").fill("승인된 방문 상담을 안내합니다.")
+            await panel.get_by_label("활동 지역", exact=True).fill("서울 강남구·서초구")
+            await panel.get_by_label("영업시간", exact=True).fill("평일 09:00–18:00")
             await panel.get_by_role("button", name="서비스 추가").click()
             await panel.get_by_label("서비스 이름").fill("방문 상담")
             await panel.get_by_label("서비스 설명").fill("상담 후 담당자가 연락합니다.")
@@ -383,6 +385,9 @@ async def main():
             await guest.get_by_role("button", name="사업 정보 다시 불러오기").click()
             await guest.unroute("**/v1/public/organizations/*", customer_knowledge_route)
             await guest.locator(".agent-public-header-business strong").get_by_text("합성 AP 상담실").wait_for()
+            business_facts = guest.get_by_role("region", name="승인된 사업 지역·영업시간")
+            await expect(business_facts).to_contain_text("서울 강남구·서초구")
+            await expect(business_facts).to_contain_text("평일 09:00–18:00")
             ai = guest.locator("section.agent-public-chat")
             await ai.get_by_label("질문", exact=True).fill("방문 상담 가격은 얼마인가요?")
             await ai.get_by_role("button", name="AI에 질문").click()
