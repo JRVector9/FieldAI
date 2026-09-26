@@ -16,6 +16,11 @@ test("tenant public route distinguishes missing and mismatched sites from API fa
     globalThis.fetch = async () => new Response("", { status: 404 });
     assert.equal((await proxy(request())).status, 404);
 
+    globalThis.fetch = async () => Response.json({ error: 'site_visibility_restricted', organizationId }, { status: 404 });
+    assert.equal((await proxy(request())).status, 200);
+    assert.equal((await proxy(new NextRequest('http://field-012345abcdef.localhost:3002/public/22222222-2222-4222-8222-222222222222',
+      { headers: { host: 'field-012345abcdef.localhost:3002' } }))).status, 404);
+
     globalThis.fetch = async () => Response.json({ organizationId: "22222222-2222-4222-8222-222222222222" });
     assert.equal((await proxy(request())).status, 404);
 

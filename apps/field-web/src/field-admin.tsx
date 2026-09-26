@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
 import { fieldAdminSections as sections, type FieldAdminSection } from "./field-admin-sections";
 import "./field-admin.css";
+import { FieldModerationAdmin } from './FieldModerationAdmin';
 
 type Overview = {
   product: "field";
+  actorUserId: string;
   role: "operator" | "auditor";
   snapshotAt: string;
   counts: {
@@ -112,7 +114,7 @@ export function FieldAdmin({ section = "operations" }: { section?: FieldAdminSec
     "site-domains": "실제 DNS·TLS 검증과 자체 도메인 연결은 미연결입니다. 기본 공개 사이트는 별도로 유지합니다.",
     notifications: "실제 발송 공급사가 연결되지 않아 고객 알림은 미연결 상태입니다. 결과 미상 사건을 임의 재발송하지 않습니다.",
     billing: "실결제 공급사와 승인된 Field 가격·청구 원장이 미연결입니다. 체험을 유료 결제로 표시하지 않습니다.",
-    audit: "고객 상세 지원 접근은 별도 승인·사유·기간·추가 인증이 마련된 뒤 제공합니다.",
+    audit: "고객 대화 원문은 제공하지 않습니다. 신고 상세는 별도 운영자가 승인한 사유·기간 안에서 확인합니다. 운영 MFA는 별도 공급사 검수가 필요합니다.",
   };
   return <div className="site-shell"><header className="site-header"><a href="/"><Brand product="Field" /></a>
     <nav aria-label="제품 이동"><a href="/workspace">Field 사업자 작업실</a></nav></header>
@@ -123,7 +125,7 @@ export function FieldAdmin({ section = "operations" }: { section?: FieldAdminSec
           {item.title.replace("Field ", "")}</a>)}
       </nav><p>고객 원문·연락처는 기본 화면에 표시하지 않습니다.</p></aside>
     <main className="feature-section field-admin-main"><div className="feature-heading"><p className="eyebrow">Field · 제품 관리자</p>
-      <h1>{current.title}</h1><p>{current.description} 고객 원문과 연락처는 표시하지 않습니다.</p></div>
+      <h1>{current.title}</h1><p>{current.description} {section === 'audit' ? '신고 상세는 승인한 범위·기간 안에서만 표시합니다.' : '고객 원문과 연락처는 표시하지 않습니다.'}</p></div>
       {status && <p role="status" className="state-message">{status}</p>}
       {phase === "loading" && <p role="status">Field 관리자 권한과 운영 상태를 확인하는 중입니다.</p>}
       {phase === "auth" && <section className="special-panel"><h2>Field 관리자 로그인</h2><p>Field 계정과 별도 관리자 권한이 필요합니다.</p>
@@ -146,6 +148,7 @@ export function FieldAdmin({ section = "operations" }: { section?: FieldAdminSec
               <p>사건 ID {item.eventId}</p>
             </article>)}</div>}
         </section>}
+        {section === "audit" && <FieldModerationAdmin actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <section className="special-panel" aria-label="최근 관리자 조회"><h2>최근 관리자 조회</h2>
           {overview.recentAdminAccesses.length === 0 ? <p>조회 기록이 없습니다.</p>
             : <div className="field-admin-list">{overview.recentAdminAccesses.map((item, index) => <article key={`${item.actorUserId}-${item.accessedAt}-${index}`}>

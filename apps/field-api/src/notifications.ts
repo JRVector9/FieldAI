@@ -27,7 +27,8 @@ export function registerFieldNotificationRoutes(app: FastifyInstance, runtime: F
     return { notifications: result.rows.map(row => ({ id: row.id, organizationId: row.organization_id,
       targetId: row.target_id,
       targetKind: row.event_type === 'field.external_request.accepted' ? 'external_request'
-        : row.event_type.startsWith('field.inquiry.') ? 'inquiry' : 'reservation',
+        : row.event_type.startsWith('field.inquiry.') ? 'inquiry'
+          : row.event_type.startsWith('field.moderation.') ? 'moderation_report' : 'reservation',
       eventType: row.event_type, createdAt: row.created_at.toISOString(),
       readAt: row.read_at?.toISOString() ?? null })),
     unreadCount: Number(count.rows[0]?.unread_count ?? 0) };

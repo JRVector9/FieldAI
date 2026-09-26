@@ -30,7 +30,11 @@ export async function proxy(request: NextRequest) {
     try {
       const api = process.env.FIELD_API_BASE_URL ?? "http://127.0.0.1:4321";
       const response = await fetch(new URL(`/v1/public/sites/${tenantSlug}`, api), { cache: "no-store" });
-      if (response.status === 404) return notFound();
+      if (response.status === 404) {
+        const restricted = await response.json().catch(() => ({})) as { error?: string; organizationId?: string };
+        return restricted.error === 'site_visibility_restricted' && restricted.organizationId === publicCatalog[1]
+          ? NextResponse.next() : notFound();
+      }
       if (!response.ok) return unavailable();
       const published = await response.json() as { organizationId?: string };
       return published.organizationId === publicCatalog[1] ? NextResponse.next() : notFound();

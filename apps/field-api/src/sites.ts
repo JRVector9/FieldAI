@@ -347,7 +347,7 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
       `select a.object_key, a.sha256 from field.site_assets a
        join field.site_release_assets ra on ra.asset_id = a.id
        join field.site_releases r on r.id = ra.release_id
-       where a.id = $1 and r.revision = (
+       where a.id = $1 and not exists (select 1 from field.site_visibility_holds h where h.site_id=r.site_id and h.released_at is null) and r.revision = (
          select max(latest.revision) from field.site_releases latest where latest.site_id = r.site_id)
        limit 1`, [request.params.id],
     );
@@ -452,6 +452,10 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     const client = await runtime.pool.connect();
     try {
       await client.query('begin');
+      await client.query('select id from field.sites where id=$1 for update', [site.id]);
+      if ((await client.query('select 1 from field.site_visibility_holds where site_id=$1 and released_at is null', [site.id])).rowCount) {
+        await client.query('rollback'); return reply.code(409).send({ error: 'site_visibility_restricted' });
+      }
       const draft = await client.query<{ revision: number; content: SiteContent }>(
         'select revision, content from field.site_drafts where site_id = $1 for update', [site.id],
       );
@@ -561,6 +565,8 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
        where s.slug = $1 order by r.revision desc limit 1`, [request.params.slug],
     );
     if (!result.rows[0]) return reply.code(404).send({ error: 'site_not_found' });
+    if ((await runtime.pool.query('select 1 from field.site_visibility_holds where site_id=$1 and released_at is null',
+      [result.rows[0].site_id])).rowCount) return reply.header('Cache-Control', 'no-store').code(404).send({ error: 'site_visibility_restricted', organizationId: result.rows[0].organization_id });
     const row = result.rows[0];
     const siteOrigin = publicSiteOrigin(request.params.slug);
     const installation = siteOrigin && await runtime.pool.query<{ ap_public_id: string; mode: 'inline' | 'floating' }>(

@@ -1,0 +1,15 @@
+.field-moderation-dialog{box-sizing:border-box;width:min(560px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overflow:auto;border:1px solid #dce1e9;border-radius:20px;padding:24px;color:#17212e;background:#fff;font-size:16px;line-height:1.65}
+.field-moderation-dialog::backdrop{background:rgb(20 30 45 / 40%)}
+.field-site-report-button{min-height:44px;border:0;background:transparent;padding:10px 0;color:inherit;font-size:14px;cursor:pointer;text-align:left}
+.field-moderation-dialog p,.field-moderation-panel p{overflow-wrap:anywhere;white-space:pre-wrap}
+.field-moderation-dialog code,.field-moderation-panel code{overflow-wrap:anywhere;font-size:14px}
+.field-moderation-panel{box-sizing:border-box;max-width:100%;margin:24px 0;padding:24px;border:1px solid #dce1e9;border-radius:18px;background:white;color:#17212e;font-size:16px;line-height:1.65}
+.field-moderation-panel h2{font-size:22px}.field-moderation-panel h3{font-size:18px}
+.field-moderation-case,.field-moderation-access{margin:16px 0;padding:18px;border:1px solid #dce1e9;border-radius:14px}
+.field-moderation-panel button,.field-moderation-dialog button,.field-moderation-owner>button{min-height:44px;max-width:100%;padding:10px 16px;border:1px solid #cdd5e1;border-radius:10px;background:#f5f8fc;color:#17212e;font-size:16px;white-space:normal}
+.field-moderation-panel input,.field-moderation-panel textarea,.field-moderation-panel select,.field-moderation-dialog input,.field-moderation-dialog textarea,.field-moderation-dialog select{box-sizing:border-box;max-width:100%;min-width:0;font-size:16px}
+.field-moderation-panel textarea,.field-moderation-dialog textarea{min-height:120px}
+.field-moderation-snapshot dl div,.field-moderation-snapshot article{margin:16px 0}.field-moderation-snapshot dt,.field-moderation-snapshot h4{font-size:16px;font-weight:700}.field-moderation-snapshot dd{margin:4px 0;overflow-wrap:anywhere;white-space:pre-wrap}
+.field-moderation-check{display:flex;gap:12px;align-items:flex-start}.field-moderation-check input{width:auto;flex-shrink:0;margin-top:6px}
+.field-moderation-owner{max-width:900px;margin:auto;padding:24px 16px}.field-moderation-owner nav{display:flex;flex-wrap:wrap;gap:16px;font-size:16px}
+@media(max-width:600px){.field-moderation-panel{padding:16px}.field-moderation-case,.field-moderation-access{padding:12px}.field-moderation-dialog{padding:20px}}

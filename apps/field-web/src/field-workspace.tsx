@@ -14,7 +14,7 @@ import { inquiryDeliveryLabel } from "./field-notification-label";
 
 type Phase = "loading" | "failed" | "auth" | "organization" | "catalog";
 type OwnerNotification = { id: string; organizationId: string; targetId: string;
-  targetKind: "inquiry" | "reservation" | "external_request";
+  targetKind: "inquiry" | "reservation" | "external_request" | "moderation_report";
   eventType: string; createdAt: string; readAt: string | null };
 type ExternalInquiry = { id: string; service: Service; customerName: string; customerPhone: string;
   customerVerified: boolean; summary: string; status: "requested"; receivedAt: string; isTest: boolean;
@@ -29,6 +29,8 @@ type ApMessage = { id: string; sequence: string; actor: "customer" | "owner"; bo
 type ApReplyDraft = { body: string; expectedRevision: number;
   state: "pending" | "delivery_unknown" | "revision_conflict" };
 const notificationLabels: Record<string, string> = {
+  "field.moderation.review": "사업 안내 신고 검토 결과",
+  "field.moderation.appeal-decision": "사업 안내 신고 이의 결정",
   "field.inquiry.created": "새 직접 문의",
   "field.inquiry.customer_message": "고객 추가 질문",
   "field.external_request.accepted": "AP에서 전달된 문의",
@@ -96,7 +98,7 @@ export function FieldWorkspace() {
   const [catalog, setCatalog] = useState<DraftCatalog | null>(null);
   const [releaseRevision, setReleaseRevision] = useState<number | null>(null);
   const [catalogReleaseState, setCatalogReleaseState] = useState<"loading" | "ready" | "failed">("loading");
-  const [sitePublicationState, setSitePublicationState] = useState<"loading" | "ready" | "failed">("loading");
+  const [sitePublicationState, setSitePublicationState] = useState<"loading" | "ready" | "failed" | "restricted">("loading");
   const [sitePublishedRevision, setSitePublishedRevision] = useState<number | null>(null);
   const [sitePublicUrl, setSitePublicUrl] = useState<string | null>(null);
   const [servicesEditorOpen, setServicesEditorOpen] = useState(false);
@@ -416,7 +418,7 @@ export function FieldWorkspace() {
       const slug = (draft.data as { slug: string }).slug;
       if (!/^field-[0-9a-f]{12}$/.test(slug)) { setSitePublicationState("failed"); return; }
       const released = await requestJson(`/v1/public/sites/${slug}`);
-      if (released.status === 404) { setSitePublicationState("ready"); return; }
+      if (released.status === 404) { setSitePublicationState((released.data as { error?: string }).error === "site_visibility_restricted" ? "restricted" : "ready"); return; }
       if (released.status !== 200) { setSitePublicationState("failed"); return; }
       const value = released.data as { siteRevision: number; siteOrigin: string | null };
       setSitePublishedRevision(value.siteRevision);
@@ -701,6 +703,9 @@ export function FieldWorkspace() {
     }
     if (item.organizationId !== catalog?.organizationId) {
       setStatus("이 알림은 다른 Field 조직의 요청입니다. 해당 조직 작업 공간에서 확인해 주세요.");
+    } else if (item.targetKind === "moderation_report") {
+      window.location.assign('/workspace/moderation');
+      return;
     } else if (item.targetKind === "inquiry") {
       showOwnerSection("inbox");
       setInboxFilter("all"); setInboxSearch("");
@@ -809,9 +814,9 @@ export function FieldWorkspace() {
   const reservationSummaryState = reservationsLoadState;
   const todayRecordsFailed = inquirySummaryState === "failed" || reservationSummaryState === "failed" || notificationLoadState === "failed";
   const todayRecordsReady = inquirySummaryState === "ready" && reservationSummaryState === "ready" && notificationLoadState === "ready";
-  const sitePublicationLabel = sitePublicationState === "failed" ? "확인 불가"
+  const sitePublicationLabel = sitePublicationState === "restricted" ? "공개 제한" : sitePublicationState === "failed" ? "확인 불가"
     : sitePublicationState === "loading" ? "확인 중" : sitePublishedRevision === null ? "초안" : "공개";
-  const sitePublicationDetail = sitePublicationState === "failed" ? "공개 상태 조회 실패"
+  const sitePublicationDetail = sitePublicationState === "restricted" ? "신고·검토 결과에서 확인" : sitePublicationState === "failed" ? "공개 상태 조회 실패"
     : sitePublicationState === "loading" ? "공개 상태 확인 중"
       : sitePublishedRevision === null ? "공개 전" : `사이트 ${sitePublishedRevision}번`;
   const catalogReleaseLabel = catalogReleaseState === "failed" ? "확인 불가"
@@ -927,6 +932,7 @@ export function FieldWorkspace() {
         <button type="button" onClick={() => showOwnerSection("notifications")}><span aria-hidden="true">♧</span>알림 {unreadCount > 0 ? `${unreadCount}건` : "설정"}<b aria-hidden="true">›</b></button>
         <a href="/workspace/subscription"><span aria-hidden="true">▣</span>구독·운영 데이터<b aria-hidden="true">›</b></a>
         <a href="/workspace/usage"><span aria-hidden="true">▥</span>사용량 보기<b aria-hidden="true">›</b></a>
+        <a href="/workspace/moderation"><span aria-hidden="true">!</span>신고·검토 결과<b aria-hidden="true">›</b></a>
       </div><section className="field-owner-more-business"><h2>{catalog.businessName.trim() || "새 사업체"}</h2><p>{catalog.region.trim() || "지역 미등록"} · {catalog.openingHours.trim() || "운영시간 미설정"}</p><div>{catalogReleaseState === "failed" ? "사업 정보 승인 상태 확인 불가" : catalogReleaseState === "loading" ? "사업 정보 승인 상태 확인 중" : releaseRevision === null ? "사업 정보 승인 전" : `사업 정보 ${releaseRevision}번 승인`}{dirty ? " · 화면에 미저장 변경 있음" : catalogReleaseState === "ready" && releaseRevision !== null && releaseRevision !== catalog.revision ? " · 새 초안은 미승인" : ""}</div><p>홈페이지와 직접 문의·예약은 Field에서, 상담 AI는 연결된 AP에서 관리합니다.</p><button type="button" disabled={busy || dirty || catalogSaveState === "saving" || Boolean(apReplyBody.trim()) || Boolean(replyBody.trim()) || Boolean(noteBody.trim())} onClick={() => void signOut()}>로그아웃</button>{(dirty || catalogSaveState === "saving" || apReplyBody.trim() || replyBody.trim() || noteBody.trim()) && <p>작성 중인 내용을 저장하거나 비운 뒤 로그아웃할 수 있습니다.</p>}</section></section>}
       {phase === "catalog" && catalog && <><section className="field-owner-services" id="owner-services"><div className="field-owner-services-heading"><div><h1>서비스</h1><p>사이트와 예약 요청에 사용할 서비스를 관리합니다. AP 상담 정보는 별도 승인 후 반영됩니다.</p></div><button type="button" disabled={catalog.services.length >= 100} onClick={addService}>＋ 서비스 추가</button></div>
         {catalog.services.length === 0 ? <div className="field-owner-services-empty"><h2>등록된 서비스가 없습니다.</h2><p>서비스를 추가해 고객에게 보여 줄 내용과 예약 방식을 입력해 주세요.</p></div> : <div className="field-owner-service-cards">{catalog.services.map(service => <article key={service.id} className="field-owner-service-card"><div className="field-owner-service-icon" aria-hidden="true">◫</div><span className="field-owner-service-state">{catalogReleaseState === "failed" ? "승인 상태 확인 불가" : catalogReleaseState === "loading" ? "승인 상태 확인 중" : releaseRevision === null ? "승인 전 초안" : releaseRevision === catalog.revision && !dirty ? "승인본과 일치" : "미승인 변경"}</span><h2>{service.name.trim() || "서비스 이름 입력 필요"}</h2><p>{service.description.trim() || "서비스 설명을 입력해 주세요."}</p><div className="field-owner-service-facts"><span>{service.durationMinutes > 0 ? `${service.durationMinutes}분` : "소요 시간 입력 필요"}</span><span>{(service.bookingMode === "inherit" ? catalog.defaultBookingMode : service.bookingMode) === "slot" ? "시간표 선택형" : "희망시간 제출형"}</span></div><strong className="field-owner-service-price">{service.priceAmount === null ? "가격 미정" : `${service.priceAmount.toLocaleString("ko-KR")}원`}</strong><button type="button" onClick={() => openServiceEditor(service.id)}>수정·승인 관리</button></article>)}</div>}

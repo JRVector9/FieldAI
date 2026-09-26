@@ -59,6 +59,7 @@ export function SiteEditor() {
   const [approvedCatalog, setApprovedCatalog] = useState<Catalog | null>(null);
   const [noSite, setNoSite] = useState(false);
   const [loadState, setLoadState] = useState<"loading" | "ready" | "failed" | "needs_setup">("loading");
+  const [visibilityRestricted, setVisibilityRestricted] = useState(false);
   const [publishedRevision, setPublishedRevision] = useState<number | null>(null);
   const [publishedCatalogRevision, setPublishedCatalogRevision] = useState<number | null>(null);
   const [siteOrigin, setSiteOrigin] = useState<string | null>(null);
@@ -121,6 +122,7 @@ export function SiteEditor() {
       const live = await requestJson(`/v1/public/sites/${value.slug}`);
       if (live.status !== 200 && live.status !== 404)
         return failed(`공개 사이트 상태를 불러오지 못했습니다 (${live.status}). 다시 시도해 주세요.`);
+      setVisibilityRestricted(live.status === 404 && (live.data as { error?: string }).error === "site_visibility_restricted");
       setPublishedRevision(live.status === 200 ? (live.data as { siteRevision: number }).siteRevision : null);
       setPublishedCatalogRevision(live.status === 200 ? (live.data as { catalogRevision: number }).catalogRevision : null);
       setSiteOrigin(live.status === 200 ? (live.data as { siteOrigin: string | null }).siteOrigin : null);
@@ -423,7 +425,8 @@ export function SiteEditor() {
         <p>초안과 카탈로그를 확인한 뒤 사이트 버전을 공개합니다. 다른 제품과 연결하지 않아도 공개할 수 있습니다.</p>
         <p>승인된 카탈로그: {approvedCatalog ? `${approvedCatalog.revision}번` : "없음"}</p>
         {approvedCatalog && publishedCatalogRevision !== null && approvedCatalog.revision > publishedCatalogRevision && <div className="state-message" role="status"><strong>공개 사이트의 사업 정보가 오래되었습니다.</strong><p>현재 카탈로그 {approvedCatalog.revision}번을 반영하려면 새 초안을 저장하고 다시 공개해 주세요.</p><button type="button" disabled={busy || dirty} onClick={() => void save()}>카탈로그 반영용 초안 저장</button></div>}
-        <button type="button" disabled={busy || dirty || !approvedCatalog || site.revision === 0 || publishedRevision === site.revision} onClick={() => void publish()}>현재 초안 공개</button>
+        {visibilityRestricted && <p role="status">사이트 공개가 제한되었습니다. 초안과 이전 공개 버전·기존 문의·예약은 유지됩니다. <a href="/workspace/moderation">신고·검토 결과와 이의 제출</a>을 확인해 주세요.</p>}
+        <button type="button" disabled={visibilityRestricted || busy || dirty || !approvedCatalog || site.revision === 0 || publishedRevision === site.revision} onClick={() => void publish()}>현재 초안 공개</button>
         {dirty && <p>변경 내용을 먼저 저장해 주세요.</p>}
         {publishedRevision !== null && siteOrigin && <section className="knowledge-source" role="region" aria-label={siteOrigin.endsWith(".localhost:3002") ? "사이트 개설 완료" : "사이트 공개본 확인"}>
           <h3>{siteOrigin.endsWith(".localhost:3002") ? "로컬 사이트 개설 완료" : "사이트 공개본 생성"}</h3>

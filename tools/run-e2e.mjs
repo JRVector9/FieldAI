@@ -15,6 +15,7 @@ const suites = {
     ['Field owner, public site, inquiry, and two booking modes', 'field-owner-flow-http.test.mjs'],
     ['Field site autosave and release boundary', 'field-site-autosave-http.test.mjs'],
     ['Field administrator routes and permission boundary', 'field-admin-http.test.mjs'],
+    ['Field report, approved support access, and owner appeal', 'field-moderation-http.test.mjs'],
   ],
   distribution: [
     ['AP publisher recovery', 'publisher-recovery-http.test.mjs'],

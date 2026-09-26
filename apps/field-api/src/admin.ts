@@ -71,7 +71,7 @@ export function registerFieldAdminRoutes(app: FastifyInstance, runtime: FieldBus
       actorUserId: string; resource: string; accessedAt: Date;
     }>(`select actor_user_id as "actorUserId", resource, accessed_at as "accessedAt"
       from field.admin_access_audit order by id desc limit 20`);
-    return { product: 'field', role: member.rows[0].role, snapshotAt: new Date().toISOString(),
+    return { product: 'field', actorUserId: userId, role: member.rows[0].role, snapshotAt: new Date().toISOString(),
       counts: { ...result.rows[0], adminReads: adminReads.rows[0]?.count ?? '0' },
       recentIncidents: incidents.rows, recentAdminAccesses: accesses.rows };
   });

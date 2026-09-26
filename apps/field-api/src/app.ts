@@ -25,6 +25,7 @@ import { registerFieldUsageRoutes } from './usage.js';
 import { registerFieldSubscriptionRoutes } from './subscription.js';
 import { registerExternalRequestAttachmentRoutes } from './external-request-attachments.js';
 import { registerFieldAdminRoutes } from './admin.js';
+import { registerFieldModerationRoutes } from './site-moderation.js';
 
 export function createFieldApp(
   probe: () => Promise<void>,
@@ -37,6 +38,7 @@ export function createFieldApp(
     (_request, body, done) => done(null, body));
   if (businessRuntime) {
     registerFieldAdminRoutes(app, businessRuntime);
+    registerFieldModerationRoutes(app, businessRuntime);
     registerFieldReceiptAbuseGuard(app, businessRuntime);
     registerFieldReceiptRotationRoutes(app, businessRuntime);
     registerFieldBusinessRoutes(app, businessRuntime);
