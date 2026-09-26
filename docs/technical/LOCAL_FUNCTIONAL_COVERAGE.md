@@ -1,6 +1,13 @@
 # 로컬 기능 검수 현황 — 2026-09-26
 
-**최신 완료 원장:** TASKS 상단 내부33개[x]/남은7개[ ]를 따른다. A05.WIDGET-END(fe6a524)와 **A07.F09.PLAN-BASIS(b639a4d)**는 완료 범위로 다시 구현하지 않는다. 유료 전체 A07.F09.PAID의 owner 동의/provider·worker/갱신/해지/환불/제공량/UI는 미완료다. 전체 C03/QA160/출시·사용자 최종 시안 인수는 완료가 아니다. 아래 과거 “남음/다음 작업/runtime”은 당시 이력이며 최신 체크/인계가 우선한다.
+**최신 완료 원장:** TASKS 상단 내부34개[x]/남은7개[ ]를 따른다. WIDGET-END(fe6a524)·PLAN-BASIS(b639a4d)·**CONSENT-BACKEND(1a04815)**는 완료 범위로 다시 구현하지 않는다. 유료 전체 PAID의 인증 발급/청구 worker·갱신/해지/환불/제공량·실 SDK callback/owner/admin UI는 미완료다. 전체 C03/QA160/출시·사용자 최종 시안 인수는 완료가 아니다. 아래 과거 “남음/다음 작업/runtime”은 당시 이력이며 최신 체크/인계가 우선한다.
+
+## 최신 A07.F09.CONSENT-BACKEND — 코드1a04815 / 인증 대기 backend 완료
+
+- AP70/Field64·각 own consent/context/Toss modules·business/app/server/subscription·package unit 등록·새 native/adapter 검사를 TASKS[x]로 체크했다. owner/current session의 승인 경제값/약관/갱신/첫 승인 시각 정책 동의→UUID복구·org/actor/session/mode/MID/nonce/TTL binding·암호화 authKey pending202·미시작 cancel/secret 폐기. 실제 인증 발급/청구/worker/SDK웹 UI는 아직 없다. pending을 결제 성공으로 주장하지 않는다.
+- 실제 own UUID PG17 **84322/76016 exit0 각3/3 fail0/skip0**, /tmp/{ap,field}-paid-consent-final-db.log. 새consent1+유료stub 이동과 직접 관련된 기존trial2만 검사했다. 공급사 fixture port/config의 static import unit 각2/2(/tmp/{ap,field}-toss-static-green.log). 실제 mutation은 synthetic fixture DB에서만 했고 자기UUID DB만 정리했다. root 전체 unit/DB/E2E·실 공급사/UI/QA/G는 미실행이며 이전 전체 AP29/Field30을 합산하지 않는다.
+- 마지막 API type25047/75781·lint58419·build62281/60371 exit0. native23026/27493 503≠201·MID6029/31312 202≠409·provider/context 부재 red를 실제 수정했다. 감사92527 gpt-6-sol/high exit0: No concrete P1/P2 defects found. raw confidence 미출력·static/read-only이며 자체 테스트 미실행.
+- 최신 managed73001 /tmp/paid-consent-managed-runtime.log에 build/migrate/양API ready·양웹200·신규 API 무인증401·양 retention worker를 확인했고 own DB의 AP000070/Field000064·binding4열을 실제 조회했다. 53591은 Ctrl+C 뒤 terminalexit1/ELIFECYCLE(정상0으로 보고하지 않음)이며 현재 controller74228·자체 worker75278/75296 한 개씩의 snapshot으로 중복 부재를 확인했다. 기존70/64 수정 금지·다음 schema71/65. PG키 부재 checkout503·제작 LLM blocked는 계속 유지된다.
 
 ## 최신 A07.F09.PLAN-BASIS — 코드 b639a4d / 내부 저장 기반 완료
 

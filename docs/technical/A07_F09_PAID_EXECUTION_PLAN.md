@@ -21,7 +21,8 @@
 
 - [x] native plan route404와 승인/권한/멱등/불변 가격·월말 규칙의 실패를 먼저 실행한다. AP24059·Field10713 plan404, AP53054/calendar 부재 실제 red 기록.
 - [x] **A07.F09.PLAN-BASIS 완료 checkpoint / b639a4d:** plan 요청/다른 operator 승인/판매 중지·자체 read API와 immutable plan/consent/기간 저장 기반, 월말 계산. 최종 repair4350 exit0/남은P1/P2 없음·focused DB 각3/3·managed53591 migrate/build/ready·양웹200, TASKS도 같은 세부 ID로 체크했다. owner 동의와 결제 성공 범위는 포함하지 않는다.
-- [ ] owner만 명시 plan/terms/자동갱신 동의, 기존 원장을 참조하는 authorization/transaction 생성을 구현한다. 한 조직의 동시 활성 구독/미확인 결제는 한 개다.
+- [x] **A07.F09.CONSENT-BACKEND / 1a04815:** owner/current session의 명시 plan/terms/자동갱신/첫 승인 시각 정책 동의→한 consent/authorization·동일 UUID 복구, org/actor/session/mode/MID/nonce/TTL binding·암호화 authKey pending202·미시작 cancel/비밀값 폐기와 product-owned Toss/context port. native84322/76016 각3/3·adapter 각2/2·마지막 type/lint/build·독립92527 exit0/추가P1/P2 없음, managed73001 반영. **인증 발급/청구 worker·실 SDK 화면/카드 인증 성공은 포함하지 않는다.**
+- [ ] 첫 transaction/period 생성·authorization 발급/청구 실행은 다음 worker 단계다. 한 조직의 동시 활성 구독/미확인 결제는 한 개이며 기존 pending을 fake paid로 바꾸지 않는다.
 - [x] 최초 기준일(Asia/Seoul)을 유지해 1월31→2월말→3월31로 계산한다. 실제 기간은 `(subscription_id,billing_period)` 유일하고 계획된 금액/세금·consent version은 수정하지 않는다. 승인 plan과 consent binding·기간 overlap23P01/인접 허용까지 native DB38087/75037 각3/3·calendar95519 각1/1 실제 확인했다. 최초 결제 기준시각 채택은 provider 실행 단계에서 추가한다.
 - [ ] 격리 DB에서 owner/editor/외부 org·동의 누락·미승인 plan·불변 원장·현재 상태를 검수한다.
 
@@ -53,6 +54,13 @@ assert.equal(response.statusCode, 201, response.body);
 ```
 
 ## 2. 실제 provider port/거래 실행·미상 복구·갱신/해지
+
+### 현재 선택한 미완료 범위 — A07.F09.CONSENT-AUTH (2026-09-26)
+
+- HEAD9734843/status clean·TASKS33[x]/7[ ]를 확인했다. 직전 turn은 PLAN-BASIS 구현/검수/commit·최신 managed53591 반영의 progress다. 이미 체크한 저장 기반/월말/trial/usage/위젯/보존/회수를 재구현하지 않는다.
+- 먼저 product-owned Toss HTTP port와 별도 키/암호화 환경 검증, owner checkout의 승인 경제값/약관/자동 갱신/첫 승인 시각 정책 명시 동의→같은 UUID 복구·카드 인증 callback nonce/actor binding→암호화 authKey queued 상태를 구현한다. 신규 raw 카드 입력은 받지 않고 실제 카드 청구는 하지 않는다. queued는 인증 발급/결제 성공이 아니다.
+- 파일 범위: 각 src/toss-billing.ts/billing-context.ts/billing-consent-routes.ts·business.ts/server.ts/app.ts/subscription.ts, AP70/Field64 추가 migration(이미 적용한69/63은 변경하지 않음), 각 test/toss-billing.adapter.test.ts/paid-billing-consent.db.test.ts·package unit 등록. 환경 설명/phase/이 인계도 같은 단계에 기록한다. 이후 worker/실행/갱신/환불/제공량/UI는 계속 남은 PAID 범위다.
+- 관련 요구/검수: AP PRD2.8·Field3.8·보안5.4/5.5·QA43~46/113/126/146 저장/동의 부분. 각 own UUID PG17 새 consent 파일과 실제 adapter request/response 검사, 변경 범위 type/lint/build·좁은 CLI 리뷰만 실행한다. 외부 Toss HTTP는 fixture fetcher에서만 재현하며 live 호출·가격/MFA/법무·출시 게이트는 미실행이다.
 
 **Files:** 각 src/toss-billing.ts·billing-worker.ts·billing.ts·billing-routes.ts/server.ts; 각 package.json, tools/mock-run.mjs·환경 template; 각 test/toss-billing.adapter.test.ts·paid-billing.db.test.ts.
 

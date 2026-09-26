@@ -12,12 +12,40 @@
 
 - 사용자가 **“완료된 작업은 체크하고, 에이전트가 잊고 같은 작업을 다시 하지 않도록 반드시 지켜”**라고 명시했다.
 - 작업 재개 전에 `TASKS.md` 상단 **완료 체크 — 재작업 방지 기준**을 먼저 읽는다. 이 목록이 완료 세부 ID의 기준 원장이다. 상세 규칙은 `AGENTS.md`6.1. 기억 부재/compaction으로 완료 항목을 재구현·검수 반복하지 않는다.
-- 최초 체크 정리는 현재 로그/AP29·Field30/commit/source와 기존 evidence로 로컬 완료31개[x]/잔여8개[ ]를 기록했다. 위젯(fe6a524) 완료 당시32개[x]/7개[ ]였고, **A07.F09.PLAN-BASIS(b639a4d)** 추가로 현재 **33개[x]/7개[ ]**다. 아래 최신 단계와 TASKS 원장이 우선한다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다. phase plan에서 이미 구현된 AP native 회수5개가 아직 `[ ]`였던 것을 실제 결과에 맞춰 `[x]`로 수정했다.
+- 최초 체크 정리는 로컬 완료31개[x]/잔여8개[ ]였고 위젯(fe6a524)·PLAN-BASIS(b639a4d)를 거쳐 **CONSENT-BACKEND(1a04815)** 추가로 현재 **34개[x]/7개[ ]**다. TASKS 상단이 최신 세부 원장이며 과거 개수는 당시 이력이다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다.
 - 신규 오류/요구변경/현재상태 불일치가 확인됐을 때만 같은 완료 ID에 재개 사유·증거·추가 범위를 먼저 기록한다. 이전 완료 근거/commit은 삭제하지 않는다.
-- 변경 파일: AGENTS.md·TASKS.md·PHASE_2_EXECUTION_PLAN·DEVELOPMENT_REMAINING_AUDIT·이 인계. 문서 변경으로 서비스 테스트 재실행 없음, diff 체크만 수행. 현재 mock36780 양 ready/생존을 실제 재확인했다.
+- 최초 체크 정리 당시 변경 파일: AGENTS.md·TASKS.md·PHASE_2_EXECUTION_PLAN·DEVELOPMENT_REMAINING_AUDIT·이 인계. 문서 변경으로 서비스 테스트 재실행 없이 diff 체크만 수행했고 당시 mock36780 양 ready/생존을 재확인했다. 지금 runtime/체크는 아래 최신 단계가 우선한다.
 - 원래 진행 목표는 계속 전체 v3/C03 로컬 기능이다. 체크 정리 당시 다음은 A05.WIDGET-END였으며 현재 진행 상태는 바로 아래 별도 세부 작업 기록을 따른다.
 
-## 현재 인수인계 — A07.F09.PLAN-BASIS 완료 (2026-09-26)
+## 현재 인수인계 — A07.F09.CONSENT-BACKEND 완료 (2026-09-26)
+
+- **목표/착수:** 전체 v3/C03 서비스와 사용 가능한 독립 로컬 환경 구축은 active. 직전 turn은 가격/기간 기반 b639a4d와 완료 체크9734843·managed53591 반영의 progress였다. 현재 TASKS33[x]/7[ ]·HEAD9734843/status clean을 실제 확인하고 남은 PAID의 owner 동의/인증을 선택했다. 이미 체크한 PLAN-BASIS/trial/usage/위젯/보존/회수는 다시 구현하지 않는다.
+- **완료/변경/commit:** backend 내부 범위 implemented/아래 local verified, 코드 **1a04815**. AP70/Field64, 각 src/toss-billing.ts/billing-context.ts/billing-consent-routes.ts·business/app/server·subscription 유료503 stub 이동·package unit 등록, 새 test/toss-billing.adapter.test.ts/paid-billing-consent.db.test.ts의22파일. paid plan에 범위/QA/명령을 먼저 기록했고 TASKS34[x]/7[ ]·phase/coverage/audit/인계·BILLING_PROVIDER_SETUP/옵시디언을 같은 checkpoint로 갱신했다. QA43~46/113/126/146 저장/동의 부분이며 전체QA/G 통과가 아니다. 공개 cross-product 계약 변경/다른 제품domain·DB import는 없다.
+- **동작/결정:** 제품별 승인 가격/약관/환불/제공량·자동갱신/인증 후 첫 청구 정책 명시 동의→owner/current session·org 잠금→한 consent/authorization·같은 UUID/본문 복구. SDK 임의 customerKey와 encrypted nonce를 원래 actor/session/org/mode/MID에 묶는다. callback은 원래 session/nonce/customer/MID/TTL을 검증하고 authKey를 AES-GCM/purpose/intent binding으로 암호화해 **pending202**만 저장한다. provider HTTP는 request handler에서 호출하지 않는다. 미시작 cancel은 암호문을 폐기하고 immutable 동의/이벤트/metadata 유지. pending은 카드 인증 발급/결제 성공이 아니다.
+- **port/config:** 각 Toss issue/charge/order lookup HTTP port는 동일 request key header·고정 공식 HTTPS endpoint·65초 timeout·MID/order/currency/amount binding, provider 메시지를 제외한 안전 오류를 사용한다. 지금 공급사 오류는 보수적으로 unknown이며 확정 거절/실제 worker·환불은 다음 구현 범위다. own5설정(client/secret/MID/credential key/web origin), test/live mismatch/partial 설정/production test 거절. 모든 PG key가 없는 서버는 정상 부팅/checkout503·원장0, 실제 key/예시 paid/fixture fallback을 native runtime에 넣지 않는다.
+- **실제 red/검사:** 최초editor404≠403은 기존 stub의 owner 필터 상태라 feature red로 사용하지 않았고 owner checkout을 먼저 검사했다. native **23026/27493 checkout503≠201 red→50456/37020 각1/1**. provider/context 모듈 부재24400/78015·67342/18450 red→각2/2; static import 후 /tmp/{ap,field}-toss-static-green.log 각2/2 exit0. 중간 PG 상점 변경을 허용한 **6029/31312 202≠409 red→mode/MID immutable binding·97340/78359 각1/1**.
+- **마지막 검수/환경:** Node24.18.0·own UUID PG17, `/tmp/ap-paid-consent-run-db.mjs` **84322**, Field equivalent **76016 exit0 각3/3 fail0/skip0** /tmp/{ap,field}-paid-consent-final-db.log(새1+stub 이동 관련 기존trial2). owner/editor·동의/가격·다른org/session/Origin·TTL·MID·동일nonce복구·다른authKey409·raw secret 비저장·billing period0/consent1·취소 ciphertext null/oldconfirm409/newintent를 확인했다. API type25047/75781·lint58419·build62281/60371 exit0. API auth resolver와 HTTP supplier는 명시 synthetic fixture이며 실 로그인/PG browser evidence가 아니다. 전체 unit/DB/E2E/QA/G·새SDK웹 UI/실기기/실 PG는 미실행. 테스트는 자기 UUID DB만 정리했다.
+- **최종 리뷰:** gpt-6-sol/high **92527 exit0**, /tmp/paid-consent-independent-audit.log: **No concrete P1/P2 defects found in the current uncommitted A07.F09.CONSENT-AUTH backend and Toss port for either product**. raw confidence 미출력. read-only/static이며 자체 테스트·provider 호출/수정 없음. 실제 DB/HTTP fixture 검사는 위 root 결과다. 최초 checkout stub/filter red와 MID변경202은 실제 수정/검수했고 release 성공으로 포장하지 않았다.
+- **현재 environment / migration:** 확인된53591에 Ctrl+C를 보내 terminal exit1/ELIFECYCLE을 관찰했다(정상exit0로 보고하지 않음, 상세 원인은 미입증). 이후 **managed73001**, /tmp/paid-consent-managed-runtime.log가 최신 양제품build/migrate/API ready·양웹200·신규 authorization route 무인증401·각 retention worker ready다. own managed DB에서 AP000070/Field000064와 session/mode/MID/auth_key_hash binding4열을 실제 조회했다. process snapshot에서 tools/mock-run PID74228 한 개, 양 retention worker PID75278/75296가 동일 parent74228 한 개씩임을 확인했다. 이전53591을 재사용/중복 기동하지 않는다. AP http://localhost:3001/workspace / Field http://localhost:3002/workspace. 제작 모델 미설정은 blocked_integration 유지. 이제70/64도 적용/커밋됐으므로 추가 schema는 **AP71/Field65**이며 기존69/63/70/64는 수정하지 않는다.
+- **남은 작업/미검수/복구:** 전체 목표와 A07.F09.PAID는 계속 active/in_progress/[ ]다. 다음은 **인증 발급/거래 worker→같은 주문 미상 복구·갱신/해지→환불/제공량→owner/admin 시안 UI/콜백 페이지**. 현재 SDK return `/billing/return` 웹 페이지는 없으므로 전체 카드 인증 사용자 흐름을 완료 처리하지 않는다. UI 단계에 canonical web origin/로그인 cookie host/프록시 origin을 실제 브라우저로 대조해야 한다. 원 기준 owner/billing/admin/billing은 직전 basis 단계에서 실제320px로 열었으며 이번 backend에는 native UI를 추가/검수하지 않았다. 실 PG/LLM/MFA/가격·세금·법무·계약/QA/G·사용자 최종 시각 인수는 별도다. 실 카드 청구/고객 발송/운영 삭제/외부 배포 없음. consent/event/법정 metadata를 삭제하거나 pending을 paid로 rollback하지 않는다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+sed -n '1,66p' TASKS.md
+git status --short
+git log -2 --oneline
+tail -n 45 /tmp/paid-consent-independent-audit.log
+cat docs/technical/BILLING_PROVIDER_SETUP.md
+cat apps/agent-api/src/billing-consent-routes.ts
+cat apps/field-api/src/billing-consent-routes.ts
+cat apps/agent-api/src/toss-billing.ts
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+다음 새 worker/청구/해지 범위는 paid plan에 기록하고 native 실패부터 진행한다. 92527은 종료됐으며 반복 poll/재검토하지 않는다. 73001은 실제 확인해 유지하고 최신 코드 반영이 필요한 때만 정상 종료 후 재기동한다. 적용/커밋70/64는 변경하지 않고 새 schema는71/65다. 완료한 가격·동의 backend/port를 다시 만들지 않는다. 새 backend의 공식 API 검수/현 상태는 위가 우선한다.
+
+## 완료 기록 — A07.F09.PLAN-BASIS (2026-09-26)
 
 - **Objective / Task / Product / Owner / State:** 전체 v3/C03 기능과 사용 가능한 로컬 환경 구축은 active/in_progress. 이번은 A07.F09.PLAN-BASIS / AP와 Field 각 자체 소유 경로 / 순차 Coordinator·AP·Field / implemented 및 아래 내부 범위 verified. 직전 goal 턴은 위젯/체크의 progress였고 이번도 실제 코드·검수·런타임·완료 체크의 progress다. main A07.F09.PAID 전체·QA160·출시는 미완료다.
 - **완료/코드 commit:** **b639a4d**, 가격 버전 요청→다른 operator 승인→판매 중지, 승인 불변·제품별 자체 조회, immutable consent/plan snapshot·기간 중복/겹침 차단, 원래 KST 일시를 유지한 월말 계산. TASKS33[x]/7[ ]·paid plan/phase/coverage/audit를 같은 checkpoint에 갱신했다. 이 ID를 기억 부재로 재작업하지 않는다. owner 유료 동의/카드 인증/결제 성공·worker/갱신/해지/유예/환불/제공량/UI는 포함하지 않는다.
