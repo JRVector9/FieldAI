@@ -55,6 +55,17 @@ assert.equal(response.statusCode, 201, response.body);
 
 ## 2. 실제 provider port/거래 실행·미상 복구·갱신/해지
 
+### 현재 선택 — A07.F09.FIRST-CHARGE (2026-09-27)
+
+- 착수: HEAD76a094a/status clean·TASKS35[x]/7[ ]·managed48041 실제 live를 확인했다. 직전 AUTH-ISSUE 구현/검수/체크/커밋은 progress다. 가격/동의/인증 발급은 완료로 유지하며 남은 첫 청구와 같은 주문 결과 대조만 추가한다.
+- 새 schema: AP72/Field66, 가격/동의/기간의 명시 taxFreeAmount(미지정 legacy는 null/자동 청구 차단), 첫 period0의 승인 전 날짜 null→원격 approvedAt 최초 한 번 확정, 기간 겹침/경제값 불변 유지, 거래의 MID/API key fingerprint/claim·첫 시작 불변. 적용69~71/63~65는 수정하지 않는다.
+- **완료 ID 추가 범위/근거:** PLAN-BASIS(b639a4d)와 CONSENT-BACKEND(1a04815)의 기존 체크는 유지한다. 최초 청구 연결에 필요한 명시 면세 snapshot/owner 대조·Toss port의 비밀키 fingerprint만 확장한다. 현재 plan/consent에는 면세값이 없고 모든 공급사 호출의 멱등성은 API key까지 묶인다([공식 헤더](https://docs.tosspayments.com/reference/using-api/authorization)). VAT로 면세를 추정하거나 키 회전 뒤 같은 멱등키로 재청구하지 않기 위한 새 범위다. 기존 승인 가격을 자동 수정/채움하지 않는다. 기존 가격 요청은 면세 미지정으로 보존하며 새 명시 버전만 청구 가능하다.
+- 경로: 각 billing-charge-execution.ts·billing-charge-worker.ts·test/billing-charge.db.test.ts와 새 migration, 기존 billing/routes/consent 및 Toss metadata·package·managed worker 시작, 해당 port/config 검사와 기록 문서. 공개 cross-product 계약/다른 제품 domain·DB·UI는 변경하지 않는다.
+- 요구/검수: AP PRD2.8·Field3.8·보안5.4/5.5·QA43~46/113/126/146 첫 거래/미상 복구 부분. native 승인 plan→동의→인증발급→period/transaction pending→durable claim→fixture charge/timeout→같은 order 조회를 먼저 red로 재현한다. 동시/미시작 stop·MID/key 변경·암호문·stale result·금액/세금/날짜 불일치·15일창을 own UUID PG17에 검사한다. supplier HTTP는 synthetic fetcher만 사용하며 실제 카드 청구/PG·UI·전체 QA는 미실행이다.
+- 다음 갱신/해지/유예·확정 오류 분류·환불/entitlement·SDK callback/owner/admin UI는 별도 남은 PAID다. 이번 active/paid 반영은 해당 원격 DONE 검증에만 한정하며 production fixture/fake 성공은 없다.
+
+- [ ] 첫 청구 실행과 동일 order 결과 미상 복구를 구현·검수하고 세부 완료 원장에 체크한다.
+
 ### 현재 선택 — A07.F09.AUTH-ISSUE (2026-09-26)
 
 - 착수 근거: HEAD ed196d2, 작업트리 clean, TASKS 34개[x]/7개[ ]. CONSENT-BACKEND(1a04815)는 완료로 유지한다. 이번은 queued authKey를 실제 공급사 billingKey로 발급하는 제품별 worker와 재시작 복구다.

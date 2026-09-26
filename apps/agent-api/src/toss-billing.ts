@@ -1,8 +1,10 @@
+import { createHash } from 'node:crypto';
+
 export type BillingPayment = { paymentKey: string; orderId: string; status: string; totalAmount: number;
   balanceAmount: number; taxFreeAmount: number; suppliedAmount: number; vat: number; approvedAt: string | null };
 export type BillingCharge = { billingKey: string; customerKey: string; orderId: string; orderName: string;
   amount: number; taxFreeAmount: number; requestKey: string };
-export type BillingProvider = { mode: 'test' | 'live'; clientKey: string; mid: string;
+export type BillingProvider = { mode: 'test' | 'live'; clientKey: string; mid: string; keyFingerprint?: string;
   issue: (input: { authKey: string; customerKey: string; requestKey: string }) => Promise<string>;
   charge: (input: BillingCharge) => Promise<BillingPayment>;
   lookup: (orderId: string) => Promise<BillingPayment | null> };
@@ -51,6 +53,7 @@ export function createTossBillingProvider(config: { mode: 'test' | 'live'; mid: 
       vat: Number(v.vat), approvedAt: v.approvedAt as string | null };
   }
   return { mode: config.mode, clientKey: config.clientKey, mid: config.mid,
+    keyFingerprint: createHash('sha256').update(config.secretKey).digest('hex'),
     async issue({ authKey, customerKey, requestKey }) {
       if (!str(authKey, 300) || !str(customerKey, 50)) throw new Error('invalid_billing_authorization');
       const v = await request('/v1/billing/authorizations/issue', 'POST', { authKey, customerKey }, requestKey);

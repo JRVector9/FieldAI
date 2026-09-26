@@ -1,6 +1,6 @@
 # 제품별 구독 PG 설정 — 구현 중
 
-현재 구현 범위는 승인 가격의 명시 동의·SDK 카드 인증 준비·콜백의 암호화 대기 저장, Toss HTTP port와 제품별 인증 발급 worker다. 실제 청구 worker·갱신/환불·제공량·콜백 페이지/결제 UI는 아직 구현 중이다. 아래 설정만으로 전체 유료 구독이 완료되지 않는다. 외부 설정은 사용자의 후속 기능 테스트 때 연결한다.
+현재 구현 범위는 승인 가격의 명시 동의·SDK 카드 인증 준비·콜백의 암호화 대기 저장, Toss HTTP port·인증 발급 worker·첫 청구와 동일 주문 결과 조회다. 갱신/해지/유예·환불·제공량·콜백 페이지/결제 UI는 아직 구현 중이다. 아래 설정만으로 전체 유료 구독이 완료되지 않는다. 외부 설정은 사용자의 후속 기능 테스트 때 연결한다.
 
 ## 각 제품의 자체 환경변수
 
@@ -35,7 +35,20 @@ node --env-file=infra/field/.env apps/field-api/dist/billing-authorization-worke
 # 위 명령에 --once를 추가하면 한 번 처리한 뒤 종료한다.
 ```
 
-청구 worker는 저장된 같은 order만 조회하도록 후속 구현한다. 현재 port의 공급사 오류는 보수적으로 unknown이며 확정 거절/유예 처리와 환불 API는 미완료다. HTTP fixture/provider는 테스트 주입이며 runtime fallback이 아니다.
+첫 청구 worker는 인증 발급 완료 뒤 period0/transaction/order/request를 저장하고, 날짜는 실제 승인까지 null로 유지한다. 첫 시작·MID·서버 API key의 비가역 fingerprint·customer/orderName·암호화 billingKey snapshot을 호출 전에 기록한다. 180초 lease는 조회와 청구의65초 timeout 두 번을 포함한다. 응답 유실/만료 lease는 같은 order를 GET으로 조회하고, 없음이 확인되면 원래 fingerprint/본문/멱등키로만 재요청한다. 키 변경·미시작 중지·멱등창 종료2분 전에는 새 POST를 하지 않는다. 조회는 이후에도 가능하며 기존 미상 원장을 초기화하지 않는다.
+
+현재 `DONE`·원래 order/금액/잔액/면세/부가세·승인시각 검증 후에만 period0를 실제 approvedAt 기준으로 확정하고 paymentKey를 암호화해 저장한다. 먼저 시작한 원장이 없는 공급사 성공을 모의하지 않는다. 조회된 ABORTED/EXPIRED는 해당 시도를 실패로 확정한다. 다른 HTTP 공급사 오류는 보수적으로 unknown이며 확정 거절 분류/유예와 환불은 후속이다. HTTP fixture/provider는 테스트 주입이며 runtime fallback이 아니다.
+
+```bash
+node --env-file=infra/agent/.env apps/agent-api/dist/billing-charge-worker.js
+node --env-file=infra/field/.env apps/field-api/dist/billing-charge-worker.js
+```
+
+## 명시 세금 조건과 이전 원장
+
+새 청구용 가격에는 운영자가 `taxFreeAmount`를 명시하고 다른 운영자가 해당 버전을 승인해야 한다. [공식 세금 계산](https://docs.tosspayments.com/guides/v2/learn/tax)에 따라 total/vat/taxFree의 일치를 검증한다. 기존 supplyAmount는 total-vat의 전체 순금액이고 공급사 응답의 과세 suppliedAmount+taxFreeAmount와 대조한다. 기존 승인 가격/동의의 미지정값은 null로 보존하고 자동 청구를 blocked_integration으로 막는다. 승인본을 자동 채우지 않는다.
+
+새 owner 동의는 명시 면세값까지 대조한다. 면세 항목이 없던 이전 가격/동의의 멱등 request digest는 그대로 복구하며, 기존 consent/가격 버전을 수정하지 않는다. 명시 면세값 없는 legacy 가입의 실제 청구는 새 승인 버전과 동의가 준비되어야 한다. API key fingerprint는 native 서버 내부 원장에만 쓰고 SDK/사업자 조회/export에 노출하지 않는다.
 
 ## 공식 API 근거 / 미검수
 

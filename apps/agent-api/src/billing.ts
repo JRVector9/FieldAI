@@ -2,14 +2,14 @@ import type { Pool, PoolClient } from 'pg';
 
 export type BillingPlan = {
   id: string; mode: 'test' | 'live'; name: string; currency: 'KRW'; total_amount: number;
-  supply_amount: number; vat_amount: number; included_ai_units: number; grace_days: number;
+  supply_amount: number; vat_amount: number; tax_free_amount: number | null; included_ai_units: number; grace_days: number;
   terms_version: string; terms_text: string; refund_version: string; refund_text: string;
   reference: string; requested_by: string; approved_by: string | null; approved_at: Date | null;
   retired_at: Date | null; created_at: Date;
 };
 
 export const planView = (p: BillingPlan) => ({ id: p.id, mode: p.mode, name: p.name, currency: p.currency,
-  totalAmount: p.total_amount, supplyAmount: p.supply_amount, vatAmount: p.vat_amount,
+  totalAmount: p.total_amount, supplyAmount: p.supply_amount, vatAmount: p.vat_amount, taxFreeAmount: p.tax_free_amount,
   includedAiUnits: p.included_ai_units, graceDays: p.grace_days, interval: 'month', timeZone: 'Asia/Seoul',
   termsVersion: p.terms_version, termsText: p.terms_text, refundVersion: p.refund_version, refundText: p.refund_text,
   reference: p.reference, requestedBy: p.requested_by, approvedBy: p.approved_by, approvedAt: p.approved_at,
@@ -23,7 +23,7 @@ export async function billingSnapshot(db: Pool | PoolClient, organizationId: str
   const current = subscriptions.rows[0];
   const periods = await db.query(
     `select p.id,p.subscription_id as "subscriptionId",p.billing_period as "billingPeriod",p.starts_at as "startsAt",p.ends_at as "endsAt",
-       p.total_amount as "totalAmount",p.supply_amount as "supplyAmount",p.vat_amount as "vatAmount",p.currency,p.state,
+       p.total_amount as "totalAmount",p.supply_amount as "supplyAmount",p.vat_amount as "vatAmount",p.tax_free_amount as "taxFreeAmount",p.currency,p.state,
        p.paid_at as "paidAt",p.grace_ends_at as "graceEndsAt",p.refunded_amount as "refundedAmount"
      from ap.billing_periods p join ap.paid_subscriptions s on s.id=p.subscription_id
      where s.organization_id=$1 order by p.starts_at desc,p.id desc limit 100`, [organizationId]);

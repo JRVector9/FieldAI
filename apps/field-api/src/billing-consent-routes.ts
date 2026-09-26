@@ -80,7 +80,7 @@ export function registerFieldBillingConsentRoutes(app: FastifyInstance, runtime:
       || ['totalAmount','supplyAmount','vatAmount','includedAiUnits','graceDays'].some(k => !Number.isSafeInteger(b[k])))
       return fail(reply, 400, 'explicit_billing_consent_required');
     const key = hash(rawKey), digest = hash(JSON.stringify(['checkout', a.org, b.planId, b.termsVersion,b.refundVersion,
-      b.totalAmount,b.supplyAmount,b.vatAmount,b.currency,b.includedAiUnits,b.graceDays,b.autoRenew,b.firstChargePolicy]));
+      b.totalAmount,b.supplyAmount,b.vatAmount,...(b.taxFreeAmount === undefined ? [] : [b.taxFreeAmount]),b.currency,b.includedAiUnits,b.graceDays,b.autoRenew,b.firstChargePolicy]));
     const db = await runtime.pool.connect();
     try {
       await db.query('begin'); if (!await lockOwner(db,a)) { await db.query('rollback'); return fail(reply,403,'owner_required'); }
@@ -95,7 +95,7 @@ export function registerFieldBillingConsentRoutes(app: FastifyInstance, runtime:
       const plan = (await db.query<BillingPlan>('select * from field.billing_plans where id=$1 for share',[b.planId])).rows[0];
       if (!plan || !plan.approved_at || plan.retired_at || plan.mode !== mode || plan.terms_version !== b.termsVersion
         || plan.refund_version !== b.refundVersion || plan.total_amount !== b.totalAmount || plan.supply_amount !== b.supplyAmount
-        || plan.vat_amount !== b.vatAmount || plan.included_ai_units !== b.includedAiUnits || plan.grace_days !== b.graceDays) {
+        || plan.vat_amount !== b.vatAmount || plan.tax_free_amount !== (b.taxFreeAmount ?? null) || plan.included_ai_units !== b.includedAiUnits || plan.grace_days !== b.graceDays) {
         await db.query('rollback'); return fail(reply,409,'billing_plan_conditions_changed');
       }
       if ((await db.query('select 1 from field.paid_subscriptions where organization_id=$1 and terminated_at is null',[a.org])).rowCount) {
@@ -104,8 +104,8 @@ export function registerFieldBillingConsentRoutes(app: FastifyInstance, runtime:
       const sub=randomUUID(), id=randomUUID(), customer=randomUUID(), state=`${id}.${randomBytes(32).toString('base64url')}`;
       await db.query('insert into field.paid_subscriptions(id,organization_id,plan_id,customer_key,created_by) values($1,$2,$3,$4,$5)',[sub,a.org,plan.id,customer,a.user]);
       await db.query(`insert into field.billing_consents(id,subscription_id,plan_id,accepted_by,terms_version,refund_version,total_amount,supply_amount,vat_amount,
-        currency,included_ai_units,grace_days,auto_renew,first_charge_policy) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true,'after_authorization')`,
-      [randomUUID(),sub,plan.id,a.user,plan.terms_version,plan.refund_version,plan.total_amount,plan.supply_amount,plan.vat_amount,plan.currency,plan.included_ai_units,plan.grace_days]);
+        currency,included_ai_units,grace_days,auto_renew,first_charge_policy,tax_free_amount) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true,'after_authorization',$13)`,
+      [randomUUID(),sub,plan.id,a.user,plan.terms_version,plan.refund_version,plan.total_amount,plan.supply_amount,plan.vat_amount,plan.currency,plan.included_ai_units,plan.grace_days,plan.tax_free_amount]);
       await db.query(`insert into field.billing_authorizations(id,subscription_id,request_key,callback_token_hash,callback_token_ciphertext,expires_at,session_id,provider_mode,provider_mid)
         values($1,$2,$3,$4,$5,now()+interval '30 minutes',$6,$7,$8)`,[id,sub,randomUUID(),hash(state),sealBilling(state,context.credentialKey,`callback:${id}`),a.session,context.provider.mode,context.provider.mid]);
       await record(db,a,id,sub,plan.id,'consent_accepted',key,digest);

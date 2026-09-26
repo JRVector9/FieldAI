@@ -186,6 +186,11 @@ async function main() {
         environment, managed, error => {
           process.stderr.write(`${error.message}; ${prefix} core remains ready, billing authorization is unavailable\n`);
         }, root, false);
+      start(`${prefix} first charge worker`, process.execPath,
+        [`--env-file=infra/${product}/.env`, `apps/${product}-api/dist/billing-charge-worker.js`],
+        environment, managed, error => {
+          process.stderr.write(`${error.message}; ${prefix} core remains ready, first charge processing is unavailable\n`);
+        }, root, false);
       if (isAgent) {
         start('AP retention worker', process.execPath,
           ['--env-file=infra/agent/.env', 'apps/agent-api/dist/retention-purge-worker.js'],

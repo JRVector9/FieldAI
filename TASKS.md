@@ -49,6 +49,8 @@
 
 ### 남은 작업 — 여기서 다음 세부 ID를 선택한다
 
+**2026-09-27 추가 범위 기록:** 미완료 A07.F09.FIRST-CHARGE를 선택했다. 기존 PLAN-BASIS(b639a4d)·CONSENT-BACKEND(1a04815)의[x]는 유지한다. 최초 청구 연결을 위해 면세 미지정 legacy 차단/명시 승인 taxFreeAmount snapshot·owner 대조와 Toss adapter API-key fingerprint metadata만 확장한다. 현재 원장에 면세값이 없고 공식 멱등키가 API key에도 묶이는 구체적 근거는 paid 실행 계획에 기록했다. 가격/동의/인증 backend 자체를 재구현하지 않는다.
+
 - [ ] **A07.F09.PAID** 남은 첫 청구/거래 worker·동일 주문 미상 대조·주기 생성·갱신/해지/유예/환불·entitlement·실 SDK 콜백/owner/admin UI. PLAN-BASIS(b639a4d)·CONSENT-BACKEND(1a04815)·AUTH-ISSUE(ed61b70)는 완료이며 다시 구현하지 않는다. 전체 카드 인증/결제 흐름과 유료 전체 완료 체크는 남은 기능까지 연결한 뒤 한다.
 - [ ] **A06.F08.DELIVERY** Kakao/SMS/webpush 발송·콜백/unknown 조회·중복/역순/한도·설정/실패확정 fallback.
 - [ ] **F04.CUSTOM-DOMAIN** 자체domain 등록/검증/연결/TLS/대표URL 상태·기본주소 유지/새AP origin.

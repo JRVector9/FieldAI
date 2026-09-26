@@ -50,3 +50,13 @@ test('AP billing configuration and encryption fail closed across profiles and in
   assert.throws(() => billingContextFromEnvironment({ ...env, AP_PROFILE: 'live' }));
   assert.throws(() => billingContextFromEnvironment({ AP_TOSS_CLIENT_KEY: 'test_ck_partial' }));
 });
+
+
+test('billing provider identifies its API key without exposing it', () => {
+  const first = createTossBillingProvider({ mode:'test',mid:'synthetic-mid',clientKey:'test_ck_synthetic',secretKey:'test_sk_synthetic' });
+  const rotated = createTossBillingProvider({ mode:'test',mid:'synthetic-mid',clientKey:'test_ck_synthetic',secretKey:'test_sk_rotated' });
+  const fingerprint = (first as typeof first & { keyFingerprint?: string }).keyFingerprint;
+  assert.match(fingerprint ?? '',/^[a-f0-9]{64}$/);
+  assert.notEqual(fingerprint,(rotated as typeof rotated & { keyFingerprint?: string }).keyFingerprint);
+  assert.doesNotMatch(fingerprint ?? '',/test_sk_/);
+});

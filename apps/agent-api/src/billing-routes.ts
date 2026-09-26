@@ -66,17 +66,18 @@ export function registerAgentBillingRoutes(app: FastifyInstance, runtime: Busine
     if (typeof rawKey !== 'string' || !uuid.test(rawKey) || !name || !termsVersion || !termsText || !refundVersion || !refundText || !reference
       || !['test','live'].includes(String(b.mode)) || !integer(b.totalAmount, 1, 1000000000) || !integer(b.supplyAmount, 0, 1000000000)
       || !integer(b.vatAmount, 0, 1000000000) || Number(b.totalAmount) !== Number(b.supplyAmount) + Number(b.vatAmount)
+      || b.taxFreeAmount !== undefined && (!integer(b.taxFreeAmount,0,Number(b.totalAmount)) || Number(b.vatAmount)!==Math.round((Number(b.totalAmount)-Number(b.taxFreeAmount))/11))
       || !integer(b.graceDays, 0, 30) || !integer(b.includedAiUnits, 1, 10000000))
       return reply.code(400).send({ error: 'invalid_billing_plan' });
     const key = hash(rawKey), requestHash = hash(JSON.stringify(['plan', b.mode, name, b.totalAmount, b.supplyAmount, b.vatAmount,
-      b.includedAiUnits, b.graceDays, termsVersion, termsText, refundVersion, refundText, reference])), db = await runtime.pool.connect();
+      b.includedAiUnits, b.graceDays, termsVersion, termsText, refundVersion, refundText, reference, ...(b.taxFreeAmount === undefined ? [] : [b.taxFreeAmount])])), db = await runtime.pool.connect();
     try {
       await db.query('begin'); const old = await replay(db, actor, key, requestHash);
       if (old) { await db.query('commit'); return reply.code(old.conflict ? 409 : 200).send(old.conflict ? { error: 'idempotency_conflict' } : old.value); }
       const id = randomUUID();
       await db.query(`insert into ap.billing_plans(id,mode,name,total_amount,supply_amount,vat_amount,included_ai_units,grace_days,
-        terms_version,terms_text,refund_version,refund_text,reference,requested_by) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-      [id, b.mode, name, b.totalAmount, b.supplyAmount, b.vatAmount, b.includedAiUnits, b.graceDays, termsVersion, termsText, refundVersion, refundText, reference, actor]);
+        terms_version,terms_text,refund_version,refund_text,reference,requested_by,tax_free_amount) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+      [id, b.mode, name, b.totalAmount, b.supplyAmount, b.vatAmount, b.includedAiUnits, b.graceDays, termsVersion, termsText, refundVersion, refundText, reference, actor, b.taxFreeAmount ?? null]);
       await record(db, actor, key, requestHash, { id }, id, 'plan_requested', reference);
       await db.query('commit'); return reply.code(201).send({ id });
     } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
