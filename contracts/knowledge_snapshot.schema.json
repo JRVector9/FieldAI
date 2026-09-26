@@ -1,0 +1,133 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "connection_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "source_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "source_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "business": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "external_org_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 3000
+        }
+      },
+      "required": [
+        "external_org_id",
+        "name",
+        "summary"
+      ]
+    },
+    "services": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "external_service_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9_.:-]+$"
+          },
+          "entity_revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "price_mode": {
+            "enum": [
+              "fixed",
+              "from",
+              "quote"
+            ]
+          },
+          "price_krw": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "duration_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "booking_mode": {
+            "enum": [
+              "none",
+              "preferred",
+              "slot"
+            ]
+          }
+        },
+        "required": [
+          "external_service_id",
+          "entity_revision",
+          "name",
+          "active",
+          "price_mode",
+          "price_krw",
+          "duration_minutes",
+          "booking_mode"
+        ]
+      }
+    }
+  },
+  "required": [
+    "connection_id",
+    "source_id",
+    "source_revision",
+    "published_at",
+    "content_hash",
+    "business",
+    "services"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "knowledge_snapshot contract design v1.0"
+}

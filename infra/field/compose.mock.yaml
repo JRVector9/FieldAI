@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:17.11
+    environment:
+      POSTGRES_DB: fieldai_field_mock
+      POSTGRES_USER: field_local
+      POSTGRES_PASSWORD: ${FIELD_MOCK_DB_PASSWORD:?Run setup-mock-env.mjs}
+    ports:
+      - '127.0.0.1:55432:5432'
+    volumes:
+      - field_mock_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U field_local -d fieldai_field_mock']
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    networks: [field_mock]
+  queue:
+    image: valkey/valkey:8.1.10-alpine
+    command: ['valkey-server', '--requirepass', '${FIELD_MOCK_VALKEY_PASSWORD:?Run setup-mock-env.mjs}', '--appendonly', 'yes']
+    environment:
+      FIELD_MOCK_VALKEY_PASSWORD: ${FIELD_MOCK_VALKEY_PASSWORD:?Run setup-mock-env.mjs}
+    ports:
+      - '127.0.0.1:56332:6379'
+    volumes:
+      - field_mock_queue_data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'REDISCLI_AUTH=$$FIELD_MOCK_VALKEY_PASSWORD valkey-cli ping | grep -q PONG']
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    networks: [field_mock]
+
+volumes:
+  field_mock_data:
+  field_mock_queue_data:
+
+networks:
+  field_mock:

@@ -1,0 +1,533 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Agent Platform delegated integrator API",
+    "version": "1.0.0-preview.8",
+    "description": "AP bearer reads, selected deployment discovery, delegated conversation replies and source refresh requests, action-bound authorized attachment bytes, signed Field reservation/facts event inbox, signed connection revoke, post-revoke event status recovery, and durable reservation notification route closure. Deployment mutation is pending."
+  },
+  "servers": [{ "url": "/" }],
+  "components": {
+    "securitySchemes": {
+      "fieldEventHmac": {
+        "type": "apiKey", "in": "header", "name": "X-Signature",
+        "description": "HMAC-SHA256 over timestamp.event_id.raw_body_bytes using the connection key selected by X-Key-Id. X-Event-Id and X-Timestamp are required."
+      },
+      "fieldRevokeHmac": {
+        "type": "apiKey", "in": "header", "name": "X-Signature",
+        "description": "HMAC-SHA256 over timestamp.revocation_id.connection_id.revoke using the connection key selected by X-Key-Id. X-Revocation-Id and X-Timestamp are required. The same revocation ID can be retried."
+      },
+      "fieldRecoveryHmac": {
+        "type": "apiKey", "in": "header", "name": "X-Signature",
+        "description": "HMAC-SHA256 over timestamp.event_id.connection_id.notification-status using the connection key selected by X-Key-Id. X-Connection-Id and X-Timestamp are required. This read-only route is available only after AP connection revoke."
+      },
+      "fieldRouteCloseHmac": {
+        "type": "apiKey", "in": "header", "name": "X-Signature",
+        "description": "HMAC-SHA256 over timestamp.transferId.connectionId.actionRequestId.reservationId.latestRevision.latestEventId.route-close using the connection key selected by X-Key-Id. X-Timestamp is required. Only a revoked connection may close generation 1; identical transfer IDs may be retried."
+      },
+      "apOAuth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "/api/auth/oauth2/authorize",
+            "tokenUrl": "/api/auth/oauth2/token",
+            "scopes": {
+              "ap.agent.read": "Read the selected approved AI's minimal identity and revision",
+              "ap.conversations.read": "Read consented conversations on explicitly selected active deployments",
+              "ap.conversations.reply": "Write a human reply as the delegated AP owner",
+              "ap.sources.refresh": "Request a review-only refresh of this connection's approved Field source"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "FieldEventEnvelope": {
+        "type": "object",
+        "required": ["spec_version", "event_id", "event_type", "source_product", "connection_id", "aggregate_type", "aggregate_id", "aggregate_version", "occurred_at", "correlation_id", "notification_owner_product", "route_generation", "data"],
+        "properties": {
+          "spec_version": { "type": "string", "enum": ["1.0"] },
+          "event_id": { "type": "string", "format": "uuid" },
+          "event_type": { "type": "string", "pattern": "^field\\.reservation\\.[a-z_]+$" },
+          "source_product": { "type": "string", "enum": ["field"] },
+          "connection_id": { "type": "string", "format": "uuid" },
+          "aggregate_type": { "type": "string", "enum": ["reservation"] },
+          "aggregate_id": { "type": "string", "format": "uuid" },
+          "aggregate_version": { "type": "integer", "minimum": 0 },
+          "occurred_at": { "type": "string", "format": "date-time" },
+          "correlation_id": { "type": "string", "format": "uuid" },
+          "notification_owner_product": { "type": "string", "enum": ["ap"] },
+          "route_generation": { "type": "integer", "minimum": 1 },
+          "data": {
+            "type": "object", "required": ["resource_id", "status"],
+            "properties": {
+              "resource_id": { "type": "string", "format": "uuid" },
+              "status": { "type": "string" },
+              "start_at": { "type": "string", "format": "date-time" },
+              "end_at": { "type": "string", "format": "date-time" }
+            }, "additionalProperties": false
+          }
+        }, "additionalProperties": false
+      },
+      "FieldFactsChangedEnvelope": {
+        "type": "object",
+        "required": ["spec_version", "event_id", "event_type", "source_product", "connection_id", "aggregate_type", "aggregate_id", "aggregate_version", "occurred_at", "correlation_id", "route_generation", "data"],
+        "properties": {
+          "spec_version": { "type": "string", "const": "1.0" },
+          "event_id": { "type": "string", "format": "uuid" },
+          "event_type": { "type": "string", "const": "field.facts.changed" },
+          "source_product": { "type": "string", "const": "field" },
+          "connection_id": { "type": "string", "format": "uuid" },
+          "aggregate_type": { "type": "string", "const": "facts" },
+          "aggregate_id": { "type": "string", "format": "uuid", "description": "Field catalog release ID" },
+          "aggregate_version": { "type": "integer", "minimum": 1 },
+          "occurred_at": { "type": "string", "format": "date-time" },
+          "correlation_id": { "type": "string", "format": "uuid" },
+          "route_generation": { "type": "integer", "enum": [1] },
+          "data": { "type": "object", "required": ["resource_id", "status", "source_revision"],
+            "properties": {
+              "resource_id": { "type": "string", "format": "uuid" },
+              "status": { "type": "string", "const": "approved" },
+              "source_revision": { "type": "integer", "minimum": 1 }
+            }, "additionalProperties": false }
+        }, "additionalProperties": false
+      },
+      "FieldEventDelivery": {
+        "type": "object",
+        "required": ["eventId", "connectionId", "actionRequestId", "reservationId", "revision", "receiptState", "processingState", "receivedAt", "processedAt", "processingError", "customerNotificationState", "customerReadState"],
+        "properties": {
+          "eventId": { "type": "string", "format": "uuid" },
+          "connectionId": { "type": "string", "format": "uuid" },
+          "actionRequestId": { "type": "string", "format": "uuid" },
+          "reservationId": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer", "minimum": 0 },
+          "receiptState": { "type": "string", "enum": ["received"] },
+          "processingState": { "type": "string", "enum": ["received", "pending_gap", "processed", "rejected"] },
+          "receivedAt": { "type": "string", "format": "date-time" },
+          "processedAt": { "type": ["string", "null"], "format": "date-time" },
+          "processingError": { "type": ["string", "null"] },
+          "customerNotificationState": { "type": "string", "enum": ["not_created", "not_applicable", "blocked_integration"] },
+          "customerReadState": { "type": "string", "enum": ["not_recorded"] }
+        },
+        "additionalProperties": false
+      },
+      "FieldNotificationRouteClose": {
+        "type": "object",
+        "required": ["transferId", "connectionId", "actionRequestId", "reservationId", "latestRevision", "latestEventId", "routeGeneration"],
+        "properties": {
+          "transferId": { "type": "string", "format": "uuid" },
+          "connectionId": { "type": "string", "format": "uuid" },
+          "actionRequestId": { "type": "string", "format": "uuid" },
+          "reservationId": { "type": "string", "format": "uuid" },
+          "latestRevision": { "type": "integer", "minimum": 0 },
+          "latestEventId": { "type": "string", "format": "uuid" },
+          "routeGeneration": { "type": "integer", "enum": [2] }
+        }, "additionalProperties": false
+      },
+      "FieldNotificationRouteClosure": {
+        "allOf": [
+          { "$ref": "#/components/schemas/FieldNotificationRouteClose" },
+          { "type": "object", "required": ["closedAt"],
+            "properties": { "closedAt": { "type": "string", "format": "date-time" } } }
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "type": "string" }, "currentRevision": { "type": "integer", "minimum": 0 } },
+        "additionalProperties": false
+      },
+      "SourceRefreshOperation": {
+        "type": "object",
+        "required": ["operationId", "connectionId", "expectedSourceRevision", "state", "retryable", "sourceRevision", "outcome", "error"],
+        "properties": {
+          "operationId": { "type": "string", "format": "uuid" },
+          "connectionId": { "type": "string", "format": "uuid" },
+          "expectedSourceRevision": { "type": "integer", "minimum": 0 },
+          "state": { "type": "string", "enum": ["pending", "retry", "completed", "blocked"] },
+          "retryable": { "type": "boolean" },
+          "sourceRevision": { "type": ["integer", "null"], "minimum": 1 },
+          "outcome": { "type": ["string", "null"] },
+          "error": { "type": ["string", "null"] }
+        }, "additionalProperties": false
+      },
+      "SourceRevision": {
+        "type": "object",
+        "required": ["connectionId", "sourceRevision", "approvedSourceRevision", "state"],
+        "properties": {
+          "connectionId": { "type": "string", "format": "uuid" },
+          "sourceRevision": { "type": "integer", "minimum": 0 },
+          "approvedSourceRevision": { "type": ["integer", "null"], "minimum": 1 },
+          "state": { "type": "string", "enum": ["not_synced", "pending_review", "current", "stale", "unavailable", "integrity_conflict", "revoked"] }
+        }, "additionalProperties": false
+      },
+      "Grant": {
+        "type": "object",
+        "required": ["grantId", "organizationId", "agentId", "deploymentIds", "scopes", "state"],
+        "properties": {
+          "grantId": { "type": "string", "format": "uuid" },
+          "organizationId": { "type": "string", "format": "uuid" },
+          "agentId": { "type": "string", "format": "uuid" },
+          "deploymentIds": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+          "scopes": { "type": "array", "items": { "type": "string", "enum": ["ap.agent.read", "ap.conversations.read", "ap.conversations.reply", "ap.sources.refresh"] } },
+          "state": { "type": "string", "enum": ["active"] }
+        },
+        "additionalProperties": false
+      },
+      "Agent": {
+        "type": "object",
+        "required": ["organizationId", "agentId", "revision", "name", "knowledgeRevision"],
+        "properties": {
+          "organizationId": { "type": "string", "format": "uuid" },
+          "agentId": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "name": { "type": "string" },
+          "knowledgeRevision": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": false
+      },
+      "Deployment": {
+        "type": "object",
+        "required": ["id", "publicId", "kind", "origin"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "publicId": { "type": "string", "pattern": "^dep_[A-Za-z0-9_-]{20,50}$" },
+          "kind": { "type": "string", "enum": ["link", "owned_embed", "placement_embed"] },
+          "origin": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "ConversationSummary": {
+        "type": "object",
+        "required": ["id", "deploymentId", "state", "createdAt", "submittedAt"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "deploymentId": { "type": "string", "format": "uuid" },
+          "state": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "submittedAt": { "type": ["string", "null"], "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "Message": {
+        "type": "object",
+        "required": ["id", "sequence", "actor", "body", "createdAt"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "sequence": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+          "actor": { "type": "string", "enum": ["customer", "assistant", "owner"] },
+          "body": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "ReplyRequest": {
+        "type": "object",
+        "required": ["body", "expectedRevision"],
+        "properties": {
+          "body": { "type": "string", "minLength": 1, "maxLength": 5000 },
+          "expectedRevision": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      },
+      "ReplyResult": {
+        "type": "object",
+        "required": ["messageId", "state", "delivery", "revision", "replayed"],
+        "properties": {
+          "messageId": { "type": "string", "format": "uuid" },
+          "state": { "type": "string", "enum": ["waiting_customer"] },
+          "delivery": { "type": "string", "enum": ["blocked_integration", "pending", "sent", "unknown", "failed"] },
+          "revision": { "type": "integer", "minimum": 0 },
+          "replayed": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "Unauthorized": { "description": "Missing, expired, revoked, or invalid AP access token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Forbidden": { "description": "The delegated token lacks the required scope", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NotFound": { "description": "Resource outside this grant or not present", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    }
+  },
+  "paths": {
+    "/integrations/v1/action-requests/{actionId}/attachments/{attachmentId}": {
+      "get": {
+        "operationId": "getConsentedActionAttachment",
+        "description": "Returns only a ready customer image explicitly selected in this ActionRequest after checking the AP grant, actor, connection, deployment, customer submission, and transfer consent. Field must validate and copy the WebP into its own private store. No arbitrary URL is accepted.",
+        "security": [{ "apOAuth": ["ap.conversations.read"] }],
+        "parameters": [
+          { "name": "actionId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "attachmentId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Selected normalized WebP image bytes", "headers": { "Cache-Control": { "schema": { "type": "string", "enum": ["private, no-store"] } }, "X-Content-Type-Options": { "schema": { "type": "string", "enum": ["nosniff"] } } }, "content": { "image/webp": { "schema": { "type": "string", "format": "binary" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "description": "AP private media unavailable; Field preserves the accepted request and retries the copy" }
+        }
+      }
+    },
+    "/integrations/v1/notification-routes/close": {
+      "post": {
+        "operationId": "closeSignedFieldReservationNotificationRoute",
+        "description": "After revoke, durably close AP generation 1 for one accepted Field reservation only when all events through the supplied revision are contiguous, processed, and customer notification states are resolved. The receipt is not a Field activation or a sent message.",
+        "parameters": [
+          { "in": "header", "name": "X-Key-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Timestamp", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{10}$" } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FieldNotificationRouteClose" } } } },
+        "security": [{ "fieldRouteCloseHmac": [] }],
+        "responses": {
+          "200": { "description": "Durable AP closure or identical transfer replay", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FieldNotificationRouteClosure" } } } },
+          "400": { "description": "Malformed request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "Missing, unresolved, or conflicting event or closure", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Closure key unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/integrations/v1/field-events": {
+      "post": {
+        "operationId": "receiveSignedFieldEvent",
+        "description": "A 202 confirms durable inbox receipt only; AP processing and customer notification are separate states. The same event ID and body may be retried with a fresh timestamp and signature.",
+        "parameters": [
+          { "in": "header", "name": "X-Event-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Key-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Timestamp", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{10}$" } }
+        ],
+        "requestBody": { "required": true, "content": { "application/vnd.field-event+json": {
+          "schema": { "oneOf": [
+            { "$ref": "#/components/schemas/FieldEventEnvelope" },
+            { "$ref": "#/components/schemas/FieldFactsChangedEnvelope" }
+          ] }
+        } } },
+        "security": [{ "fieldEventHmac": [] }],
+        "responses": {
+          "202": { "description": "Event stored in AP inbox or identical event already stored", "content": { "application/json": { "schema": { "type": "object", "required": ["received"], "properties": { "received": { "type": "boolean" } }, "additionalProperties": false } } } },
+          "400": { "description": "Malformed or forbidden event body", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "description": "Same event ID with different body", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Event route unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/integrations/v1/connections/{id}/revoke": {
+      "post": {
+        "operationId": "receiveSignedFieldConnectionRevoke",
+        "description": "Field initiated unlink. AP verifies the per-connection HMAC, revokes this connection and its delegated grant, and keeps existing AP conversations and Field reservation evidence.",
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Key-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Revocation-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Timestamp", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{10}$" } }
+        ],
+        "security": [{ "fieldRevokeHmac": [] }],
+        "responses": {
+          "200": { "description": "Local AP revoke committed or same revocation replayed", "content": { "application/json": { "schema": { "type": "object", "required": ["connectionId", "status", "revocationId"], "properties": { "connectionId": { "type": "string", "format": "uuid" }, "status": { "type": "string", "enum": ["revoked"] }, "revocationId": { "type": "string", "format": "uuid" } }, "additionalProperties": false } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "description": "A different revoke ID was already committed for this connection", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Connection key unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/integrations/v1/connections/{id}/source": {
+      "get": {
+        "operationId": "getDelegatedSourceRevision",
+        "description": "Returns only the current and approved Field source revisions for the exact connection. No facts or AP native knowledge are exposed.",
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "security": [{ "apOAuth": ["ap.sources.refresh"] }],
+        "responses": {
+          "200": { "description": "Safe source revision metadata", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SourceRevision" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/integrations/v1/connections/{id}/source-refreshes": {
+      "post": {
+        "operationId": "requestDelegatedSourceRefresh",
+        "description": "Queues a durable refresh for the exact connected Field source. The result is a review-only AP snapshot; AP owner approval and AI release remain separate. A retry with the same key and body returns the same operation.",
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "Idempotency-Key", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["expectedSourceRevision"],
+          "properties": { "expectedSourceRevision": { "type": "integer", "minimum": 0 } },
+          "additionalProperties": false
+        } } } },
+        "security": [{ "apOAuth": ["ap.sources.refresh"] }],
+        "responses": {
+          "202": { "description": "Durable work accepted or exact request replayed; processing and owner approval are separate", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SourceRefreshOperation" } } } },
+          "400": { "description": "Invalid revision or idempotency key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "Source revision changed or same key has different request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/integrations/v1/connections/{id}/source-refreshes/{operationId}": {
+      "get": {
+        "operationId": "getDelegatedSourceRefresh",
+        "description": "Reads only this grant's refresh operation state and safe source revision metadata.",
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "path", "name": "operationId", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "security": [{ "apOAuth": ["ap.sources.refresh"] }],
+        "responses": {
+          "200": { "description": "Current durable work state", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SourceRefreshOperation" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/integrations/v1/events/{id}/delivery": {
+      "get": {
+        "operationId": "getDelegatedFieldEventDelivery",
+        "description": "Returns separate durable receipt, processing, customer notification and read states for an event on this grant's selected deployment and Field connection. A 202 webhook receipt alone never means the customer was notified.",
+        "parameters": [{ "in": "path", "name": "id", "required": true,
+          "schema": { "type": "string", "format": "uuid" } }],
+        "security": [{ "apOAuth": ["ap.conversations.read"] }],
+        "responses": {
+          "200": { "description": "Current AP state for this exact Field event", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FieldEventDelivery" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/integrations/v1/events/{id}/recovery-status": {
+      "get": {
+        "operationId": "getSignedFieldEventRecoveryStatus",
+        "description": "Read only the AP receipt, processing, notification ledger and read states of a Field event on a revoked connection. A missing event or unavailable AP is not proof that no customer message was sent. No AP conversation or customer data is returned.",
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Key-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Connection-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Timestamp", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{10}$" } }
+        ],
+        "security": [{ "fieldRecoveryHmac": [] }],
+        "responses": {
+          "200": { "description": "AP state for this exact accepted Field reservation event", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FieldEventDelivery" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "description": "Recovery key unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/integrations/v1/me": {
+      "get": {
+        "operationId": "getDelegatedGrant",
+        "security": [{ "apOAuth": [] }],
+        "responses": {
+          "200": { "description": "Current delegated grant", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Grant" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/integrations/v1/agent": {
+      "get": {
+        "operationId": "getDelegatedAgent",
+        "security": [{ "apOAuth": ["ap.agent.read"] }],
+        "responses": {
+          "200": { "description": "Selected approved AI", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Agent" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/integrations/v1/deployments": {
+      "get": {
+        "operationId": "listDelegatedDeployments",
+        "description": "Lists only active deployments explicitly selected in this AP grant, bound to its currently approved AI and knowledge release. A placement_embed is an AP-approved publisher placement, not a Field site installation target. Public IDs and exact origins are safe to use with the ordinary AP SDK; this operation does not install them.",
+        "security": [{ "apOAuth": ["ap.agent.read"] }],
+        "responses": {
+          "200": {
+            "description": "Selected active deployments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["deployments"],
+                  "properties": { "deployments": { "type": "array", "items": { "$ref": "#/components/schemas/Deployment" } } },
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/integrations/v1/conversations": {
+      "get": {
+        "operationId": "listDelegatedConversations",
+        "security": [{ "apOAuth": ["ap.conversations.read"] }],
+        "responses": {
+          "200": { "description": "Latest 50 consented conversations on selected active deployments", "content": { "application/json": { "schema": { "type": "object", "required": ["conversations"], "properties": { "conversations": { "type": "array", "items": { "$ref": "#/components/schemas/ConversationSummary" } } }, "additionalProperties": false } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/integrations/v1/conversations/{id}": {
+      "get": {
+        "operationId": "getDelegatedConversation",
+        "security": [{ "apOAuth": ["ap.conversations.read"] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": {
+          "200": { "description": "Conversation metadata and current revision; use the paginated messages endpoint for content", "content": { "application/json": { "schema": { "type": "object", "required": ["id", "deploymentId", "state", "revision"], "properties": { "id": { "type": "string", "format": "uuid" }, "deploymentId": { "type": "string", "format": "uuid" }, "state": { "type": "string" }, "revision": { "type": "integer", "minimum": 0 } }, "additionalProperties": false } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/integrations/v1/conversations/{id}/messages": {
+      "get": {
+        "operationId": "listDelegatedMessages",
+        "security": [{ "apOAuth": ["ap.conversations.read"] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "after", "in": "query", "schema": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$", "default": "0" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Customer-visible messages after the exclusive sequence cursor", "content": { "application/json": { "schema": { "type": "object", "required": ["conversationId", "messages", "nextAfter"], "properties": { "conversationId": { "type": "string", "format": "uuid" }, "messages": { "type": "array", "items": { "$ref": "#/components/schemas/Message" } }, "nextAfter": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" } }, "additionalProperties": false } } } },
+          "400": { "description": "Invalid cursor or page size" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/integrations/v1/conversations/{id}/replies": {
+      "post": {
+        "operationId": "createDelegatedHumanReply",
+        "security": [{ "apOAuth": ["ap.conversations.reply"] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReplyRequest" } } } },
+        "responses": {
+          "200": { "description": "Same request was already committed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReplyResult" } } } },
+          "201": { "description": "AP message and notification ledger committed; delivery is separate", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReplyResult" } } } },
+          "400": { "description": "Invalid body or idempotency key" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "Revision, state, or idempotency conflict", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    }
+  }
+}

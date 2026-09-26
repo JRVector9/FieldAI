@@ -1,0 +1,7 @@
+.distribution-metrics { margin-top: 24px; }
+.distribution-metrics .panel-heading { flex-wrap: wrap; gap: 8px; }
+.distribution-metrics-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 12px; }
+.distribution-metrics-list article { min-width: 0; padding: 14px; border: 1px solid #dce5ef; border-radius: 12px; background: #f8fbff; }
+.distribution-metrics-list h3 { margin: 0 0 10px; font-size: 16px; }
+.distribution-metrics-list p { margin: 5px 0; font-size: 16px; }
+.distribution-metrics-list strong { font-weight: 700; }

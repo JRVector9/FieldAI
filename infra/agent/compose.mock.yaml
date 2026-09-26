@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:17.11
+    environment:
+      POSTGRES_DB: fieldai_agent_mock
+      POSTGRES_USER: agent_local
+      POSTGRES_PASSWORD: ${AP_MOCK_DB_PASSWORD:?Run setup-mock-env.mjs}
+    ports:
+      - '127.0.0.1:55431:5432'
+    volumes:
+      - agent_mock_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U agent_local -d fieldai_agent_mock']
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    networks: [agent_mock]
+
+volumes:
+  agent_mock_data:
+
+networks:
+  agent_mock:

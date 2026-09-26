@@ -1,0 +1,17 @@
+{
+  "schemas_and_examples_valid": [
+    "event_envelope",
+    "action_request",
+    "knowledge_snapshot"
+  ],
+  "invalid_examples_rejected": [
+    "unverified_customer_must_not_be_marked_verified",
+    "PII_not_allowed_in_event_data",
+    "confirm_not_an_external_action",
+    "revision_must_be_integer",
+    "slot_requires_start_end",
+    "customer_consent_reference_required",
+    "private_facts_excluded"
+  ],
+  "service_tests_run": false
+}

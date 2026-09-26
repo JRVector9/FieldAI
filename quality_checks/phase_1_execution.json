@@ -1,0 +1,100 @@
+{
+  "scope": "local_mock_partial_spikes_only",
+  "startedAt": "2026-09-24T01:18:45.582Z",
+  "nodeVersion": "v24.18.0",
+  "commit": null,
+  "commands": [
+    {
+      "command": "pnpm install --frozen-lockfile",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 235
+    },
+    {
+      "command": "pnpm lint",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 785
+    },
+    {
+      "command": "pnpm typecheck",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 1579
+    },
+    {
+      "command": "pnpm test:unit",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 775
+    },
+    {
+      "command": "pnpm build:agent",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 986
+    },
+    {
+      "command": "pnpm build:field",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 1025
+    },
+    {
+      "command": "pnpm test:spike:imports",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 161
+    },
+    {
+      "command": "pnpm test:spike:db:isolation",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 206
+    },
+    {
+      "command": "pnpm test:spike:db:field",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 507
+    },
+    {
+      "command": "pnpm test:spike:oauth:agent",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 863
+    },
+    {
+      "command": "pnpm test:spike:oauth:field",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 849
+    },
+    {
+      "command": "pnpm test:spike:oauth:issuers",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 1043
+    },
+    {
+      "command": "pnpm test:spike:embed:agent",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 614
+    },
+    {
+      "command": "pnpm test:spike:conversation:agent",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 761
+    }
+  ],
+  "notCovered": [
+    "AP-only and Field-only tests with the other database stopped",
+    "official contract, independence, faults, E2E, security and release gates",
+    "external providers and production behavior"
+  ],
+  "finishedAt": "2026-09-24T01:18:55.972Z",
+  "status": "passed",
+  "notRun": []
+}

@@ -1,0 +1,115 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": {
+      "const": "1.0"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "event_type": {
+      "enum": [
+        "field.facts.changed",
+        "field.request.accepted",
+        "field.reservation.proposed",
+        "field.reservation.confirmed",
+        "field.reservation.changed",
+        "field.reservation.canceled",
+        "agent.conversation.updated",
+        "agent.action.delivery_updated",
+        "agent.notification.updated",
+        "connection.revoked"
+      ]
+    },
+    "source_product": {
+      "enum": [
+        "field",
+        "agent_platform"
+      ]
+    },
+    "connection_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "aggregate_type": {
+      "enum": [
+        "facts",
+        "request",
+        "reservation",
+        "conversation",
+        "action",
+        "notification",
+        "connection"
+      ]
+    },
+    "aggregate_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "aggregate_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "resource_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "status": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "source_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "route_generation": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "resource_id",
+        "status"
+      ]
+    }
+  },
+  "required": [
+    "spec_version",
+    "event_id",
+    "event_type",
+    "source_product",
+    "connection_id",
+    "aggregate_type",
+    "aggregate_id",
+    "aggregate_version",
+    "occurred_at",
+    "correlation_id",
+    "data"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "event_envelope contract design v1.0"
+}

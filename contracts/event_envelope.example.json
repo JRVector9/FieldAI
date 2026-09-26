@@ -1,0 +1,16 @@
+{
+  "spec_version": "1.0",
+  "event_id": "evt_example_001",
+  "event_type": "field.reservation.confirmed",
+  "source_product": "field",
+  "connection_id": "con_example_001",
+  "aggregate_type": "reservation",
+  "aggregate_id": "field_reservation_example",
+  "aggregate_version": 3,
+  "occurred_at": "2026-09-24T10:05:00Z",
+  "correlation_id": "ar_example_001",
+  "data": {
+    "resource_id": "field_reservation_example",
+    "status": "confirmed"
+  }
+}

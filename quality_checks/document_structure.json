@@ -1,0 +1,114 @@
+{
+  "status": "passed",
+  "scope": "document_package_only",
+  "service_tests_executed": false,
+  "tasks": 46,
+  "acceptance_specs": 160,
+  "legacy_qa_ids_preserved": 120,
+  "new_qa_specs": 40,
+  "decision_rows": 21,
+  "boundary_rules": 12,
+  "task_dag_acyclic": true,
+  "independence": {
+    "A11": {
+      "dependencies": [
+        "A00",
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A08",
+        "A09",
+        "A10",
+        "A11",
+        "C00",
+        "C01",
+        "C02",
+        "C03"
+      ],
+      "forbidden_prefixes": [
+        "F",
+        "I",
+        "D"
+      ],
+      "violations": []
+    },
+    "F11": {
+      "dependencies": [
+        "C00",
+        "C01",
+        "C02",
+        "C03",
+        "F00",
+        "F01",
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "F07",
+        "F08",
+        "F09",
+        "F10",
+        "F11"
+      ],
+      "forbidden_prefixes": [
+        "A",
+        "I",
+        "D"
+      ],
+      "violations": []
+    },
+    "D05": {
+      "dependencies": [
+        "A00",
+        "A01",
+        "A02",
+        "A03",
+        "A04",
+        "A05",
+        "A06",
+        "A07",
+        "A08",
+        "A09",
+        "A10",
+        "C00",
+        "C01",
+        "C02",
+        "C03",
+        "D00",
+        "D01",
+        "D02",
+        "D03",
+        "D04",
+        "D05"
+      ],
+      "forbidden_prefixes": [
+        "F",
+        "I"
+      ],
+      "violations": []
+    }
+  },
+  "schemas_valid": 3,
+  "links_checked": [
+    "CHANGELOG_v3.0.md",
+    "README.md",
+    "docs/technical/evidence/c03-field-workspace-before.png",
+    "docs/technical/evidence/c03-field-workspace-after-320.png",
+    "docs/technical/evidence/c03-field-workspace-after-640.png",
+    "docs/technical/evidence/c03-field-workspace-before.png",
+    "docs/technical/evidence/c03-field-workspace-after-320.png",
+    "docs/technical/evidence/c03-field-workspace-after-640.png",
+    "docs/technical/evidence/c03-field-workspace-before.png",
+    "docs/technical/evidence/c03-field-workspace-after-320.png",
+    "docs/technical/evidence/c03-field-workspace-after-640.png",
+    "docs/00_PRODUCT_ARCHITECTURE.md",
+    "docs/03_INTEGRATION_CONTRACT.md"
+  ],
+  "master_bytes": 237211,
+  "master_lines": 1594
+}

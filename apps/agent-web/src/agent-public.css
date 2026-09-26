@@ -1,0 +1,71 @@
+.agent-public-shell{min-height:100vh;background:#f7f9fd}
+.agent-public-shell .site-header{max-width:none;height:92px;background:#fff;padding-inline:clamp(20px,5vw,70px)}
+.agent-public-header-business{display:flex;align-items:center;gap:11px;min-width:0}
+.agent-public-header-business strong,.agent-public-header-business small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-public-header-business strong{font-size:16px;line-height:1.35}
+.agent-public-header-business small{color:#6b7789;font-size:14px}
+.agent-public-symbol{display:grid;flex:none;place-items:center;width:50px;height:50px;border-radius:17px;background:#294563;color:#fff;font-size:25px}
+.agent-public-main{min-height:calc(100vh - 92px);padding:34px 20px 90px;background:#f7f9fd}
+.agent-public-main>.feature-heading,.agent-public-main>.state-message,.agent-public-main>.agent-public-chat,.agent-public-main>.agent-public-privacy,.agent-public-main>.agent-public-detail-grid{width:min(100%,712px);margin-left:auto;margin-right:auto}
+.agent-public-heading{margin-bottom:18px}
+.agent-public-heading .eyebrow{color:#42617e;font-size:14px;letter-spacing:.04em}
+.agent-public-chat{padding:0;overflow:hidden;border-color:#d8e2ee;border-radius:20px;box-shadow:0 12px 34px #183a5908}
+.agent-public-chat-top{display:flex;justify-content:space-between;gap:12px;padding:15px 20px;border-bottom:1px solid #e5ebf3;color:#647288;font-size:14px}
+.agent-public-chat-top span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-public-chat-body{padding:22px 23px 28px;min-height:265px}
+.agent-public-intro{display:flex;align-items:center;gap:12px}
+.agent-public-intro strong,.agent-public-intro small{display:block}
+.agent-public-intro strong{font-size:16px}
+.agent-public-intro small{color:#677589;font-size:14px;margin-top:3px}
+.agent-public-chat-body h1{font-size:24px;line-height:1.35;margin:20px 0 12px}
+.agent-public-chat-body>p{color:#617085;font-size:16px;white-space:pre-wrap}
+.agent-public-quick{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.agent-public-quick button{min-height:42px;max-width:100%;padding:8px 13px;border:1px solid #d6e3f2;border-radius:24px;background:#f9fbff;color:#315677;font-size:14px;text-align:left;cursor:pointer;overflow-wrap:anywhere}
+.agent-public-quick button:hover:not(:disabled){background:#eaf3fc;border-color:#a9c8e7}
+.agent-public-quick button:disabled{opacity:.55;cursor:not-allowed}
+.agent-public-messages{display:grid;gap:13px;list-style:none;margin:24px 0 0;padding:0}
+.agent-public-messages li{max-width:90%;padding:12px 15px;border-radius:14px;background:#f1f5f9;overflow-wrap:anywhere}
+.agent-public-messages li.agent-public-message-customer{justify-self:end;background:#e7f1fd}
+.agent-public-messages strong{font-size:14px;color:#365779}
+.agent-public-messages p{font-size:16px;white-space:pre-wrap;margin-top:4px}
+.agent-public-chat-actions{padding:16px 20px 17px;border-top:1px solid #e5ebf3}
+.agent-public-shell .agent-public-composer{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:9px;margin:0}
+.agent-public-composer label{min-width:0;font-size:14px;color:#617085}
+.agent-public-shell .agent-public-composer textarea{min-height:48px;height:48px;max-height:140px;resize:vertical;padding:11px 13px}
+.agent-public-shell .agent-public-composer>button[type=submit]{min-height:48px;width:auto;margin:0;padding:10px 14px;background:#0066cc;font-size:15px;white-space:nowrap}
+.agent-public-composer>p{grid-column:1/-1;color:#617085;font-size:14px}
+.agent-public-chat-actions>.state-message{margin:10px 0}
+.agent-public-human-link{display:flex;align-items:center;justify-content:center;gap:10px;min-height:45px;margin-top:12px;border:1px solid #d7dfeb;border-radius:11px;background:#fff;font-size:15px;font-weight:700}
+.agent-public-human-link:hover{background:#f3f7fc}
+.agent-public-chat-bottom{padding:12px 20px;background:#f9fbfe;color:#69798e;font-size:14px;border-top:1px solid #edf1f6}
+.agent-public-privacy{margin-top:20px;color:#66778b;font-size:14px;line-height:1.6}
+.agent-public-detail-grid{display:flex;flex-direction:column;gap:18px;margin-top:108px}
+.agent-public-detail-grid .agent-public-human{order:-1;scroll-margin-top:20px}
+.agent-public-detail-grid .agent-public-facts{order:0}
+.agent-public-detail-grid .agent-public-facts h3{margin-top:18px;font-size:16px}
+.agent-public-detail-grid .agent-public-facts li,.agent-public-detail-grid .agent-public-facts dd{overflow-wrap:anywhere}
+.agent-public-photo{min-width:0}
+.agent-public-photo label{font-size:15px;font-weight:600}
+.agent-public-photo p{font-size:16px;color:#65758a;line-height:1.6;margin-top:7px}
+.agent-public-photo input{margin-top:8px}
+@media(max-width:600px){
+  .agent-public-shell .site-header{height:76px;gap:10px;padding-inline:16px}
+  .agent-public-shell .site-header .brand{font-size:20px}
+  .agent-public-header-business{max-width:50%}
+  .agent-public-header-business .agent-public-symbol{width:36px;height:36px;border-radius:11px;font-size:19px}
+  .agent-public-header-business strong{font-size:14px}
+  .agent-public-header-business small{font-size:14px}
+  .agent-public-main{padding:25px 12px 70px}
+  .agent-public-chat-body{padding:20px 17px 25px;min-height:240px}
+  .agent-public-chat-body h1{font-size:21px}
+  .agent-public-chat-actions{padding:14px 14px 16px}
+  .agent-public-chat-top{padding-inline:16px}
+  .agent-public-shell .agent-public-composer>button[type=submit]{padding-inline:12px}
+  .agent-public-detail-grid{margin-top:72px}
+}
+@media(max-width:380px){
+  .agent-public-header-business{gap:7px}
+  .agent-public-shell .site-header .brand{font-size:18px}
+  .agent-public-shell .site-header .brand-mark{width:26px;height:26px}
+  .agent-public-composer>button span{display:none}
+}

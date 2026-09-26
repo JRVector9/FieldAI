@@ -1,0 +1,1122 @@
+[
+  {
+    "id": "QA01",
+    "name": "공개 가입·사업체 생성",
+    "pass": "수동 승인 없이 정상 가입, 사용자별 한도 적용",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA02",
+    "name": "이메일 로그인·만료 링크",
+    "pass": "유효 링크만 허용, 중복 사용·만료 처리",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA03",
+    "name": "카카오 로그인·이메일 미제공",
+    "pass": "이메일 없이도 안전한 계정 경로, 필요한 정보 별도 입력",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA04",
+    "name": "같은 이메일의 다른 로그인",
+    "pass": "자동 병합 없이 기존 계정 재인증 후 연결",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA05",
+    "name": "다른 사업체 API/파일 접근",
+    "pass": "ID·tenant 변경으로 데이터 접근 불가",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA06",
+    "name": "사업자 번호 변경·세션 폐기",
+    "pass": "최근 확인·기존 기기 세션·보안 알림 처리",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA07",
+    "name": "템플릿 시작과 AI 시작",
+    "pass": "같은 편집/공개 모델로 끝까지 진행",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA08",
+    "name": "AI의 임의 코드·허위 정보 삽입",
+    "pass": "스키마 밖 변경 차단, 사실 미확인 값 경고",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA09",
+    "name": "여러 페이지·서비스 상세·모바일",
+    "pass": "연결·CTA·반응형 정상, 페이지 한도 일치",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA10",
+    "name": "초안 수정 중 실제 사이트",
+    "pass": "공개본에 초안이 노출되지 않음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA11",
+    "name": "사실·사이트 공개 중 일부 실패",
+    "pass": "Field 내부 공개의 원자성은 Field DB에서 검수. AP 동기화는 별도 상태·승인·stale 처리로 검수하며 분산 원자성을 주장하지 않음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA12",
+    "name": "공개 버전 복구",
+    "pass": "과거 디자인을 초안으로 복구, 현재 승인 사실·예약·대화·결제는 유지",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA13",
+    "name": "정상 자체 도메인 연결",
+    "pass": "소유 확인·TLS·DNS 확인 후 해당 사이트 연결",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA14",
+    "name": "타인 도메인·잘못된 Host",
+    "pass": "다른 사업체 사이트/데이터로 연결되지 않음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA15",
+    "name": "DNS 이탈·인증서 오류·재연결",
+    "pass": "상태 안내, 기본 주소 유지, 재검증",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA16",
+    "name": "AI 질문 후 직접 문의로 전환",
+    "pass": "AP 대화에서 직접 접수로 전환할 때 맥락 유지. Field로 넘어갈 경우 수신 범위·고객 동의·원본 분리",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA17",
+    "name": "비회원 이름·번호 접수",
+    "pass": "OTP/회원가입 없이 접수, 미인증 상태 표시",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA18",
+    "name": "번호 오입력·다른 브라우저 링크",
+    "pass": "링크/번호만으로 본문·사진·과거 내역 공개 안 됨",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA19",
+    "name": "접수 확인키·잘못된 키 반복",
+    "pass": "해당 대화만 접근, 횟수 제한·폐기 작동",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA20",
+    "name": "악성/과대/HEIC 첨부",
+    "pass": "안전한 검사·변환·재첨부, 다른 필드 손실 없음",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA21",
+    "name": "사람 인계 중 AI 생성 완료",
+    "pass": "고객에게 AI·사람 동시 발송 안 됨",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA22",
+    "name": "등록되지 않은 가격·가능 여부",
+    "pass": "임의 약속 없이 미확인/사람 인계",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA23",
+    "name": "프롬프트 공격·타 사업자 정보 요구",
+    "pass": "권한 밖 도구/정보 반환 없음",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA24",
+    "name": "AI 오류·한도·공급사 중단",
+    "pass": "AP LLM 장애에도 AP 사람 응대/양식 정상. AP 전체 장애에도 Field 직접 문의 정상",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA25",
+    "name": "희망시간형 신청",
+    "pass": "미확정 요청으로 저장, 필요 시간 조율",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA26",
+    "name": "시간표형 신청",
+    "pass": "서비스 시간·휴무·완충·현재 점유 반영",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA27",
+    "name": "다른 서비스의 같은 시간",
+    "pass": "동일 사업자 자원에서 중복 확정 차단",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA28",
+    "name": "같은 슬롯 복수 요청",
+    "pass": "요청은 저장, 서로 다른 두 확정은 불가",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA29",
+    "name": "동시에 승인 버튼 두 번",
+    "pass": "DB에서 한 번 처리, 알림 중복 없음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA30",
+    "name": "전화 예약 수동 등록",
+    "pass": "고객 사이트 시간표에 즉시 반영",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA31",
+    "name": "새 시간 제안·고객 수락",
+    "pass": "고객 동의 기록, 사업자 최종 승인 전 확정 금지",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA32",
+    "name": "확정 예약 시간 변경",
+    "pass": "새 점유 성공 전 기존 점유 유지, 원자적 교체",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA33",
+    "name": "취소·거절·만료·노쇼",
+    "pass": "각 상태와 책임 구분, 법적 안내/알림 적합",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA34",
+    "name": "자정·완충·휴무·조건 변경",
+    "pass": "날짜 경계와 기존 예약 스냅샷 정상 유지",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA35",
+    "name": "사업자 알림 조건",
+    "pass": "단순 AI 안내는 제외, 처리할 일은 카카오/푸시",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA36",
+    "name": "고객 알림톡 실패→문자",
+    "pass": "등록 발신번호·단일 대체 주체, 중복 없음",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA37",
+    "name": "고객 미열람·공급사 결과 미상",
+    "pass": "미열람만으로 문자 발송 안 함, 결과 조회",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA38",
+    "name": "중복·역순 콜백·Worker 재시작",
+    "pass": "원장 최종 상태·차감 한 번, outbox 재구성",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA39",
+    "name": "iPhone PWA·Android·PC 푸시",
+    "pass": "설치/권한/거부/무효 토큰 처리, 잠금화면 민감정보 없음",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA40",
+    "name": "알림 한도 소진·수신 신고",
+    "pass": "저장 유지·명확한 미전달 상태·비용 차단",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA41",
+    "name": "사장님 답변 후 고객 재방문",
+    "pass": "접수 대화 연결, 사이트 밖에서도 양방향 진행",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA42",
+    "name": "카드 없는 체험 시작·종료",
+    "pass": "14일 제안값 준수, 동의 없는 자동 결제 없음",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA43",
+    "name": "구독 신청·첫 결제·월말 갱신",
+    "pass": "동의한 금액/주기·월말 규칙·원장 정상",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA44",
+    "name": "결제 타임아웃·중복 콜백",
+    "pass": "새로운 청구 중복 생성 없이 PG 상태 대조",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA45",
+    "name": "구독 해지·실패 유예·환불",
+    "pass": "다음 갱신 중지·기존 기간 유지·환불 기록",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA46",
+    "name": "구독 종료 후 예정 예약",
+    "pass": "각 제품 신규 기능 제한과 정리 모드 분리. 한 제품의 해지로 상대 구독/기존 예약을 가두지 않음",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA47",
+    "name": "DB/파일 복구·삭제 재적용",
+    "pass": "독립 환경 복구, RPO/RTO 실측·삭제 복원 방지",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA48",
+    "name": "공개 가입 악용·알림 폭탄",
+    "pass": "위험 범위만 제한·비용 상한·신고/이의 처리",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA49",
+    "name": "운영자 열람·지원 접근",
+    "pass": "승인/사유/기간/감사 기록 없이 상세 열람 불가",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA50",
+    "name": "전체 실제 연락 흐름",
+    "pass": "Field 단독 직접 흐름과 AP 연결 흐름을 각각 별도 실제 기기에서 검수",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA51",
+    "name": "플랫폼 루트와 고객 사이트 분리",
+    "pass": "플랫폼 루트는 만들기·가입, tenant 도메인은 해당 공개본. 샘플 고객 사이트로 시작하지 않음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA52",
+    "name": "신규 가입자 첫 화면·빈 상태",
+    "pass": "사이트 없음→만들기, 문의·예약 0건. 샘플 영업 데이터 없음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA53",
+    "name": "실제 사업 정보 바인딩",
+    "pass": "세차·촬영·레슨 정보가 Field 초안/공개본에 반영. 연결 AP는 해당 소스 버전 승인 후 반영",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA54",
+    "name": "템플릿·실제 AI 생성 두 경로",
+    "pass": "둘 다 같은 스키마로 개설 완료. 운영 AI 경로가 키워드 데모로 대체되지 않음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA55",
+    "name": "템플릿 배치 차이",
+    "pass": "3개 템플릿이 색상뿐 아니라 대표 영역·사진·정렬에서 다르게 렌더링",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA56",
+    "name": "사업자 사진 업로드·실패·새로고침",
+    "pass": "asset 상태·재첨부·서버 저장·공개 반영. 로컬 썸네일을 저장 성공으로 오인하지 않음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA57",
+    "name": "320~1440px 글자·접근성",
+    "pass": "320·390·768·1440px에서 표시 글자 최소 14px, 주요 경로 가로 넘침·키보드 가림 없음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA58",
+    "name": "모바일 편집/미리보기 전환",
+    "pass": "입력·선택 유지, 좁은 화면에 다열 압축/축소 텍스트 없음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA59",
+    "name": "섹션 순서·삭제·필수 CTA",
+    "pass": "모바일 버튼·키보드로도 편집, 공통 문의 액션·tenant 보호",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA60",
+    "name": "페이지 추가·이름·경로·삭제",
+    "pass": "페이지 한도·홈 유지·내부 링크·공개 경로 처리 일치",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA61",
+    "name": "제작 중 이탈·기기 변경",
+    "pass": "서버 마지막 저장본과 유효 단계에서 재개, localStorage만 의존하지 않음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA62",
+    "name": "자동 저장 실패·오프라인",
+    "pass": "미저장 표시·입력 보존·안전 재시도, 공개본 변화 없음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA63",
+    "name": "AI 생성 대기·실패·취소·재시도",
+    "pass": "입력/초안 보존·단일 job·중복 차감 없음·템플릿 대체 가능",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA64",
+    "name": "AI 대기 중 수동 수정·다중 탭",
+    "pass": "base_revision 충돌 감지, 최신 입력 자동 덮어쓰기 금지",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA65",
+    "name": "초안·미리보기 접근",
+    "pass": "비로그인/다른 tenant가 토큰·경로 변경으로 미공개 정보 읽기 불가",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA66",
+    "name": "공개 전 연락·서비스·시간표 검사",
+    "pass": "Field 필수 연락·서비스·예약 검수는 유지하되 AP 미연결만으로 공개를 차단하지 않음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA67",
+    "name": "자체 도메인 대기 중 첫 공개",
+    "pass": "기본 주소로 공개·운영 가능, 자체 도메인 준비와 상태 분리",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA68",
+    "name": "개설 완료와 다음 행동",
+    "pass": "Field 사이트 확인/테스트와 AP 선택 연결을 구분; 실제 운영 주소만 성공으로 표시",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA69",
+    "name": "첫 문의 테스트 안전성",
+    "pass": "서버 테스트 플래그, 자기 검증 수신처만 발송, 실적·실제 일정 점유 제외",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA70",
+    "name": "예시 데이터 격리",
+    "pass": "운영 tenant에 데모 고객/예약/리뷰/관리자 샘플 초기 삽입 없음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA71",
+    "name": "단계 URL 직접 접근·재로그인",
+    "pass": "서버 readiness/권한 검사, 공개 후 기본은 오늘, 기존 업무 접근을 온보딩으로 잠그지 않음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA72",
+    "name": "과거 버전 복구 후 공개",
+    "pass": "활성 포인터 유지→복구 초안 검수→재승인→새 디자인 릴리스. 과거 가격 복구는 별도 승인",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA73",
+    "name": "디자인 교체·재생성",
+    "pass": "사업 정보·수동 편집 보존 또는 변경 확인, 내용 자동 유실 없음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA74",
+    "name": "공개본이 쓰는 사진 삭제",
+    "pass": "초안 교체만으로 현재 공개 사진을 삭제하지 않음, 참조 정리·보존 동작",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA75",
+    "name": "생성/공개 Worker 재시작",
+    "pass": "Field 생성/공개 Worker 멱등·revision 검수. AP sync는 별도 outbox·소스 승인 상태이며 Field 공개 실패와 구분",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA76",
+    "name": "시안 역할 탭·관리자 접근 제거",
+    "pass": "운영 배포에서 버튼/URL만으로 다른 역할 전환·대화 열람 불가",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA77",
+    "name": "개설 때 설정한 두 예약 방식",
+    "pass": "서비스별 예약 설정이 공개 사이트·일정·관리실에 일치, 임의 전역 덮어쓰기 없음",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA78",
+    "name": "실제 서로 다른 기기의 접수·답변",
+    "pass": "고객 기기→서버→사업자 기기→고객 후속 확인, 같은 브라우저 데모로 대체 금지",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA79",
+    "name": "공개 SEO·미공개 보호·가격 일치",
+    "pass": "각 제품 초안 비공개·승인 원본 유지. 연결 가격은 live version 일치 또는 확인 필요로 처리",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA80",
+    "name": "셀프 개설 전체 흐름",
+    "pass": "Field 가입·자기 정보·템플릿/실제제작AI·공개·직접문의·예약을 AP 없이 완료. 연결 흐름도 별도 검수",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA81",
+    "name": "AI 단독 가입",
+    "pass": "AP 전용 가입·DB·조직·지식·활성화·상담이 Field 사이트/계정/서버/예약 없이 완료",
+    "scope": "AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA82",
+    "name": "기존 사이트 경로 보존",
+    "pass": "신규 사업자는 5단계 셀프 제작, 사업자가 직접 공개",
+    "scope": "Field",
+    "status": "not_run"
+  },
+  {
+    "id": "QA83",
+    "name": "AI-only에서 사이트 추가",
+    "pass": "AP 고객이 Field에 별도 동의/가입하고 기존 AI를 연결. AP와 Field 조직은 별도며 무단 고객/예약 복제·중복 청구 없음",
+    "scope": "연동/AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA84",
+    "name": "승인 사실 변경",
+    "pass": "Field source 변경을 AP 검토·버전 대조 후 반영. 미승인/미상 가격은 단정하지 않으며 기존 예약 snapshot 불변",
+    "scope": "연동/AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA85",
+    "name": "디자인 복구와 사실 복구",
+    "pass": "Field 디자인 복구가 AP 사실·설정·중지를 변경하지 않음. 각 사실 복구는 별도 승인",
+    "scope": "연동/AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA86",
+    "name": "AI 배포별 권한",
+    "pass": "같은 AP agent의 배포 권한을 검사하고 선택 Field 도구는 연결 scope에서만 사용",
+    "scope": "연동/AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA87",
+    "name": "카드 초안 편집",
+    "pass": "공개 카드와 매체 live 내용 불변, draft preview만 변경",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA88",
+    "name": "카드 공개 동의",
+    "pass": "사업자 명시 승인·revision·idempotency, stale 승인 거부",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA89",
+    "name": "허위 가격/주장 삽입",
+    "pass": "승인 사실과 충돌하는 카드 약속을 차단 또는 수정 확인 요구",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA90",
+    "name": "공개 카드 버전 변경",
+    "pass": "기존 매체 승인을 새 버전 승인으로 자동 승격하지 않음",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA91",
+    "name": "배치 요청 중복",
+    "pass": "같은 카드 release와 slot 요청은 하나, 다른 body 같은 key 충돌",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA92",
+    "name": "매체 승인 권한",
+    "pass": "다른 매체의 slot/placement 승인·조회 불가",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA93",
+    "name": "정확한 버전 승인",
+    "pass": "심사 중 카드가 바뀌면409 및 새 버전 검토 요구",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA94",
+    "name": "도메인 소유 확인",
+    "pass": "임의 타인 domain 등록으로 embed 서빙 허용 안 됨",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA95",
+    "name": "slot 비활성/재활성",
+    "pass": "노출 중지, 과거 거절·취소를 자동 승인하지 않음",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA96",
+    "name": "공유 링크와 매체 카드",
+    "pass": "기본 link/owned widget은 캠페인·매체 없이 작동. 광고 카드만 공개/매체 버전 승인 필요",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA97",
+    "name": "frame-ancestors 실제 헤더",
+    "pass": "허용/비허용/중첩 ancestor 각각 별도 origin에서 확인",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA98",
+    "name": "postMessage origin/source/nonce",
+    "pass": "위조·다른 창·wildcard·잘못된 schema 메시지 처리 차단",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA99",
+    "name": "제3자 쿠키 없는 카드",
+    "pass": "anonymous 안내·접수 전환이 쿠키 차단 환경에서도 가능",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA100",
+    "name": "handoff 만료·1회 사용",
+    "pass": "기한·audience·session 바인딩 검증, 재사용으로 새 접수 권한 생성 불가",
+    "scope": "연동/AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA101",
+    "name": "전환 URL·로그 개인정보",
+    "pass": "전화·사진·대화 text·access secret이 query/Referer/분석에 남지 않음",
+    "scope": "연동/AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA102",
+    "name": "외부 카드에서 접수 전환",
+    "pass": "기존 질문·서비스·희망 조건 유지, 연락처는 안전한 접수 화면에서 확인",
+    "scope": "연동/AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA103",
+    "name": "위조 attribution",
+    "pass": "body의 campaign/placement 변경으로 다른 사업자의 성과·문의로 귀속 불가",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA104",
+    "name": "매체 PII 차단",
+    "pass": "API/CSV/DOM에 이름·전화·사진·원문·개별 접수번호 없음",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA105",
+    "name": "작은 집단·차분 집계",
+    "pass": "5개 미만 억제 및 인접 필터 차감 노출 완화, CSV도 동일",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA106",
+    "name": "테스트/봇/중복 이벤트",
+    "pass": "명시 테스트·미리보기 제외, 중복 reload/callback이 전환 부풀리지 않음",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA107",
+    "name": "예약 성과와 매출 분리",
+    "pass": "Field가 보낸 확정 이벤트로 AP 상태/집계를 갱신. 미연결 시 확정 지표는 미지원이며 수금/매출 아님",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA108",
+    "name": "개별 카드·AI·전역 중지",
+    "pass": "AP AI/카드 중지와 Field 사이트·예약 제한 독립. 연동 grant/작업은 범위별 중지",
+    "scope": "연동/AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA109",
+    "name": "노출 후 승인 철회",
+    "pass": "이미 열린 카드의 다음 요청·인계도 거절, 단순 화면 버튼 숨김에 의존하지 않음",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA110",
+    "name": "공개키 유출 악용",
+    "pass": "설치 public key로 owner/publisher API 접근 불가, 발급·비용 한도 작동",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA111",
+    "name": "tenant 교차 지식/캠페인",
+    "pass": "제품별 tenant 격리, 연결 조직 매핑·source/source_id·캐시·큐·도구에서 교차 권한 차단",
+    "scope": "연동/AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA112",
+    "name": "사진과 자료 재사용",
+    "pass": "고객 첨부가 공개 갤러리·카드·매체 export로 유출되지 않음",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA113",
+    "name": "구독 범위와 채널 사용량",
+    "pass": "AP와 Field의 구독/크레딧 별도. 연결 동의로 결제/혜택을 자동 복제하지 않음",
+    "scope": "연동/AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA114",
+    "name": "제휴 관계 종료",
+    "pass": "domain/slot/grant 회수와 기존 업무 보존, 링크 탈취 방지",
+    "scope": "AP·배포",
+    "status": "not_run"
+  },
+  {
+    "id": "QA115",
+    "name": "v1.1 마이그레이션",
+    "pass": "기존 v2.0 서버가 있을 때만 원본·조직·대화·동의·과금 이행 검수. 없으면 N/A 근거 기록",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA116",
+    "name": "운영 빌드 mock 차단",
+    "pass": "production에서 mock credentials/role switch/seed fixture 사용시 실패",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA117",
+    "name": "실제 독립 AI 종단간",
+    "pass": "AP만 배포·Field network/env 부재·실제 고객/사업자 두 기기·실LLM/알림/구독으로 완료",
+    "scope": "AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA118",
+    "name": "실제 매체 종단간",
+    "pass": "AP만으로 별도 origin 광고→상담→접수→집계 완료. Field 연결 예약 경로는 별도 통합 QA",
+    "scope": "연동/AP",
+    "status": "not_run"
+  },
+  {
+    "id": "QA119",
+    "name": "역할별 모바일 회귀",
+    "pass": "고객/사업자/매체/관리자 주요행동을320/390px에서14px이상으로 완료",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA120",
+    "name": "릴리스 인계 증빙",
+    "pass": "제품별 출시/통합증빙·적용160개 QA·독립성·공급사·복구·차단 조건을 표시하고 미실행/skip은 통과로 처리하지 않음",
+    "scope": "제품별/공통",
+    "status": "not_run"
+  },
+  {
+    "id": "QA121",
+    "name": "AP 완전 독립 실행",
+    "scope": "AP",
+    "pass": "Field 미배포·DB권한/환경값/네트워크 없는 상태에서 가입→설치→접수→응대→구독 완료",
+    "status": "not_run"
+  },
+  {
+    "id": "QA122",
+    "name": "Field 완전 독립 실행",
+    "scope": "Field",
+    "pass": "AP 미배포·환경값/DB없는 상태에서 자체제작LLM·사이트·직접문의·예약·구독 완료",
+    "status": "not_run"
+  },
+  {
+    "id": "QA123",
+    "name": "빌드·마이그레이션 분리",
+    "scope": "AP/Field",
+    "pass": "상대 앱/마이그레이션 없이 build/migrate/restore; import graph가 공개 client만 허용",
+    "status": "not_run"
+  },
+  {
+    "id": "QA124",
+    "name": "DB·큐·파일 접근 분리",
+    "scope": "AP/Field",
+    "pass": "각 runtime credential로 상대 DB/queue/bucket 직접 접근 거부",
+    "status": "not_run"
+  },
+  {
+    "id": "QA125",
+    "name": "동일 이메일/카카오 양제품 가입",
+    "scope": "AP/Field",
+    "pass": "각 조직/세션 생성·별도 동의, token/cookie 자동공유·권한 합침 없음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA126",
+    "name": "연결과 과금 동의 분리",
+    "scope": "연동",
+    "pass": "OAuth 승인·AI 설치만으로 상대 구독 시작/카드 복제/추가 청구 없음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA127",
+    "name": "기본 상담 설치 독립",
+    "scope": "AP",
+    "pass": "campaign/publisher/예약 엔터티 없는 고객이 상담 link와 owned widget을 사용",
+    "status": "not_run"
+  },
+  {
+    "id": "QA128",
+    "name": "Field와 일반 외부사이트 동일 계약",
+    "scope": "연동/AP",
+    "pass": "같은 AP SDK와 공개 권한으로 일반 외부 사이트와 Field 설치, 내부 예외없음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA129",
+    "name": "연결할 조직/AI 선택",
+    "scope": "연동",
+    "pass": "양쪽 actor가 선택한 조직/AI만 mapping, 이메일/상호로 자동 연결하지 않음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA130",
+    "name": "역방향 동의 거부",
+    "scope": "연동",
+    "pass": "AP 설치는 유지하고 Field 사실/예약 도구는 비활성, 취소를 connected로 위장하지 않음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA131",
+    "name": "issuer/audience/token 교환 공격",
+    "scope": "연동",
+    "pass": "AP용 token을 Field API에 제출하거나 반대로 제출 시 거부, code/state/redirect 검수",
+    "status": "not_run"
+  },
+  {
+    "id": "QA132",
+    "name": "과도한 scope/금지 도구",
+    "scope": "연동",
+    "pass": "AP에서 Field confirm/가격수정/관리자 API 불가; 누락 scope 도구 비노출",
+    "status": "not_run"
+  },
+  {
+    "id": "QA133",
+    "name": "사람 답변 actor 경계",
+    "scope": "연동",
+    "pass": "Field 소유자가 자신의 AP 위임권한으로 연결 대화만 답변, 타직원·타채널 원문 접근 차단",
+    "status": "not_run"
+  },
+  {
+    "id": "QA134",
+    "name": "source 충돌과 편집 권한",
+    "scope": "AP/연동",
+    "pass": "Field source 필드 AP 직접덮어쓰기 금지, native 중복은 명시 mapping·검수",
+    "status": "not_run"
+  },
+  {
+    "id": "QA135",
+    "name": "사실 발행과 AP 승인 사이",
+    "scope": "연동",
+    "pass": "Field 공개는 독립 완료·AP는 pending_review, 미승인 값을 고객에게 공개하지 않음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA136",
+    "name": "중요값 최신성 조회 실패",
+    "scope": "연동",
+    "pass": "가격/시간/활성 상태를 최신이라 단정하지 않고 사람문의 대체, AP native 상담은 유지",
+    "status": "not_run"
+  },
+  {
+    "id": "QA137",
+    "name": "같은 소스 버전 다른 hash",
+    "scope": "연동",
+    "pass": "integrity_conflict로 격리·알림, 승인정보 조용히 덮어쓰기 금지",
+    "status": "not_run"
+  },
+  {
+    "id": "QA138",
+    "name": "소스 이벤트 역순·누락",
+    "scope": "연동",
+    "pass": "낮은 revision이 최신을 덮지 않음, snapshot 재조회·재조정",
+    "status": "not_run"
+  },
+  {
+    "id": "QA139",
+    "name": "외부 요청 timeout 뒤 중복 전송",
+    "scope": "연동",
+    "pass": "동일 action ID/hash로 한 external_request만, 결과조회 전 새 업무 생성 금지",
+    "status": "not_run"
+  },
+  {
+    "id": "QA140",
+    "name": "웹훅 서명·재전송·역순",
+    "scope": "연동",
+    "pass": "raw body HMAC·시간창·key rotation·inbox 유일·aggregate 조회·순서 역행 방지",
+    "status": "not_run"
+  },
+  {
+    "id": "QA141",
+    "name": "최종 고객 전달 동의",
+    "scope": "연동",
+    "pass": "수신 제품·사업자·항목·정책·조건hash 확인 없이는 전송/알림 없음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA142",
+    "name": "첨부 수신·URL 악용",
+    "scope": "연동",
+    "pass": "승인 자산만 인증API로 copy/scan, 임의 URL·다른고객사진 가져오기 거부",
+    "status": "not_run"
+  },
+  {
+    "id": "QA143",
+    "name": "원본별 장애 격리",
+    "scope": "AP/Field",
+    "pass": "AP 장애중 Field 원본 메시지/예약과 Field장애중 AP 원본상담을 각각 정상 처리",
+    "status": "not_run"
+  },
+  {
+    "id": "QA144",
+    "name": "Field에서 AP 대화 답변",
+    "scope": "연동",
+    "pass": "AP message ID·sequence·mode 원본 한곳, Field 별도 transcript 작성 없음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA145",
+    "name": "AP 답변 API 실패",
+    "scope": "연동",
+    "pass": "Field가 전송성공/고객수신을 거짓 표시하지 않고 미전송 초안 유지",
+    "status": "not_run"
+  },
+  {
+    "id": "QA146",
+    "name": "한 제품 구독 종료",
+    "scope": "AP/Field",
+    "pass": "상대 구독·원본·기존예약 유지, 자기 신규기능만 정책대로 제한",
+    "status": "not_run"
+  },
+  {
+    "id": "QA147",
+    "name": "생산 가격 미확정",
+    "scope": "AP/Field",
+    "pass": "승인되지 않은 가격/plan으로 청구 불가; mock 금액이 live로 전환되지 않음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA148",
+    "name": "이벤트별 단일 알림 주체",
+    "scope": "연동",
+    "pass": "AP문의/Field직접문의/연결예약 각각 정해진 제품만 카카오/문자 발송",
+    "status": "not_run"
+  },
+  {
+    "id": "QA149",
+    "name": "원격 수신과 최종 알림 구분",
+    "scope": "연동",
+    "pass": "202 inbox ACK·processed·provider success·read를 별도로 표시",
+    "status": "not_run"
+  },
+  {
+    "id": "QA150",
+    "name": "로컬 revoke 즉시 차단",
+    "scope": "연동",
+    "pass": "해제 후 로컬 scope/도구/원문조회 차단, 데이터삭제/구독해지로 대체하지 않음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA151",
+    "name": "원격 장애 중 revoke",
+    "scope": "연동",
+    "pass": "원격토큰 회수대기 durable retry·짧은만료·사용시검사, 완료 오표시 없음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA152",
+    "name": "연결 소스 해제",
+    "scope": "연동/AP",
+    "pass": "Field 소스는 사용중단, AP native로 자동 변환 금지; 다른 native 상담 유지",
+    "status": "not_run"
+  },
+  {
+    "id": "QA153",
+    "name": "AP 해제 이후 기존 예약",
+    "scope": "연동/Field",
+    "pass": "이미 수신한 Field 작업·snapshot 유지; 권한있는 고객 Field 경로/직접연락 제공",
+    "status": "not_run"
+  },
+  {
+    "id": "QA154",
+    "name": "부분 배포 해제",
+    "scope": "연동/AP",
+    "pass": "Field 배포만 중지하고 AP 독립링크·다른 사이트·제휴계약은 자동 삭제하지 않음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA155",
+    "name": "고객 cross-product 접근",
+    "scope": "연동",
+    "pass": "유효 AP capability+연결 예약+1회Field handoff만 교환, 전화번호/ID만으론 불가",
+    "status": "not_run"
+  },
+  {
+    "id": "QA156",
+    "name": "최종 제출 직전 가격/시간 변경",
+    "scope": "연동",
+    "pass": "expected_service_revision mismatch409, 변경내용 고객 재확인 전 자동접수/확정 금지",
+    "status": "not_run"
+  },
+  {
+    "id": "QA157",
+    "name": "관리자 제품 경계",
+    "scope": "AP/Field",
+    "pass": "각 admin MFA·membership·audit, 같은운영자여도 다른 제품 DB/콘솔 자동 접근 금지",
+    "status": "not_run"
+  },
+  {
+    "id": "QA158",
+    "name": "API/schema 버전 독립 배포",
+    "scope": "연동",
+    "pass": "구 consumer 계약회귀·알수없는필드/enum 처리, breaking change 새버전/이행",
+    "status": "not_run"
+  },
+  {
+    "id": "QA159",
+    "name": "로그/이벤트/매체 최소정보",
+    "scope": "공통",
+    "pass": "서명/토큰/연락처/사진/원문이 URL·웹훅·로그·매체 집계에 유출되지 않음",
+    "status": "not_run"
+  },
+  {
+    "id": "QA160",
+    "name": "제품별 출시 게이트 독립",
+    "scope": "전체",
+    "pass": "A/F/I/D각 증빙과 최종Suite 분리, 아직미완료 모듈을 통합완료라 보고하지 않음",
+    "status": "not_run"
+  }
+]

@@ -1,0 +1,42 @@
+import { NextResponse, type NextRequest } from "next/server";
+
+const siteSlug = /^field-[0-9a-f]{12}$/;
+const sitePage = /^\/site\/([^/]+)(?:\/[^/]+)?\/?$/;
+const publicPage = /^\/public\/([^/]+)\/?$/;
+const receiptPage = /^\/(?:inquiry|reservation)\/[^/]+\/?$/;
+const notFound = () => new Response("Not Found", { status: 404 });
+const unavailable = () => new Response("사업장 정보를 확인하지 못했습니다. 잠시 뒤 새로고침해 주세요.", {
+  status: 503,
+  headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+});
+
+export async function proxy(request: NextRequest) {
+  const domain = process.env.APP_PROFILE === "live" ? process.env.FIELD_SITE_BASE_DOMAIN : "localhost:3002";
+  const host = (request.headers.get("host") ?? "").toLowerCase();
+  const suffix = domain ? `.${domain.toLowerCase()}` : "";
+  if (!suffix || !host.endsWith(suffix)) return NextResponse.next();
+
+  const tenantSlug = host.slice(0, -suffix.length);
+  if (!siteSlug.test(tenantSlug)) return notFound();
+  const path = request.nextUrl.pathname;
+  if (path.startsWith("/_next/") || path.startsWith("/v1/") || path === "/favicon.ico"
+    || path === "/.well-known/ap-site-verification") return NextResponse.next();
+
+  const site = sitePage.exec(path);
+  if (site) return site[1] === tenantSlug ? NextResponse.next() : notFound();
+
+  const publicCatalog = publicPage.exec(path);
+  if (publicCatalog) {
+    try {
+      const api = process.env.FIELD_API_BASE_URL ?? "http://127.0.0.1:4321";
+      const response = await fetch(new URL(`/v1/public/sites/${tenantSlug}`, api), { cache: "no-store" });
+      if (response.status === 404) return notFound();
+      if (!response.ok) return unavailable();
+      const published = await response.json() as { organizationId?: string };
+      return published.organizationId === publicCatalog[1] ? NextResponse.next() : notFound();
+    } catch { return unavailable(); }
+  }
+
+  if (receiptPage.test(path)) return NextResponse.next();
+  return notFound();
+}

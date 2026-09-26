@@ -1,0 +1,438 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Field delegated integrator API",
+    "version": "1.0.0-preview.8",
+    "description": "Field bearer facts, availability, scoped external request receipt including selected attachment IDs, by-source lookup, customer reservation handoff, capability discovery, explicit AP-to-Field binding, and signed AP initiated connection revoke. Attachment bytes are copied later through the authorized AP action route; the request receipt does not assert copy success. Release consumer gates are pending."
+  },
+  "servers": [{ "url": "/" }],
+  "components": {
+    "securitySchemes": {
+      "apRevokeHmac": {
+        "type": "apiKey", "in": "header", "name": "X-Signature",
+        "description": "HMAC-SHA256 over timestamp.revocation_id.connection_id.revoke using the bound connection key selected by X-Key-Id. X-Revocation-Id and X-Timestamp are required."
+      },
+      "fieldOAuth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "/api/auth/oauth2/authorize",
+            "tokenUrl": "/api/auth/oauth2/token",
+            "scopes": {
+              "field.facts.read": "Read the selected organization's latest owner-approved catalog facts",
+              "field.availability.read": "Read the selected organization's current service terms and requestable slots",
+              "field.requests.create": "Submit a consented AP ActionRequest to the selected Field organization",
+              "field.requests.read": "Read the result and sanitized reservation events of a submitted AP ActionRequest",
+              "field.customer_access.create": "Issue one-use customer handoff codes for an accepted external reservation"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "type": "string" } },
+        "additionalProperties": false
+      },
+      "Grant": {
+        "type": "object",
+        "required": ["grantId", "organizationId", "scopes", "state"],
+        "properties": {
+          "grantId": { "type": "string", "format": "uuid" },
+          "organizationId": { "type": "string", "format": "uuid" },
+          "scopes": { "type": "array", "items": { "type": "string", "enum": ["field.facts.read", "field.availability.read", "field.requests.create", "field.requests.read", "field.customer_access.create"] } },
+          "state": { "type": "string", "enum": ["active"] }
+        },
+        "additionalProperties": false
+      },
+      "Capabilities": {
+        "type": "object",
+        "required": ["organizationId", "schemaVersion", "capabilities"],
+        "properties": {
+          "organizationId": { "type": "string", "format": "uuid" },
+          "schemaVersion": { "type": "string", "enum": ["1.0"] },
+          "capabilities": {
+            "type": "object",
+            "required": ["facts.read", "availability.read", "request.create", "customer_access.create", "proposal.respond"],
+            "properties": {
+              "facts.read": { "type": "boolean" },
+              "availability.read": { "type": "boolean" },
+              "request.create": { "type": "boolean" },
+              "customer_access.create": { "type": "boolean" },
+              "proposal.respond": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "BindRequest": {
+        "type": "object",
+        "required": ["apGrantId", "apOrganizationId", "apAgentId", "fieldGrantId", "eventKeyId", "eventSecret", "routeGeneration"],
+        "properties": {
+          "apGrantId": { "type": "string", "format": "uuid" },
+          "apOrganizationId": { "type": "string", "format": "uuid" },
+          "apAgentId": { "type": "string", "format": "uuid" },
+          "fieldGrantId": { "type": "string", "format": "uuid" },
+          "eventKeyId": { "type": "string", "format": "uuid" },
+          "eventSecret": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$", "description": "Server-to-server HMAC key. Never returned to a browser or in BindResult." },
+          "routeGeneration": { "type": "integer", "enum": [1] }
+        },
+        "additionalProperties": false
+      },
+      "BindResult": {
+        "type": "object",
+        "required": ["connectionId", "status", "fieldOrganizationId", "fieldGrantId"],
+        "properties": {
+          "connectionId": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["review_required"] },
+          "fieldOrganizationId": { "type": "string", "format": "uuid" },
+          "fieldGrantId": { "type": "string", "format": "uuid" }
+        },
+        "additionalProperties": false
+      },
+      "ServiceFact": {
+        "type": "object",
+        "required": ["id", "name", "description", "bookingMode", "durationMinutes", "priceAmount"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "bookingMode": { "type": "string", "enum": ["request", "slot"] },
+          "durationMinutes": { "type": "integer", "minimum": 1 },
+          "priceAmount": { "type": ["integer", "null"], "minimum": 0 }
+        },
+        "additionalProperties": false
+      },
+      "AvailabilitySlot": {
+        "type": "object",
+        "required": ["startAt", "endAt"],
+        "properties": {
+          "startAt": { "type": "string", "format": "date-time" },
+          "endAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "Availability": {
+        "type": "object",
+        "required": ["organizationId", "catalogRevision", "policyRevision", "timezone", "service", "date", "slots"],
+        "properties": {
+          "organizationId": { "type": "string", "format": "uuid" },
+          "catalogRevision": { "type": "integer", "minimum": 1 },
+          "policyRevision": { "type": "integer", "minimum": 1 },
+          "timezone": { "type": "string" },
+          "service": { "$ref": "#/components/schemas/ServiceFact" },
+          "date": { "type": ["string", "null"], "format": "date" },
+          "slots": { "type": "array", "items": { "$ref": "#/components/schemas/AvailabilitySlot" } }
+        },
+        "additionalProperties": false
+      },
+      "ExternalRequest": {
+        "type": "object",
+        "required": ["actionRequestId", "connectionId", "kind", "originConversationId", "externalServiceId", "expectedServiceRevision", "expectedPolicyRevision", "customer", "request", "summary", "attachmentRefs", "consent", "source"],
+        "properties": {
+          "actionRequestId": { "type": "string", "format": "uuid" },
+          "connectionId": { "type": "string", "format": "uuid" },
+          "kind": { "type": "string", "enum": ["inquiry", "reservation_request"] },
+          "originConversationId": { "type": "string", "format": "uuid" },
+          "externalServiceId": { "type": "string", "format": "uuid" },
+          "expectedServiceRevision": { "type": "integer", "minimum": 1 },
+          "expectedPolicyRevision": { "type": "integer", "minimum": 1 },
+          "customer": {
+            "type": "object", "required": ["name", "phone", "verified"],
+            "properties": { "name": { "type": "string", "maxLength": 80 }, "phone": { "type": "string", "maxLength": 30 }, "verified": { "type": "boolean" } },
+            "additionalProperties": false
+          },
+          "request": {
+            "oneOf": [
+              { "type": "object", "required": ["mode", "timezone"], "properties": { "mode": { "const": "inquiry" }, "timezone": { "type": "string" } }, "additionalProperties": false },
+              { "type": "object", "required": ["mode", "timezone", "startAt"], "properties": { "mode": { "const": "slot" }, "timezone": { "type": "string" }, "startAt": { "type": "string", "format": "date-time" } }, "additionalProperties": false },
+              { "type": "object", "required": ["mode", "timezone", "preferredTimeText"], "properties": { "mode": { "const": "preferred" }, "timezone": { "type": "string" }, "preferredTimeText": { "type": "string", "maxLength": 500 } }, "additionalProperties": false }
+            ]
+          },
+          "summary": { "type": "string", "maxLength": 5000 },
+          "attachmentRefs": { "type": "array", "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "format": "uuid" }, "description": "Customer-selected AP inquiry attachment IDs. Field copies bytes via the authorized AP action attachment route after accepting the request; receipt does not mean copy succeeded." },
+          "consent": {
+            "type": "object",
+            "required": ["version", "recordId", "confirmedAt", "recipientProduct", "recipientOrganizationId", "items", "conditionsHash"],
+            "properties": {
+              "version": { "const": "transfer-v1" }, "recordId": { "type": "string", "format": "uuid" },
+              "confirmedAt": { "type": "string", "format": "date-time" }, "recipientProduct": { "const": "field" },
+              "recipientOrganizationId": { "type": "string", "format": "uuid" },
+              "items": { "type": "array", "uniqueItems": true, "items": { "type": "string", "enum": ["name", "phone", "service", "requested_time", "summary", "attachments"] } },
+              "conditionsHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            }, "additionalProperties": false
+          },
+          "source": {
+            "type": "object", "required": ["provider", "deploymentId", "isTest"],
+            "properties": { "provider": { "const": "agent-platform" }, "deploymentId": { "type": "string", "format": "uuid" }, "isTest": { "type": "boolean" } },
+            "additionalProperties": false
+          }
+        }, "additionalProperties": false
+      },
+      "ExternalRequestReceipt": {
+        "type": "object", "required": ["externalRequestId", "reservationId", "status", "version", "requestId", "retryable"],
+        "properties": {
+          "externalRequestId": { "type": "string", "format": "uuid" },
+          "reservationId": { "type": ["string", "null"], "format": "uuid" },
+          "status": { "const": "requested" }, "version": { "type": "integer", "minimum": 1 },
+          "requestId": { "type": "string", "format": "uuid" }, "retryable": { "const": false }
+        }, "additionalProperties": false
+      },
+      "ExternalReservationEvent": {
+        "type": "object",
+        "required": ["eventId", "revision", "eventType", "state", "occurredAt", "customerNotificationOwnerProduct", "routeGeneration"],
+        "properties": {
+          "eventId": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer", "minimum": 0 },
+          "eventType": { "type": "string" },
+          "state": { "type": "string" },
+          "occurredAt": { "type": "string", "format": "date-time" },
+          "customerNotificationOwnerProduct": { "const": "ap" },
+          "routeGeneration": { "type": "integer", "minimum": 1 },
+          "startAt": { "type": "string", "format": "date-time" },
+          "endAt": { "type": "string", "format": "date-time" }
+        }, "additionalProperties": false
+      },
+      "ExternalReservationEvents": {
+        "type": "object",
+        "required": ["actionRequestId", "externalRequestId", "connectionId", "organizationId", "reservationId", "state", "revision", "events"],
+        "properties": {
+          "actionRequestId": { "type": "string", "format": "uuid" },
+          "externalRequestId": { "type": "string", "format": "uuid" },
+          "connectionId": { "type": "string", "format": "uuid" },
+          "organizationId": { "type": "string", "format": "uuid" },
+          "reservationId": { "type": "string", "format": "uuid" },
+          "state": { "type": "string" },
+          "revision": { "type": "integer", "minimum": 0 },
+          "events": { "type": "array", "items": { "$ref": "#/components/schemas/ExternalReservationEvent" } }
+        }, "additionalProperties": false
+      },
+      "CustomerHandoffRequest": {
+        "type": "object", "required": ["connectionId", "actionRequestId", "externalRequestId", "reservationId"],
+        "properties": {
+          "connectionId": { "type": "string", "format": "uuid" },
+          "actionRequestId": { "type": "string", "format": "uuid" },
+          "externalRequestId": { "type": "string", "format": "uuid" },
+          "reservationId": { "type": "string", "format": "uuid" }
+        }, "additionalProperties": false
+      },
+      "CustomerHandoffIssue": {
+        "type": "object", "required": ["code", "handoffUrl", "expiresAt", "reservationId"],
+        "properties": {
+          "code": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+          "handoffUrl": { "type": "string", "format": "uri" },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "reservationId": { "type": "string", "format": "uuid" }
+        }, "additionalProperties": false
+      },
+      "CustomerHandoffExchange": {
+        "type": "object", "required": ["reservationId", "receiptKey"],
+        "properties": {
+          "reservationId": { "type": "string", "format": "uuid" },
+          "receiptKey": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+        }, "additionalProperties": false
+      },
+      "FaqFact": {
+        "type": "object", "required": ["question", "answer"],
+        "properties": {
+          "question": { "type": "string", "maxLength": 500 },
+          "answer": { "type": "string", "maxLength": 2000 }
+        }, "additionalProperties": false
+      },
+      "Facts": {
+        "type": "object",
+        "required": ["organizationId", "releaseId", "revision", "contentHash", "publishedAt", "businessName", "introduction", "region", "openingHours", "services", "faqs"],
+        "properties": {
+          "organizationId": { "type": "string", "format": "uuid" },
+          "releaseId": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "contentHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "publishedAt": { "type": "string", "format": "date-time" },
+          "businessName": { "type": "string" },
+          "introduction": { "type": "string" },
+          "region": { "type": "string" },
+          "openingHours": { "type": "string" },
+          "services": { "type": "array", "items": { "$ref": "#/components/schemas/ServiceFact" } },
+          "faqs": { "type": "array", "maxItems": 100, "items": { "$ref": "#/components/schemas/FaqFact" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "Unauthorized": { "description": "Missing, expired, revoked, or invalid Field access token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Forbidden": { "description": "The delegated token lacks field.facts.read", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NotFound": { "description": "The selected organization has no approved catalog release", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    }
+  },
+  "paths": {
+    "/integrations/v1/external-requests": {
+      "post": {
+        "operationId": "submitFieldExternalRequest",
+        "description": "Receive a consented AP ActionRequest against current Field terms. A successful reservation request creates a requested Field reservation, not a confirmed booking. Repeating the same source ID and body returns the original receipt, including after mock trial expiry. Other body content conflicts. A new request after mock trial expiry is rejected; by-source reconciliation remains available for prior accepted requests.",
+        "parameters": [{ "in": "header", "name": "x-body-sha256", "required": true, "schema": { "type": "string", "pattern": "^[a-f0-9]{64}$" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExternalRequest" } } } },
+        "security": [{ "fieldOAuth": ["field.requests.create"] }],
+        "responses": {
+          "201": { "description": "New Field request accepted", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExternalRequestReceipt" } } } },
+          "200": { "description": "Identical prior request receipt", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExternalRequestReceipt" } } } },
+          "400": { "description": "Invalid request or transfer consent", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "description": "Scope or binding denied, or new request blocked because the Field mock trial ended (error: trial_ended, accessMode: cleanup_only)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "Changed terms, stale consent, unavailable slot, or idempotency conflict", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/integrations/v1/external-requests/by-source/{actionId}": {
+      "get": {
+        "operationId": "getFieldExternalRequestBySource",
+        "description": "Reconcile an unknown submit result by AP ActionRequest ID using the same authorized binding.",
+        "parameters": [{ "in": "path", "name": "actionId", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "security": [{ "fieldOAuth": ["field.requests.read"] }],
+        "responses": {
+          "200": { "description": "Previously accepted external request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExternalRequestReceipt" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/integrations/v1/external-requests/by-source/{actionId}/events": {
+      "get": {
+        "operationId": "getFieldExternalReservationEvents",
+        "description": "Read a complete, revision-ordered, PII-free reservation event history for an accepted AP ActionRequest. The current connection, client, actor, grant, and field.requests.read scope are required. A successful read is not notification delivery acknowledgement.",
+        "parameters": [{ "in": "path", "name": "actionId", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "security": [{ "fieldOAuth": ["field.requests.read"] }],
+        "responses": {
+          "200": { "description": "Sanitized Field reservation events", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExternalReservationEvents" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/integrations/v1/customer-handoffs": {
+      "post": {
+        "operationId": "issueFieldCustomerHandoff",
+        "description": "Issue a five-minute one-use code for an AP-origin reservation after AP verifies its customer conversation receipt. The Field connection, grant, external request and reservation must match. The code is never placed in a URL or durable payload.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerHandoffRequest" } } } },
+        "security": [{ "fieldOAuth": ["field.customer_access.create"] }],
+        "responses": {
+          "201": { "description": "One-use code issued", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerHandoffIssue" } } } },
+          "400": { "description": "Invalid handoff request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "429": { "description": "Too many recent handoff issues", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/v1/customer-handoffs/exchange": {
+      "post": {
+        "operationId": "exchangeFieldCustomerHandoff",
+        "description": "Exchange a short-lived one-use code for a Field reservation receipt key. This is a customer capability exchange, not a Field OAuth login. A later exchange for the same reservation rotates the previous Field receipt key.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["code"], "properties": { "code": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" } }, "additionalProperties": false } } } },
+        "responses": {
+          "200": { "description": "One-time Field reservation receipt key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerHandoffExchange" } } } },
+          "400": { "description": "Invalid handoff code", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "Used or expired code", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/integrations/v1/availability": {
+      "get": {
+        "operationId": "getFieldCurrentServiceAvailability",
+        "description": "Reads current approved service price, booking mode, policy revision, and available slots from the selected Field organization. Slot services require date. This read does not reserve or confirm a slot.",
+        "parameters": [
+          { "in": "query", "name": "serviceId", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "query", "name": "date", "required": false, "schema": { "type": "string", "format": "date" } }
+        ],
+        "security": [{ "fieldOAuth": ["field.availability.read"] }],
+        "responses": {
+          "200": { "description": "Current approved service and requestable slots", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Availability" } } } },
+          "400": { "description": "Invalid service or required date is missing", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "Booking policy is not configured", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/integrations/v1/capabilities": {
+      "get": {
+        "operationId": "getFieldIntegrationCapabilities",
+        "description": "Reports implemented Field public contract operations for the selected organization. Support does not grant permission; /me scopes remain authoritative. Unimplemented operations are false.",
+        "security": [{ "fieldOAuth": [] }],
+        "responses": {
+          "200": { "description": "Current public integration capability support", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Capabilities" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/integrations/v1/connections/{id}/bind": {
+      "post": {
+        "operationId": "bindFieldConnectionToApprovedApGrant",
+        "description": "Only the configured AP connector client may bind a pending connection. Field verifies its own grant and the stored AP grant. Repeating a matching request returns the same result. This records mutual consent; it does not activate synchronization or installation.",
+        "parameters": [{ "in": "path", "name": "id", "required": true,
+          "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": { "required": true, "content": { "application/json": {
+          "schema": { "$ref": "#/components/schemas/BindRequest" }
+        } } },
+        "security": [{ "fieldOAuth": ["field.facts.read"] }],
+        "responses": {
+          "200": { "description": "Matching consent is recorded; review and installation remain pending", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BindResult" } } } },
+          "400": { "description": "Invalid binding identifiers", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "Connection or AP grant no longer matches", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Connector unavailable or AP grant must be refreshed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/integrations/v1/connections/{id}/revoke": {
+      "post": {
+        "operationId": "receiveSignedApConnectionRevoke",
+        "description": "AP initiated unlink. Field verifies the per-connection HMAC, revokes its local connector and delegated grant, pauses the AP widget, and keeps existing Field reservations and customer access keys.",
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Key-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Revocation-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Timestamp", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{10}$" } }
+        ],
+        "security": [{ "apRevokeHmac": [] }],
+        "responses": {
+          "200": { "description": "Local Field revoke committed or same revocation replayed", "content": { "application/json": { "schema": { "type": "object", "required": ["connectionId", "status", "revocationId"], "properties": { "connectionId": { "type": "string", "format": "uuid" }, "status": { "type": "string", "enum": ["revoked"] }, "revocationId": { "type": "string", "format": "uuid" } }, "additionalProperties": false } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "description": "A different revoke ID was already committed for this connection", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Connection key unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/integrations/v1/me": {
+      "get": {
+        "operationId": "getFieldDelegatedGrant",
+        "security": [{ "fieldOAuth": [] }],
+        "responses": {
+          "200": { "description": "Current Field delegated grant", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Grant" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/integrations/v1/facts": {
+      "get": {
+        "operationId": "getFieldApprovedFacts",
+        "security": [{ "fieldOAuth": ["field.facts.read"] }],
+        "responses": {
+          "200": { "description": "Latest approved catalog facts from the selected Field organization", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Facts" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  }
+}

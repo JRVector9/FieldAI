@@ -1,0 +1,32 @@
+{
+  "action_request_id": "ar_example_001",
+  "connection_id": "con_example_001",
+  "kind": "reservation_request",
+  "origin_conversation_id": "ap_thread_example",
+  "external_service_id": "field_service_example",
+  "expected_service_revision": 7,
+  "customer": {
+    "name": "테스트 고객",
+    "phone": "01000000000",
+    "verified": false
+  },
+  "request": {
+    "mode": "preferred",
+    "timezone": "Asia/Seoul",
+    "preferences": [
+      "2026-10-10 오전"
+    ]
+  },
+  "consent": {
+    "version": "transfer-v1",
+    "record_id": "consent_example",
+    "confirmed_at": "2026-09-24T10:00:00Z"
+  },
+  "summary": "세탁기 청소 일정 문의",
+  "attachment_refs": [],
+  "source": {
+    "provider": "agent-platform",
+    "deployment_id": "dep_example",
+    "is_test": true
+  }
+}

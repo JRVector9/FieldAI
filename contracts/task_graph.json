@@ -1,0 +1,553 @@
+[
+  {
+    "id": "C00",
+    "product": "계약/조율",
+    "title": "저장소·실제 구현·위험 인벤토리",
+    "deps": [],
+    "deliver": "기존 데이터/코드 유무·권한·보존·변경 범위 ADR",
+    "qa": "QA115, QA116",
+    "status": "planned"
+  },
+  {
+    "id": "C01",
+    "product": "계약/조율",
+    "title": "제품 경계·OpenAPI·이벤트·상태·QA 고정",
+    "deps": [
+      "C00"
+    ],
+    "deliver": "B01~B12·양방향 scope·필드·오류 계약·구버전 대응",
+    "qa": "QA121~QA160",
+    "status": "planned"
+  },
+  {
+    "id": "C02",
+    "product": "인프라",
+    "title": "독립 배포/DB/큐/키/CI 프로필",
+    "deps": [
+      "C01"
+    ],
+    "deliver": "AP-only·Field-only 실행과 import/권한 제한",
+    "qa": "QA123, QA124",
+    "status": "planned"
+  },
+  {
+    "id": "C03",
+    "product": "디자인",
+    "title": "공통 무상태 UI·역할별 라우트 설계",
+    "deps": [
+      "C01"
+    ],
+    "deliver": "14px·모바일·제품 이동·비연결/오류 상태",
+    "qa": "QA57, QA58, QA119",
+    "status": "planned"
+  },
+  {
+    "id": "A00",
+    "product": "AP",
+    "title": "AP 계정·조직·DB·권한 기반",
+    "deps": [
+      "C02"
+    ],
+    "deliver": "자체 이메일/카카오·세션·AP migrations·outbox",
+    "qa": "QA01~QA06, QA125",
+    "status": "planned"
+  },
+  {
+    "id": "A01",
+    "product": "AP",
+    "title": "직접 지식·서비스·승인 버전",
+    "deps": [
+      "A00"
+    ],
+    "deliver": "source 출처·revision·KnowledgeRelease",
+    "qa": "QA22, QA81, QA134",
+    "status": "planned"
+  },
+  {
+    "id": "A02",
+    "product": "AP",
+    "title": "자체 비회원 접수·대화·사진·접근",
+    "deps": [
+      "A00"
+    ],
+    "deliver": "Field 없는 first-party intake·확인키·합성 테스트",
+    "qa": "QA16~QA20, QA41",
+    "status": "planned"
+  },
+  {
+    "id": "A03",
+    "product": "AP",
+    "title": "자체 문의함·사람 인계·답변",
+    "deps": [
+      "A02"
+    ],
+    "deliver": "대화 원본·mode·internal note·단일 발송 이벤트",
+    "qa": "QA21, QA41, QA144",
+    "status": "planned"
+  },
+  {
+    "id": "A04",
+    "product": "AP",
+    "title": "실제 AI 안내·테스트·가드레일",
+    "deps": [
+      "A01",
+      "A03"
+    ],
+    "deliver": "모델 어댑터·근거·도구 선택·예산·실패 대체",
+    "qa": "QA22~QA24, QA117",
+    "status": "planned"
+  },
+  {
+    "id": "A05",
+    "product": "AP",
+    "title": "상담 링크·기본 외부 위젯·handoff",
+    "deps": [
+      "A04",
+      "C03"
+    ],
+    "deliver": "campaign/publisher 없는 설치·origin·기본 SDK",
+    "qa": "QA94, QA97~QA102, QA127, QA128",
+    "status": "planned"
+  },
+  {
+    "id": "A06",
+    "product": "AP",
+    "title": "독립 메시지·푸시·대체발송",
+    "deps": [
+      "A03"
+    ],
+    "deliver": "실제 공급사·한 발송 주체·원장·미상 처리",
+    "qa": "QA35~QA40",
+    "status": "planned"
+  },
+  {
+    "id": "A07",
+    "product": "AP",
+    "title": "독립 구독·크레딧·가격 동의",
+    "deps": [
+      "A00"
+    ],
+    "deliver": "AP-only billing·갱신/해지·공급사 검수",
+    "qa": "QA42~QA46, QA126, QA146",
+    "status": "planned"
+  },
+  {
+    "id": "A08",
+    "product": "AP",
+    "title": "AP 관리자·보존/삭제·백업·신고",
+    "deps": [
+      "A00",
+      "A06",
+      "A07"
+    ],
+    "deliver": "원본 보존·AP 권한·복구·운영 runbook",
+    "qa": "QA47~QA49, QA157",
+    "status": "planned"
+  },
+  {
+    "id": "A09",
+    "product": "AP",
+    "title": "공식 통합자 API·인가·외부 client 계약",
+    "deps": [
+      "A01",
+      "A03",
+      "A05"
+    ],
+    "deliver": "AP OAuth server·scope·위임 API·등록 client·문서",
+    "qa": "QA129~QA133",
+    "status": "planned"
+  },
+  {
+    "id": "A10",
+    "product": "AP",
+    "title": "AI Core 단독 실검수",
+    "deps": [
+      "A05",
+      "A06",
+      "A07",
+      "A08",
+      "A09"
+    ],
+    "deliver": "Field 없는 실제 외부사이트/실알림/구독·QA 증빙",
+    "qa": "QA117, QA121, QA127, QA128",
+    "status": "planned"
+  },
+  {
+    "id": "A11",
+    "product": "AP",
+    "title": "AI Core 독립 공개 승인",
+    "deps": [
+      "A10"
+    ],
+    "deliver": "G-A1~G-A3·G-L1 적용 증빙·배포/되돌림",
+    "qa": "QA121, QA120",
+    "status": "planned"
+  },
+  {
+    "id": "F00",
+    "product": "Field",
+    "title": "Field 계정·조직·DB·권한 기반",
+    "deps": [
+      "C02"
+    ],
+    "deliver": "자체 이메일/카카오·세션·Field migrations·outbox",
+    "qa": "QA01~QA06, QA125",
+    "status": "planned"
+  },
+  {
+    "id": "F01",
+    "product": "Field",
+    "title": "사업/서비스·원본 카탈로그 버전",
+    "deps": [
+      "F00"
+    ],
+    "deliver": "구조화 가격·두 예약 설정·FieldCatalogRelease",
+    "qa": "QA53, QA77",
+    "status": "planned"
+  },
+  {
+    "id": "F02",
+    "product": "Field",
+    "title": "5단계·템플릿·직접 편집·미디어",
+    "deps": [
+      "F01",
+      "C03"
+    ],
+    "deliver": "실입력·다중페이지·사진·재개·모바일",
+    "qa": "QA51~QA62, QA70, QA71",
+    "status": "planned"
+  },
+  {
+    "id": "F03",
+    "product": "Field",
+    "title": "사이트 제작 LLM·취소·충돌",
+    "deps": [
+      "F02"
+    ],
+    "deliver": "AP없는 제작 어댑터·JSON 제한·작업/비용",
+    "qa": "QA54, QA63, QA64, QA122",
+    "status": "planned"
+  },
+  {
+    "id": "F04",
+    "product": "Field",
+    "title": "사이트 공개·복구·기본/자체 도메인",
+    "deps": [
+      "F03"
+    ],
+    "deliver": "Field내 원자성·실제 TLS·AP영향 분리",
+    "qa": "QA07~QA15, QA65~QA75",
+    "status": "planned"
+  },
+  {
+    "id": "F05",
+    "product": "Field",
+    "title": "직접 문의·비회원·사진·후속 접근",
+    "deps": [
+      "F00",
+      "F01"
+    ],
+    "deliver": "AP없어도 저장·capability·안전 연락",
+    "qa": "QA17~QA20, QA41, QA143",
+    "status": "planned"
+  },
+  {
+    "id": "F06",
+    "product": "Field",
+    "title": "직접 문의함·답변·내부 메모",
+    "deps": [
+      "F05"
+    ],
+    "deliver": "자체 대화 원본·server 상태·outbox",
+    "qa": "QA41, QA143",
+    "status": "planned"
+  },
+  {
+    "id": "F07",
+    "product": "Field",
+    "title": "두 예약 방식·달력·수동 일정",
+    "deps": [
+      "F01",
+      "F06"
+    ],
+    "deliver": "요청/확정·DB충돌·변경·취소·snapshot",
+    "qa": "QA25~QA34",
+    "status": "planned"
+  },
+  {
+    "id": "F08",
+    "product": "Field",
+    "title": "자체 알림·대체발송·이력",
+    "deps": [
+      "F06",
+      "F07"
+    ],
+    "deliver": "자체 공급사 검수·미상·중복·한도",
+    "qa": "QA35~QA40",
+    "status": "planned"
+  },
+  {
+    "id": "F09",
+    "product": "Field",
+    "title": "구독·관리자·보존·복구",
+    "deps": [
+      "F00",
+      "F04",
+      "F08"
+    ],
+    "deliver": "독립 청구/해지·정리모드·Field 운영실",
+    "qa": "QA42~QA49, QA146, QA157",
+    "status": "planned"
+  },
+  {
+    "id": "F10",
+    "product": "Field",
+    "title": "Field Core 단독 실검수",
+    "deps": [
+      "F04",
+      "F07",
+      "F08",
+      "F09"
+    ],
+    "deliver": "AP 없는 사이트→직접문의→예약·실알림·구독",
+    "qa": "QA50, QA80, QA122",
+    "status": "planned"
+  },
+  {
+    "id": "F11",
+    "product": "Field",
+    "title": "Field Core 독립 공개 승인",
+    "deps": [
+      "F10"
+    ],
+    "deliver": "G-F1~G-F3·G-L1 적용 증빙·배포/되돌림",
+    "qa": "QA120, QA122",
+    "status": "planned"
+  },
+  {
+    "id": "I00",
+    "product": "연동",
+    "title": "Field 역방향 인가·OAuth 양방향 마법사",
+    "deps": [
+      "A09",
+      "F00"
+    ],
+    "deliver": "서로 다른 token/audience·거부/취소·scope",
+    "qa": "QA129~QA132",
+    "status": "planned"
+  },
+  {
+    "id": "I01",
+    "product": "연동",
+    "title": "조직·AI·actor·source 매핑·기능 발견",
+    "deps": [
+      "I00",
+      "A01",
+      "F01"
+    ],
+    "deliver": "connection ledger·설치만/부분연결·허용리소스",
+    "qa": "QA130, QA133, QA134",
+    "status": "planned"
+  },
+  {
+    "id": "I02",
+    "product": "연동",
+    "title": "승인 정보 sync·최신성·재조정",
+    "deps": [
+      "I01",
+      "F04"
+    ],
+    "deliver": "Field source→AP 검토·revision/hash·live 중요값",
+    "qa": "QA84, QA135~QA138, QA156",
+    "status": "planned"
+  },
+  {
+    "id": "I03",
+    "product": "연동",
+    "title": "Field 사이트에 외부 SDK 설치",
+    "deps": [
+      "I01",
+      "A05",
+      "F04"
+    ],
+    "deliver": "일반외부사이트와동일한 public 계약·origin",
+    "qa": "QA86, QA94, QA128",
+    "status": "planned"
+  },
+  {
+    "id": "I04",
+    "product": "연동",
+    "title": "외부 문의/예약 요청·고객 인계",
+    "deps": [
+      "I01",
+      "A02",
+      "F07"
+    ],
+    "deliver": "동의·idempotence·unknown·수신 snapshot·Field capability",
+    "qa": "QA139~QA142, QA153, QA155",
+    "status": "planned"
+  },
+  {
+    "id": "I05",
+    "product": "연동",
+    "title": "Field 문의 통합뷰·AP 답변·알림 소유",
+    "deps": [
+      "I04",
+      "A03",
+      "A06",
+      "F06",
+      "F08"
+    ],
+    "deliver": "원본 API·reply actor·event route·미전달 표시",
+    "qa": "QA144, QA145, QA148, QA149",
+    "status": "planned"
+  },
+  {
+    "id": "I06",
+    "product": "연동",
+    "title": "해제·부분 장애·구독 종료·삭제",
+    "deps": [
+      "I02",
+      "I03",
+      "I05"
+    ],
+    "deliver": "양방향 revoke·원격대기·업무보존·새 알림경로",
+    "qa": "QA146, QA150~QA155",
+    "status": "planned"
+  },
+  {
+    "id": "I07",
+    "product": "연동",
+    "title": "fault injection·권한/계약 회귀",
+    "deps": [
+      "I06"
+    ],
+    "deliver": "복수 origin·결과미상·서명재생·scope공격·version 호환",
+    "qa": "QA131, QA132, QA140, QA158, QA159",
+    "status": "planned"
+  },
+  {
+    "id": "I08",
+    "product": "연동",
+    "title": "Field Connector 공개 승인",
+    "deps": [
+      "I07",
+      "A11",
+      "F11"
+    ],
+    "deliver": "G-I1~G-I3·동일 외부 client 계약·고객 E2E",
+    "qa": "QA50, QA80, QA160",
+    "status": "planned"
+  },
+  {
+    "id": "D00",
+    "product": "배포/매체",
+    "title": "AP 홍보 카드·검토·공개",
+    "deps": [
+      "A01",
+      "A04"
+    ],
+    "deliver": "campaign/knowledge 참조·광고표시·revision",
+    "qa": "QA87~QA91",
+    "status": "planned"
+  },
+  {
+    "id": "D01",
+    "product": "배포/매체",
+    "title": "매체 조직·도메인·광고 위치",
+    "deps": [
+      "A00",
+      "A09"
+    ],
+    "deliver": "매체 RBAC·소유 증명·slot·AP 관리",
+    "qa": "QA92, QA94, QA95",
+    "status": "planned"
+  },
+  {
+    "id": "D02",
+    "product": "배포/매체",
+    "title": "정확한 카드 버전 배치 승인",
+    "deps": [
+      "D00",
+      "D01"
+    ],
+    "deliver": "사업자공개와매체승인분리·상태·중지",
+    "qa": "QA90~QA96",
+    "status": "planned"
+  },
+  {
+    "id": "D03",
+    "product": "배포/매체",
+    "title": "외부 기사 카드·AP 접수 전환",
+    "deps": [
+      "A05",
+      "D02"
+    ],
+    "deliver": "Field 없이 광고 대화→AP 접수·권한/고지",
+    "qa": "QA97~QA103, QA118",
+    "status": "planned"
+  },
+  {
+    "id": "D04",
+    "product": "배포/매체",
+    "title": "성과·개인정보 없는 집계·export",
+    "deps": [
+      "A02",
+      "D03"
+    ],
+    "deliver": "source event·데모제외·작은집단/차분억제",
+    "qa": "QA104~QA107",
+    "status": "planned"
+  },
+  {
+    "id": "D05",
+    "product": "배포/매체",
+    "title": "Distribution 독립 검수·출시",
+    "deps": [
+      "D04",
+      "A10"
+    ],
+    "deliver": "G-D1~G-D2·제휴 증빙·AP만으로완료",
+    "qa": "QA108~QA114, QA118",
+    "status": "planned"
+  },
+  {
+    "id": "R00",
+    "product": "검수/이행",
+    "title": "기존120개 재귀속·추가40개 검수 추적",
+    "deps": [
+      "C01"
+    ],
+    "deliver": "QA01~QA160적용제품·게이트·기존변경근거",
+    "qa": "QA01~QA160",
+    "status": "planned"
+  },
+  {
+    "id": "R01",
+    "product": "검수/이행",
+    "title": "기존 서버 존재 시 이행·없으면 N/A 증빙",
+    "deps": [
+      "C00",
+      "I06"
+    ],
+    "deliver": "원본분류·동의·건수·백업·전환·복구",
+    "qa": "QA115",
+    "status": "planned"
+  },
+  {
+    "id": "R02",
+    "product": "최종",
+    "title": "두제품+연동+매체 전체 최종 인수",
+    "deps": [
+      "A11",
+      "F11",
+      "I08",
+      "D05",
+      "R00",
+      "R01"
+    ],
+    "deliver": "G-S1·독립/연결회귀·릴리스 evidence·운영 인계",
+    "qa": "QA120, QA160",
+    "status": "planned"
+  }
+]

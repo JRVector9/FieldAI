@@ -1,0 +1,14 @@
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+dist/
+.env
+.env.*
+!.env.example
+coverage/
+.next/
+*.tsbuildinfo
+infra/field/media/
+infra/field/inquiry-media/
+infra/agent/inquiry-media/

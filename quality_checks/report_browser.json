@@ -1,0 +1,35 @@
+{
+  "scope": "HTML report only, not UI v3 or service app",
+  "results": [
+    {
+      "width": 320,
+      "bodyWidth": 320,
+      "minFontViolations": [],
+      "headingCount": 10,
+      "tableCount": 34
+    },
+    {
+      "width": 390,
+      "bodyWidth": 390,
+      "minFontViolations": [],
+      "headingCount": 10,
+      "tableCount": 34,
+      "mobile_toc_filter_navigation": "passed"
+    },
+    {
+      "width": 768,
+      "bodyWidth": 768,
+      "minFontViolations": [],
+      "headingCount": 10,
+      "tableCount": 34
+    },
+    {
+      "width": 1440,
+      "bodyWidth": 1440,
+      "minFontViolations": [],
+      "headingCount": 10,
+      "tableCount": 34
+    }
+  ],
+  "page_errors": []
+}

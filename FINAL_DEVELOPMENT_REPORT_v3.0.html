@@ -1,0 +1,3834 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>독립 AI 플랫폼 × Field · 최종 개발 계획 v3.0</title><style>
+:root{--ink:#1d1d1f;--muted:#5f6571;--line:#e5e7eb;--blue:#0066cc;--paper:#fff;--bg:#f5f5f7}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:98px}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans CJK KR','Noto Sans KR','Segoe UI',sans-serif;font-size:16px;line-height:1.8;-webkit-font-smoothing:antialiased}a{color:var(--blue);text-decoration:none;overflow-wrap:anywhere}a:hover{text-decoration:underline}button,input{font:inherit}button{min-height:44px;background:white;border:1px solid var(--line);border-radius:11px;padding:8px 16px;color:var(--ink);cursor:pointer;font-size:14px}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #88b8ee;outline-offset:3px}.top{position:sticky;top:0;background:#ffffffef;backdrop-filter:blur(14px);z-index:5;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:20px;padding:18px 30px}.word{font-weight:700;font-size:20px;letter-spacing:-.7px}.word span{color:var(--muted);font-weight:400;font-size:14px;margin-left:12px}.actions{display:flex;gap:9px;align-items:center}.actions a{font-size:14px;min-height:44px;padding:8px 14px;border-radius:11px;background:#0066cc;color:white;display:inline-flex;align-items:center}.frame{display:grid;grid-template-columns:255px minmax(0,1fr);gap:35px;max-width:1490px;margin:auto;padding:32px 30px 80px}.nav{position:sticky;top:107px;align-self:start;max-height:calc(100vh - 132px);overflow:auto;padding:0 8px 20px 0}.nav .label{font-size:14px;font-weight:600;letter-spacing:.08em;color:var(--muted);margin-bottom:15px}.nav input{font-size:16px;border:1px solid var(--line);width:100%;border-radius:10px;padding:10px 12px;background:white;margin-bottom:15px}.nav a{display:block;padding:10px 12px;color:#434b58;font-size:14px;border-radius:9px;line-height:1.6;word-break:keep-all}.nav a:hover{background:white;text-decoration:none;color:var(--blue)}.nav .hint{font-size:14px;color:var(--muted);padding:18px 10px}.paper{min-width:0;background:white;border:1px solid var(--line);border-radius:22px;padding:45px 48px;box-shadow:0 8px 35px #151a2105}h1{font-size:40px;line-height:1.2;letter-spacing:-1.8px;margin:0 0 20px;word-break:keep-all}h2{font-size:29px;line-height:1.45;letter-spacing:-.85px;margin:45px 0 20px;word-break:keep-all}h3{font-size:22px;line-height:1.5;letter-spacing:-.5px;margin:32px 0 14px;word-break:keep-all}h4{font-size:18px;line-height:1.5;margin:25px 0 12px}p{margin:16px 0;overflow-wrap:anywhere;word-break:normal}strong{font-weight:650}blockquote{margin:24px 0;padding:19px 23px;border-left:4px solid var(--blue);background:#f1f6fc;border-radius:0 13px 13px 0;color:#284765}blockquote p{margin:0}ul,ol{padding-left:26px}li{padding:4px 0;font-size:16px;overflow-wrap:anywhere}.table-scroll{width:100%;overflow:auto;border:1px solid var(--line);border-radius:13px;margin:20px 0}table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.65;min-width:560px}.table-scroll.compact table{min-width:0;table-layout:fixed}.table-scroll.compact th:first-child{width:28%}thead{background:#f6f7f9}th{text-align:left;font-weight:600;padding:13px 15px;border-bottom:1px solid var(--line);font-size:14px}td{padding:13px 15px;border-bottom:1px solid #eef0f3;vertical-align:top;font-size:14px;overflow-wrap:anywhere}tr:last-child td{border-bottom:0}table p{margin:0;font-size:14px}pre{padding:20px;background:#f6f7f9;border:1px solid var(--line);border-radius:13px;overflow:auto;font-size:14px;line-height:1.8;tab-size:2;max-width:100%}code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px}p code,li code,td code{background:#f1f2f4;padding:2px 4px;border-radius:4px;overflow-wrap:anywhere}hr{border:0;border-top:1px solid var(--line);margin:44px 0}.version{font-size:14px;color:var(--muted);padding-top:25px;text-align:center}.mobile-toggle{display:none}.top .small{font-size:14px}.note{font-size:14px;padding:14px 17px;background:#eef4fb;border-radius:12px;color:#345677;margin:0 0 28px}.hidden{display:none!important}@media(max-width:1050px){.frame{grid-template-columns:210px minmax(0,1fr);gap:20px;padding:23px 20px}.paper{padding:32px 28px}.top{padding:15px 20px}.word span{display:none}}@media(max-width:760px){.top{padding:12px 16px;gap:8px;flex-wrap:wrap}.word{font-size:18px}.actions{gap:5px;flex-wrap:wrap}.actions a,button{padding:7px 10px;font-size:14px}.mobile-toggle{display:inline-flex;align-items:center}.frame{display:block;padding:15px 12px 35px}.nav{position:static;max-height:430px;padding:15px;background:white;border:1px solid var(--line);border-radius:14px;margin-bottom:16px;display:none}.nav.open{display:block}.paper{padding:25px 20px;border-radius:16px}h1{font-size:31px;letter-spacing:-1px}h2{font-size:25px;margin-top:35px}h3{font-size:20px}.table-scroll{margin-left:0;margin-right:0}pre{padding:14px}.note{font-size:14px}.actions .md-link{display:none}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{body{background:white;font-size:11pt}.top,.nav,.note,.version{display:none}.frame{display:block;padding:0;max-width:none}.paper{border:0;padding:0;box-shadow:none}h2{page-break-before:always}h2:first-of-type{page-break-before:auto}h2,h3,h4{break-after:avoid}tr,blockquote{break-inside:avoid}.table-scroll{overflow:visible;border-radius:0}table{min-width:0;font-size:10.5pt}pre{white-space:pre-wrap;overflow-wrap:anywhere;break-inside:auto}a{color:inherit}a[href^="http"]{text-decoration:underline}}
+</style></head><body><header class="top"><div class="word">AI Platform × Field <span>Development plan / v3.0</span></div><div class="actions"><button id="menu" class="mobile-toggle" aria-expanded="false" aria-controls="toc">목차</button><a class="md-link" href="AI_Field_Service_Operator_Final_Development_Plan_v3.0.md">Markdown 원문</a><button id="print">인쇄</button></div></header><div class="frame"><nav class="nav" id="toc" aria-label="개발 계획 목차"><div class="label">DEVELOPMENT PLAN</div><input id="filter" aria-label="목차 검색" placeholder="목차 검색"><a href="#section-4">01. 최종 제품 구조와 변경 기준</a><a href="#section-12">02. Agent Platform 독립 제품 PRD</a><a href="#section-25">03. Field 독립 제품 PRD</a><a href="#section-36">04. 공식 연동 계약 — AP ↔ Field</a><a href="#section-57">05. 구현 구조·운영·제품별 출시</a><a href="#section-67">06. 기존 역할과 UI v3의 개정 지도</a><a href="#section-73">07. 요구사항 추적과 인수 검수 160개</a><a href="#section-77">TASKS — 독립 제품 개발 작업 보드 v3.0</a><a href="#section-83">AGENTS.md — 독립 AI 플랫폼 + Field, 개발 기준 v3.0</a><div class="hint">본문 검색은 브라우저의 찾기를 이용하세요.<br>문서·계약 예제 검수와 실서비스 인수는 별개입니다.</div></nav><main class="paper"><div class="note">최종 기준: 두 독립 제품 + 공식 연동 계약. 기존 UI v3는 화면 참고이며, 이 보고서는 새 앱 시안이 아닙니다.</div><h1 id="section-1">독립 AI 플랫폼 × Field</h1>
+<h2 id="section-2">최종 개발 계획 v3.0</h2>
+<p><strong>2026년 9월 24일 · 개발 에이전트 인계용 · 제품별 독립 출시 및 정식 연동 기준</strong></p>
+<blockquote>
+<p><strong>AI 플랫폼은 Field의 하위 기능이 아니다. Field를 포함한 외부 서비스가 설치하는 독립 제품이다.</strong></p>
+</blockquote>
+<p>이번 최종본은 기존 통합 PRD v2.0을 대체한다. 기존 21개 결정과 홈페이지 셀프 제작·역할별 UI를 유지하고 제품 경계·DB·계정·과금·배포·연동 계약을 개정했다.</p>
+<div class="table-scroll compact" tabindex="0"><table>
+<thead>
+<tr>
+<th>산출물</th>
+<th>상태</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>제품</td>
+<td>독립 Agent Platform / 독립 Field / 공식 연동 계약</td>
+</tr>
+<tr>
+<td>작업</td>
+<td>46개 계획 작업, 제품별 독립 DAG</td>
+</tr>
+<tr>
+<td>인수</td>
+<td>160개 실서비스 인수 기준, 현재 미실행</td>
+</tr>
+<tr>
+<td>이번 범위</td>
+<td>개발 문서·계약 예제·보고서. 운영 서버·새 UI 구현은 아님</td>
+</tr>
+<tr>
+<td>기존 시안</td>
+<td>UI v3는 시각/흐름 참고. 제품별 이전 요구는 06장 적용</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-3">읽는 순서</h3>
+<p>제품 책임자는 01장, 각 개발자는 02·03장과 04장, 배포 담당자는 05장, UI 담당자는 06장, QA는 07장, 개발 에이전트는 마지막 TASKS·AGENTS 지침을 함께 읽는다. <a href="CHANGELOG_v3.0.md">변경 이력</a>과 <a href="README.md">분할 문서</a>를 함께 제공한다.</p>
+<hr />
+<h2 id="section-4">01. 최종 제품 구조와 변경 기준</h2>
+<p><strong>기준일 2026-09-24 · 개발 계획 v3.0 · 이전 개발안 v2.0을 대체</strong></p>
+<blockquote>
+<p>독립 AI 플랫폼은 누구나 가입해 자기 사업 AI를 만들고 외부에 설치하는 제품이다. Field는 그 AI 플랫폼의 내부 상위 서비스가 아니라, 공개된 연동 계약으로 AI를 설치하는 첫 번째 외부 고객 서비스다.</p>
+</blockquote>
+<h3 id="section-5">1.1 문서의 적용 수준</h3>
+<div class="table-scroll compact" tabindex="0"><table>
+<thead>
+<tr>
+<th>구분</th>
+<th>의미</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>사용자 확정</td>
+<td>기존 21개 선택, 사업자 셀프 홈페이지 제작, 역할별 화면 유지, Firsthand식 독립 AI 제품, Field의 외부 연동 관계</td>
+</tr>
+<tr>
+<td>실행 설계</td>
+<td>추가 설문 없이 개발 에이전트가 구현할 수 있게 정한 제품 경계·상태·API·데이터·오류 처리. 변경 시 ADR과 영향 검토 필요</td>
+</tr>
+<tr>
+<td>제안값</td>
+<td>기간·한도·성능·보존·집계 하한. 실측이나 가격 확정이 아니며 정책 설정으로 관리</td>
+</tr>
+<tr>
+<td>출시 게이트</td>
+<td>실제 계정·PG·메시지·도메인·보안·복구·연동 검증과 책임자 승인</td>
+</tr>
+<tr>
+<td>이번 산출물</td>
+<td>개발 문서와 계약 예제. 운영 서버 코드, 새 UI 프로토타입, 실제 공급사 승인 결과가 아님</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>Agent Platform</code> 또는 <code>AP</code>는 독립 AI 제품의 임시 명칭이다. 최종 상표·도메인이 아니다. Firsthand는 브랜드 AI·외부 배포라는 제품 개념의 참고 대상일 뿐, Firsthand API 구매·코드 이용·기능 완전 동등성을 전제하지 않는다.<a href="https://www.firsthand.ai/platform">S06</a></p>
+<p>우선순위는 <strong>최신 사용자 확정 → 이 v3.0의 명시 규칙 → 개정된 제품별 명세·연동 계약 → 과거 시안의 시각 표현</strong>이다. v2.0의 공유 DB·공유 조직·한 구독·통합 출시 의존성과 UI v3의 하나의 역할 전환기는 더 이상 운영 아키텍처 기준이 아니다.</p>
+<h3 id="section-6">1.2 두 제품, 한 공개 연동 계약</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>항목</th>
+<th>Agent Platform — 독립 AI 서비스</th>
+<th>Field — 사이트·업무 운영 서비스</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>핵심 고객</td>
+<td>기존 사이트 운영 사업자, 자체 사이트 없는 사업자, 기업, 제휴 매체</td>
+<td>다양한 1인 사업자, 이후 기존 출장·AS 업체</td>
+</tr>
+<tr>
+<td>첫 행동</td>
+<td>내 사업 AI 만들기 / 내 사이트에 설치하기</td>
+<td>내 홈페이지 만들기</td>
+</tr>
+<tr>
+<td>자체 제공</td>
+<td>승인 지식, AI, 상담 링크·위젯, 상담 관리실, 사람 인계, 홍보·매체, 사용량·구독</td>
+<td>사이트 제작·수정·공개, 서비스 정보, 일반 문의, 예약·달력, 알림·구독</td>
+</tr>
+<tr>
+<td>선택 연결</td>
+<td>Field 등 외부 업무 서비스</td>
+<td>외부 AI 플랫폼 설치·권한 설정</td>
+</tr>
+<tr>
+<td>단독 동작</td>
+<td>Field 서버·DB·계정·예약·구독 없이 전 과정 이용</td>
+<td>AP 서버·DB·계정·구독 없이 사이트·일반 문의·예약 운영</td>
+</tr>
+<tr>
+<td>장기 확장</td>
+<td>다양한 외부 서비스의 커넥터와 AI 배포 인프라</td>
+<td>견적·기사 배정·현장 작업·증빙·청구·사후관리</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-text">Agent Platform                                Field
+자체 계정 / 자체 사업 조직                      자체 계정 / 자체 사업 조직
+사업 AI / 승인 지식 / AI 상담 원본              사이트 / 서비스 / 직접 문의 원본 / 예약 원본
+자체 구독 / 메시지 / 매체 운영                   자체 구독 / 메시지 / 현장 업무
+             └──────── 공식 API·위젯·웹훅 ────────┘
+                         동일 계약
+              일반 외부 홈페이지 / 제휴 매체 / 다른 연동 앱
+</code></pre>
+<p>두 제품이 같은 회사에서 운영되어도 예외 내부 API, 상대 DB 접속, 공통 세션 쿠키, 고객별 수작업 설치를 전제로 하지 않는다. 초기에는 같은 인프라 장비를 활용할 수 있지만 독립 배포와 논리 격리는 유지한다. 같은 장비에서 발생할 공통 장애까지 제거됐다고 주장하지 않는다.</p>
+<h3 id="section-7">1.3 독립성 불변조건 — 구현 중 임의 변경 금지</h3>
+<div class="table-scroll compact" tabindex="0"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>필수 조건</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B01</td>
+<td>AP를 배포할 때 Field DB·마이그레이션·환경변수·서버를 요구하지 않는다.</td>
+</tr>
+<tr>
+<td>B02</td>
+<td>Field를 배포할 때 AP DB·마이그레이션·환경변수·서버를 요구하지 않는다.</td>
+</tr>
+<tr>
+<td>B03</td>
+<td>AP와 Field는 별도 사용자·조직·membership·로그인 세션·서명키를 가진다. 같은 이메일로 자동 연결하지 않는다.</td>
+</tr>
+<tr>
+<td>B04</td>
+<td>DB·마이그레이션·런타임 계정·큐·파일 접근권한·암호화 키·백업은 제품별이다. 상대 테이블 JOIN/FK/직접 SQL 금지.</td>
+</tr>
+<tr>
+<td>B05</td>
+<td>Field 커넥터는 외부 통합자와 같은 정식 API·범위·승인·비용·속도 제한을 사용한다.</td>
+</tr>
+<tr>
+<td>B06</td>
+<td>가입·AI 활성화에 사이트·캠페인·매체·예약 설정을 강제하지 않는다.</td>
+</tr>
+<tr>
+<td>B07</td>
+<td>AI 없이도 Field의 원래 일반 문의·예약·고객 연락은 이용 가능해야 한다.</td>
+</tr>
+<tr>
+<td>B08</td>
+<td>전체 상담 원본과 업무 요청 원본의 소유를 분리한다. 같은 대화를 양쪽에서 독립적으로 수정하지 않는다.</td>
+</tr>
+<tr>
+<td>B09</td>
+<td>승인 정보의 제품 간 반영은 비동기 계약이다. 공유 DB의 원자적 전환이나 항상 즉시 동일 상태를 약속하지 않는다.</td>
+</tr>
+<tr>
+<td>B10</td>
+<td>연결·연결 해제·AI 중지·사이트 비공개·각 제품 해지는 서로 다른 동작이다.</td>
+</tr>
+<tr>
+<td>B11</td>
+<td>각 제품은 독립 구독 원장과 별도 출시 게이트를 가진다. 묶음 요금과 공유 크레딧은 이번에 자동 도입하지 않는다.</td>
+</tr>
+<tr>
+<td>B12</td>
+<td>기존 고객·사업자/서비스 제공자·매체·관리자 역할을 보존하되 제품별 권한으로 분리한다.</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-8">1.4 사이트 제작 AI와 고객 상담 AI를 구분한다</h3>
+<p><strong>Field의 ‘사이트를 만들어주는 AI’는 Field 소유의 제작 도구다.</strong> 기존의 템플릿 + AI 제작 결정을 지키기 위해 Field 자체 LLM 어댑터로 페이지 JSON 변경안을 만든다. AP의 고객 상담 런타임을 호출하거나 AP 구독을 요구하지 않는다. LLM 공급사 SDK 같은 무상태 유틸리티 코드는 재사용할 수 있지만 키·사용량·호출·작업 기록은 분리한다.</p>
+<p><strong>고객이 ‘AI에 문의하기’를 누를 때 작동하는 AI는 AP의 외부 설치 기능이다.</strong> Field는 승인된 설치 구성과 공개 위젯만 이용한다. 새 AI를 Field DB에 만들어 고객 상담을 흉내 내지 않는다.</p>
+<p>AP가 중단돼도 Field의 제작 AI는 AP 때문에 중단되지 않는다. 공통 LLM 공급사 자체가 장애인 경우에는 별도 외부 의존 장애로 표시하고 Field 템플릿·직접 편집을 유지한다.</p>
+<h3 id="section-9">1.5 기존 21개 결정의 귀속</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>번호</th>
+<th>유지할 결정</th>
+<th>제품/검수 귀속</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>01</td>
+<td>다양한 1인 업종에 개방</td>
+<td>두 제품. 전문 업종 업무를 모두 지원한다는 의미는 아님</td>
+</tr>
+<tr>
+<td>02</td>
+<td>템플릿 + AI 사이트 제작</td>
+<td>Field. AP 가입·사용과 무관</td>
+</tr>
+<tr>
+<td>03</td>
+<td>일반 문의 + 예약 요청 + 별도 관리실</td>
+<td>Field 자체 완결. AP는 자체 상담실, 예약은 연결했을 때만</td>
+</tr>
+<tr>
+<td>04</td>
+<td>AI 채팅 + 문의 양식 + 예약 양식</td>
+<td>연결된 Field에서 세 경로 제공. 미연결 Field의 직접 양식은 계속 제공</td>
+</tr>
+<tr>
+<td>05</td>
+<td>모바일·PC 웹, 네이티브 앱 제외</td>
+<td>두 제품·매체·각 관리자 화면</td>
+</tr>
+<tr>
+<td>06</td>
+<td>사업자 카카오톡 + 웹 푸시</td>
+<td>이벤트 원본 제품이 책임 발송. 중복 발송 금지</td>
+</tr>
+<tr>
+<td>07</td>
+<td>고객 이름·휴대전화, 회원가입·OTP 없음</td>
+<td>각 원본 제품의 비회원 접수. 번호를 본인 식별자로 취급하지 않음</td>
+</tr>
+<tr>
+<td>08</td>
+<td>고객 카카오 실패 시 문자 대체</td>
+<td>단일 알림 책임 제품에서만 적용</td>
+</tr>
+<tr>
+<td>09</td>
+<td>직접 처리할 업무만 사장님 외부 알림</td>
+<td>양쪽 공통. 단순 AI 질의와 매체 노출은 제외</td>
+</tr>
+<tr>
+<td>10</td>
+<td>허용 구성요소 내 AI 사이트 제작</td>
+<td>Field. 임의 HTML·JS 생성 금지</td>
+</tr>
+<tr>
+<td>11</td>
+<td>여러 페이지, 한 페이지 완성도 가능</td>
+<td>Field</td>
+</tr>
+<tr>
+<td>12</td>
+<td>기본 주소 + 자체 도메인</td>
+<td>Field 사이트. AP는 자체 공통 상담 도메인·외부 설치; AP 화이트라벨 도메인은 별도 후속</td>
+</tr>
+<tr>
+<td>13</td>
+<td>구조화 서비스 목록</td>
+<td>Field 원본 또는 AP 직접 입력 원본. 연결 시 출처·버전 매핑</td>
+</tr>
+<tr>
+<td>14</td>
+<td>희망시간 제출형 + 시간표 선택형</td>
+<td>Field. AP는 연결 기능으로 선택 노출</td>
+</tr>
+<tr>
+<td>15</td>
+<td>자체 달력 + 수동 일정, 외부 캘린더 제외</td>
+<td>Field. AP 자체 달력은 만들지 않음</td>
+</tr>
+<tr>
+<td>16</td>
+<td>누구나 가입·개설</td>
+<td>두 제품 사업자. 위험 기반 제한과 매체 설치 검증은 별도</td>
+</tr>
+<tr>
+<td>17</td>
+<td>무료 체험 후 명시적 유료 구독</td>
+<td>각각의 제품. 계정 연결만으로 상대 결제 시작 금지</td>
+</tr>
+<tr>
+<td>18</td>
+<td>고객의 서비스 대금은 플랫폼 외부 수령</td>
+<td>두 제품 동일. 예약금·서비스 대금·매체 정산 제외</td>
+</tr>
+<tr>
+<td>19</td>
+<td>이메일 + 카카오 로그인</td>
+<td>제품별 앱 설정·동의·세션. 동일 이메일 자동 병합 금지</td>
+</tr>
+<tr>
+<td>20</td>
+<td>직접 등록·승인한 정보·서비스·FAQ·정책만 AI 참고</td>
+<td>AP 직접 승인 및 Field에서 승인한 정보를 공식 커넥터로 가져와 검수. 임의 크롤링 제외</td>
+</tr>
+<tr>
+<td>21</td>
+<td>초안 저장 → 검토·공개, 복구 후 재승인</td>
+<td>Field 사이트 / AP 지식·AI·홍보 각각 적용</td>
+</tr>
+</tbody>
+</table></div>
+<p>Field에 AP 연결이 없는 상태는 장애도 미완성 계정도 아니다. 단, 전체 연결 상품의 인수 테스트에는 AI 문의 경로가 실제로 설치되는지 검수한다. 독립 Field 출시를 전체 통합 완성으로 보고하지 않는다.</p>
+<h3 id="section-10">1.6 출시 단위</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>릴리스</th>
+<th>내용</th>
+<th>기다리지 않아도 되는 것</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A — AI Core</td>
+<td>AP 가입·지식·AI·자체 상담·외부 위젯·알림·구독·운영</td>
+<td>Field 사이트·예약, 홍보 카드·매체</td>
+</tr>
+<tr>
+<td>F — Field Core</td>
+<td>사이트 제작·도메인·직접 문의·예약·알림·구독·운영</td>
+<td>AP 설치·매체</td>
+</tr>
+<tr>
+<td>I — Field Connector</td>
+<td>정식 연결·권한·지식 동기화·외부 설치·업무 전달·API 답변</td>
+<td>제휴 매체 광고 기능</td>
+</tr>
+<tr>
+<td>D — Distribution</td>
+<td>AP 홍보 카드·제휴 매체·승인·집계</td>
+<td>Field. 연결된 예약 전환 지표만 Field 이벤트가 있을 때 표시</td>
+</tr>
+<tr>
+<td>Suite</td>
+<td>A+F+I+D의 전체 인수 및 제품별 독립 회귀</td>
+<td>없음. 전체 최종 범위의 완료 판단</td>
+</tr>
+</tbody>
+</table></div>
+<p>Firsthand식 대화형 홍보·매체 기능을 삭제하는 것이 아니다. <strong>기본 외부 설치가 매체 기능의 개발을 기다리지 않도록 출시 단위를 분리</strong>한다. AP Core부터 독립적으로 검증하고, Field Core는 병렬 개발하며, 매체는 AP의 확장으로 제공한다.</p>
+<h3 id="section-11">1.7 범위 밖</h3>
+<p>현재 단계에서 범용 AI 에이전트 마켓, 고객 서버 온프레미스 설치, 임의 도구/MCP 실행, 브라우저 자동 수집, 웹 문서 자동 학습, 이미지 생성·진단, AI 전화, 고객 서비스 대금·예약금 결제, 광고 자동 입찰/거래소, 매체 광고비 정산, 리타게팅·고객 프로필 판매, 다인 기사 배정 UI는 만들지 않는다. 공개 API는 문서화된 설치·상담·제한된 커넥터 계약이며 무제한 외부 실행 권한을 판매하는 제품이 아니다.</p>
+<hr />
+<h2 id="section-12">02. Agent Platform 독립 제품 PRD</h2>
+<h3 id="section-13">2.1 제품의 완료 정의</h3>
+<p><strong>Field 설치 파일·계정·서버·DB가 전혀 없는 환경</strong>에서 사업자가 가입하고 정보를 등록·승인한 뒤, AP 상담 링크 또는 자신이 소유한 외부 사이트에 위젯을 설치하고, 별도 고객 기기의 실제 문의를 받아 사람이 답변하며, 유료 구독·해지·데이터 내보내기까지 진행할 수 있어야 한다.</p>
+<p>AP 사업자는 초기에는 조직 1개·대표 AI 1개라는 제안 한도로 시작한다. 추후 다중 AI 확장에 대비해 agent_id를 두되 초기 UI에서 불필요한 에이전트 편성을 요구하지 않는다. 서비스·제품 안내는 지원하지만 재고·주문·배송·결제의 실시간 자동 처리를 연결 없이 제공하지 않는다.</p>
+<h3 id="section-14">2.2 필수 사용 흐름</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>순서</th>
+<th>화면과 행동</th>
+<th>저장·검증</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>AP 홈페이지 → 내 사업 AI 만들기</td>
+<td>Field 가입 링크로 강제 이동 금지</td>
+</tr>
+<tr>
+<td>2</td>
+<td>이메일 또는 카카오 가입</td>
+<td>AP 자체 사용자·조직·세션·체험 생성</td>
+</tr>
+<tr>
+<td>3</td>
+<td>상호·소개·서비스·지역·영업시간·FAQ 등록</td>
+<td>초안, 입력 출처, 미확인 정보. 사이트·예약 설정 불필요</td>
+</tr>
+<tr>
+<td>4</td>
+<td>AI 이름·말투·안내 범위·사람 연결 설정</td>
+<td>AgentDraft, 조직 권한</td>
+</tr>
+<tr>
+<td>5</td>
+<td>답변 테스트</td>
+<td>근거·미등록 질문·인계 확인; 실제 고객 알림/리드 생성 금지</td>
+</tr>
+<tr>
+<td>6</td>
+<td>검토 후 활성화</td>
+<td>KnowledgeRelease와 AgentRelease의 AP 내부 검증</td>
+</tr>
+<tr>
+<td>7</td>
+<td>상담 링크 공유 또는 외부 설치</td>
+<td>운영 주소·허용 도메인·상태 확인</td>
+</tr>
+<tr>
+<td>8</td>
+<td>고객 상담 → 이름·번호로 문의 제출</td>
+<td>AP의 원본 대화/비회원 접근 권한</td>
+</tr>
+<tr>
+<td>9</td>
+<td>AP 문의함에서 사람 응대</td>
+<td>AI 중지·답변·알림·고객 복귀</td>
+</tr>
+<tr>
+<td>10</td>
+<td>필요하면 외부 서비스 연결</td>
+<td>선택 기능. 연결 전에도 1~9 정상 운영</td>
+</tr>
+</tbody>
+</table></div>
+<p>최초 고객 문의 전에는 문의 0건을 그대로 표시한다. 예시 고객·허위 후기·가짜 정확도·매출 그래프를 채우지 않는다. 사이트가 없어도 상호와 서비스 소개가 있는 독립 상담 랜딩 화면을 제공한다.</p>
+<h3 id="section-15">2.3 AI가 사용하는 데이터</h3>
+<p>지식 원본은 AP 직접 입력 또는 승인된 외부 커넥터의 구조화 데이터다. <code>source_kind=native|connector</code>, <code>source_id</code>, <code>external_entity_id</code>, <code>source_revision</code>, <code>content_hash</code>, <code>approved_by</code>, <code>approved_at</code>를 보관한다.</p>
+<p>Field 연결 후 해당 서비스의 가격·운영시간은 Field 원본을 참조한다. AP 화면에서는 ‘Field에서 관리’로 표시하고 같은 필드를 직접 수정하지 못하게 한다. AP 고유 FAQ와 말투는 AP에서 편집할 수 있다. 직접 입력 데이터와 연결 데이터가 같은 대상을 설명하면 출처 매핑·우선순위를 확인한 후 연결하며 자동 덮어쓰기·단순 이름 일치 병합을 하지 않는다.</p>
+<div class="table-scroll compact" tabindex="0"><table>
+<thead>
+<tr>
+<th>객체</th>
+<th>역할</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>KnowledgeDraft</td>
+<td>비공개 입력·수정·가져온 변경안</td>
+</tr>
+<tr>
+<td>KnowledgeRelease</td>
+<td>승인된 불변 지식 묶음; 사이트 ID 불필요</td>
+</tr>
+<tr>
+<td>KnowledgeSource</td>
+<td>외부 연결·마지막 검증 시각·승인된 소스 버전·동기화 상태</td>
+</tr>
+<tr>
+<td>AgentRelease</td>
+<td>말투·허용 기능·안내 문구·정책 버전</td>
+</tr>
+<tr>
+<td>Deployment</td>
+<td>자체 링크·소유 사이트 위젯·제휴 카드 등 설치 위치</td>
+</tr>
+<tr>
+<td>Conversation / Submission</td>
+<td>고객 대화와 최종 제출된 연락 요청</td>
+</tr>
+<tr>
+<td>ActionRequest</td>
+<td>고객이 확인한 외부 업무 전달 요청. 예약 원본이 아님</td>
+</tr>
+</tbody>
+</table></div>
+<p>AP 직접 입력 지식의 상호·서비스·FAQ는 작성 중 빈 값도 비공개 초안에 서버 저장해 재접속 후 이어 쓴다. 고객 공개와 AI 근거에 쓰는 KnowledgeRelease는 필수 값을 다시 검사한 뒤 사업자가 별도로 승인한다. 자동 저장 실패·오프라인·revision 충돌은 저장 완료로 표시하지 않고 입력을 보존한다. 공개 버전 번호와 직접 입력 초안 번호는 별도로 관리한다.</p>
+<p>가격·예약 가능성은 추측하지 않는다. Field 연결 데이터가 최신 승인 상태인지 확인할 수 없으면 해당 조건의 확정적 안내와 예약 도구를 중단하고 사람 문의로 전환한다. 세부 최신성·승인 규칙은 연동 계약 4.5절을 따른다.</p>
+<h3 id="section-16">2.4 기본 AI와 도구</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>기능</th>
+<th>기본 AP 단독</th>
+<th>외부 연결 시</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>상호·서비스·FAQ 안내</td>
+<td>승인 AP 정보 조회</td>
+<td>승인된 연결 데이터도 출처 검증 후 이용</td>
+</tr>
+<tr>
+<td>문의 초안</td>
+<td>고객 발언·선택 서비스 정리</td>
+<td>동일</td>
+</tr>
+<tr>
+<td>정식 접수</td>
+<td>고객의 제출 버튼과 서버 검증 후 AP 저장</td>
+<td>동일</td>
+</tr>
+<tr>
+<td>사람 인계</td>
+<td>AP 문의함으로 전환</td>
+<td>허용받은 Field 관리실에도 API로 표시</td>
+</tr>
+<tr>
+<td>예약 시간 조회</td>
+<td>기능 비노출</td>
+<td>활성 커넥터의 제한 API로 조회</td>
+</tr>
+<tr>
+<td>예약 요청 전달</td>
+<td>기능 비노출</td>
+<td>고객 확인 후 ActionRequest → Field 요청</td>
+</tr>
+<tr>
+<td>예약 확정·가격 변경·할인·결제</td>
+<td>금지</td>
+<td>연결되어도 금지</td>
+</tr>
+</tbody>
+</table></div>
+<p>LLM은 tenant·권한·금액·발신자를 결정하지 않는다. 서버가 고정한 agent/조직/지식 버전으로 검증된 도구만 호출한다. 고객 메시지나 외부 기사 내용이 공식 지식·정책·새 도구가 되어서는 안 된다. 임의 URL fetch·SQL·shell·외부 메일 보내기는 도구에 없다.</p>
+<p>답변은 답변문, 사용 근거 ID, 지식 버전, 미확인 항목, 사람 인계 제안으로 구조화한다. 모델의 비공개 사고과정은 저장하지 않는다. 이름·번호·상세 주소는 모델 입력에서 최소화하며 고객 사진은 초기 비전 분석으로 보내지 않는다.</p>
+<h3 id="section-17">2.5 설치 상품 — 기본 위젯과 광고 카드를 분리</h3>
+<h4 id="section-18">기본 설치: AP Core 필수</h4>
+<p>AP 대표 상담 링크, QR, 웹사이트용 버튼·플로팅 위젯·인라인 대화 중 검수된 기본 렌더러를 제공한다. 초기 프리셋은 한 엔진의 <code>floating</code>과 <code>inline</code> 두 표시 모드로 충분하다. 고객이 준비할 것은 직접 도메인 소유/설치 권한을 확인하고 발급된 설치 코드를 넣는 일이다.</p>
+<p>Field도 동일 코드 로더·공개 배포 ID·허용 도메인 검증을 사용한다. Field에만 AP 서버의 내장 컴포넌트를 직접 import하거나 비밀키로 우회하는 경로는 없다. 로더 실패 시 원래 Field 문의·전화·예약 버튼은 남는다.</p>
+<pre><code class="language-html">&lt;!-- 예시 계약. 실제 운영 host와 검증된 public deployment ID로 발급할 것. --&gt;
+&lt;script async src=&quot;https://embed.agent-platform.example/sdk/v1.js&quot;
+        data-deployment=&quot;dep_public_example&quot;
+        data-mode=&quot;floating&quot;&gt;&lt;/script&gt;
+</code></pre>
+<p><code>.example</code>은 실제 배포 주소가 아니다. 스크립트에는 운영자 API 토큰을 넣지 않는다. 위젯은 API용 단기·대화 범위 세션을 발급받고 원본 사이트의 고객 데이터나 DOM 전체를 수집하지 않는다. 테마·크기·대표 질문만 제한된 옵션으로 받는다.</p>
+<p>자기 사이트의 고객지원 위젯은 광고 캠페인 생성을 요구하지 않는다. 모든 접점은 사업자명과 AI 안내를 표시한다. <strong>‘광고’ 표시는 유료/스폰서 콘텐츠의 홍보 카드에 필수</strong>이며, 일반 고객지원 위젯을 광고상품으로 강제 분류하지 않는다.</p>
+<h4 id="section-19">제휴 매체 배포: Distribution 릴리스</h4>
+<p>홍보 카드의 초안·공개·중지, 매체 도메인·광고 위치, 사업자의 배치 요청, 매체의 정확한 카드 버전 승인, 외부 대화→AP 안전 접수, 집계 성과를 제공한다. Firsthand의 모든 광고 네트워크 기능을 재현한다고 표현하지 않는다.</p>
+<p>카드의 가격은 승인 서비스에 바인딩한다. campaign release 변경 시 새 버전 승인이 필요하며, 기존 승인을 최신 버전으로 바꿔치기하지 않는다. 위험한 사실 변경은 관련 노출을 보류한다. 부모 매체에 이름·번호·사진·대화·세션 비밀값을 반환하지 않는다.</p>
+<h3 id="section-20">2.6 외부 대화와 비회원 접수</h3>
+<p>외부 iframe에서는 일반 안내와 서비스 선택을 한다. 연락처·사진·상세 주소를 받는 양식은 AP의 1차 상담 도메인에서 제공한다. 고객이 외부 채팅에 식별정보를 직접 입력할 가능성도 고려해 마스킹과 보존을 적용한다. 개인정보가 전혀 들어오지 않는다고 가정하지 않는다.</p>
+<p>전환은 단기·1회·대상 바인딩된 handoff 권한으로 처리한다. 제3자 쿠키가 없다는 이유로 실패하거나 로그인부터 요구하지 않는다. 브라우저의 외부 쿠키 제약을 고려한 설계다.<a href="https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Third-party_cookies">S05</a></p>
+<p>기존과 같이 회원가입·휴대전화 OTP 없이 이름·번호로 접수한다. 번호는 미인증으로 표시한다. 최초 접수 브라우저의 대화 범위 HttpOnly/Secure 세션과 별도 접수 확인키를 사용하고, 알림 링크/번호만으로 원문·사진·과거 기록을 공개하지 않는다. 확인키는 문자·알림톡에 포함하지 않는다. 다른 브라우저에서 확인키가 필요할 수 있는 불편과 번호 오입력의 잔여 위험을 명시한다.</p>
+<p>같은 대화에서 AI→사람 문의→외부 업무 요청으로 넘어갈 때 원문과 선택 정보를 보존한다. 외부 업무 전송에는 수신 사업자·외부 제품·전달 필드·요청 상태·필요 처리 안내를 보여주고 명시적 제출을 받는다. 자동으로 Field 가입 계정이나 고객 프로필을 만드는 것은 금지한다.</p>
+<p>상담 링크에서 모델 공급사 또는 예산 설정이 없어도 익명 AP 대화 원본을 열어 사람 문의를 이어갈 수 있어야 한다. AI 답변 시도는 실제 차단 상태로 표시하고 실패한 질문을 고객이 확인·수정할 수 있는 사람 문의 초안에 남긴다. 초안 5,000자 한도로 질문을 더하지 못하면 추가됐다고 안내하지 않고, 원 질문 입력과 누락 안내·초안 축소 뒤 재추가 경로를 유지한다. 고객 동의 후 같은 원본·배포 귀속을 유지하며, 연결된 외부 업무 요청은 같은 화면에서 별도 현재 조건 확인과 동의를 거친다.
+고객이 AI 질문을 건너뛰고 바로 사람 문의를 제출해도 상담 링크의 활성 배포에 귀속된 AP 원본으로 접수한다. AI 질문과 사람 제출이 동시에 시작되면 한 상담 세션을 공유하며, 사람 접수 뒤 늦게 도착한 AI 답변은 표시하지 않는다.</p>
+<p>상담 링크와 외부 iframe의 AI 질문 POST <code>/v1/engagements/{id}/messages</code>는 질문마다 임의의 <code>Idempotency-Key</code>를 보낸다. 같은 대화·키·질문은 모델 실행과 사용량을 다시 만들지 않고 완료 답변, 진행 중 202, 확정 실패를 재사용하며 같은 키의 다른 질문은 409로 거절한다. 응답이 유실되면 유효한 상담 세션에서 GET <code>/v1/engagements/{id}/messages/recover</code>와 같은 키로 상태를 조회한다. 진행 중·조회 장애에는 성공을 표시하거나 새 질문을 실행하지 않는다. 브라우저 탭의 임시 재시도 원장에는 질문 원문 대신 해시와 키만 둔다. 서버의 실행 상태가 5분 이상 <code>in_progress</code>이면 GET과 같은 키 POST 재시도는 조회 시점 <code>result_unknown</code>을 반환한다. 이는 실패 확정이나 재실행 허가가 아니다. 원래 실행은 여전히 새 키 질문을 막으며 늦은 완료를 같은 키로 다시 확인할 수 있다. 고객에게는 결과 미상·상태 재조회·사람 문의를 안내한다.</p>
+<h3 id="section-21">2.7 상담 원본과 사람 응대</h3>
+<p>AP에서 시작한 대화 원본은 AP DB에만 있다. AP 관리실에서 열든 Field가 정식 API로 보여주든 같은 conversation_id와 message sequence를 사용한다. Field UI에서 작성한 답변도 AP 서버가 저장·모드 전환·알림 생성까지 담당한다.</p>
+<p><code>ai_assisting → needs_owner → human_active → waiting_customer → closed</code>를 기본 상태로 한다. 고객이 추가 답변하면 다시 needs_owner로 연다. spam 상태는 대화·증빙 보존정책과 별도로 발송을 중단한다. 사람 응대 진입과 답변 저장을 원자적으로 처리하고, 생성 중인 AI는 마지막 전송 전에 automation_paused와 revision을 다시 검사한다.</p>
+<p>원문, 요약, 미확인 값, 고객 공개 답변, 내부 메모를 분리한다. 내부 메모는 외부 매체와 고객 응답 스키마에서 제외한다. AP 장애 시 Field가 AP 답변을 성공으로 표시해서는 안 된다. 로컬 입력은 전송되지 않은 초안으로 남기고 복구/재전송 선택을 제공한다.</p>
+<h3 id="section-22">2.8 AP 알림·사용량·구독</h3>
+<p>단독 AP는 자체 카카오톡·웹 푸시 사업자 알림과 고객 카카오→실패 문자 대체를 가진다. Field의 메시지 Worker가 없어도 동작해야 한다. 두 제품이 같은 공급사를 쓰더라도 발송 주체·계약 적합성·템플릿·사용량 원장은 구분한다. AP 업무 알림은 직접 접수·미해결 인계·고객 추가 답변에 한하며 단순 질문에는 보내지 않는다.</p>
+<p>AP 구독으로 AI 응답·상담실·기본 외부 설치를 사용할 수 있다. 예약·사이트 기능을 구매해야만 AP 결제를 진행할 수 있으면 실패다. 기본 상담 설치는 매체 요금제와 분리한다. 체험 14일, 대표 AI 1개, 유료 월 500회 AI 응답 등은 운영비 검증 전 제안값이다. <strong>독립 AP 가격은 새 plan version으로 정하고, 기존 Field 통합안의 29,000원을 자동 적용하지 않는다.</strong></p>
+<p>원가·동의가 확정되지 않은 플랜은 test mode에서만 결제한다. production은 승인된 가격·세금·갱신·해지 조건 없이는 유료 판매를 활성화하지 않는다. 이는 추가 사용자 설문이 아니라 출시 가격 확정 작업이다.</p>
+<p>AP 해지 시 신규 AI·신규 접수·새 캠페인을 제한해도 기존 상담의 정리·내보내기 경로를 유지한다. Field 구독은 해지되지 않는다. 이미 Field에 접수된 예약은 Field에서 계속 처리하며, AP를 다시 구독해야 예약을 볼 수 있게 만들지 않는다.</p>
+<h3 id="section-23">2.9 역할별 화면</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>역할/화면</th>
+<th>핵심 요소</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AP-P01</td>
+<td>AP 제품 홈</td>
+<td>AI 만들기·외부 설치·요금·매체·로그인</td>
+</tr>
+<tr>
+<td>AP-O01</td>
+<td>가입·빈 관리실</td>
+<td>이메일/카카오, 시작/이어서 하기, 데모 분리</td>
+</tr>
+<tr>
+<td>AP-O02</td>
+<td>사업 정보·지식</td>
+<td>native/connector 출처, 초안/승인, 가져온 변경 검토</td>
+</tr>
+<tr>
+<td>AP-O03</td>
+<td>AI 설정·테스트</td>
+<td>이름·말투·허용 도구, 근거·상태·실제 활성화</td>
+</tr>
+<tr>
+<td>AP-O04</td>
+<td>문의함·대화</td>
+<td>직접 답변·사람 인계·미인증 번호·알림 실패</td>
+</tr>
+<tr>
+<td>AP-O05</td>
+<td>공유·설치</td>
+<td>링크·QR·소유 도메인·설치 코드·테스트·중지</td>
+</tr>
+<tr>
+<td>AP-O06</td>
+<td>연동 앱</td>
+<td>권한·출처·Field 연결·재동의·해제·실패</td>
+</tr>
+<tr>
+<td>AP-O07</td>
+<td>홍보 카드</td>
+<td>초안·미리보기·공개·버전·배치</td>
+</tr>
+<tr>
+<td>AP-O08</td>
+<td>성과·사용량</td>
+<td>대화/접수/외부 전환 구분, 실제 수금은 아님</td>
+</tr>
+<tr>
+<td>AP-O09</td>
+<td>구독·계정·데이터</td>
+<td>별도 요금/동의/해지·export·삭제</td>
+</tr>
+<tr>
+<td>AP-C01</td>
+<td>고객 상담 랜딩/위젯</td>
+<td>상호·AI 고지·공개 안내·사람 문의</td>
+</tr>
+<tr>
+<td>AP-C02</td>
+<td>안전 접수/후속 대화</td>
+<td>이름·번호·사진·확인키·외부 요청 상태</td>
+</tr>
+<tr>
+<td>AP-M01~05</td>
+<td>제휴 매체</td>
+<td>운영·위치·배치 검토·집계·도메인/설정</td>
+</tr>
+<tr>
+<td>AP-A01~06</td>
+<td>AP 관리자</td>
+<td>운영·조직·발송·AI/배포·구독·신고/감사</td>
+</tr>
+</tbody>
+</table></div>
+<p>매체는 자기 도메인/위치/카드 승인과 집계만 본다. 사업자와 매체 역할을 같은 사람에게 허용하더라도 별도 membership으로 확인한다. AP 관리자라는 이유로 Field DB나 예약 관리자 권한을 주지 않는다.</p>
+<h3 id="section-24">2.10 AP 원본 데이터와 내부 API</h3>
+<p>AP 전용 DB: <code>ap_users</code>, <code>ap_identities</code>, <code>ap_organizations</code>, <code>ap_memberships</code>, <code>ap_knowledge_sources</code>, <code>ap_knowledge_drafts</code>, <code>ap_knowledge_releases</code>, <code>ap_agents</code>, <code>ap_agent_releases</code>, <code>ap_deployments</code>, <code>ap_conversations</code>, <code>ap_messages</code>, <code>ap_submissions</code>, <code>ap_visitor_grants</code>, <code>ap_action_requests</code>, <code>ap_connector_bindings</code>, <code>ap_campaigns</code>, <code>ap_campaign_releases</code>, <code>ap_publishers</code>, <code>ap_slots</code>, <code>ap_placement_approvals</code>, <code>ap_events</code>, <code>ap_outbox</code>, <code>ap_notifications</code>, <code>ap_usage</code>, <code>ap_subscriptions</code>, <code>ap_invoices</code>, <code>ap_audit</code>.</p>
+<p>표의 <code>ap_</code>는 소유권을 명확히 하기 위한 명세 접두어이며 DB가 제품별로 나뉘면 실제 테이블 접두어는 ADR로 생략 가능하다. Field 외부 ID는 string 메타데이터이며 AP의 FK가 아니다.</p>
+<div class="table-scroll compact" tabindex="0"><table>
+<thead>
+<tr>
+<th>계약</th>
+<th>핵심 동작</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST /v1/organizations</td>
+<td>AP 조직·체험 생성</td>
+</tr>
+<tr>
+<td>PATCH /v1/knowledge/draft</td>
+<td>revision 조건 수정, source 필드 통제</td>
+</tr>
+<tr>
+<td>POST /v1/knowledge/releases</td>
+<td>사업자 승인 버전 생성</td>
+</tr>
+<tr>
+<td>POST /v1/agents / POST /v1/agents/{id}/activate</td>
+<td>사이트·예약 없이 개설·활성화</td>
+</tr>
+<tr>
+<td>POST /v1/agents/{id}/tests</td>
+<td>테스트 격리, 근거 반환</td>
+</tr>
+<tr>
+<td>POST /v1/deployments</td>
+<td>link/owned_embed/partner 구분, 권한·허용 origin</td>
+</tr>
+<tr>
+<td>POST /v1/public/deployments/{id}/sessions</td>
+<td>짧은 공개 대화 세션, 관리자 토큰 금지</td>
+</tr>
+<tr>
+<td>POST /v1/engagements/{id}/messages</td>
+<td>승인 정보·모드·비용 검사</td>
+</tr>
+<tr>
+<td>POST /v1/engagements/{id}/handoffs</td>
+<td>AP 1차 접수 권한 교환</td>
+</tr>
+<tr>
+<td>POST /v1/conversations/{id}/submissions</td>
+<td>최종 제출, 비회원 capability</td>
+</tr>
+<tr>
+<td>GET/POST /v1/conversations/{id}/messages</td>
+<td>권한/actor 구분, human reply와 AI 실행 분리</td>
+</tr>
+<tr>
+<td>POST /v1/action-requests</td>
+<td>고객이 확인한 외부 작업 요청 저장</td>
+</tr>
+<tr>
+<td>POST /v1/subscription/checkout / cancel</td>
+<td>AP 구독만 처리</td>
+</tr>
+</tbody>
+</table></div>
+<p>내부 API와 위임 공개 API의 이름이 비슷해도 인증 주체·스코프·응답 허용 필드를 분리한다. 교차 제품 호출에는 연동 계약의 전용 경로를 사용한다.</p>
+<hr />
+<h2 id="section-25">03. Field 독립 제품 PRD</h2>
+<h3 id="section-26">3.1 Field의 책임</h3>
+<p>Field는 사업자 스스로 사이트를 개설하고 고객의 직접 문의와 예약을 운영하는 제품이다. AP는 선택적으로 설치하는 외부 서비스다. Field 홈페이지·일반 문의·예약·구독의 요청 경로에서 AP가 상시 필수 호출이 되어서는 안 된다.</p>
+<p>Field 자체 사이트 제작 AI는 Field의 제작 기능으로 유지한다. 상담용 AI 설치와 제작용 LLM 호출은 비용·권한·상태를 명확히 구분한다. 관리실의 ‘AI 연결’은 AP 계정·AI·권한을 연결하는 화면이지 AP 전체 관리 콘솔의 복제본이 아니다.</p>
+<h3 id="section-27">3.2 기존 5단계 셀프 사이트 제작</h3>
+<p><strong>플랫폼 홈 → 가입 → 빈 시작 화면 → 사업 정보 → 디자인 → 편집 → 연락·예약 → 확인·공개 → 운영실 오늘</strong>.</p>
+<div class="table-scroll compact" tabindex="0"><table>
+<thead>
+<tr>
+<th>단계</th>
+<th>필수 동작</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>사업 정보</td>
+<td>상호·업종·서비스·지역·소개·운영시간·연락처·사진 입력; 서버 초안</td>
+</tr>
+<tr>
+<td>디자인</td>
+<td>템플릿 또는 AI 설명; 입력한 실제 상호·서비스로 생성</td>
+</tr>
+<tr>
+<td>편집</td>
+<td>글·사진·alt·색·허용 폰트·페이지·섹션 순서·직접/AI 수정</td>
+</tr>
+<tr>
+<td>연락·예약</td>
+<td>사이트 직접 문의, 전화, 두 예약 방식, 사업자 카카오/푸시 설정; AP 연결은 선택</td>
+</tr>
+<tr>
+<td>확인·공개</td>
+<td>기본 주소, 모바일, 필수 정보, 미승인 변경 확인; 실제 공개 후 성공 표시</td>
+</tr>
+</tbody>
+</table></div>
+<p>AP 연결 전에도 사이트를 공개할 수 있다. 설치를 권하는 카드에 ‘나중에 연결’ 경로를 두며 AI 상담이 없는 상태의 버튼은 ‘문의 남기기’로 명확히 표시한다. 비연결 상태에서 AI가 답하고 있다고 표시하지 않는다.</p>
+<p>Essential·Editorial·Warm 3개 배치는 색상만 바뀌는 동일 레이아웃이 아니다. 한 페이지 기본 사이트와 서비스·소개·작업 사례·FAQ 등 최대 5개 소개 페이지 시작안을 유지한다. 시스템 문의·예약 화면은 소개 페이지 수와 별도다. 사진 없는 사업자도 개설할 수 있다. 이미지 생성·외부 이미지 자동 수집은 제외한다.</p>
+<h3 id="section-28">3.3 편집·저장·공개·복구</h3>
+<p><code>FieldBusinessDraft/FieldCatalogRelease</code>와 <code>SiteDraft/SiteRelease</code>는 Field 내부 객체다. 초안은 서버에 자동 저장하고 base_revision 충돌을 검사한다. 약 1초 저장 디바운스는 제안값이다. 오프라인/실패 중에는 저장 완료라고 표시하지 않는다. 입력 중인 빈 상호·서비스명·소요시간 0도 비공개 사업정보 초안에 저장해 재접속 후 이어 쓸 수 있다. 필수 정보가 미완성인 초안은 사업자가 승인할 수 없고 고객 공개 버전에도 반영하지 않는다.</p>
+<p>AI 생성 작업은 queued/running/proposed/applied_to_draft/failed/canceled/stale를 구분한다. 실제 LLM 결과를 제한된 페이지 JSON으로 검증한 뒤 초안만 수정한다. 생성 중 직접 수정하면 오래된 AI 결과를 자동 덮어쓰지 않는다. 실패·취소·재시도에 입력과 사진을 잃지 않는다.</p>
+<p>Field 내부에서 승인한 사업정보·사이트 공개는 해당 DB 트랜잭션/작업 상태로 일관성 있게 적용한다. <strong>AP로의 동기화 성공까지 Field 공개 트랜잭션에 넣지 않는다.</strong> 성공 후 outbox로 승인 정보 변경을 발행하고 별도 ‘AI 정보 동기화 대기/검토 필요’ 상태를 보인다.</p>
+<p>과거 디자인 복구는 초안으로 가져오고 재승인 후 공개한다. 현재 서비스 가격·예약 조건·확정 예약은 디자인 복구로 되돌리지 않는다. 사실 복구가 필요하면 별도 변경 승인이다. AP AI/배포 중지는 사이트 디자인 복구로 해제되지 않는다.</p>
+<h3 id="section-29">3.4 도메인·공개 자산</h3>
+<p>기본 슬러그와 자체 도메인 기능은 유지한다. 자체 도메인은 등록·소유 증명·DNS·TLS·연결·대표 URL을 구분하며, 실패 시 기본 주소를 유지한다. 도메인 구매·갱신 판매는 제외한다.</p>
+<p>AP 위젯을 Field 자체 도메인에 붙일 때도 새 origin 승인이 필요하다. Field의 도메인 검증 사실을 숨은 DB로 전달하지 않고, 공식 커넥터의 signed source/공개 검증 엔드포인트 또는 AP가 지원하는 일반 소유 검증으로 확인한다. 기본 플랫폼 호스트는 정확한 사업자 서브도메인 단위로 제한한다. 전체 플랫폼 <code>*</code> 허용으로 다른 사업자가 설치키를 재사용하게 하지 않는다.</p>
+<p>사이트 공개 사진과 비공개 문의 첨부는 저장 정책을 분리한다. HEIC 등은 안전한 변환, 실제 파일 형식 검사·용량·EXIF 제거를 거친다. 공개 릴리스가 참조하는 사진은 초안에서 삭제했다고 즉시 제거하지 않는다.</p>
+<h3 id="section-30">3.5 AP 연결 화면</h3>
+<p>Field 메뉴: <strong>더보기 → 연동 서비스 → AI 상담 연결</strong>. 이미 고객 사이트가 공개돼 있든 개설 중이든 별도 설정할 수 있다.</p>
+<pre><code class="language-text">AI 상담 연결
+제공 서비스: Agent Platform (별도 서비스)
+[기존 계정 연결] [AI 서비스에 가입]
+
+공유할 정보: 승인된 사업 소개·서비스·가격·FAQ
+설치할 위치: 이 Field 사이트의 검증된 주소
+선택 권한: Field 문의 전달 / 예약 시간 조회·요청 / 대화 조회·답변
+요금: Field 이용료와 AP 이용료는 별도. 연결만으로 결제하지 않음.
+</code></pre>
+<p>권한·기관·연결 조직·AI를 명확히 표시한다. 허용하지 않은 기능은 숨기거나 권한이 필요하다는 이유를 표시한다. 연결 실패/일부 동의/검토 필요/정보 오래됨/중지/만료를 ‘연결됨’ 하나로 뭉개지 않는다.</p>
+<p>AI 위젯은 AP 공식 SDK로 설치한다. 설정 화면에는 연결 상태·마지막 동기화·AI 테스트·AP 관리실 열기·연결 해제를 둔다. AP의 홍보·매체·전체 구독 메뉴를 Field 내부 소유 기능처럼 복제하지 않는다.</p>
+<h3 id="section-31">3.6 Field 자체 문의와 연결된 AI 문의</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>구분</th>
+<th>Field 자체 직접 문의</th>
+<th>AP에서 시작한 AI 문의</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>대화 원본</td>
+<td>Field</td>
+<td>AP</td>
+</tr>
+<tr>
+<td>고객 후속 대화</td>
+<td>Field 상담 도메인</td>
+<td>AP 상담 도메인</td>
+</tr>
+<tr>
+<td>관리실 표시</td>
+<td>Field DB에서 조회</td>
+<td>위임 API 조회; 요약 인덱스와 업무 링크만 Field에 저장</td>
+</tr>
+<tr>
+<td>사람이 답변할 때</td>
+<td>Field 메시지 저장·알림</td>
+<td>Field BFF → AP 위임 답변 API → AP 저장·알림</td>
+</tr>
+<tr>
+<td>AP 장애·연결 해제</td>
+<td>정상 이용</td>
+<td>원문 재조회/전송 불가 표시; 이미 접수된 Field 업무는 유지</td>
+</tr>
+<tr>
+<td>예약 원본</td>
+<td>Field</td>
+<td>연결 요청이 수락되면 Field</td>
+</tr>
+</tbody>
+</table></div>
+<p>사업자에게는 문의 목록을 한 화면에서 보여줄 수 있지만 행마다 <code>Field 직접 문의</code>/<code>외부 AI 상담</code> 출처를 표시한다. 연결 조회 장애를 전체 문의 0건으로 표시하지 않는다. AP 문의를 보기 위해 Field 전체 관리 권한을 AP에 넘기거나 AP의 모든 채널 대화를 Field에 노출하지 않는다. 기본 범위는 <strong>이 연결/배포/외부 업무에 관련된 AP 대화만</strong>이다.</p>
+<p>Field는 AP 대화의 전체 원문을 상시 복제하지 않는다. 업무 수행에 필요한 연락처·고객 제출 요약·서비스·희망일·승인한 첨부는 고객 확인 후 받은 작업 스냅샷으로 보관한다. AP 대화 원본과 별개로 그 수신 시각·목적·출처·보존기간을 기록한다. 요약 미러의 최신 시각과 상태도 표시한다.</p>
+<p>AP 연결이 해제되면 그 원문/답변 권한은 사라진다. 기존 Field 업무 처리·달력·제출된 연락 정보는 정당한 보존 범위에서 남는다. 원래 대화를 무단으로 복제해 연결 해제를 우회하지 않는다.</p>
+<h3 id="section-32">3.7 예약·달력의 원본</h3>
+<p>기존 희망시간 제출형과 시간표 선택형을 모두 제공한다. 각 서비스는 기본 방식을 상속하거나 선택할 수 있으며 사이트 생성 과정이 서비스별 선택을 덮어쓰지 않는다.</p>
+<p>시간표는 사업자 1명의 공통 자원, 소요·준비·이동시간, 영업시간·휴무·예외일, 최소 요청 여유와 기간을 적용한다. 모든 서비스가 같은 자원을 공유한다. 미확정 요청은 슬롯을 독점하지 않고, 확정·수동 차단만 점유한다. 동시에 들어온 요청은 승인 시 DB에서 최종 충돌을 검사한다.</p>
+<p>고객이 서비스나 날짜를 바꾸면 이전 조건의 가능 시간 선택을 즉시 해제한다. 조회 실패·시간표 미설정·빈 결과에는 현재 서비스와 날짜를 유지한 재조회 경로를 제공하며, 이미 입력한 고객 연락처와 동의는 보존한다. 가능 시간을 다시 조회해도 예약은 요청 단계이며 사업자 확정 전 점유로 표시하지 않는다.</p>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>상태</th>
+<th>점유</th>
+<th>처리</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>requested</td>
+<td>없음</td>
+<td>확정/시간 제안/거절/고객 철회</td>
+</tr>
+<tr>
+<td>proposed / customer_accepted</td>
+<td>없음</td>
+<td>새 조건에 대한 고객 동의, 사업자의 최종 승인</td>
+</tr>
+<tr>
+<td>confirmed</td>
+<td>있음</td>
+<td>완료·변경 요청·취소 요청</td>
+</tr>
+<tr>
+<td>change_requested / cancel_requested</td>
+<td>기존 점유 유지</td>
+<td>새 합의와 승인 후 교체/해제</td>
+</tr>
+<tr>
+<td>completed / canceled / rejected / expired</td>
+<td>과거 기록</td>
+<td>결과 표시; 임의 자동 노쇼 처리 금지</td>
+</tr>
+</tbody>
+</table></div>
+<p>AP는 예약 가능 시간을 읽고 요청을 만들 수 있으나 confirm 권한이 없다. Field 사용자의 명시적 승인만 일정 확정 API를 실행한다. 제안을 고객이 수락해도 자동 확정되지 않는다.</p>
+<p><code>[start-before_buffer, end+after_buffer)</code> 범위에 같은 resource의 겹침을 차단하고 예약 상태·점유·outbox를 한 Field DB 트랜잭션에 저장한다. 수동 일정도 예외가 아니다. 시간 변경 때 기존 점유를 먼저 삭제한 뒤 실패하는 상태를 만들지 않는다. 과거 가격·소요시간은 접수/확정 당시 스냅샷을 유지한다. 시간은 timezone 포함, 표시 기본은 Asia/Seoul이다.</p>
+<h3 id="section-33">3.8 알림·구독·장애</h3>
+<p>Field 직접 문의·예약 알림은 Field가 발송한다. AP에서 시작한 연결 대화의 고객 알림은 정상 연결 중 AP가 발송하며, Field는 해당 사건을 이벤트로 전달한다. 이미 발송된 같은 사건을 두 제품이 각각 카카오/문자로 보내지 않는다. 상세 규칙은 연동 계약 4.8절을 따른다.</p>
+<p>Field의 유료 이용은 사이트·직접 문의·예약·도메인·자체 알림을 기준으로 독립 제공한다. 과거 통합 가격 29,000원+부가세는 최종 가격이 아니며 분리 후 구성 변경에 맞춰 재확정한다. AP를 구독하지 않아도 Field 결제가 가능해야 한다. 연결 동의는 별도 제품 결제 동의가 아니다.</p>
+<p>해지 시 이미 확정된 미래 예약과 종결 중인 업무의 정리/내보내기 경로를 유지한다. 일반 정리 30일, 예약은 마지막 예정일+7일 등 기존 제안값은 법무·운영비 검수 후 확정한다. Field를 해지해도 AP 계정·독립 AI·다른 사이트 설치를 자동 해지하지 않는다.</p>
+<p>AP 장애 시 고객에게 Field 직접 문의/예약과 전화 경로를 제공하되, AP의 기존 미전송 내용을 몰래 복사해 새 문의를 만들지 않는다. 고객이 새 요청을 제출하면 <code>fallback_origin</code>과 관계를 기록하고 가능한 요청 ID로 중복 후보를 보여준다. 같은 전화번호만으로 두 대화를 자동 병합하지 않는다.</p>
+<h3 id="section-34">3.9 역할별 화면 유지</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>화면</th>
+<th>변경점</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F-P01</td>
+<td>Field 홈</td>
+<td>홈페이지·사업 운영 중심. AI는 외부 서비스 연결로 소개</td>
+</tr>
+<tr>
+<td>F-O01~07</td>
+<td>가입·빈 시작·5단계·개설 완료</td>
+<td>기존 셀프 제작 보존; AP 연결은 선택</td>
+</tr>
+<tr>
+<td>F-O08</td>
+<td>오늘</td>
+<td>직접 문의·외부 AI 업무 구분, 예약·알림 실패</td>
+</tr>
+<tr>
+<td>F-O09</td>
+<td>문의함·상세</td>
+<td>출처·전송 가능 상태·대화 원본·직접 답변</td>
+</tr>
+<tr>
+<td>F-O10</td>
+<td>예약·달력</td>
+<td>두 방식·수동 일정·변경·취소·충돌</td>
+</tr>
+<tr>
+<td>F-O11</td>
+<td>내 사이트</td>
+<td>편집·미리보기·공개·복구</td>
+</tr>
+<tr>
+<td>F-O12</td>
+<td>서비스·FAQ·운영 규칙</td>
+<td>Field 원본, AP 동기화 상태</td>
+</tr>
+<tr>
+<td>F-O13</td>
+<td>연동 서비스</td>
+<td>AP 연결·정보 범위·권한·상태·해제</td>
+</tr>
+<tr>
+<td>F-O14~16</td>
+<td>주소·알림·구독/계정</td>
+<td>Field 자체 원장·도메인·설정</td>
+</tr>
+<tr>
+<td>F-C01~04</td>
+<td>고객 사이트·서비스·소개·문의</td>
+<td>직접 경로 항상 유지; AP 위젯은 설치 상태일 때만</td>
+</tr>
+<tr>
+<td>F-C05~08</td>
+<td>예약·접수 완료·후속 대화·접근 확인</td>
+<td>직접 접수 원본은 Field; AP 출처는 AP로 안전 연결</td>
+</tr>
+<tr>
+<td>F-A01~06</td>
+<td>Field 관리자</td>
+<td>운영·사업체·제작/도메인·발송·구독·신고/감사</td>
+</tr>
+</tbody>
+</table></div>
+<p>모바일은 오늘/문의/예약/내 사이트/더보기 유지. 매체 관리실은 Field 메뉴에서 제거하는 것이 아니라 AP 제품으로 소유권을 옮긴다. 필요하면 AP로 이동 링크를 제공하되 Field 관리자 세션으로 자동 열람하지 않는다.</p>
+<h3 id="section-35">3.10 Field 데이터·API</h3>
+<p>Field DB: 사용자·조직·사이트·서비스·카탈로그 릴리스·공개 미디어·직접 대화·접수·예약·점유·알림·구독·감사. 연결 데이터는 <code>field_integrations</code>, <code>external_work_requests</code>, <code>external_thread_refs</code>, <code>source_mappings</code>, <code>inbox_events</code>, <code>outbox_events</code>, <code>revocation_jobs</code>로 분리한다. AP PK는 문자열 참조이며 cross-DB FK가 아니다.</p>
+<p>Field 자체 API는 기존 사이트/문의/예약 경로를 보존한다. 외부에 제공할 <code>facts</code>, <code>capabilities</code>, <code>availability</code>, <code>external-requests</code>, <code>external-request-status</code>는 별도 integration API로 만들고 요청마다 조직·연결·허용 도구·리소스·현재 상태를 검증한다. AP 토큰만으로 Field 사용자 세션이나 예약 확정 권한을 대신하지 못한다.</p>
+<hr />
+<h2 id="section-36">04. 공식 연동 계약 — AP ↔ Field</h2>
+<p><strong>이 장은 두 제품 개발 에이전트가 먼저 고정할 네트워크 계약이다.</strong> 실제 서버용 OpenAPI와 인증 공급사 설정은 구현 작업 C01/I00에서 이 규칙으로 생성·검증한다. 경로·필드는 계약 설계이며 현재 호출 가능한 서비스 주소가 아니다.</p>
+<h3 id="section-37">4.1 원본과 복제의 경계</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>데이터</th>
+<th>원본</th>
+<th>상대가 보관해도 되는 것</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Field 가입자·사업체·권한</td>
+<td>Field</td>
+<td>명시적으로 연결한 외부 식별자·권한 범위</td>
+</tr>
+<tr>
+<td>AP 가입자·사업체·권한</td>
+<td>AP</td>
+<td>명시적으로 연결한 외부 식별자·권한 범위</td>
+</tr>
+<tr>
+<td>Field 서비스·가격·운영시간</td>
+<td>Field</td>
+<td>승인·버전·출처가 있는 지식 스냅샷</td>
+</tr>
+<tr>
+<td>AP 직접 등록 FAQ·AI 설정</td>
+<td>AP</td>
+<td>권한 있는 설정 조회 결과; Field 원본으로 자동 덮어쓰기 금지</td>
+</tr>
+<tr>
+<td>Field 직접 대화·사진</td>
+<td>Field</td>
+<td>원칙적으로 AP 전달 안 함; 사용자가 별도 전달한 업무만</td>
+</tr>
+<tr>
+<td>AP 대화·후속 답변·사진 원본</td>
+<td>AP</td>
+<td>Field 통합 문의함의 최소 인덱스, 고객이 전달한 업무 스냅샷</td>
+</tr>
+<tr>
+<td>외부 업무 전달 요청</td>
+<td>AP의 ActionRequest</td>
+<td>Field가 접수한 external_request와 수신 증빙</td>
+</tr>
+<tr>
+<td>실제 예약·시간 점유</td>
+<td>Field</td>
+<td>AP의 상태 미러·외부 요청 ID·합의 조건</td>
+</tr>
+<tr>
+<td>알림·청구·비용</td>
+<td>발송/판매 책임 제품</td>
+<td>상관 ID·결과 메타데이터. 잔액 공유 금지</td>
+</tr>
+<tr>
+<td>매체·배치·홍보 집계</td>
+<td>AP</td>
+<td>Field 업무에 필요한 유입 라벨, AP 매체에 별도 승인 집계</td>
+</tr>
+</tbody>
+</table></div>
+<p>‘원본은 하나’는 모든 개인정보를 한 제품에 모으라는 뜻이 아니다. AP에서 고객이 Field에 전달하기로 확인한 연락처·요약·첨부는 Field 업무 수행 목적의 <strong>수신 기록</strong>으로 남을 수 있다. 그 데이터와 AP 대화 원본의 보존·정정·삭제 책임은 각각 관리한다.</p>
+<h3 id="section-38">4.2 연결 관계와 식별</h3>
+<p>초기 연결은 하나의 AP 조직·대표 AI와 하나의 Field 사업체를 명시적으로 매핑한다. AP AI는 다른 일반 웹사이트·공유 링크에도 설치할 수 있다. 다중 Field 사업체에 한 AI를 동시에 매핑해 가격/예약을 섞는 기능은 후속이다.</p>
+<pre><code class="language-text">IntegrationBinding
+  connection_id                # 두 서버가 합의한 공개 연동 식별자; 인증 비밀값 아님
+  provider_client_id           # 검증된 커넥터 앱
+  ap_org_id / ap_agent_id       # AP 자체 ID
+  external_org_id              # Field 조직 ID, AP에서는 불투명 참조
+  allowed_deployment_ids       # 이 연결의 사이트/배포
+  approved_scopes_by_direction
+  authorizing_subjects         # 각 제품의 동의한 사용자
+  consent_versions / grant_ids
+  source_mappings / capabilities
+  revision / revoked_at / status
+</code></pre>
+<p>상호명·이메일·전화번호로 자동 매핑하지 않는다. API body의 tenant_id, agent_id, 외부 조직 ID는 토큰 바인딩을 바꾸는 권한이 아니다. ID가 유효하더라도 연결 범위 밖이면 거부한다. 새 Field 조직 연결·AI 교체는 새 동의와 변경 영향 검토를 거친다. 기존 요청 ID와 과거 귀속은 유지한다.</p>
+<h3 id="section-39">4.3 두 방향의 권한을 따로 승인</h3>
+<p><strong>Field가 AP API를 호출하는 권한과 AP가 Field 업무 API를 호출하는 권한은 다르다.</strong> 동일 토큰을 양쪽 서버에서 받아주지 않는다. 제품 로그인과 OAuth 설치 승인은 별개다.</p>
+<p>시작안은 양쪽 제품의 검수된 OAuth 2.0 인가 서버를 사용하는 Authorization Code + PKCE(S256)다. 웹 BFF가 비밀 자격·refresh token을 보관하고 브라우저/설치 코드/localStorage에 넣지 않는다. exact redirect URI, 요청별 state·issuer 검사, 최소 scope, 짧은 access token, refresh rotation을 적용한다. 표준 동작은 검수된 서버/라이브러리로 구현하며 임의 token endpoint를 즉석 작성하지 않는다.<a href="https://www.rfc-editor.org/rfc/rfc9700.html">S01</a></p>
+<h4 id="section-40">단계별 연결</h4>
+<ol>
+<li>Field 소유자가 연결 시작. Field 세션·조직·최근 인증 상태를 확인하고 연결 transaction/nonce 생성.</li>
+<li>AP 공식 인가 화면에서 AP 로그인 또는 가입, 연결할 조직·AI 선택, Field가 요청하는 AP 권한 승인.</li>
+<li>Field BFF가 code를 교환하고 AP issuer·audience·subject·조직 범위를 확인. 이때 기본 AI 설치만 활성화할 수 있다.</li>
+<li>Field 정보를 가져오거나 예약을 연결하려면 AP가 별도 등록된 client로 Field 인가 화면을 연다. 사업자가 <strong>Field 데이터 읽기·요청 전달 권한</strong>을 별도로 승인.</li>
+<li>양쪽 서버가 연결 transaction과 선택된 조직·grant를 검증한 뒤 기능별 active 상태를 합의한다. 둘째 승인이 취소되면 설치만 유지하고 Field 정보/예약 도구는 비활성.</li>
+<li>승인된 정보 동기화·서비스 매핑·AI 테스트 후 위젯 활성화. 무료 체험/구독 조건은 별도 표시하며 연결 승인으로 자동 결제하지 않음.</li>
+</ol>
+<p>단계 2·4는 하나의 안내 마법사로 연결할 수 있지만 서로의 동의를 몰래 생략하지 않는다. 이메일/카카오 로그인은 각 인가 화면의 인증 수단일 뿐 다른 제품에 자동 로그인하는 공통 쿠키가 아니다.</p>
+<h4 id="section-41">AP 발급 → Field 보관 토큰의 범위</h4>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Scope</th>
+<th>허용</th>
+<th>추가 경계</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ap.agent.read</td>
+<td>선택한 AI의 공개·상태 정보</td>
+<td>AP 전체 조직 조회 불가</td>
+</tr>
+<tr>
+<td>ap.sources.refresh</td>
+<td>이 연결의 승인 정보 갱신 요청</td>
+<td>임의 source/지식 공개 금지</td>
+</tr>
+<tr>
+<td>ap.deployments.manage</td>
+<td>검증된 Field 사이트의 배포 생성·중지</td>
+<td>다른 외부 사이트 배포 삭제 불가</td>
+</tr>
+<tr>
+<td>ap.conversations.read</td>
+<td>이 연결·배포 또는 넘겨받은 업무에 관련된 대화</td>
+<td>AI의 다른 사이트 대화를 전부 조회하지 않음</td>
+</tr>
+<tr>
+<td>ap.conversations.reply</td>
+<td>연결 대화에 동의한 사업자의 직접 답변</td>
+<td>설치용 백그라운드 credential에는 넣지 않음</td>
+</tr>
+<tr>
+<td>ap.events.read</td>
+<td>이 연결 사건·실패 메타데이터</td>
+<td>매체/타 연결 이벤트 조회 불가</td>
+</tr>
+<tr>
+<td>ap.connection.revoke</td>
+<td>이 연결 해제</td>
+<td>AI 전체 삭제·계정 해지 불가</td>
+</tr>
+</tbody>
+</table></div>
+<p>사람 답변에는 최근 유효한 <strong>그 사람의 AP 위임 토큰</strong>을 사용한다. Field membership만 존재하는 다른 직원에게 소유자의 AP 토큰을 대리 사용하지 않는다. 초기 소유자 1명 기준이며 후속 직원은 각자 AP membership·권한 연결이 필요하다. 백그라운드 동기화·배포·수신 이벤트용 installation grant는 사람 답변 scope와 분리한다.</p>
+<h4 id="section-42">Field 발급 → AP 보관 토큰의 범위</h4>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Scope</th>
+<th>허용</th>
+<th>금지</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>field.facts.read</td>
+<td>승인된 사업 정보·서비스·가격·FAQ</td>
+<td>사이트 초안·내부 메모·전체 고객 목록</td>
+</tr>
+<tr>
+<td>field.availability.read</td>
+<td>서비스별 요청 가능 구간</td>
+<td>예약자 신원·점유 사유</td>
+</tr>
+<tr>
+<td>field.requests.create</td>
+<td>고객이 확인한 문의/예약 요청 생성</td>
+<td>실제 예약 확정·가격 변경</td>
+</tr>
+<tr>
+<td>field.requests.read</td>
+<td>이 연결에서 생성한 작업/제안/결과</td>
+<td>다른 경로 요청 열람</td>
+</tr>
+<tr>
+<td>field.proposals.respond</td>
+<td>고객이 특정 제안에 직접 동의/철회한 결과 전달</td>
+<td>LLM의 임의 수락</td>
+</tr>
+<tr>
+<td>field.notification_route.read</td>
+<td>연결된 작업 사건의 현재 알림 책임 조회</td>
+<td>임의 채널 발송</td>
+</tr>
+<tr>
+<td>field.connection.revoke</td>
+<td>이 연결 취소</td>
+<td>Field 사이트·예약·구독 삭제</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>field.reservations.confirm</code>, 사이트 공개, Field 관리자, 결제, 원장 SQL 범위는 어떤 AP 도구에도 부여하지 않는다. Field도 AP 조직을 대신해 AI를 임의 공개하지 않는다.</p>
+<p>초기 제안값: access token 10분, authorization code 60초·1회, refresh token은 rotation·재사용 탐지·명시 만료. 실제 유효기간은 선택한 인가 서버 제약과 보안 검토 후 고정한다. revoke endpoint·연결 상태 검사를 같이 두고, 단순히 refresh token만 지워 남은 access token을 계속 허용하지 않는다.<a href="https://www.rfc-editor.org/rfc/rfc7009">S02</a></p>
+<h3 id="section-43">4.4 연결 상태와 도구 발견</h3>
+<p>제품의 단일 <code>connected=true</code> 대신 기능별 상태를 가진다.</p>
+<div class="table-scroll compact" tabindex="0"><table>
+<thead>
+<tr>
+<th>상태</th>
+<th>의미·동작</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>pending_ap_consent</td>
+<td>AP 권한 승인 전. 기존 Field는 정상</td>
+</tr>
+<tr>
+<td>install_only</td>
+<td>AP 위젯 사용 가능. Field 데이터/예약 권한 없음</td>
+</tr>
+<tr>
+<td>pending_field_consent</td>
+<td>역방향 기능 승인 대기</td>
+</tr>
+<tr>
+<td>syncing / review_required</td>
+<td>데이터 동기화·사업자 정보 승인 대기</td>
+</tr>
+<tr>
+<td>active</td>
+<td>허용된 기능의 준비 상태 검수 완료</td>
+</tr>
+<tr>
+<td>degraded</td>
+<td>일부 API/동기화 실패. 이용 가능한 기능만 표시</td>
+</tr>
+<tr>
+<td>suspended / expired</td>
+<td>제재·구독·인가 사유로 해당 연결 기능 제한</td>
+</tr>
+<tr>
+<td>revoking / revoked</td>
+<td>로컬 사용 즉시 차단, 원격 폐기 재시도; 업무 원본 보존</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>GET /integrations/v1/capabilities</code>는 <code>facts.read</code>, <code>availability.read</code>, <code>request.create</code>, <code>proposal.respond</code> 지원 여부와 스키마 버전을 반환한다. AP가 Field 전용 bool/SQL로 판단하지 않는다. 연결이 없는 AI는 기능 발견을 호출할 필요 없이 자체 FAQ·상담만 실행한다. 외부 앱이 예약 기능을 지원하지 않아도 커넥터와 AI가 실패하지 않게 한다.</p>
+<h3 id="section-44">4.5 승인 정보 동기화와 최신성</h3>
+<h4 id="section-45">원본과 승인 흐름</h4>
+<p>Field 변경 승인 → FieldCatalogRelease(version N) + outbox 생성 → signed facts.changed 이벤트 → AP가 해당 연결 API로 snapshot 조회 → source revision/hash 검증 → AP KnowledgeDraft에 변경안 → AP 사업자가 영향 확인 후 승인 → 새 AP KnowledgeRelease.</p>
+<p>초기 기본값은 <strong>가져온 변경을 AP에서도 검토 후 활성화</strong>다. 최초 연결 후 모든 미래 가격을 자동 승인하는 정책은 기본으로 켜지 않는다. Field에서 한 승인과 AP 지식 공개 승인은 다른 제품의 별도 행위다. Field 연결 화면에서 AP 변경 검토로 이동하거나 AP의 공식 승인 화면을 사용할 수 있다.</p>
+<p>Source 필드:</p>
+<pre><code class="language-text">source_id, provider, connection_id, external_org_id
+source_revision, entity_versions, content_hash, published_at
+fetched_at, approved_source_revision, ap_knowledge_release_id
+state: current | pending_review | stale | unavailable | revoked
+</code></pre>
+<p>여기서 source_revision은 외부 제품이 부여한 비교 가능한 버전이고 AP KnowledgeRelease의 버전과 같지 않다. 순서가 뒤집힌 이벤트는 원본 상태를 과거로 돌리지 않는다. 누락된 revision은 snapshot 재조회로 복구한다. 같은 source/version/hash는 멱등, 동일 version+다른 hash는 integrity_conflict로 격리한다.</p>
+<p>현재 로컬 AP owner 출처 공개 화면은 <code>GET /v1/connections/field/{id}/source/mapping-options</code>로 <strong>최신 AP 직접 승인 공개본</strong>의 서비스 이름·설명과 공개본 ID를 읽고, 별도로 저장된 Field 승인 snapshot과 나란히 보여준다. 선택한 Field 서비스가 AP 서비스와 이름이 같으면 owner가 <strong>별도 서비스</strong>, <strong>AP 설명 우선</strong>, <strong>Field 설명 우선</strong> 중 하나를 명시해야 한다. 서로 다른 이름도 owner가 같은 대상으로 지정할 수 있다. 공개 요청은 선택한 Field service ID, AP 서비스 인덱스/우선순위, <code>expectedNativeReleaseId</code>, Field <code>expectedSourceRevision</code>/<code>expectedContentHash</code>를 전송한다. AP 직접 승인본 또는 Field 버전이 변경되면 409로 재검토를 요구한다. 매핑은 AP <code>source_selection</code>에 공개본별로 저장되며 같은 선택의 재시도는 멱등이다. AP 설명 우선이면 Field 서비스 설명을 연결 AI 근거에서 제외하고, Field 설명 우선이면 새 connector KnowledgeRelease에서 대응하는 AP 서비스 설명을 제외한다. 별도 서비스는 두 설명을 출처별로 보존한다. AP 직접 초안·승인 원본은 수정하지 않으며 새 AI 공개는 owner의 별도 승인이 필요하다. 가격·시간·예약 조건은 이 매핑의 정적 AI 근거가 아니다.</p>
+<p>현재 로컬 연결의 공식 갱신 경로는 <code>ap.sources.refresh</code>를 별도 동의한 Field owner가 AP 공개 <code>GET /connections/{id}/source</code>에서 AP 저장/승인 버전을 읽고, 현재 저장 버전을 <code>expectedSourceRevision</code>으로 보내 <code>POST /connections/{id}/source-refreshes</code>를 호출한다. 요청에는 32바이트 무작위값의 base64url <code>Idempotency-Key</code>가 필요하다. AP는 token·client·grant·actor·조직·AI·연결 상태와 버전을 확인하고 내구 작업 ID를 202로 반환한다. 같은 키/요청은 같은 작업으로 돌아오고 다른 버전 재사용 또는 현재 버전 충돌은 409다. <code>GET /connections/{id}/source-refreshes/{operationId}</code>로 <code>pending/retry/completed/blocked</code>를 조회한다. worker는 Field의 승인 사실을 공개 API로 가져와 AP 검토 초안으로 저장하며, AP 사업자 source 승인과 고객 AI 지식 공개는 별도다. 기존 연결에 갱신 범위가 없으면 재동의가 필요하고, Field 조회 장애는 재시도 상태로 남긴다. 이 경로는 예약 확정이나 자동 가격 승인이 아니다.</p>
+<p>현재 로컬 자동 경로는 Field의 승인 카탈로그 release와 같은 트랜잭션의 <code>field.catalog.approved</code> outbox를 기준으로, 연결 생성 뒤의 최신 승인 release를 활성 연결별 내구 전송 원장에 재조정한다. Field는 연결별 키로 <code>field.facts.changed</code>를 서명해 AP <code>/integrations/v1/field-events</code>에 전달한다. 사건에는 연결·release ID, 버전, 승인 시각만 있고 사업 설명·가격·연락처는 없다. AP는 서명·시간창·현재 owner/grant·<code>ap.sources.refresh</code> 동의를 확인하고 제품 전체에서 event ID를 멱등 검사해 inbox commit 뒤 202를 준다. 별도 worker가 과거 버전은 무시하고 최신 Field 공개 facts를 다시 읽는 내구 갱신 작업을 만든다. Field 전송 실패/응답 미상은 같은 event ID로 재시도한다. 새 AP source는 <code>pending_review</code>이며 기존 승인 버전·고객 AI 공개를 바꾸지 않는다. 연결 전 승인분의 최초 가져오기는 사업자의 명시 갱신/연결 검토 경로를 사용한다. release/outbox와 연결 원장만으로 최신 변경을 재조정하므로 모든 중간 버전의 독립 전달 이력을 보장하지 않는다.</p>
+<p>현재 로컬 AP 상담은 연결 지식을 모델 근거에 넣기 직전 Field 공개 facts를 재조회하고 AP 승인 source의 revision/hash와 비교한다. 일치하면 확인 시각을 갱신하고 승인된 소개·서비스 설명만 근거로 사용한다. 불일치·권한 회수·Field 조회 장애에는 그 연결 근거를 제외하고 AP 직접 승인 지식으로 답할 수 있으며, 미확인 Field 정보와 사람 인계를 함께 표시한다. 모델이 연결 근거를 사용해 답변을 만든 경우 고객 저장/표시 직전 한 번 더 확인하고, 그 사이 버전이 바뀌거나 조회가 실패하면 답변 원문과 근거를 버리고 사람 확인으로 전환한다. 상담 중 일시적인 Field <code>/me</code> 장애만으로 AP 연결 원장을 영구 <code>degraded</code>로 바꾸지 않는다. 이 경로는 실제 모델의 모든 문장 의미를 증명하는 검사가 아니며 가격·예약 조건 수치를 AP 캐시에서 답하지 않는다.</p>
+<h4 id="section-46">가격·가용성의 엄격한 규칙</h4>
+<p>제품 간 한 DB 트랜잭션은 존재하지 않는다. 일반 소개·FAQ는 승인한 캐시와 마지막 확인 시각으로 안내할 수 있으나, <strong>연결된 서비스의 가격·활성 상태·예약 조건을 수치로 제시하는 응답은 Field에서 현재 entity revision을 재확인</strong>한다.</p>
+<ul>
+<li>Field 현재 버전과 AP가 승인한 버전이 같으면 근거로 사용한다.</li>
+<li>다르면 새 값을 미승인 상태로 그대로 답하거나 예전 값을 최신이라고 답하지 않는다. 해당 필드는 검토 필요 안내·사람 문의로 전환한다.</li>
+<li>Field 조회가 실패하면 가격/가능 시간 확정 안내를 하지 않는다. AP 전체 상담실과 다른 native 지식은 계속 이용 가능하다.</li>
+<li>무관한 다른 서비스의 변경은 해당 서비스 entity version이 동일하면 차단할 필요 없다. entity version을 제공하지 않는 커넥터는 전체 snapshot 버전을 엄격 비교한다.</li>
+<li>최종 요청 제출에는 고객이 본 서비스 버전·조건 hash를 함께 보낸다. Field가 더 새 조건을 갖고 있으면409 <code>SOURCE_VERSION_CHANGED</code>로 최신 확인을 요구한다.</li>
+</ul>
+<p>카드·사이트에서 가격을 복사한 정적 문구는 stale 검수 대상이다. 연결된 숫자는 가능한 라이브 바인딩으로 렌더하고, 확인 불가 시 ‘가격 확인 필요’로 바꾼다. 어떤 시점에도 전체 외부 사이트의 캐시가 동시에 바뀐다고 보장하지 않는다.</p>
+<p>캐시 일반 확인 간격 5분, 소개자료 stale 24시간, 중요값 라이브 재확인은 제안값/실행 정책이다. 실제 주기와 모델 지연·API 부하를 측정하며 중요값 검사를 조용히 생략하는 최적화는 금지한다.</p>
+<h3 id="section-47">4.6 외부 요청과 예약 전달 — 분산 상태 처리</h3>
+<p>AP <code>ActionRequest</code>는 Field의 예약이 아니다. 외부 전달 원장과 예약 원장을 구분한다.</p>
+<p>현재 AP 고객 경로는 AP 원본 대화의 별도 확인키를 가진 고객이 Field 서비스를 조회하고 현행 가격·시간·정책을 확인한 뒤 진행한다. AP BFF는 <code>/v1/inquiries/{id}/field-services</code>, <code>/field-connections/{connectionId}/services/{serviceId}/availability</code>, <code>/field-availability</code>로 공개 Field 정보와 최종 조건 hash를 보여준다. 고객은 이름·전화번호·서비스·요청 시간/요약과 수신 Field 사업장을 확인해 동의하고 <code>/field-actions</code>에 제출한다. AP 서버는 원본의 연락처·배포 귀속과 동의 시각을 고정한 ActionRequest를 저장한 뒤 공개 Field API로 전송한다. 재시도는 동일 제출 키·action ID·body hash를 사용하며 <code>/field-actions/{actionId}/reconcile</code>은 Field의 by-source 결과를 조회한다. Field가 없거나 scope·연결이 맞지 않으면 AP 자체 문의 조회/답변은 그대로 동작한다. 고객은 기존 AP 사람 문의를 보낸 뒤 외부 업무를 제출하거나, AP 상담 링크에서 같은 AI 대화의 이름·번호·AP 저장 동의를 <code>destination=field</code>로 제출해 <code>external_ready</code>와 별도 확인키를 만들 수 있다. 후자는 AP 사람 문의함·사업자 알림·매체 연락 사건을 만들지 않으며 Field 요청도 아직 전송하지 않는다. 고객이 현행 Field 조건·수신 사업자·전달 항목을 별도로 확인하고 동의한 <code>/field-actions</code>만 Field로 보낸다. 연결이 없으면 AP 확인키로 후속 대화를 열어 사람 문의를 명시 제출할 수 있다. 로컬 mock의 합성 AI/320px 경로를 검증했으며 실모델 응답·운영 공급사는 아직 미검수다.</p>
+<p>직접 준비 POST가 저장된 뒤 브라우저 응답을 잃으면 고객은 같은 탭의 임시 제출 키·확인키로 읽기 전용 <code>/submissions/recover</code>를 호출해 기존 <code>external_ready</code> 원본을 찾는다. 임시 저장소에는 사진 바이트를 넣지 않고 선택 여부만 남긴다. 사진을 골랐던 고객은 복구 뒤 같은 화면에서 다시 선택·AP 요약 메시지에 첨부해야 하며, Field 전송 사진도 별도로 선택하고 동의한다. 복구만으로 사람 문의·Field ActionRequest를 새로 만들지 않는다. 이 동작은 로컬 mock의 320px 실제 HTTP/브라우저에서 확인했고 다른 탭/기기의 확인키 전달과 실 객체 저장소 장애는 별도다.</p>
+<p>직접 준비 전 익명 상담 세션의 <code>GET /v1/engagements/{id}/field-readiness</code>는 현재 활성 배포에 허용된 AP owner 위임·유효한 AP OAuth 동의/refresh·<code>review_required</code> Field 연결과 필수 scope를 확인한 뒤 Field 공개 <code>/me</code>·승인 <code>/facts</code>를 조회한다. 유효한 요청 서비스가 하나 이상인 경우만 <code>{ready:true}</code>다. 그 외에는 <code>{ready:false,reason}</code>으로 <code>no_connection</code>(로컬 위임/연결 없음), <code>field_unavailable</code>(현재 Field 권한·응답·사실 미확인), <code>no_services</code>(검증된 공개 서비스 0개)를 구분한다. 일시 장애만으로 연결 원장을 영구 <code>degraded</code>로 바꾸지 않는다. 연락처·Field 토큰·연결/조직 ID는 반환하지 않고 세션이 없으면 401이며 no-store다. 화면은 직접 준비를 비활성화하고 사유·사람 문의·재확인을 제공한다. <code>destination=field</code> POST는 연락처 저장 전에 Field 현행 상태를 다시 확인하고 같은 연결이 AP 트랜잭션 중에도 유효한지 확인한다. 무연결 409 <code>field_connection_unavailable</code>, 공개 서비스 0개 409 <code>field_services_unavailable</code>, 현재 상태 미확인 503 <code>field_unavailable</code>에서는 원본/연락처/알림 원장을 변경하지 않는다. 이미 수락된 같은 제출 키의 복구는 연결 해제 후에도 기존 결과를 반환한다. 사전 응답 뒤에도 Field 상태는 바뀔 수 있으므로 현재 서비스·가격/시간·수신 사업자와 최종 동의는 기존 <code>/field-services</code>·<code>/field-actions</code>에서 다시 검증한다.</p>
+<p>유효한 Field 연결이 있는 익명 상담의 사전 GET과 <code>destination=field</code> POST는 Field 외부 조회 전에 AP 전용 조직별 1분 호출 원장을 소비한다. 기본 120회/분이며 <code>AP_FIELD_PREFLIGHT_ORG_LIMIT</code>로 1~1000 사이 조정한다. 한도를 넘으면 429 <code>field_preflight_rate_limited</code>·<code>scope=organization</code>·<code>Retry-After</code>를 반환하고 Field를 호출하거나 고객 연락처를 저장하지 않는다. 연결이 없는 AP-only 상담에는 이 한도를 소비하지 않는다. 사람 문의와 이미 수락한 동일 제출 키의 조회/재시도는 계속 처리한다. 여러 서버 인스턴스가 같은 AP DB 원장을 사용하므로 한도 판정은 원자적으로 공유한다. 운영 역프록시/IP 정책과 정상 고객 차단 위험은 별도 출시 검수 항목이다.</p>
+<p>현재 로컬 AP 고객 화면은 최종 제출에서 <code>service_conditions_changed</code> 409를 받으면 이전 가격/시간 확인 카드·동의·제출 키를 해제하고 Field availability를 다시 조회한다. 새 현재 가격/시간이 오면 이를 보여준 뒤 요청 시간·전달 항목 확인과 고객 동의를 다시 요구한다. 재조회에 실패하면 이전 가격을 계속 표시하거나 자동 제출하지 않는다. 응답 미상·멱등 충돌은 이 조건 변경 처리와 별도로 원래 요청을 조회한다.</p>
+<p>현재 로컬 AP 고객 화면은 <strong>제출 조건 사전 확인</strong>에서도 409를 받으면 이전 가격/시간을 지우고 Field availability를 재조회한다. 새 값은 고객의 조건 확인·동의를 다시 거쳐야 하며, Field가 재조회 또는 사전 확인에 실패하면 이전 가격을 현재값처럼 남기지 않는다. AP 원본 문의와 기존 전달 기록은 유지한다.</p>
+<p>현재 로컬 고객 화면은 <code>field-services</code> 전체 조회가 200이어도 연결별 Field facts 조회가 <code>field_facts_unavailable</code>이면 해당 연결의 서비스/가격/전달 양식을 숨기고 현재 정보를 확인할 수 없다는 안내와 재조회 버튼을 표시한다. AP 원본 문의와 이미 저장된 Field 전달 기록은 계속 열 수 있다. 재조회로 Field 현재 정보가 복구된 뒤에만 가격·시간 확인과 새 전달 동의를 진행한다. 이는 연결별 일시 장애 표시이며 Field 연결이 없는 AP 단독 문의에는 표시하지 않는다.</p>
+<p>현재 로컬 고객 화면은 같은 목록에 정상 연결과 문제 연결이 함께 있으면 정상 연결의 서비스만 선택지에 두고 현재 가격 확인과 요청을 계속 허용한다. <code>field_facts_unavailable</code>은 현재 정보 재조회 안내, <code>field_reauthorization_required</code>는 사업자 재동의 필요 안내로 구별하며 고객에게 상대 제품의 OAuth 권한을 대신 부여하지 않는다. 그 외 사용할 수 없는 연결도 별도 사업자 확인 안내를 표시한다. 이 복합 상태는 현재 Chromium에서 목록 응답 주입으로 UI 흐름을 검수했으며 실제 두 연결의 서버 원장 검수는 별도다.</p>
+<p>현재 로컬 AP 고객의 Field grant <code>/me</code> 조회가 일시 실패하면 그 요청은 <code>field_grant_unknown</code>으로 표시하고 연결 원장의 <code>review_required</code> 상태를 보존한다. 고객 읽기 한 번으로 연결을 영구 <code>degraded</code>로 바꾸지 않으므로 Field 복구 뒤 같은 확인키로 현재 사실을 다시 조회할 수 있다. 재조회가 성공하기 전에는 서비스/가격/업무 제출을 진행하지 않는다. AP owner의 명시 연결 검사·갱신 worker가 실제 권한 실패를 처리하는 기존 경로는 유지한다.</p>
+<p>현재 로컬 AP 격리 DB/API 검사는 같은 조직·배포의 실제 AP 연결 원장 세 건에서 정상 연결·Field facts 503·facts scope 없는 연결을 함께 조회한다. 고객 목록은 정상 서비스만 제공하고 실패 연결은 각각 <code>field_facts_unavailable</code>/<code>field_reauthorization_required</code>와 빈 서비스로 보낸다. 잘못된 고객 확인키 401, 재동의 연결 직접 가용성 조회 403, 다른 연결의 조직 사실을 반환한 가용성 응답 502를 확인했다. 정상 연결의 현행 가격 확인·동의/전달은 계속된다. 이 검사의 Field 전송기는 stub이므로 서로 다른 실제 Field 조직 두 곳의 HTTP 장애 검수는 남는다.</p>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>AP 상태</th>
+<th>고객에게 표시</th>
+<th>다음 동작</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>draft / awaiting_customer</td>
+<td>전달 내용을 확인해 주세요</td>
+<td>고객의 명시 제출</td>
+</tr>
+<tr>
+<td>queued / sending</td>
+<td>문의는 저장됐으며 Field 전달 중</td>
+<td>멱등 전송</td>
+</tr>
+<tr>
+<td>accepted_external</td>
+<td>Field에 요청 접수됨, 아직 미확정</td>
+<td>외부 ID 저장·사업자 응대</td>
+</tr>
+<tr>
+<td>delivery_unknown</td>
+<td>전달 결과 확인 중</td>
+<td>원래 요청 ID로 Field 조회, 새 업무 생성 금지</td>
+</tr>
+<tr>
+<td>retryable_failure</td>
+<td>전달 지연, 다시 확인 중</td>
+<td>같은 키로 제한 재시도</td>
+</tr>
+<tr>
+<td>rejected</td>
+<td>Field가 접수하지 못함/조건 재확인 필요</td>
+<td>원본 유지·고객 수정/직접 문의</td>
+</tr>
+<tr>
+<td>canceled_before_delivery</td>
+<td>고객이 전달 전 취소</td>
+<td>큐 전송 차단; 이미 수신됐다면 외부 철회 요청</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-json">{
+  &quot;actionRequestId&quot;: &quot;00000000-0000-4000-8000-000000000001&quot;,
+  &quot;connectionId&quot;: &quot;00000000-0000-4000-8000-000000000002&quot;,
+  &quot;kind&quot;: &quot;reservation_request&quot;,
+  &quot;originConversationId&quot;: &quot;00000000-0000-4000-8000-000000000003&quot;,
+  &quot;externalServiceId&quot;: &quot;00000000-0000-4000-8000-000000000004&quot;,
+  &quot;expectedServiceRevision&quot;: 7,
+  &quot;expectedPolicyRevision&quot;: 2,
+  &quot;customer&quot;: {&quot;name&quot;: &quot;테스트 고객&quot;, &quot;phone&quot;: &quot;01000000000&quot;, &quot;verified&quot;: false},
+  &quot;request&quot;: {&quot;mode&quot;: &quot;preferred&quot;, &quot;timezone&quot;: &quot;Asia/Seoul&quot;, &quot;preferredTimeText&quot;: &quot;2026-10-10 오전&quot;},
+  &quot;consent&quot;: {&quot;version&quot;: &quot;transfer-v1&quot;, &quot;recordId&quot;: &quot;00000000-0000-4000-8000-000000000005&quot;, &quot;confirmedAt&quot;: &quot;2026-09-24T10:00:00Z&quot;, &quot;recipientProduct&quot;: &quot;field&quot;, &quot;recipientOrganizationId&quot;: &quot;00000000-0000-4000-8000-000000000006&quot;, &quot;items&quot;: [&quot;name&quot;, &quot;phone&quot;, &quot;service&quot;, &quot;requested_time&quot;], &quot;conditionsHash&quot;: &quot;&lt;현행 서비스·정책·요청 조건의 SHA-256&gt;&quot;},
+  &quot;summary&quot;: &quot;세탁기 청소 일정 문의&quot;,
+  &quot;attachmentRefs&quot;: [],
+  &quot;source&quot;: {&quot;provider&quot;: &quot;agent-platform&quot;, &quot;deploymentId&quot;: &quot;00000000-0000-4000-8000-000000000007&quot;, &quot;isTest&quot;: true}
+}
+</code></pre>
+<p>위 값은 테스트용 예시이며 ID·시각·hash는 실제 요청 값으로 대체한다. 현재 Field 공개 계약의 JSON 필드 이름은 camelCase이고 <code>x-body-sha256</code>은 객체 키를 재귀적으로 정렬한 JSON의 SHA-256 hex다. <code>conditionsHash</code>는 현행 <code>{organizationId,catalogRevision,policyRevision,service,timezone,request}</code>의 같은 방식 hash다. 외부 요청에는 고객 최종 확인의 감사 레코드·body hash를 묶고 인증된 서버 요청으로 전달한다. 이것은 휴대전화 실명 인증 증명이 아니다. <code>verified=false</code>는 수신 Field에도 보존한다. 프론트가 보낸 <code>isTest=false</code>를 신뢰하지 않고 서버의 테스트 세션에서 결정한다. 고객이 AP 사람 문의 또는 <code>external_ready</code>의 마지막 고객 요약 메시지에 사진을 첨부하면, 선택한 ready 사진 UUID 최대 5개만 <code>attachmentRefs</code>에 넣고 <code>consent.items</code>에 <code>attachments</code>를 추가한다. AI 질문은 사진 첨부 대상이 아니다. 고객은 준비 뒤 확인키로 AP 원본을 재열람해 사진을 선택·첨부할 수 있고, Field 전달 사진은 다시 선택·동의한다. Field의 업무 수락은 사진 복사 완료를 뜻하지 않는다. 실제 악성코드 검사·객체 저장소/보존 정책·운영 장애와 정식 검수 전에는 I04 완료로 보지 않는다.</p>
+<p>Field 처리:</p>
+<ol>
+<li>인증·scope·connection·동의 참조·대상 서비스·최신 조건·외부 요청 hash 검증.</li>
+<li><code>UNIQUE(provider, connection_id, action_request_id)</code>로 동일 업무를 하나만 수락. 같은 ID·다른 body면409.</li>
+<li>Field 트랜잭션에 external_work_request·예약 requested·업무 수신 증빙·outbox 저장. 예약은 미확정이므로 점유 없음.
+4.201/200 응답에 <code>external_request_id</code>, <code>reservation_id</code>(해당 시), <code>status=requested</code>, <code>version</code> 반환.</li>
+<li>AP는 external ID가 확인된 경우에만 ‘Field 접수 완료’로 전환. 타임아웃은 unknown이며 같은 키로 조회/재시도.</li>
+<li>사장님이 Field 자체 승인 API에서 confirm. DB 충돌 검사 후 이벤트 발행. AP는 상태 미러만 갱신.</li>
+</ol>
+<p>수신 조회 API는 AP가 저장한 action_request_id로 이미 수락된 건을 찾을 수 있어야 한다. 큐 재시작·이벤트 역순·연속 클릭도 별도 예약을 생성하지 않는다. 인터넷 전체에 exactly-once delivery가 있다고 가정하지 않고 at-least-once 전달과 멱등 업무 처리로 설계한다.</p>
+<p>로컬 <code>mock</code>에서 Field 체험이 만료되면 <strong>새</strong> 외부 요청은 HTTP 403 <code>{ &quot;error&quot;: &quot;trial_ended&quot;, &quot;accessMode&quot;: &quot;cleanup_only&quot; }</code>로 거부한다. 같은 source ID·body의 기존 수신 영수증은 200으로 재확인되고, by-source 조회와 기존 예약 사건·고객 확인키는 유지된다. AP는 이 응답을 재인가 오류와 구분해 <code>field_subscription_ended</code>로 기록한다. 실구독 종료 정책·결제 공급사 검수는 별도다.</p>
+<p>고객이 선택한 사진의 AP 원본은 AP에 남는다. Field 연결 worker는 자기 DB에 고정된 ActionRequest ID와 사진 UUID로만 <code>GET /integrations/v1/action-requests/{actionId}/attachments/{attachmentId}</code>를 호출한다. AP는 <code>ap.conversations.read</code> OAuth scope에 더해 현재 grant·actor·연결·배포·고객 동의·해당 ActionRequest의 선택 배열을 확인하고 준비된 WebP 바이트만 응답한다. 외부 body가 지정한 임의 URL을 fetch하지 않는다. Field는 업무 트랜잭션에 선택 사진별 <code>pending</code> 원장을 만들고, 바이트 형식·최대 4MB를 다시 검사해 자기 비공개 저장소에 정규화한 뒤 <code>copied</code>로 표시한다. 실패는 <code>copy_failed</code>와 원인/재시도 시각으로 남기고 본문 접수 성공과 구분한다. Field 사업자는 자기 조직의 복사 상태와 완료된 사본만 열 수 있다. 악성코드 검사기·실 객체 저장소의 ACL/보존/복구는 공급사 환경에서 별도 검수한다.</p>
+<h3 id="section-48">4.7 대화·업무 UI와 고객 접근</h3>
+<p>AP가 원본인 대화는 Field BFF가 위임 API로 읽는다. 메시지 전송은 AP가 원본 event_id를 발급하고 AP에서 저장·AI 인계·알림을 처리한다. Field는 AP 문장을 자기 DB에서 따로 편집하거나 AP 장애 중 성공 메시지를 생성하지 않는다.</p>
+<p>현재 Field 사업자 화면은 <code>GET /v1/owner/external-requests</code>로 자기 조직에 수신된 외부 문의의 서비스·고객 연락처·요약·접수 시각을 별도 목록에서 읽는다. <code>field.external_request.accepted</code>는 Field 사업자 내부 알림 1건을 만든다. 이 목록은 AP 대화 원본이나 답변 원장이 아니다. 연결을 승인한 Field owner가 문의를 열면 Field BFF가 현재 AP grant·조직·actor·배포·scope를 확인하고 AP 공개 <code>/integrations/v1/conversations/{id}</code> 및 <code>/messages</code>에서 원본을 읽는다. 답변은 별도로 동의한 <code>ap.conversations.reply</code> 범위와 AP revision·멱등 키로 AP 공개 <code>/replies</code>에 기록한다. Field DB에는 AP transcript를 저장하지 않으며 AP가 메시지 ID·sequence·outbox·고객 알림 원장을 소유한다. Field는 AP 호출 전에 미전송 답변 본문을 Field 전용 키로 암호화하고 원래 revision·멱등 키를 기록한다. 응답 미상·화면/서버 재시작 뒤에도 같은 원본 요청으로 재확인하며, 다른 본문은 결과 확인 전 거부한다. AP 수락 확인 후 Field 본문을 지우고 message ID·revision·알림 상태만 멱등 영수증으로 남긴다. AP 저장 성공 시에도 고객 외부 알림은 공급사 미연결이면 <code>blocked_integration</code>으로 표시한다. 실 알림/결과 동기화는 후속이다. 외부 예약은 Field 자체 예약함에 나타난다.</p>
+<p>Field 직접 문의는 Field 원본이며 AP에 자동 이관하지 않는다. 고객 대화는 생성 제품의 상담 도메인에 남긴다. 제품 사이에 HttpOnly 쿠키를 공유하거나 전화번호로 로그인시키지 않는다.</p>
+<p>AP에서 Field 예약 요청이 접수된 고객은 자신의 AP 대화 확인키로 ActionRequest를 다시 열고, <strong>유효한 AP 대화 권한 + 정상 양방향 connection + accepted ActionRequest의 연결된 reservation_id</strong>를 AP 서버에서 확인한다. AP는 별도 동의 scope <code>field.customer_access.create</code>의 Field 공개 API <code>POST /integrations/v1/customer-handoffs</code>에 action/connection/external request/reservation ID를 보낸다. Field는 자체 원장의 동일 조직·grant·외부 요청·예약 일치를 다시 확인하고 5분짜리 32바이트 무작위 1회 코드를 발급한다. 고객은 코드를 URL에 싣지 않고 Field <code>/handoff</code> 화면에 입력한다. Field <code>POST /v1/customer-handoffs/exchange</code>가 코드를 트랜잭션에서 한 번 소비하고 Field 전용 예약 확인키를 발급한다. 같은 예약의 새 교환은 이전 Field 키를 폐기한다. 코드·Field 키 원문은 DB/outbox에 저장하지 않고, 코드 발급은 예약당 시간당 5회로 제한한다. 이미 교환한 Field 키는 AP grant가 철회되거나 AP가 중단돼도 Field 예약 조회/변경 요청에 사용한다. 알림 링크·전화번호·외부 ID만으로 권한을 발급하지 않는다. 현재 로컬 mock DB·실제 양쪽 HTTP·320px 화면에서 검수했으며 운영 독립성/복구와 정식 QA153/155는 별도다.</p>
+<p>정상 연결 시 대화는 AP에서 유지하고 예약 상태·제안 UI는 허용 API를 사용한다. AP 장애/해제 후 새 연락을 위한 Field 후속 스레드가 필요하면 새 원본이라는 사실을 표시하고, 기존에 수신한 업무/예약과만 연결한다. AP 과거 대화 원문을 몰래 복제하지 않는다. 양방향 자동 transcript sync는 제외한다.</p>
+<h3 id="section-49">4.8 알림의 단일 책임</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>사건</th>
+<th>기록 원본</th>
+<th>정상 연결의 외부 알림 책임</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AP 일반 문의 제출/고객 추가 메시지</td>
+<td>AP</td>
+<td>AP → 사업자</td>
+</tr>
+<tr>
+<td>AP 대화에서 사업자 답변 (AP 화면 또는 Field API)</td>
+<td>AP</td>
+<td>AP → 고객</td>
+</tr>
+<tr>
+<td>Field 직접 문의/답변</td>
+<td>Field</td>
+<td>Field</td>
+</tr>
+<tr>
+<td>AP가 넘긴 Field 예약 요청 수락</td>
+<td>Field 업무 + AP 전환 원장</td>
+<td>AP 한 번. Field 미러 생성에 별도 고객/사업자 알림 중복 금지</td>
+</tr>
+<tr>
+<td>연결 AP 예약의 Field 확정/제안/변경</td>
+<td>Field</td>
+<td>AP가 외부 사건을 기록한 뒤 고객 통지</td>
+</tr>
+<tr>
+<td>Field 직접 예약의 확정/변경</td>
+<td>Field</td>
+<td>Field</td>
+</tr>
+<tr>
+<td>각 제품의 결제/보안/서비스 장애</td>
+<td>해당 제품</td>
+<td>해당 제품</td>
+</tr>
+</tbody>
+</table></div>
+<p>원본 이벤트마다 <code>notification_owner_product</code>, <code>origin_event_id</code>, <code>connection_id</code>, <code>route_generation</code>을 저장한다. AP 대화/사용량 알림은 AP 구독에, Field 직접 업무는 Field 구독에 귀속한다. Field가 대신 AP 대화에 답변해도 AP 응답/메시지 비용을 Field 원장에 중복 차감하지 않는다.</p>
+<p>현재 로컬 구현은 Field 공개 <code>GET /integrations/v1/external-requests/by-source/{actionId}/events</code>를 <code>field.requests.read</code>와 현재 조직·client·grant·actor·connection 결합으로 제한한다. 응답은 사건 ID·예약 revision/상태·발생 시각과 승인된 예약 시각만 포함하며 고객 이름·전화·사유·원문은 싣지 않는다. AP 고객의 확인키 수동 동기화는 전체 revision 연속성·ActionRequest/예약/조직/connection을 검사한다. 추가로 초기 양방향 bind가 연결별 HMAC 키를 두 제품에 각자 암호화해 저장하고, Field 전용 worker는 세대 1 예약 사건 원장을 재조정해 PII 없는 서명 사건을 AP에 재시도한다. AP는 서명 확인 후 durable inbox에 기록한 경우에만 202를 반환한다. AP 전용 worker는 action/route/revision을 확인해 역순 사건을 보류하고 AP 사건·고객 알림 원장을 멱등 생성한다. AP 공개 <code>GET /integrations/v1/events/{id}/delivery</code>는 현재 <code>ap.conversations.read</code> OAuth grant의 client·actor·조직·선택 배포와 연결 사건 소속을 검증한 뒤 AP 수신/처리·고객 알림·열람 기록 유무만 반환한다. Field owner의 자체 예약 상세는 Field 전송 원장을 먼저 읽고, ACK 사건에 대해서만 해당 공개 AP API를 조회한다. AP 응답 장애에도 Field 예약과 로컬 ACK는 조회 가능하며 원격 상태는 <code>unavailable</code>이다. 확정·제안·변경·취소 등 사업자 사건의 고객 알림은 공급사 미연결일 때 <code>blocked_integration</code>이다. 정상 연결 및 해제 후 세대 2 활성화 전에는 Field가 연결 예약 고객 알림을 따로 만들지 않는다. 오래된 연결에 서명키가 없으면 수동 동기화만 가능하다.</p>
+<p>연결 해제 뒤 Field owner는 기존 예약의 ACK 사건에 한해 AP 공개 <code>GET /integrations/v1/events/{id}/recovery-status</code>를 조회한다. Field 서버는 자기 owner/예약/connection을 먼저 확인하고, bind 당시 연결별 키로 <code>timestamp.eventId.connectionId.notification-status</code>를 HMAC 서명한다. AP는 5분 시간창·키/연결·서명 및 accepted ActionRequest/예약/사건 소속을 검사하며 이미 폐기된 OAuth grant를 다시 열지 않는다. 결과는 수신·처리·고객 알림 원장·열람 상태만 담고 대화 원문·고객 연락처를 담지 않는다. AP가 내려갔거나 사건 조회가 404이면 Field는 로컬 ACK를 보존한 채 원격 상태를 확인 불가로 둔다. 이 읽기 전용 복구는 고객 알림 발송이나 새 route generation 발급이 아니다. 로컬 mock의 양쪽 해제 흐름과 AP API 중단→복구에서 320px 화면을 검수했으며 실제 공급사 미상 발송 결과 조회는 후속이다.</p>
+<p>Field→AP 사건이 지연되면 Field는 ‘예약 확정됨·고객 알림 전달 대기’를 표시한다. AP 장애를 이유로 Field가 동일 사건의 SMS를 자동 병행 발송하지 않는다. 원격 수신 ACK는 알림 최종 발송 성공이 아니다. AP가 처리·발송 결과 상태를 기록하고 Field는 정해진 API/이벤트로 조회한다. AP 공개 사건 수신은 연결 row lock을 잡은 트랜잭션 안에서 서명 확인과 durable inbox commit까지 수행한다. 해제와 경쟁할 때 먼저 commit된 수신만 202이고, 해제가 먼저 확정되면 신규 사건을 401로 거부한다. 202를 준 세대 1 inbox 사건은 해제 뒤에도 AP 내부 사건·고객 알림 원장을 멱등 처리해 경로 종료 대조에 포함한다. 이미 종료 영수증이 있는 예약에 늦게 남은 inbox 사건은 <code>route_closed</code>로 거부한다. 이 내부 대조는 실제 공급사 발송 허가가 아니다.</p>
+<p>연결 예약 사건의 발송 직전 AP는 Field의 알림 route/current generation·연결 상태를 확인한다. 확인할 수 없으면 보류한다. AP 자체 일반 대화의 알림은 Field 확인 없이 처리한다. 이 구분으로 AP 독립 운영을 유지한다.</p>
+<p><strong>연결 해제 시 자동 발송 소유권 전환은 하지 않는다.</strong> 기존 예약은 Field에 남기고 ‘직접 연락/알림 경로 재설정 필요’로 안내한다. Field의 유효한 고객 접근 경로와 필요한 고지/동의를 마련한 뒤 새 generation을 발급해 명시적으로 전환한다. 이전 generation에 속한 queued 이벤트는 폐기/대조 후 처리한다. 이미 공급사에 전달된 미상 메시지는 조회로 정리하고 곧바로 대체 발송하지 않는다. 긴급한 경우 사장님이 전화 등으로 직접 연락한 사실을 기록한다.</p>
+<p>현재 로컬 mock에서는 기존 연결 예약 하나씩 다음 경로로 전환한다. 고객은 Field 예약 확인키로 <code>GET/POST /v1/reservations/{id}/notification-route</code>의 상태·명시 동의/철회를 사용한다. Field owner는 자기 예약과 고객 동의, 양쪽 해제 ACK를 확인한 뒤 <code>POST /v1/owner/reservations/{id}/notification-route/activate</code>를 실행한다. Field는 AP 전달 ACK가 연속된 세대 1 사건의 마지막 ID/revision, 전환 ID, 동의 ID를 AP 호출 전에 자체 DB에 저장하고 연결별 키로 서명해 AP 공개 <code>POST /integrations/v1/notification-routes/close</code>에 보낸다. AP는 revoked 연결의 accepted ActionRequest/예약과 해당 세대 1 사건의 연속 처리, 기준을 넘는 inbox 사건 부재, 고객 알림 원장의 <code>not_applicable</code> 또는 <code>blocked_integration</code>을 대조하고 자기 DB에 종료 영수증을 내구 기록한다. Field 응답 분실·프로세스 재시작·브라우저 새로고침 뒤에는 저장된 전환 ID/기준으로 동일 영수증을 재시도한다. 기준 뒤에 생긴 예약 사건은 AP에 다시 보내거나 Field 고객 자동 알림으로 재발송하지 않고, 사건별 고객 직접 연락 <code>reached</code> 기록을 요구한다. Field는 영수증·현재 동의·예약 사건을 재검사한 뒤 세대 2를 활성화한다. 이후 새 Field 사건만 Field 알림 원장에 기록하고 AP 전송 원장에서 제외한다. 고객 동의 철회는 향후 Field 자동 알림을 중지하고 AP 경로를 복구하지 않는다. 이는 로컬 mock 경로의 부분 구현이며 <strong>실제 공급사의 unknown 조회, 발송 직전 Field route 재확인, 구독 종료·삭제 보존·운영 장애 검수</strong>는 남아 있다. 공급사 미연결 상태의 Field 고객 알림도 <code>blocked_integration</code>이고 실제 발송 성공이 아니다.</p>
+<p>현재 Field owner의 기존 연결 예약 상세는 양쪽 중 어느 쪽에서 연결을 해제했든 AP 원격 사건·고객 알림 상태와 별도로 직접 연락 필요를 표시한다. <code>GET/POST /v1/owner/reservations/{id}/manual-contacts</code>는 Field 자체 owner 세션으로만 기존 <code>external_ap</code> 예약·사건의 전화/대면 시도 또는 도달 사실을 읽고 기록한다. 활성 연결에서 기록을 거부하고, 해제 뒤 다른 예약 사건·다른 owner를 거부하며, 동일 기록 ID 재시도는 멱등 처리한다. 감사 outbox에는 사건/시도 ID와 결과만 두고 고객 연락처·본문을 싣지 않는다. 담당자 계정이 삭제돼도 사건 기록은 보존한다. 이는 사람이 실제 연락했다고 명시한 업무 기록이며 고객 메시지 자동 전송이나 AP 발송 성공·알림 소유권 변경의 증빙이 아니다. 고객에게 도달했다고 검수하려면 실제 통화/대면 근거와 운영 정책이 추가로 필요하다.</p>
+<h3 id="section-50">4.9 이벤트·멱등·재조정</h3>
+<p>두 제품은 각각 로컬 업무 commit+outbox를 같은 DB 트랜잭션에 저장한다. 원격 웹훅 수신은 서명 확인 후 inbox 원장에 durable 저장한 뒤202를 반환한다. 아직 저장하지 못하면2xx를 주지 않는다. 업무 처리·알림 생성은 이후 멱등 수행한다.</p>
+<pre><code class="language-json">{
+  &quot;spec_version&quot;: &quot;1.0&quot;,
+  &quot;event_id&quot;: &quot;11111111-1111-4111-8111-111111111111&quot;,
+  &quot;event_type&quot;: &quot;field.reservation.confirmed&quot;,
+  &quot;source_product&quot;: &quot;field&quot;,
+  &quot;connection_id&quot;: &quot;22222222-2222-4222-8222-222222222222&quot;,
+  &quot;aggregate_type&quot;: &quot;reservation&quot;,
+  &quot;aggregate_id&quot;: &quot;33333333-3333-4333-8333-333333333333&quot;,
+  &quot;aggregate_version&quot;: 3,
+  &quot;occurred_at&quot;: &quot;2026-09-24T10:05:00Z&quot;,
+  &quot;correlation_id&quot;: &quot;44444444-4444-4444-8444-444444444444&quot;,
+  &quot;notification_owner_product&quot;: &quot;ap&quot;,
+  &quot;route_generation&quot;: 1,
+  &quot;data&quot;: {&quot;resource_id&quot;: &quot;33333333-3333-4333-8333-333333333333&quot;, &quot;status&quot;: &quot;confirmed&quot;}
+}
+</code></pre>
+<p>웹훅 payload에는 원문·전화·주소·사진 URL·access token을 넣지 않는다. 필요한 원본은 scope가 있는 API로 조회한다. 등록된 client/connection과 source를 검증하며 body source 문자열을 믿지 않는다. <code>UNIQUE(source_product,event_id)</code>로 중복 제거하고 aggregate_version 역행·누락 시 최신 원본을 재조회한다.</p>
+<p><code>field.facts.changed</code>는 같은 서명 헤더를 사용하되 <code>aggregate_type=facts</code>, <code>aggregate_id=FieldCatalogRelease ID</code>, <code>aggregate_version=source_revision</code>, <code>route_generation=1</code>, <code>data={resource_id,status:&quot;approved&quot;,source_revision}</code>를 싣는다. 예약 사건의 알림 소유권 필드는 포함하지 않는다. AP의 전역 event ID 수신 원장은 예약/사실 변경 사건 사이의 ID 재사용도 서로 다른 본문이면 409로 거부한다. 202는 내구 수신만 뜻하며 AP source 승인이나 AI 공개 성공을 뜻하지 않는다.</p>
+<p>초기 서명 계약은 제품 간 사전 등록된 연결별 secret의 <strong>HMAC-SHA256</strong>이다. 자체 프로젝트 계약이며 RFC와 동일한 메시지 서명 표준이라고 부르지 않는다. <code>X-Event-Id</code>, <code>X-Timestamp</code>(Unix seconds), <code>X-Key-Id</code>, <code>X-Signature</code>를 사용하고 서명 원문은 <code>timestamp + &quot;.&quot; + event_id + &quot;.&quot; + raw_body_bytes</code>다. 상수시간 비교, body/header event 일치, ±5분 시간창, 최대 body 크기, 키 교체를 검수한다. 재전송은 같은 event_id와 새 timestamp/서명으로 처리한다. secret은 브라우저에 제공하지 않는다.</p>
+<p>현재 Field mock worker는 세대 1의 AP 담당 사건만 내구적 delivery 원장으로 재시도하고 429의 초 단위 Retry-After 또는 지수 backoff+jitter를 적용한다. 응답 분실도 같은 event ID와 새 timestamp/서명으로 재전송한다. 400/401/403/409/413은 blocked로 멈춰 운영 조치가 필요하다. Field 예약 사건 원장과 outbox를 재조정해 worker 재시작 뒤 누락 항목을 복구한다. AP는 rev 누락을 pending_gap으로 보류한다. 정식 재시도 한도·SLA·정기 원본 재조회·키 회전과 전환 중 결과 미상 복구는 후속이다.</p>
+<h3 id="section-51">4.10 위젯·동일 조건 설치</h3>
+<p>Field는 공개 AP SDK를 설치한다. AP의 서버 프레임 응답은 CSP frame-ancestors로 허용 origin을 제한한다. meta 태그로만 설정하지 않는다.<a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors">S04</a> postMessage는 origin·source·nonce·허용 스키마·크기를 검사하고 부모에 대화/권한 비밀값을 전달하지 않는다.<a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage">S03</a></p>
+<p>일반 외부 사이트와 Field 모두 API 공개키와 세션 범위가 같다. origin 확인만을 사용자 인증이나 서버 abuse 방지로 간주하지 않는다. 공개 세션 발급·비용·사용량 제한과 risk 검사를 같이 수행한다. 설정할 수 있는 URL·redirect는 등록된 HTTPS 경로로 제한하고 SSRF/내부망/metadata 주소 fetch를 금지한다.</p>
+<p><code>owned_embed</code> 설치는 campaign_id, publisher_id 없이 동작한다. <code>partner_card</code>만 campaign release·publisher approval·slot 검사가 필요하다. Field도 그 구분을 따르며 모든 위젯을 광고로 처리하지 않는다.</p>
+<p>AP 사업자가 인가 화면에서 자기 조직의 활성 <code>placement_embed</code>를 정확히 선택한 경우, 공개 <code>GET /integrations/v1/deployments</code>는 <code>link</code>·<code>owned_embed</code>와 함께 그 배포를 반환한다(AP 계약 <code>1.0.0-preview.6</code>). 이에 따라 해당 매체 승인 카드에서 AP에 접수된 고객도 별도 Field 현재 조건 확인·동의 후 업무를 요청할 수 있다. 매체 배포를 Field 사이트 위젯 설치 대상으로 취급하지 않으며 Field 사이트 설치 후보는 여전히 정확한 소유 origin의 <code>owned_embed</code>뿐이다. 매체 카드/배포가 있다는 이유로 Field 권한을 자동 승인하지 않는다.</p>
+<h3 id="section-52">4.11 연결 해제·장애·삭제</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>상황</th>
+<th>AP</th>
+<th>Field</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Field 전체 장애</td>
+<td>AP native 상담/다른 사이트는 정상. Field 중요 사실·예약 도구는 중단</td>
+<td>자체 복구. AP와 무관한 데이터 보호</td>
+</tr>
+<tr>
+<td>AP 전체 장애</td>
+<td>원격 AI/대화 불가를 정확히 표시</td>
+<td>사이트·직접 문의·달력·기존 예약 정상. AP 전송은 미전송/대기</td>
+</tr>
+<tr>
+<td>연결 revoke</td>
+<td>연결 source/도구/Field 배포·위임 권한 중지; 다른 native/외부 배포는 유지</td>
+<td>토큰 폐기·원격 읽기/쓰기 차단; 직접 업무·수신 예약 보존</td>
+</tr>
+<tr>
+<td>AP 구독 종료</td>
+<td>신규 AI/배포 제한·기존 상담 정리</td>
+<td>Field 구독·예약은 유지, 알림 경로 재설정 안내</td>
+</tr>
+<tr>
+<td>Field 구독 종료</td>
+<td>다른 사이트의 AP는 유지, Field 신규 업무는 제한 상태 표시</td>
+<td>자기 종료 정책·기존 예약 정리</td>
+</tr>
+<tr>
+<td>한쪽 삭제 요청</td>
+<td>해당 제품 원본·권한·법적 보존별 처리</td>
+<td>이미 적법하게 수신한 원본의 목적·보존을 별도 판단</td>
+</tr>
+</tbody>
+</table></div>
+<p>revoke 요청을 받은 서버는 로컬 실행을 먼저 차단하고 원격 폐기 요청을 durable 재시도한다. 원격이 오프라인이라 즉시 모든 토큰이 사라졌다고 표시하지 않는다. 사용 시 연결 상태/만료를 검증하며 유효한 요청도 scope 밖이면 거부한다. 법적 권리·약관상 필요한 양쪽 데이터 정정·삭제 요청은 추적 ID로 분리 전달하고 결과를 기록한다. 상대 동의 없이 전체 조직을 삭제하는 API는 없다.</p>
+<p>현재 로컬 양방향 연결 해제는 각 제품 owner 세션의 로컬 API가 자기 연결·source/설치·위임 grant를 먼저 회수하고 <code>pending/sending/retry/acked/blocked</code> 원장을 만든다. 별도 worker는 bind 때 양쪽에 저장한 연결별 32바이트 HMAC 키로 <code>timestamp.revocationId.connectionId.revoke</code>를 서명하고 상대 공개 <code>POST /integrations/v1/connections/{id}/revoke</code>에 <code>X-Key-Id</code>, <code>X-Revocation-Id</code>, <code>X-Timestamp</code>, <code>X-Signature</code>를 보낸다. 수신자는 정확한 연결/키, ±5분 시간창, 상수시간 서명 비교와 같은 ID 재전송을 검증한 뒤 200 영수증을 반환한다. 응답 분실은 같은 ID와 새 timestamp/서명으로 재시도한다. 한쪽 원격 회수 실패는 <code>retry</code> 또는 <code>blocked</code>로 남고 UI는 완료라고 주장하지 않는다. Field 위젯 설치와 새 위임 접근은 중지하되 AP 문의·Field 수신 예약/고객 확인키를 지우지 않는다. 로컬 mock의 AP API 실제 중단 중 Field 해제와 반대 방향 Field API 실제 중단 중 AP 해제를 각각 검수했다. 중단 중 상대 원장은 기존 연결을 유지하고 발신 원장은 <code>retry</code>를 표시했으며, API 재시작 뒤 같은 회수 ID로 ACK를 받았다. 두 경우 모두 자체 API·기존 문의/예약 확인키가 계속 작동했다. 이 서명 해제 경로는 현재 OAuth <code>manage</code> bearer 경로와 별도이며, OAuth manage 기반 범용 외부 client 해제 계약은 아직 구현되지 않았다. 운영 서버 장애, 재인가·구독 종료·삭제/보존과 알림 전환 중 결과 미상 복구는 후속이다.</p>
+<p>Field source가 해제되면 그 값의 AP 사용을 중단한다. 데이터가 공개 정보였다는 이유로 AP native로 조용히 전환하지 않는다. 계속 쓰려면 권리와 최신성을 확인하고 AP 직접 등록·승인 절차로 새 source를 만든다. 다른 native source가 준비돼 있다면 그 범위의 상담은 유지한다.</p>
+<h3 id="section-53">4.12 공개 연동 API 최소 목록</h3>
+<h4 id="section-54">AP 제공 — Field 및 검증된 외부 통합자가 사용</h4>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>경로</th>
+<th>권한/필수 입력</th>
+<th>결과</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET /integrations/v1/me</td>
+<td>AP 위임 token</td>
+<td>허용 조직·AI·scope·grant 상태</td>
+</tr>
+<tr>
+<td>POST /integrations/v1/connections</td>
+<td>동의 transaction, 선택 AI</td>
+<td>binding, 허용 기능</td>
+</tr>
+<tr>
+<td>GET /integrations/v1/connections/{id}/source</td>
+<td>ap.sources.refresh, 현재 연결</td>
+<td>AP 저장/승인 source 버전·검토 상태</td>
+</tr>
+<tr>
+<td>POST /integrations/v1/connections/{id}/source-refreshes</td>
+<td>ap.sources.refresh, 예상 source 버전</td>
+<td>202 sync_job</td>
+</tr>
+<tr>
+<td>GET /integrations/v1/connections/{id}/source-refreshes/{operationId}</td>
+<td>ap.sources.refresh, 현재 연결</td>
+<td>갱신 작업 상태·결과</td>
+</tr>
+<tr>
+<td>POST /integrations/v1/deployments</td>
+<td>ap.deployments.manage, owned origin·agent</td>
+<td>설치 준비; 검증 후 활성</td>
+</tr>
+<tr>
+<td>GET /integrations/v1/conversations</td>
+<td>read, 연결 제한 cursor</td>
+<td>최소 목록·출처·remote 상태</td>
+</tr>
+<tr>
+<td>GET /integrations/v1/conversations/{id}/messages</td>
+<td>read, 범위·cursor</td>
+<td>원본 sequence</td>
+</tr>
+<tr>
+<td>POST /integrations/v1/conversations/{id}/replies</td>
+<td>user reply, message·revision·idempotency</td>
+<td>원본 message ID·저장/알림 상태</td>
+</tr>
+<tr>
+<td>POST /integrations/v1/connections/{id}/revoke</td>
+<td>현재 연결별 HMAC 서명; 범용 manage 동의는 후속</td>
+<td>AP 로컬 회수·서명 영수증</td>
+</tr>
+<tr>
+<td>POST /integrations/v1/field-events</td>
+<td>등록 서명·event envelope</td>
+<td>202 durable inbox receipt</td>
+</tr>
+<tr>
+<td>GET /integrations/v1/events/{id}/delivery</td>
+<td>연결 사건 read</td>
+<td>processed/notification status</td>
+</tr>
+<tr>
+<td>GET /integrations/v1/events/{id}/recovery-status</td>
+<td>해제 연결별 HMAC</td>
+<td>기존 사건 수신/처리·알림 상태 재조회</td>
+</tr>
+<tr>
+<td>POST /integrations/v1/notification-routes/close</td>
+<td>해제 연결별 HMAC·전환 ID·예약 마지막 사건</td>
+<td>세대 1 종료 영수증. Field 활성화/발송 성공 아님</td>
+</tr>
+</tbody>
+</table></div>
+<h4 id="section-55">Field 제공 — AP 커넥터 및 동일 계약의 외부 앱이 사용</h4>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>경로</th>
+<th>권한/필수 입력</th>
+<th>결과</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET /integrations/v1/capabilities</td>
+<td>Field 위임 token</td>
+<td>이 연결에서 지원/허용된 도구</td>
+</tr>
+<tr>
+<td>GET /integrations/v1/facts</td>
+<td>field.facts.read, ETag/version</td>
+<td>승인 snapshot·entity version·hash</td>
+</tr>
+<tr>
+<td>GET /integrations/v1/availability</td>
+<td>scope, service_id·revision·from/to</td>
+<td>요청 가능 구간만</td>
+</tr>
+<tr>
+<td>POST /integrations/v1/external-requests</td>
+<td>create, ActionRequest·consent·idempotency</td>
+<td>external_request_id·requested 상태</td>
+</tr>
+<tr>
+<td>GET /integrations/v1/external-requests/by-source/{actionId}</td>
+<td>read, binding</td>
+<td>타임아웃 뒤 기존 수락 확인</td>
+</tr>
+<tr>
+<td>GET /integrations/v1/external-requests/{id}</td>
+<td>read, 연결 리소스</td>
+<td>최신 상태·version·제안</td>
+</tr>
+<tr>
+<td>POST /integrations/v1/external-requests/{id}/customer-decisions</td>
+<td>respond, exact proposal·customer proof</td>
+<td>동의/철회 상태. 확정 아님</td>
+</tr>
+<tr>
+<td>GET /integrations/v1/external-requests/{id}/notification-route</td>
+<td>route.read</td>
+<td>소유 제품·generation·허용 여부</td>
+</tr>
+<tr>
+<td>POST /integrations/v1/customer-handoffs</td>
+<td><code>field.customer_access.create</code>, AP 확인키·accepted action·연결 예약</td>
+<td>5분짜리 1회 Field 코드 발급</td>
+</tr>
+<tr>
+<td>POST /v1/customer-handoffs/exchange</td>
+<td>1회 고엔트로피 코드</td>
+<td>Field 예약 확인키 발급·이전 키 폐기</td>
+</tr>
+<tr>
+<td>POST /integrations/v1/connections/{id}/revoke</td>
+<td>현재 연결별 HMAC 서명; 범용 manage 동의는 후속</td>
+<td>Field 로컬 회수·서명 영수증</td>
+</tr>
+<tr>
+<td>POST /integrations/v1/webhooks/agent</td>
+<td>등록 서명</td>
+<td>202 durable inbox receipt</td>
+</tr>
+</tbody>
+</table></div>
+<p>write의 Idempotency-Key는 제품+client+connection+operation 범위다. 같은 키·다른 body는409. 변경 객체에는 If-Match/expected_revision을 쓴다.400 입력,401 인증,403 권한,404 안전한 미존재,409 충돌/조건 변경,410 해제/만료,429 사용량,503 일시 장애를 명확히 반환한다. 응답은 <code>request_id</code>, <code>operation_id</code>(비동기), <code>state</code>, <code>retryable</code>을 포함하고 개인정보를 오류 문구에 넣지 않는다.</p>
+<h4 id="section-56">계약 변경 정책</h4>
+<p>API major 버전과 event <code>spec_version</code>은 문서 release v3.0과 독립이다. enum 추가도 exhaustive client 영향 검토가 필요하다. 호환 가능한 추가는 contract test 후 적용하고 breaking 변경은 새 API major/dual support/이행 계획으로 처리한다. 최소 이전 지원 버전·지원 기간은 계약 정책으로 고정한다. 런타임은 모르는 필드를 조용히 권한으로 취급하지 않는다.</p>
+<p>AP+Field 두 코드베이스가 공유할 수 있는 것은 versioned OpenAPI·JSON Schema에서 생성한 클라이언트와 명세다. domain service·repository·DB 타입·내부 ORM 모델은 공유하지 않는다.</p>
+<hr />
+<h2 id="section-57">05. 구현 구조·운영·제품별 출시</h2>
+<h3 id="section-58">5.1 권장 저장소와 배포</h3>
+<p>한 monorepo를 관리 편의로 사용할 수 있지만, 제품별 실행·마이그레이션·배포·비밀키는 분리한다. 신규 저장소 설계안이며 기존 코드가 있다면 먼저 조사하고 ADR로 이행한다.</p>
+<pre><code class="language-text">apps/
+  agent-web/             # AP 제품홈·관리실·고객상담·publisher·AP admin·BFF/API
+  agent-worker/          # AP AI·알림·sync·배포·과금·삭제·이벤트
+  field-web/             # Field 제품홈·제작실·사이트·직접문의·예약·Field admin·API
+  field-worker/          # Field 사이트생성·공개·알림·과금·connector·삭제
+packages/
+  agent-domain/          # AP만 import
+  agent-db/              # AP migrations/repositories
+  field-domain/          # Field만 import
+  field-db/              # Field migrations/repositories
+  agent-contracts/       # AP 공개 schema/OpenAPI, 독립 버전
+  field-contracts/       # Field 공개 schema/OpenAPI, 독립 버전
+  generated-clients/     # 계약 기반 HTTP client; domain·DB import 금지
+  ui/                    # 디자인 토큰·접근성 부품. 조직/권한·DB 로직 없음
+  test-fixtures/         # 합성 데이터만, production 제외
+examples/
+  external-site/         # Field 코드 없이 AP SDK를 설치하는 최소 외부 사이트
+infra/
+  agent/                 # AP만 실행 가능한 compose/deploy/backup
+  field/                 # Field만 실행 가능한 compose/deploy/backup
+  integration/           # 두 제품·서로 다른 origin·오류 주입용 검증 환경
+ops/                     # 제품별 runbook·게이트·실행 증빙
+</code></pre>
+<p>프레임워크는 TypeScript + 검수된 React/Next 계열 웹·서버, Node Worker, 제품별 PostgreSQL·큐·S3 호환 저장소를 시작안으로 한다. 실제 버전은 구현 시 공식 지원·호환·보안 확인 후 lockfile에 고정한다. 특정 프레임워크의 내부 서버 함수를 제품 간 API로 호출하지 않는다.</p>
+<p>같은 Postgres 서버에 두 DB를 둘 수 있지만 런타임 계정은 상대 DB에 CONNECT/쓰기 권한이 없어야 한다. 백업·복구·확장도 따로 수행한다. Redis는 단순 key prefix만으로 격리됐다고 보지 않고 인스턴스 또는 ACL·큐 소비자 권한을 분리한다. 파일은 별도 bucket/policy·키로 분리한다. 별도 서비스가 같은 물리 서버의 공통 장애를 공유한다는 사실은 운영 문서에 남긴다.</p>
+<p>각 제품 web/worker는 자기 DB와 인프라만 필요하다. 미연결 상대 URL/토큰은 optional이며 상대 healthcheck 때문에 자기 서비스 readiness를 실패시키지 않는다. 연동 상태는 별도 degraded 지표다. 공통 provider 장애를 제품 상호 의존 장애로 혼동하지 않는다.</p>
+<h3 id="section-59">5.2 agent용 런타임 의존 금지선</h3>
+<p>AP Core CI는 Field 디렉터리와 환경변수를 제외하고 build/migrate/test할 수 있어야 한다. Field Core CI는 AP domain/db를 제외하고 동일 검사를 수행한다. public client 생성물을 읽는 것은 가능하지만 상대 앱 실행이나 마이그레이션이 필수가 되어서는 안 된다.</p>
+<p>금지 예: <code>agent-domain</code>이 Field 예약 service를 import, AP가 Field users를 JOIN, Field가 AP 조직 존재를 검사해 자기 로그인 허용, AP 설치 SDK가 Field 도메인에서만 발급, AP 위젯이 campaign/publisher 엔터티 없이는 로드되지 않는 것.</p>
+<p>AP 입장에서 Field 커넥터는 one adapter implementation이다. <code>if (provider === 'field')</code> 분기 자체를 모두 금지할 필요는 없지만, core 도메인의 조직·상담·빌링이 그 provider를 필수로 요구하면 안 된다. provider 전용 매핑은 connector 경계 안에 둔다.</p>
+<h3 id="section-60">5.3 독립 계정·보안</h3>
+<p>두 제품에 이메일·카카오 로그인을 각각 제공한다. 이메일 소유 확인과 카카오 ID 검증, 명시적 계정 연결, 관리자의 추가 인증, 세션 회수·CSRF·출력 이스케이프·허용 리디렉션 검수를 유지한다. AP 계정/Field 계정이 동일인이라도 membership과 이용 동의는 별도다.</p>
+<p>제품별 관리자 권한은 각각 부여한다. 하나의 회사 운영자가 두 콘솔을 사용할 수는 있지만 Field admin 토큰으로 AP 대화 원문을 열지 못한다. 지원 접근은 사유·요청·기간·감사 로그를 요구하며 무제한 impersonate를 제공하지 않는다.</p>
+<p>모든 비공개 API·파일·큐 작업·캐시·export·LLM 근거에 조직 scope와 원본 제품을 반영한다. DB RLS만으로 보안이 끝났다고 보지 않고 서비스 권한·DB role·우회 권한·테스트를 함께 둔다. 상대 토큰을 고객의 신원 인증이나 대화 접근용 bearer로 재사용하지 않는다.</p>
+<h3 id="section-61">5.4 두 제품의 구독·비용</h3>
+<div class="table-scroll compact" tabindex="0"><table>
+<thead>
+<tr>
+<th>항목</th>
+<th>규칙</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AP 구독</td>
+<td>AI·상담·기본 설치·사용량·AP 알림. Field 구매 불필요</td>
+</tr>
+<tr>
+<td>Field 구독</td>
+<td>사이트·제작 AI·직접 문의·예약·도메인·Field 알림. AP 구매 불필요</td>
+</tr>
+<tr>
+<td>연결</td>
+<td>별도 제품 이용 조건과 권한 확인. 연결만으로 청구 없음</td>
+</tr>
+<tr>
+<td>무료 체험</td>
+<td>각 제품 14일·카드 없이 시작은 제안값. 새 제품 체험을 악용해 기존 제품 크레딧을 충전하지 않음</td>
+</tr>
+<tr>
+<td>독립 가격</td>
+<td>기존 통합안 29,000원은 자동 승계하지 않음. 가격/세금/제공량/최초 결제일/환불 조건의 승인 plan 필요</td>
+</tr>
+<tr>
+<td>초과 사용량</td>
+<td>경고·제한·명시적 구매. 동의 없는 초과청구 금지</td>
+</tr>
+<tr>
+<td>묶음 판매</td>
+<td>후속 계약/정산/혜택 원장으로 다룸. 이번 필수 범위 아님</td>
+</tr>
+<tr>
+<td>고객 서비스 대금</td>
+<td>두 제품 모두 수령·정산하지 않음</td>
+</tr>
+</tbody>
+</table></div>
+<p>과금은 각 제품의 <code>(subscription_id, billing_period)</code> 유일 원장과 동의 버전으로 처리한다. 공급사 timeout은 같은 거래 조회 후 해결하며 새 주문으로 이중 청구하지 않는다. 환불/해지는 명확히 구분하고 하나의 제품 해지로 상대를 자동 취소하지 않는다.</p>
+<p>PG가 동일 사업자 계약을 사용할 수 있는지, 메시지 발신 주체/채널/템플릿이 두 제품에 적합한지 공급사와 확인한다. 같은 회사이니 승인이 자동 승계된다고 가정하지 않는다. 키와 내부 비용 원장은 계약 형태와 무관하게 제품별이다.</p>
+<h3 id="section-62">5.5 개인정보·약관·보존</h3>
+<p>AP 회원·Field 회원·AP 상담·Field 직접 상담·고객이 Field에 제출한 작업 스냅샷을 구분해 목적·주체·위탁/제공 관계를 실제 계약으로 검수한다. 제품이 분리되었다는 이유만으로 모든 이동이 반드시 제3자 제공이라고 단정하지도, 같은 회사라는 이유로 고지가 필요 없다고 단정하지도 않는다. 외부 LLM·파일·CDN·로그·백업의 처리 위치·재학습·보존·하위 처리자도 검수한다.</p>
+<p>고객에게 전달 목적·대상 사업자·제품·필드·필요 고지와 동의를 명확히 제공한다. 제품 간 공통 고객 번호 DB·고객 프로파일 판매·학습자료 자동 공동 사용은 금지다. AI 고지·광고 표시·소비자 권리·구독 약관은 실제 출시 법령과 계약을 별도 법무 게이트로 확인한다. 이번 문서는 법률 준수 인증이나 법률 의견서가 아니다.</p>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>데이터</th>
+<th>보존 시작안</th>
+<th>중요 조건</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>접수 없는 익명 AI 대화</td>
+<td>마지막 활동 후30일</td>
+<td>통계는 재식별 위험 검수</td>
+</tr>
+<tr>
+<td>정식 문의/업무 요청</td>
+<td>종결 후180일</td>
+<td>예정 업무·분쟁·법정 기록은 분리</td>
+</tr>
+<tr>
+<td>고객 사진</td>
+<td>종결 후90일</td>
+<td>제품별 수신 사본도 목적·기한 기록</td>
+</tr>
+<tr>
+<td>원문 모델 debug</td>
+<td>기본 저장 안 함</td>
+<td>예외 접근/기간 제한</td>
+</tr>
+<tr>
+<td>기술 로그</td>
+<td>마스킹30일</td>
+<td>인증/고객 비밀값 제외</td>
+</tr>
+<tr>
+<td>감사 로그</td>
+<td>1년 제안</td>
+<td>법령·계약 의무별 재설정</td>
+</tr>
+<tr>
+<td>백업</td>
+<td>제품별 순환30일 제안</td>
+<td>복원 후 삭제·revoke 원장 재적용</td>
+</tr>
+<tr>
+<td>연결 비밀값</td>
+<td>해제 즉시 사용 차단·폐기</td>
+<td>최소 감사메타·분쟁 증빙만 별도 보존</td>
+</tr>
+</tbody>
+</table></div>
+<p>법정 거래 기록은 해당 제품의 구독·청구 원장으로 분리 보존한다. 전체 채팅을 무조건 법정 기간 동안 보관하는 방식으로 확대하지 않는다. 상대가 적법하게 수신한 데이터의 삭제 결과는 별도 작업과 증빙으로 관리한다.</p>
+<h3 id="section-63">5.6 운영 목표와 관측</h3>
+<p>제안 목표: 각 제품 일반 접수 저장 p95 2초(파일/모델 제외), 정상 큐 발송 시도 p95 10초(묶음/공급사 제외), 각 제품 DB RPO15분·객체60분·핵심복구 RTO4시간. 계약상 SLA나 실측 성과가 아니다.</p>
+<p>별도 지표: AP 첫 AI 활성화, 외부 사이트 설치 성공, 상담 인계율, 답변 지연, 모델 비용, Field 사이트 공개 완료, 실제 문의 처리, 예약 확정, connector 전달 지연/unknown/중복 차단, 승인 source 최신성, 중복 알림, 서로 독립인 구독 전환·재결제. 매체는 집계만 보고 예약 확정을 실제 매출·수금으로 표시하지 않는다.</p>
+<p>AP 장애가 Field 직접 접수 오류율로 번지지 않는지, Field 장애가 AP native 질의를 끊는지 별도 synthetic probe로 확인한다. 제품별 이벤트·로그·원가를 보되 correlation_id로 허용된 장애 추적을 가능하게 한다. 상관 ID에 전화번호를 넣지 않는다.</p>
+<h3 id="section-64">5.7 출시 게이트</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>게이트</th>
+<th>대상</th>
+<th>실제로 남길 증빙</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G-A1</td>
+<td>AP 가입/요금/자체 운영</td>
+<td>Field 미배포 상태에서 자체 가입·실구독·해지·내보내기</td>
+</tr>
+<tr>
+<td>G-A2</td>
+<td>AP 외부 설치/사람 응대</td>
+<td>일반 외부 사이트의 별도 origin·실기기·고객 접수·AP 답변</td>
+</tr>
+<tr>
+<td>G-A3</td>
+<td>AP AI/알림/복구</td>
+<td>실제 LLM, 카카오/문자/푸시 승인·콜백, 원본/파일 복구</td>
+</tr>
+<tr>
+<td>G-F1</td>
+<td>Field 단독 제작/도메인</td>
+<td>AP 환경변수 없는 셀프 제작·실제 제작 LLM·기본/자체 도메인</td>
+</tr>
+<tr>
+<td>G-F2</td>
+<td>Field 직접 문의/예약</td>
+<td>AP 차단 상태의 두 예약 방식·실알림·수동 일정·동시성</td>
+</tr>
+<tr>
+<td>G-F3</td>
+<td>Field 구독/보안/복구</td>
+<td>실청구·취소·해지·권한·백업/삭제 복원 방지</td>
+</tr>
+<tr>
+<td>G-I1</td>
+<td>공개 연동/권한</td>
+<td>두 방향 scope·동의·actor·issuer·재인가·revoke 검수</td>
+</tr>
+<tr>
+<td>G-I2</td>
+<td>데이터/업무 전달</td>
+<td>stale 가격·버전 충돌·타임아웃·중복·개인정보 인계</td>
+</tr>
+<tr>
+<td>G-I3</td>
+<td>알림·단절 복구</td>
+<td>원본별 한 발송 주체·unknown·해제 중 기존 예약·토큰 회수</td>
+</tr>
+<tr>
+<td>G-D1</td>
+<td>홍보·매체</td>
+<td>사업자/매체의 정확한 버전 승인, 도메인 권한·고지·중지</td>
+</tr>
+<tr>
+<td>G-D2</td>
+<td>성과·프라이버시</td>
+<td>AP만으로 집계, 작은 집단/차분 완화·PII 차단</td>
+</tr>
+<tr>
+<td>G-L1</td>
+<td>실제 운영 계약</td>
+<td>두 제품 약관/데이터 책임/국외 처리/AI고지·PG·메시지 계약 검수</td>
+</tr>
+<tr>
+<td>G-S1</td>
+<td>전체 최종 인수</td>
+<td>변경 추적표·모든 적용 QA·제품별 독립/연결 회귀·책임자 승인</td>
+</tr>
+</tbody>
+</table></div>
+<p>각 독립 릴리스는 자기 게이트와 공통 법무·보안 적용 항목만으로 판단한다. 예를 들어 AP Core가 G-D1을 기다릴 필요는 없지만 Distribution을 완료했다고 주장할 수는 없다. 전체 Suite 완료는 모든 적용 게이트를 요구한다. credential 없음·법무 검수 미완료·테스트 skip은 통과가 아니다.</p>
+<h3 id="section-65">5.8 마이그레이션 — 이미 구현된 경우만</h3>
+<p>현재 자료는 기획/시안이므로 운영 DB가 존재한다고 가정하지 않는다. 신규 개발은 두 DB로 시작한다. 기존 v2.0 서버가 실제 존재한다면 먼저 read-only 인벤토리·백업·보존 근거·원본 건수를 확보한다.</p>
+<ol>
+<li>cross-product schema·mapping·인증·버전 계약을 추가하고 기존 서비스는 즉시 삭제하지 않는다.</li>
+<li>AP 원본으로 이전할 실제 AI/지식/대화와 Field 원본으로 남길 사이트/직접 문의/예약을 출처와 기능 기준으로 분류한다. 출처 불명 대화를 AI 원본으로 추정하지 않는다.</li>
+<li>제품별 조직을 새로 만들되 연결/계약/고지/과금 동의를 마련한다. 기존 카카오 로그인·비밀번호·PG billing key를 몰래 복사해 두 구독을 만들지 않는다.</li>
+<li>승인된 공개 정보만 source로 매핑하고 기존 사용자의 초안·중지 상태·예약 스냅샷·대화 권한을 보존한다.</li>
+<li>작업 단위 write freeze 또는 검증된 변경 캡처로 이행 경계를 잡는다. 승인 없는 무한 dual write 금지. 건수/hash/권한/정산·알림 책임을 대조한다.</li>
+<li>허용된 대상부터 canary 전환, 오류 시 이전 읽기/쓰기 경로로 안전 복귀. 실제 새 메시지·예약을 버리는 DB 전체 롤백 금지.</li>
+<li>이전 URL은 원본 권한을 검사하는 안전 전환/안내를 제공한다. 전화번호로 새 세션을 발급하지 않는다.</li>
+<li>법적 보존·대조·복구 검수가 끝난 뒤 중복 필드를 제거하고 이행 종료 증빙을 남긴다.</li>
+</ol>
+<h3 id="section-66">5.9 공식 기술 참고자료</h3>
+<p>확인일 2026-09-24. 아래는 표준/브라우저/벤치마크 확인이며 우리 구현의 승인·보안 인증을 의미하지 않는다. 문서의 구체적인 제품 경계·기간·스키마·알림 소유 규칙은 별도 실행 설계다.</p>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>출처</th>
+<th>적용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>S01</td>
+<td><a href="https://www.rfc-editor.org/rfc/rfc9700.html">RFC 9700 — OAuth 2.0 Security BCP</a></td>
+<td>code+PKCE, 정확한 redirect, scope/audience 제한, refresh 보호</td>
+</tr>
+<tr>
+<td>S02</td>
+<td><a href="https://www.rfc-editor.org/rfc/rfc7009">RFC 7009 — Token Revocation</a></td>
+<td>토큰 회수 API와 철회 처리</td>
+</tr>
+<tr>
+<td>S03</td>
+<td><a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage">MDN — Window.postMessage</a></td>
+<td>exact target origin·수신자 검증</td>
+</tr>
+<tr>
+<td>S04</td>
+<td><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors">MDN — CSP frame-ancestors</a></td>
+<td>실제 응답 헤더·ancestor 허용 범위</td>
+</tr>
+<tr>
+<td>S05</td>
+<td><a href="https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Third-party_cookies">MDN — Third-party cookies</a></td>
+<td>외부 삽입 세션과 1차 도메인 전환 분리</td>
+</tr>
+<tr>
+<td>S06</td>
+<td><a href="https://www.firsthand.ai/platform">Firsthand — Platform</a></td>
+<td>독립 브랜드 AI 생성·배포라는 개념 참고. 기능 동등성/API 계약은 아님</td>
+</tr>
+</tbody>
+</table></div>
+<p>기존 PRD의 법령·메시지 단가·구체 라이브러리 선택은 최신 가격/계약 승인이 아니다. 공개 출시의 G-L1 및 제품별 공급사 게이트에서 재확인한다.</p>
+<hr />
+<h2 id="section-67">06. 기존 역할과 UI v3의 개정 지도</h2>
+<p>이번 작업은 개발 계획 개정이다. 기존 <code>field_ui_prototype_v3.html</code>을 새 제품 구조로 재구현했다고 표시하지 않는다. 기존 디자인·사이트 제작·고객·사업자·매체·관리자 기능을 보존하되 소유 제품과 이동 경로를 아래처럼 고친다.</p>
+<h3 id="section-68">6.1 역할·제품별 화면</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>기존 항목</th>
+<th>개정 소유 제품</th>
+<th>수정할 흐름</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Field 플랫폼 홈</td>
+<td>Field</td>
+<td>‘홈페이지 만들기’ 중심, ‘AI만 도입’은 별도 AP 제품으로 안내</td>
+</tr>
+<tr>
+<td>AI만 도입하기</td>
+<td>AP 홈페이지/개설실</td>
+<td>Field 가입·사이트·예약을 요구하지 않음</td>
+</tr>
+<tr>
+<td>사업자/서비스 제공자/광고주</td>
+<td>각 제품 owner</td>
+<td>불필요한 3개 역할 계정은 만들지 않되 AP/Field 조직·동의는 별도</td>
+</tr>
+<tr>
+<td>셀프 사이트 5단계</td>
+<td>Field</td>
+<td>원래 기능 유지, AI 상담 연결은 선택 단계</td>
+</tr>
+<tr>
+<td>내 사이트 / 제작 AI</td>
+<td>Field</td>
+<td>자체 제작 LLM·초안·공개·복구</td>
+</tr>
+<tr>
+<td>내 사업 AI</td>
+<td>AP</td>
+<td>지식·응대 테스트·설치·활성화·사용량</td>
+</tr>
+<tr>
+<td>Field의 AI 메뉴</td>
+<td>Field 연동 서비스</td>
+<td>연결/권한/동기화/설치 상태·AP 관리실 이동</td>
+</tr>
+<tr>
+<td>홍보 카드·공유·매체 배치</td>
+<td>AP</td>
+<td>자체 위젯 설치와 광고 캠페인을 분리</td>
+</tr>
+<tr>
+<td>문의함</td>
+<td>양쪽 각각</td>
+<td>Field는 자기 직접 대화+허용된 AP 목록을 합성; AP 원문은 공식 API</td>
+</tr>
+<tr>
+<td>예약·달력</td>
+<td>Field</td>
+<td>AP에서 요청은 가능하지만 원본·확정은 Field</td>
+</tr>
+<tr>
+<td>고객 AI 상담·후속 대화</td>
+<td>AP</td>
+<td>AP 도메인·권한·알림, Field 예약 상세는 안전 handoff</td>
+</tr>
+<tr>
+<td>고객 직접 문의·예약</td>
+<td>Field</td>
+<td>AP 없어도 기존 양식/통화/후속 대화 유지</td>
+</tr>
+<tr>
+<td>제휴 매체</td>
+<td>AP</td>
+<td>위치·배치·승인·집계, Field 고객 데이터 열람 불가</td>
+</tr>
+<tr>
+<td>플랫폼 관리자</td>
+<td>AP admin / Field admin</td>
+<td>각각 권한·MFA·로그·구독·운영 장애. 통합 superuser 금지</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-69">6.2 Field에 표시할 연결 화면의 필수 상태</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>상태</th>
+<th>표시</th>
+<th>행동</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>미연결</td>
+<td>‘AI 상담은 별도 서비스를 연결해 이용합니다’</td>
+<td>계정 연결 / AP 가입 / 나중에</td>
+</tr>
+<tr>
+<td>설치만 연결</td>
+<td>‘AI 상담 사용 중 · 예약 연동 없음’</td>
+<td>Field 정보/예약 권한 추가 승인</td>
+</tr>
+<tr>
+<td>정보 검토 필요</td>
+<td>변경된 서비스·가격·영향 접점</td>
+<td>AP 정보 검토로 이동</td>
+</tr>
+<tr>
+<td>사용 가능</td>
+<td>선택 AI·배포 주소·권한·마지막 검증</td>
+<td>테스트 / 설정 / AP 관리실</td>
+</tr>
+<tr>
+<td>일시 장애</td>
+<td>직접 문의·예약 정상, AI 또는 원격 대화 제한</td>
+<td>상태 확인 / 직접 문의 경로</td>
+</tr>
+<tr>
+<td>해제 중</td>
+<td>로컬 차단 완료·원격 토큰 회수 대기</td>
+<td>기존 예약 처리·알림 경로 점검</td>
+</tr>
+<tr>
+<td>해제</td>
+<td>Field 업무는 유지, AP 원문 접근은 없음</td>
+<td>재연결 / AP 직접 관리실 안내</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-70">6.3 승인/정상 상태를 과장하지 않는다</h3>
+<p>‘연결됨’은 모든 source가 최신 승인이라는 뜻이 아니다. ‘요청 저장’은 외부 Field 접수 완료가 아니며, 외부 접수도 예약 확정이 아니다. ‘원격 이벤트 수신’은 고객 알림 전달이 아니다. 외부 callback 대기나 stale 상태를 초록 체크 하나로 대체하지 않는다.</p>
+<p>AI가 설치되지 않은 Field 사이트에는 동작하지 않는 ‘AI에게 문의’ 버튼을 노출하지 않는다. 실제 앱에서 시안 상단 역할 탭은 제거하고 로그인·권한별 제품 라우팅을 적용한다. 검토용 UI가 필요하면 별도 데모 배너와 합성 데이터 환경에 한정한다.</p>
+<h3 id="section-71">6.4 디자인 계약 유지</h3>
+<p>Apple 계열의 단순한 화이트·밝은 그레이, 시스템 폰트, 여백, 블루 주요 행동, 최소 경계를 유지한다. 모든 표시 텍스트 최소14px, 본문/입력16px, 조작 영역44px급을 지향한다. 외부 위젯도 14px 미만으로 축소하지 않는다. macOS/iOS 기본 폰트를 참조하되 폰트 파일을 배포하지 않는다.</p>
+<p>320/390/768/1440px·200% 확대·키보드·스크린리더·동작 감소를 검수한다. Field 모바일 오늘/문의/예약/내 사이트/더보기는 유지한다. AP 모바일은 AI/문의/설치/더보기 중심으로 별도 구성하고, 매체도 운영/위치/요청/성과/설정을 유지한다. 화면마다 빈 상태·저장·오류·미연결·권한 거부·한도·동기화 지연을 구현한다.</p>
+<h3 id="section-72">6.5 실제 사용자 인수 시나리오</h3>
+<p><strong>외부 사업자:</strong> AP 가입 → 직접 정보 등록 → AI 승인 → Field와 무관한 기존 사이트 설치 → 고객 질문 → AP 문의함에서 답변 → AP 구독.</p>
+<p><strong>Field만 쓰는 사업자:</strong> Field 가입 → 자기 사이트 제작 → 공개 → 직접 문의와 두 예약 방식 → 자체 알림 → Field 구독. AP가 없다는 이유로 메뉴를 막지 않음.</p>
+<p><strong>두 제품을 쓰는 사업자:</strong> 각 제품의 조직·요금 확인 → 공식 연결 승인 → Field 공개 정보 동기화 검토 → 같은 AP SDK 설치 → 고객 상담 → Field 업무 요청 → Field 관리실에서 API 답변·예약 승인 → 고객은 원래 대화에서 결과 확인.</p>
+<p><strong>매체:</strong> AP 매체 조직 → 도메인/위치 확인 → 사업자 공개 카드의 정확한 버전 승인 → 별도 origin에서 표시 → AP 안전 접수 → 집계만 조회. Field가 없어도 일반 상담 광고 실험 완료.</p>
+<p><strong>운영자:</strong> 제품별 콘솔 → 자기 권한 범위의 장애/신고 확인 → 사유·기간·증빙으로 조치 → 연동 문제는 correlation_id와 최소 메타데이터로 협업. 관리자 세션을 다른 제품에 그대로 제출하지 않음.</p>
+<hr />
+<h2 id="section-73">07. 요구사항 추적과 인수 검수 160개</h2>
+<p><strong>기존 QA01~QA120의 ID를 보존하고 제품 경계에 맞게 기대값을 개정했으며, 독립성·연동 QA121~QA160을 추가했다. 아래는 실행해야 할 인수 명세이고 이번 문서 작성 중 실서비스 테스트가 통과했다는 뜻이 아니다.</strong></p>
+<p>제품별/공통으로 표시한 행은 해당 제품에서 각각 검수한다. AP 승인으로 Field 검수를 대신하지 않는다. Core 릴리스에 없는 매체/연동 QA는 적용 외로 구분하고, 전체 Suite에서는 해당 항목도 실행한다. provider credential 부재는 적용 외가 아니라 blocked_integration이다.</p>
+<h3 id="section-74">기존 테스트의 중요한 개정</h3>
+<p>공유 DB 원자성→제품내 원자성+동기화 상태, AI-only 동일 조직→별도 제품 조직+동의 mapping, 통합 과금→독립 원장, 동일 브라우저 시안→실제 독립 서버/기기 검수로 바꿨다. 전체 기존 21개 요구의 삭제는 없다.</p>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>적용</th>
+<th>시나리오</th>
+<th>통과 조건</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>QA01</td>
+<td>제품별/공통</td>
+<td>공개 가입·사업체 생성</td>
+<td>수동 승인 없이 정상 가입, 사용자별 한도 적용</td>
+</tr>
+<tr>
+<td>QA02</td>
+<td>제품별/공통</td>
+<td>이메일 로그인·만료 링크</td>
+<td>유효 링크만 허용, 중복 사용·만료 처리</td>
+</tr>
+<tr>
+<td>QA03</td>
+<td>제품별/공통</td>
+<td>카카오 로그인·이메일 미제공</td>
+<td>이메일 없이도 안전한 계정 경로, 필요한 정보 별도 입력</td>
+</tr>
+<tr>
+<td>QA04</td>
+<td>제품별/공통</td>
+<td>같은 이메일의 다른 로그인</td>
+<td>자동 병합 없이 기존 계정 재인증 후 연결</td>
+</tr>
+<tr>
+<td>QA05</td>
+<td>제품별/공통</td>
+<td>다른 사업체 API/파일 접근</td>
+<td>ID·tenant 변경으로 데이터 접근 불가</td>
+</tr>
+<tr>
+<td>QA06</td>
+<td>제품별/공통</td>
+<td>사업자 번호 변경·세션 폐기</td>
+<td>최근 확인·기존 기기 세션·보안 알림 처리</td>
+</tr>
+<tr>
+<td>QA07</td>
+<td>Field</td>
+<td>템플릿 시작과 AI 시작</td>
+<td>같은 편집/공개 모델로 끝까지 진행</td>
+</tr>
+<tr>
+<td>QA08</td>
+<td>Field</td>
+<td>AI의 임의 코드·허위 정보 삽입</td>
+<td>스키마 밖 변경 차단, 사실 미확인 값 경고</td>
+</tr>
+<tr>
+<td>QA09</td>
+<td>Field</td>
+<td>여러 페이지·서비스 상세·모바일</td>
+<td>연결·CTA·반응형 정상, 페이지 한도 일치</td>
+</tr>
+<tr>
+<td>QA10</td>
+<td>Field</td>
+<td>초안 수정 중 실제 사이트</td>
+<td>공개본에 초안이 노출되지 않음</td>
+</tr>
+<tr>
+<td>QA11</td>
+<td>Field</td>
+<td>사실·사이트 공개 중 일부 실패</td>
+<td>Field 내부 공개의 원자성은 Field DB에서 검수. AP 동기화는 별도 상태·승인·stale 처리로 검수하며 분산 원자성을 주장하지 않음</td>
+</tr>
+<tr>
+<td>QA12</td>
+<td>Field</td>
+<td>공개 버전 복구</td>
+<td>과거 디자인을 초안으로 복구, 현재 승인 사실·예약·대화·결제는 유지</td>
+</tr>
+<tr>
+<td>QA13</td>
+<td>Field</td>
+<td>정상 자체 도메인 연결</td>
+<td>소유 확인·TLS·DNS 확인 후 해당 사이트 연결</td>
+</tr>
+<tr>
+<td>QA14</td>
+<td>Field</td>
+<td>타인 도메인·잘못된 Host</td>
+<td>다른 사업체 사이트/데이터로 연결되지 않음</td>
+</tr>
+<tr>
+<td>QA15</td>
+<td>Field</td>
+<td>DNS 이탈·인증서 오류·재연결</td>
+<td>상태 안내, 기본 주소 유지, 재검증</td>
+</tr>
+<tr>
+<td>QA16</td>
+<td>제품별/공통</td>
+<td>AI 질문 후 직접 문의로 전환</td>
+<td>AP 대화에서 직접 접수로 전환할 때 맥락 유지. Field로 넘어갈 경우 수신 범위·고객 동의·원본 분리</td>
+</tr>
+<tr>
+<td>QA17</td>
+<td>제품별/공통</td>
+<td>비회원 이름·번호 접수</td>
+<td>OTP/회원가입 없이 접수, 미인증 상태 표시</td>
+</tr>
+<tr>
+<td>QA18</td>
+<td>제품별/공통</td>
+<td>번호 오입력·다른 브라우저 링크</td>
+<td>링크/번호만으로 본문·사진·과거 내역 공개 안 됨</td>
+</tr>
+<tr>
+<td>QA19</td>
+<td>제품별/공통</td>
+<td>접수 확인키·잘못된 키 반복</td>
+<td>해당 대화만 접근, 횟수 제한·폐기 작동</td>
+</tr>
+<tr>
+<td>QA20</td>
+<td>제품별/공통</td>
+<td>악성/과대/HEIC 첨부</td>
+<td>안전한 검사·변환·재첨부, 다른 필드 손실 없음</td>
+</tr>
+<tr>
+<td>QA21</td>
+<td>제품별/공통</td>
+<td>사람 인계 중 AI 생성 완료</td>
+<td>고객에게 AI·사람 동시 발송 안 됨</td>
+</tr>
+<tr>
+<td>QA22</td>
+<td>제품별/공통</td>
+<td>등록되지 않은 가격·가능 여부</td>
+<td>임의 약속 없이 미확인/사람 인계</td>
+</tr>
+<tr>
+<td>QA23</td>
+<td>제품별/공통</td>
+<td>프롬프트 공격·타 사업자 정보 요구</td>
+<td>권한 밖 도구/정보 반환 없음</td>
+</tr>
+<tr>
+<td>QA24</td>
+<td>제품별/공통</td>
+<td>AI 오류·한도·공급사 중단</td>
+<td>AP LLM 장애에도 AP 사람 응대/양식 정상. AP 전체 장애에도 Field 직접 문의 정상</td>
+</tr>
+<tr>
+<td>QA25</td>
+<td>Field</td>
+<td>희망시간형 신청</td>
+<td>미확정 요청으로 저장, 필요 시간 조율</td>
+</tr>
+<tr>
+<td>QA26</td>
+<td>Field</td>
+<td>시간표형 신청</td>
+<td>서비스 시간·휴무·완충·현재 점유 반영</td>
+</tr>
+<tr>
+<td>QA27</td>
+<td>Field</td>
+<td>다른 서비스의 같은 시간</td>
+<td>동일 사업자 자원에서 중복 확정 차단</td>
+</tr>
+<tr>
+<td>QA28</td>
+<td>Field</td>
+<td>같은 슬롯 복수 요청</td>
+<td>요청은 저장, 서로 다른 두 확정은 불가</td>
+</tr>
+<tr>
+<td>QA29</td>
+<td>Field</td>
+<td>동시에 승인 버튼 두 번</td>
+<td>DB에서 한 번 처리, 알림 중복 없음</td>
+</tr>
+<tr>
+<td>QA30</td>
+<td>Field</td>
+<td>전화 예약 수동 등록</td>
+<td>고객 사이트 시간표에 즉시 반영</td>
+</tr>
+<tr>
+<td>QA31</td>
+<td>Field</td>
+<td>새 시간 제안·고객 수락</td>
+<td>고객 동의 기록, 사업자 최종 승인 전 확정 금지</td>
+</tr>
+<tr>
+<td>QA32</td>
+<td>Field</td>
+<td>확정 예약 시간 변경</td>
+<td>새 점유 성공 전 기존 점유 유지, 원자적 교체</td>
+</tr>
+<tr>
+<td>QA33</td>
+<td>Field</td>
+<td>취소·거절·만료·노쇼</td>
+<td>각 상태와 책임 구분, 법적 안내/알림 적합</td>
+</tr>
+<tr>
+<td>QA34</td>
+<td>Field</td>
+<td>자정·완충·휴무·조건 변경</td>
+<td>날짜 경계와 기존 예약 스냅샷 정상 유지</td>
+</tr>
+<tr>
+<td>QA35</td>
+<td>제품별/공통</td>
+<td>사업자 알림 조건</td>
+<td>단순 AI 안내는 제외, 처리할 일은 카카오/푸시</td>
+</tr>
+<tr>
+<td>QA36</td>
+<td>제품별/공통</td>
+<td>고객 알림톡 실패→문자</td>
+<td>등록 발신번호·단일 대체 주체, 중복 없음</td>
+</tr>
+<tr>
+<td>QA37</td>
+<td>제품별/공통</td>
+<td>고객 미열람·공급사 결과 미상</td>
+<td>미열람만으로 문자 발송 안 함, 결과 조회</td>
+</tr>
+<tr>
+<td>QA38</td>
+<td>제품별/공통</td>
+<td>중복·역순 콜백·Worker 재시작</td>
+<td>원장 최종 상태·차감 한 번, outbox 재구성</td>
+</tr>
+<tr>
+<td>QA39</td>
+<td>제품별/공통</td>
+<td>iPhone PWA·Android·PC 푸시</td>
+<td>설치/권한/거부/무효 토큰 처리, 잠금화면 민감정보 없음</td>
+</tr>
+<tr>
+<td>QA40</td>
+<td>제품별/공통</td>
+<td>알림 한도 소진·수신 신고</td>
+<td>저장 유지·명확한 미전달 상태·비용 차단</td>
+</tr>
+<tr>
+<td>QA41</td>
+<td>제품별/공통</td>
+<td>사장님 답변 후 고객 재방문</td>
+<td>접수 대화 연결, 사이트 밖에서도 양방향 진행</td>
+</tr>
+<tr>
+<td>QA42</td>
+<td>제품별/공통</td>
+<td>카드 없는 체험 시작·종료</td>
+<td>14일 제안값 준수, 동의 없는 자동 결제 없음</td>
+</tr>
+<tr>
+<td>QA43</td>
+<td>제품별/공통</td>
+<td>구독 신청·첫 결제·월말 갱신</td>
+<td>동의한 금액/주기·월말 규칙·원장 정상</td>
+</tr>
+<tr>
+<td>QA44</td>
+<td>제품별/공통</td>
+<td>결제 타임아웃·중복 콜백</td>
+<td>새로운 청구 중복 생성 없이 PG 상태 대조</td>
+</tr>
+<tr>
+<td>QA45</td>
+<td>제품별/공통</td>
+<td>구독 해지·실패 유예·환불</td>
+<td>다음 갱신 중지·기존 기간 유지·환불 기록</td>
+</tr>
+<tr>
+<td>QA46</td>
+<td>제품별/공통</td>
+<td>구독 종료 후 예정 예약</td>
+<td>각 제품 신규 기능 제한과 정리 모드 분리. 한 제품의 해지로 상대 구독/기존 예약을 가두지 않음</td>
+</tr>
+<tr>
+<td>QA47</td>
+<td>제품별/공통</td>
+<td>DB/파일 복구·삭제 재적용</td>
+<td>독립 환경 복구, RPO/RTO 실측·삭제 복원 방지</td>
+</tr>
+<tr>
+<td>QA48</td>
+<td>제품별/공통</td>
+<td>공개 가입 악용·알림 폭탄</td>
+<td>위험 범위만 제한·비용 상한·신고/이의 처리</td>
+</tr>
+<tr>
+<td>QA49</td>
+<td>제품별/공통</td>
+<td>운영자 열람·지원 접근</td>
+<td>승인/사유/기간/감사 기록 없이 상세 열람 불가</td>
+</tr>
+<tr>
+<td>QA50</td>
+<td>제품별/공통</td>
+<td>전체 실제 연락 흐름</td>
+<td>Field 단독 직접 흐름과 AP 연결 흐름을 각각 별도 실제 기기에서 검수</td>
+</tr>
+<tr>
+<td>QA51</td>
+<td>Field</td>
+<td>플랫폼 루트와 고객 사이트 분리</td>
+<td>플랫폼 루트는 만들기·가입, tenant 도메인은 해당 공개본. 샘플 고객 사이트로 시작하지 않음</td>
+</tr>
+<tr>
+<td>QA52</td>
+<td>Field</td>
+<td>신규 가입자 첫 화면·빈 상태</td>
+<td>사이트 없음→만들기, 문의·예약 0건. 샘플 영업 데이터 없음</td>
+</tr>
+<tr>
+<td>QA53</td>
+<td>Field</td>
+<td>실제 사업 정보 바인딩</td>
+<td>세차·촬영·레슨 정보가 Field 초안/공개본에 반영. 연결 AP는 해당 소스 버전 승인 후 반영</td>
+</tr>
+<tr>
+<td>QA54</td>
+<td>Field</td>
+<td>템플릿·실제 AI 생성 두 경로</td>
+<td>둘 다 같은 스키마로 개설 완료. 운영 AI 경로가 키워드 데모로 대체되지 않음</td>
+</tr>
+<tr>
+<td>QA55</td>
+<td>Field</td>
+<td>템플릿 배치 차이</td>
+<td>3개 템플릿이 색상뿐 아니라 대표 영역·사진·정렬에서 다르게 렌더링</td>
+</tr>
+<tr>
+<td>QA56</td>
+<td>Field</td>
+<td>사업자 사진 업로드·실패·새로고침</td>
+<td>asset 상태·재첨부·서버 저장·공개 반영. 로컬 썸네일을 저장 성공으로 오인하지 않음</td>
+</tr>
+<tr>
+<td>QA57</td>
+<td>Field</td>
+<td>320~1440px 글자·접근성</td>
+<td>320·390·768·1440px에서 표시 글자 최소 14px, 주요 경로 가로 넘침·키보드 가림 없음</td>
+</tr>
+<tr>
+<td>QA58</td>
+<td>Field</td>
+<td>모바일 편집/미리보기 전환</td>
+<td>입력·선택 유지, 좁은 화면에 다열 압축/축소 텍스트 없음</td>
+</tr>
+<tr>
+<td>QA59</td>
+<td>Field</td>
+<td>섹션 순서·삭제·필수 CTA</td>
+<td>모바일 버튼·키보드로도 편집, 공통 문의 액션·tenant 보호</td>
+</tr>
+<tr>
+<td>QA60</td>
+<td>Field</td>
+<td>페이지 추가·이름·경로·삭제</td>
+<td>페이지 한도·홈 유지·내부 링크·공개 경로 처리 일치</td>
+</tr>
+<tr>
+<td>QA61</td>
+<td>Field</td>
+<td>제작 중 이탈·기기 변경</td>
+<td>서버 마지막 저장본과 유효 단계에서 재개, localStorage만 의존하지 않음</td>
+</tr>
+<tr>
+<td>QA62</td>
+<td>Field</td>
+<td>자동 저장 실패·오프라인</td>
+<td>미저장 표시·입력 보존·안전 재시도, 공개본 변화 없음</td>
+</tr>
+<tr>
+<td>QA63</td>
+<td>Field</td>
+<td>AI 생성 대기·실패·취소·재시도</td>
+<td>입력/초안 보존·단일 job·중복 차감 없음·템플릿 대체 가능</td>
+</tr>
+<tr>
+<td>QA64</td>
+<td>Field</td>
+<td>AI 대기 중 수동 수정·다중 탭</td>
+<td>base_revision 충돌 감지, 최신 입력 자동 덮어쓰기 금지</td>
+</tr>
+<tr>
+<td>QA65</td>
+<td>Field</td>
+<td>초안·미리보기 접근</td>
+<td>비로그인/다른 tenant가 토큰·경로 변경으로 미공개 정보 읽기 불가</td>
+</tr>
+<tr>
+<td>QA66</td>
+<td>Field</td>
+<td>공개 전 연락·서비스·시간표 검사</td>
+<td>Field 필수 연락·서비스·예약 검수는 유지하되 AP 미연결만으로 공개를 차단하지 않음</td>
+</tr>
+<tr>
+<td>QA67</td>
+<td>Field</td>
+<td>자체 도메인 대기 중 첫 공개</td>
+<td>기본 주소로 공개·운영 가능, 자체 도메인 준비와 상태 분리</td>
+</tr>
+<tr>
+<td>QA68</td>
+<td>Field</td>
+<td>개설 완료와 다음 행동</td>
+<td>Field 사이트 확인/테스트와 AP 선택 연결을 구분; 실제 운영 주소만 성공으로 표시</td>
+</tr>
+<tr>
+<td>QA69</td>
+<td>Field</td>
+<td>첫 문의 테스트 안전성</td>
+<td>서버 테스트 플래그, 자기 검증 수신처만 발송, 실적·실제 일정 점유 제외</td>
+</tr>
+<tr>
+<td>QA70</td>
+<td>Field</td>
+<td>예시 데이터 격리</td>
+<td>운영 tenant에 데모 고객/예약/리뷰/관리자 샘플 초기 삽입 없음</td>
+</tr>
+<tr>
+<td>QA71</td>
+<td>Field</td>
+<td>단계 URL 직접 접근·재로그인</td>
+<td>서버 readiness/권한 검사, 공개 후 기본은 오늘, 기존 업무 접근을 온보딩으로 잠그지 않음</td>
+</tr>
+<tr>
+<td>QA72</td>
+<td>Field</td>
+<td>과거 버전 복구 후 공개</td>
+<td>활성 포인터 유지→복구 초안 검수→재승인→새 디자인 릴리스. 과거 가격 복구는 별도 승인</td>
+</tr>
+<tr>
+<td>QA73</td>
+<td>Field</td>
+<td>디자인 교체·재생성</td>
+<td>사업 정보·수동 편집 보존 또는 변경 확인, 내용 자동 유실 없음</td>
+</tr>
+<tr>
+<td>QA74</td>
+<td>Field</td>
+<td>공개본이 쓰는 사진 삭제</td>
+<td>초안 교체만으로 현재 공개 사진을 삭제하지 않음, 참조 정리·보존 동작</td>
+</tr>
+<tr>
+<td>QA75</td>
+<td>Field</td>
+<td>생성/공개 Worker 재시작</td>
+<td>Field 생성/공개 Worker 멱등·revision 검수. AP sync는 별도 outbox·소스 승인 상태이며 Field 공개 실패와 구분</td>
+</tr>
+<tr>
+<td>QA76</td>
+<td>Field</td>
+<td>시안 역할 탭·관리자 접근 제거</td>
+<td>운영 배포에서 버튼/URL만으로 다른 역할 전환·대화 열람 불가</td>
+</tr>
+<tr>
+<td>QA77</td>
+<td>Field</td>
+<td>개설 때 설정한 두 예약 방식</td>
+<td>서비스별 예약 설정이 공개 사이트·일정·관리실에 일치, 임의 전역 덮어쓰기 없음</td>
+</tr>
+<tr>
+<td>QA78</td>
+<td>Field</td>
+<td>실제 서로 다른 기기의 접수·답변</td>
+<td>고객 기기→서버→사업자 기기→고객 후속 확인, 같은 브라우저 데모로 대체 금지</td>
+</tr>
+<tr>
+<td>QA79</td>
+<td>Field</td>
+<td>공개 SEO·미공개 보호·가격 일치</td>
+<td>각 제품 초안 비공개·승인 원본 유지. 연결 가격은 live version 일치 또는 확인 필요로 처리</td>
+</tr>
+<tr>
+<td>QA80</td>
+<td>Field</td>
+<td>셀프 개설 전체 흐름</td>
+<td>Field 가입·자기 정보·템플릿/실제제작AI·공개·직접문의·예약을 AP 없이 완료. 연결 흐름도 별도 검수</td>
+</tr>
+<tr>
+<td>QA81</td>
+<td>AP</td>
+<td>AI 단독 가입</td>
+<td>AP 전용 가입·DB·조직·지식·활성화·상담이 Field 사이트/계정/서버/예약 없이 완료</td>
+</tr>
+<tr>
+<td>QA82</td>
+<td>Field</td>
+<td>기존 사이트 경로 보존</td>
+<td>신규 사업자는 5단계 셀프 제작, 사업자가 직접 공개</td>
+</tr>
+<tr>
+<td>QA83</td>
+<td>연동/AP</td>
+<td>AI-only에서 사이트 추가</td>
+<td>AP 고객이 Field에 별도 동의/가입하고 기존 AI를 연결. AP와 Field 조직은 별도며 무단 고객/예약 복제·중복 청구 없음</td>
+</tr>
+<tr>
+<td>QA84</td>
+<td>연동/AP</td>
+<td>승인 사실 변경</td>
+<td>Field source 변경을 AP 검토·버전 대조 후 반영. 미승인/미상 가격은 단정하지 않으며 기존 예약 snapshot 불변</td>
+</tr>
+<tr>
+<td>QA85</td>
+<td>연동/AP</td>
+<td>디자인 복구와 사실 복구</td>
+<td>Field 디자인 복구가 AP 사실·설정·중지를 변경하지 않음. 각 사실 복구는 별도 승인</td>
+</tr>
+<tr>
+<td>QA86</td>
+<td>연동/AP</td>
+<td>AI 배포별 권한</td>
+<td>같은 AP agent의 배포 권한을 검사하고 선택 Field 도구는 연결 scope에서만 사용</td>
+</tr>
+<tr>
+<td>QA87</td>
+<td>AP·배포</td>
+<td>카드 초안 편집</td>
+<td>공개 카드와 매체 live 내용 불변, draft preview만 변경</td>
+</tr>
+<tr>
+<td>QA88</td>
+<td>AP·배포</td>
+<td>카드 공개 동의</td>
+<td>사업자 명시 승인·revision·idempotency, stale 승인 거부</td>
+</tr>
+<tr>
+<td>QA89</td>
+<td>AP·배포</td>
+<td>허위 가격/주장 삽입</td>
+<td>승인 사실과 충돌하는 카드 약속을 차단 또는 수정 확인 요구</td>
+</tr>
+<tr>
+<td>QA90</td>
+<td>AP·배포</td>
+<td>공개 카드 버전 변경</td>
+<td>기존 매체 승인을 새 버전 승인으로 자동 승격하지 않음</td>
+</tr>
+<tr>
+<td>QA91</td>
+<td>AP·배포</td>
+<td>배치 요청 중복</td>
+<td>같은 카드 release와 slot 요청은 하나, 다른 body 같은 key 충돌</td>
+</tr>
+<tr>
+<td>QA92</td>
+<td>AP·배포</td>
+<td>매체 승인 권한</td>
+<td>다른 매체의 slot/placement 승인·조회 불가</td>
+</tr>
+<tr>
+<td>QA93</td>
+<td>AP·배포</td>
+<td>정확한 버전 승인</td>
+<td>심사 중 카드가 바뀌면409 및 새 버전 검토 요구</td>
+</tr>
+<tr>
+<td>QA94</td>
+<td>AP·배포</td>
+<td>도메인 소유 확인</td>
+<td>임의 타인 domain 등록으로 embed 서빙 허용 안 됨</td>
+</tr>
+<tr>
+<td>QA95</td>
+<td>AP·배포</td>
+<td>slot 비활성/재활성</td>
+<td>노출 중지, 과거 거절·취소를 자동 승인하지 않음</td>
+</tr>
+<tr>
+<td>QA96</td>
+<td>AP·배포</td>
+<td>공유 링크와 매체 카드</td>
+<td>기본 link/owned widget은 캠페인·매체 없이 작동. 광고 카드만 공개/매체 버전 승인 필요</td>
+</tr>
+<tr>
+<td>QA97</td>
+<td>AP·배포</td>
+<td>frame-ancestors 실제 헤더</td>
+<td>허용/비허용/중첩 ancestor 각각 별도 origin에서 확인</td>
+</tr>
+<tr>
+<td>QA98</td>
+<td>AP·배포</td>
+<td>postMessage origin/source/nonce</td>
+<td>위조·다른 창·wildcard·잘못된 schema 메시지 처리 차단</td>
+</tr>
+<tr>
+<td>QA99</td>
+<td>AP·배포</td>
+<td>제3자 쿠키 없는 카드</td>
+<td>anonymous 안내·접수 전환이 쿠키 차단 환경에서도 가능</td>
+</tr>
+<tr>
+<td>QA100</td>
+<td>연동/AP</td>
+<td>handoff 만료·1회 사용</td>
+<td>기한·audience·session 바인딩 검증, 재사용으로 새 접수 권한 생성 불가</td>
+</tr>
+<tr>
+<td>QA101</td>
+<td>연동/AP</td>
+<td>전환 URL·로그 개인정보</td>
+<td>전화·사진·대화 text·access secret이 query/Referer/분석에 남지 않음</td>
+</tr>
+<tr>
+<td>QA102</td>
+<td>연동/AP</td>
+<td>외부 카드에서 접수 전환</td>
+<td>기존 질문·서비스·희망 조건 유지, 연락처는 안전한 접수 화면에서 확인</td>
+</tr>
+<tr>
+<td>QA103</td>
+<td>AP·배포</td>
+<td>위조 attribution</td>
+<td>body의 campaign/placement 변경으로 다른 사업자의 성과·문의로 귀속 불가</td>
+</tr>
+<tr>
+<td>QA104</td>
+<td>AP·배포</td>
+<td>매체 PII 차단</td>
+<td>API/CSV/DOM에 이름·전화·사진·원문·개별 접수번호 없음</td>
+</tr>
+<tr>
+<td>QA105</td>
+<td>AP·배포</td>
+<td>작은 집단·차분 집계</td>
+<td>5개 미만 억제 및 인접 필터 차감 노출 완화, CSV도 동일</td>
+</tr>
+<tr>
+<td>QA106</td>
+<td>AP·배포</td>
+<td>테스트/봇/중복 이벤트</td>
+<td>명시 테스트·미리보기 제외, 중복 reload/callback이 전환 부풀리지 않음</td>
+</tr>
+<tr>
+<td>QA107</td>
+<td>AP·배포</td>
+<td>예약 성과와 매출 분리</td>
+<td>Field가 보낸 확정 이벤트로 AP 상태/집계를 갱신. 미연결 시 확정 지표는 미지원이며 수금/매출 아님</td>
+</tr>
+<tr>
+<td>QA108</td>
+<td>연동/AP</td>
+<td>개별 카드·AI·전역 중지</td>
+<td>AP AI/카드 중지와 Field 사이트·예약 제한 독립. 연동 grant/작업은 범위별 중지</td>
+</tr>
+<tr>
+<td>QA109</td>
+<td>AP·배포</td>
+<td>노출 후 승인 철회</td>
+<td>이미 열린 카드의 다음 요청·인계도 거절, 단순 화면 버튼 숨김에 의존하지 않음</td>
+</tr>
+<tr>
+<td>QA110</td>
+<td>AP·배포</td>
+<td>공개키 유출 악용</td>
+<td>설치 public key로 owner/publisher API 접근 불가, 발급·비용 한도 작동</td>
+</tr>
+<tr>
+<td>QA111</td>
+<td>연동/AP</td>
+<td>tenant 교차 지식/캠페인</td>
+<td>제품별 tenant 격리, 연결 조직 매핑·source/source_id·캐시·큐·도구에서 교차 권한 차단</td>
+</tr>
+<tr>
+<td>QA112</td>
+<td>제품별/공통</td>
+<td>사진과 자료 재사용</td>
+<td>고객 첨부가 공개 갤러리·카드·매체 export로 유출되지 않음</td>
+</tr>
+<tr>
+<td>QA113</td>
+<td>연동/AP</td>
+<td>구독 범위와 채널 사용량</td>
+<td>AP와 Field의 구독/크레딧 별도. 연결 동의로 결제/혜택을 자동 복제하지 않음</td>
+</tr>
+<tr>
+<td>QA114</td>
+<td>AP·배포</td>
+<td>제휴 관계 종료</td>
+<td>domain/slot/grant 회수와 기존 업무 보존, 링크 탈취 방지</td>
+</tr>
+<tr>
+<td>QA115</td>
+<td>제품별/공통</td>
+<td>v1.1 마이그레이션</td>
+<td>기존 v2.0 서버가 있을 때만 원본·조직·대화·동의·과금 이행 검수. 없으면 N/A 근거 기록</td>
+</tr>
+<tr>
+<td>QA116</td>
+<td>제품별/공통</td>
+<td>운영 빌드 mock 차단</td>
+<td>production에서 mock credentials/role switch/seed fixture 사용시 실패</td>
+</tr>
+<tr>
+<td>QA117</td>
+<td>AP</td>
+<td>실제 독립 AI 종단간</td>
+<td>AP만 배포·Field network/env 부재·실제 고객/사업자 두 기기·실LLM/알림/구독으로 완료</td>
+</tr>
+<tr>
+<td>QA118</td>
+<td>연동/AP</td>
+<td>실제 매체 종단간</td>
+<td>AP만으로 별도 origin 광고→상담→접수→집계 완료. Field 연결 예약 경로는 별도 통합 QA</td>
+</tr>
+<tr>
+<td>QA119</td>
+<td>제품별/공통</td>
+<td>역할별 모바일 회귀</td>
+<td>고객/사업자/매체/관리자 주요행동을320/390px에서14px이상으로 완료</td>
+</tr>
+<tr>
+<td>QA120</td>
+<td>제품별/공통</td>
+<td>릴리스 인계 증빙</td>
+<td>제품별 출시/통합증빙·적용160개 QA·독립성·공급사·복구·차단 조건을 표시하고 미실행/skip은 통과로 처리하지 않음</td>
+</tr>
+<tr>
+<td>QA121</td>
+<td>AP</td>
+<td>AP 완전 독립 실행</td>
+<td>Field 미배포·DB권한/환경값/네트워크 없는 상태에서 가입→설치→접수→응대→구독 완료</td>
+</tr>
+<tr>
+<td>QA122</td>
+<td>Field</td>
+<td>Field 완전 독립 실행</td>
+<td>AP 미배포·환경값/DB없는 상태에서 자체제작LLM·사이트·직접문의·예약·구독 완료</td>
+</tr>
+<tr>
+<td>QA123</td>
+<td>AP/Field</td>
+<td>빌드·마이그레이션 분리</td>
+<td>상대 앱/마이그레이션 없이 build/migrate/restore; import graph가 공개 client만 허용</td>
+</tr>
+<tr>
+<td>QA124</td>
+<td>AP/Field</td>
+<td>DB·큐·파일 접근 분리</td>
+<td>각 runtime credential로 상대 DB/queue/bucket 직접 접근 거부</td>
+</tr>
+<tr>
+<td>QA125</td>
+<td>AP/Field</td>
+<td>동일 이메일/카카오 양제품 가입</td>
+<td>각 조직/세션 생성·별도 동의, token/cookie 자동공유·권한 합침 없음</td>
+</tr>
+<tr>
+<td>QA126</td>
+<td>연동</td>
+<td>연결과 과금 동의 분리</td>
+<td>OAuth 승인·AI 설치만으로 상대 구독 시작/카드 복제/추가 청구 없음</td>
+</tr>
+<tr>
+<td>QA127</td>
+<td>AP</td>
+<td>기본 상담 설치 독립</td>
+<td>campaign/publisher/예약 엔터티 없는 고객이 상담 link와 owned widget을 사용</td>
+</tr>
+<tr>
+<td>QA128</td>
+<td>연동/AP</td>
+<td>Field와 일반 외부사이트 동일 계약</td>
+<td>같은 AP SDK와 공개 권한으로 일반 외부 사이트와 Field 설치, 내부 예외없음</td>
+</tr>
+<tr>
+<td>QA129</td>
+<td>연동</td>
+<td>연결할 조직/AI 선택</td>
+<td>양쪽 actor가 선택한 조직/AI만 mapping, 이메일/상호로 자동 연결하지 않음</td>
+</tr>
+<tr>
+<td>QA130</td>
+<td>연동</td>
+<td>역방향 동의 거부</td>
+<td>AP 설치는 유지하고 Field 사실/예약 도구는 비활성, 취소를 connected로 위장하지 않음</td>
+</tr>
+<tr>
+<td>QA131</td>
+<td>연동</td>
+<td>issuer/audience/token 교환 공격</td>
+<td>AP용 token을 Field API에 제출하거나 반대로 제출 시 거부, code/state/redirect 검수</td>
+</tr>
+<tr>
+<td>QA132</td>
+<td>연동</td>
+<td>과도한 scope/금지 도구</td>
+<td>AP에서 Field confirm/가격수정/관리자 API 불가; 누락 scope 도구 비노출</td>
+</tr>
+<tr>
+<td>QA133</td>
+<td>연동</td>
+<td>사람 답변 actor 경계</td>
+<td>Field 소유자가 자신의 AP 위임권한으로 연결 대화만 답변, 타직원·타채널 원문 접근 차단</td>
+</tr>
+<tr>
+<td>QA134</td>
+<td>AP/연동</td>
+<td>source 충돌과 편집 권한</td>
+<td>Field source 필드 AP 직접덮어쓰기 금지, native 중복은 명시 mapping·검수</td>
+</tr>
+<tr>
+<td>QA135</td>
+<td>연동</td>
+<td>사실 발행과 AP 승인 사이</td>
+<td>Field 공개는 독립 완료·AP는 pending_review, 미승인 값을 고객에게 공개하지 않음</td>
+</tr>
+<tr>
+<td>QA136</td>
+<td>연동</td>
+<td>중요값 최신성 조회 실패</td>
+<td>가격/시간/활성 상태를 최신이라 단정하지 않고 사람문의 대체, AP native 상담은 유지</td>
+</tr>
+<tr>
+<td>QA137</td>
+<td>연동</td>
+<td>같은 소스 버전 다른 hash</td>
+<td>integrity_conflict로 격리·알림, 승인정보 조용히 덮어쓰기 금지</td>
+</tr>
+<tr>
+<td>QA138</td>
+<td>연동</td>
+<td>소스 이벤트 역순·누락</td>
+<td>낮은 revision이 최신을 덮지 않음, snapshot 재조회·재조정</td>
+</tr>
+<tr>
+<td>QA139</td>
+<td>연동</td>
+<td>외부 요청 timeout 뒤 중복 전송</td>
+<td>동일 action ID/hash로 한 external_request만, 결과조회 전 새 업무 생성 금지</td>
+</tr>
+<tr>
+<td>QA140</td>
+<td>연동</td>
+<td>웹훅 서명·재전송·역순</td>
+<td>raw body HMAC·시간창·key rotation·inbox 유일·aggregate 조회·순서 역행 방지</td>
+</tr>
+<tr>
+<td>QA141</td>
+<td>연동</td>
+<td>최종 고객 전달 동의</td>
+<td>수신 제품·사업자·항목·정책·조건hash 확인 없이는 전송/알림 없음</td>
+</tr>
+<tr>
+<td>QA142</td>
+<td>연동</td>
+<td>첨부 수신·URL 악용</td>
+<td>승인 자산만 인증API로 copy/scan, 임의 URL·다른고객사진 가져오기 거부</td>
+</tr>
+<tr>
+<td>QA143</td>
+<td>AP/Field</td>
+<td>원본별 장애 격리</td>
+<td>AP 장애중 Field 원본 메시지/예약과 Field장애중 AP 원본상담을 각각 정상 처리</td>
+</tr>
+<tr>
+<td>QA144</td>
+<td>연동</td>
+<td>Field에서 AP 대화 답변</td>
+<td>AP message ID·sequence·mode 원본 한곳, Field 별도 transcript 작성 없음</td>
+</tr>
+<tr>
+<td>QA145</td>
+<td>연동</td>
+<td>AP 답변 API 실패</td>
+<td>Field가 전송성공/고객수신을 거짓 표시하지 않고 미전송 초안 유지</td>
+</tr>
+<tr>
+<td>QA146</td>
+<td>AP/Field</td>
+<td>한 제품 구독 종료</td>
+<td>상대 구독·원본·기존예약 유지, 자기 신규기능만 정책대로 제한</td>
+</tr>
+<tr>
+<td>QA147</td>
+<td>AP/Field</td>
+<td>생산 가격 미확정</td>
+<td>승인되지 않은 가격/plan으로 청구 불가; mock 금액이 live로 전환되지 않음</td>
+</tr>
+<tr>
+<td>QA148</td>
+<td>연동</td>
+<td>이벤트별 단일 알림 주체</td>
+<td>AP문의/Field직접문의/연결예약 각각 정해진 제품만 카카오/문자 발송</td>
+</tr>
+<tr>
+<td>QA149</td>
+<td>연동</td>
+<td>원격 수신과 최종 알림 구분</td>
+<td>202 inbox ACK·processed·provider success·read를 별도로 표시</td>
+</tr>
+<tr>
+<td>QA150</td>
+<td>연동</td>
+<td>로컬 revoke 즉시 차단</td>
+<td>해제 후 로컬 scope/도구/원문조회 차단, 데이터삭제/구독해지로 대체하지 않음</td>
+</tr>
+<tr>
+<td>QA151</td>
+<td>연동</td>
+<td>원격 장애 중 revoke</td>
+<td>원격토큰 회수대기 durable retry·짧은만료·사용시검사, 완료 오표시 없음</td>
+</tr>
+<tr>
+<td>QA152</td>
+<td>연동/AP</td>
+<td>연결 소스 해제</td>
+<td>Field 소스는 사용중단, AP native로 자동 변환 금지; 다른 native 상담 유지</td>
+</tr>
+<tr>
+<td>QA153</td>
+<td>연동/Field</td>
+<td>AP 해제 이후 기존 예약</td>
+<td>이미 수신한 Field 작업·snapshot 유지; 권한있는 고객 Field 경로/직접연락 제공</td>
+</tr>
+<tr>
+<td>QA154</td>
+<td>연동/AP</td>
+<td>부분 배포 해제</td>
+<td>Field 배포만 중지하고 AP 독립링크·다른 사이트·제휴계약은 자동 삭제하지 않음</td>
+</tr>
+<tr>
+<td>QA155</td>
+<td>연동</td>
+<td>고객 cross-product 접근</td>
+<td>유효 AP capability+연결 예약+1회Field handoff만 교환, 전화번호/ID만으론 불가</td>
+</tr>
+<tr>
+<td>QA156</td>
+<td>연동</td>
+<td>최종 제출 직전 가격/시간 변경</td>
+<td>expected_service_revision mismatch409, 변경내용 고객 재확인 전 자동접수/확정 금지</td>
+</tr>
+<tr>
+<td>QA157</td>
+<td>AP/Field</td>
+<td>관리자 제품 경계</td>
+<td>각 admin MFA·membership·audit, 같은운영자여도 다른 제품 DB/콘솔 자동 접근 금지</td>
+</tr>
+<tr>
+<td>QA158</td>
+<td>연동</td>
+<td>API/schema 버전 독립 배포</td>
+<td>구 consumer 계약회귀·알수없는필드/enum 처리, breaking change 새버전/이행</td>
+</tr>
+<tr>
+<td>QA159</td>
+<td>공통</td>
+<td>로그/이벤트/매체 최소정보</td>
+<td>서명/토큰/연락처/사진/원문이 URL·웹훅·로그·매체 집계에 유출되지 않음</td>
+</tr>
+<tr>
+<td>QA160</td>
+<td>전체</td>
+<td>제품별 출시 게이트 독립</td>
+<td>A/F/I/D각 증빙과 최종Suite 분리, 아직미완료 모듈을 통합완료라 보고하지 않음</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-75">확정 요구와 검수의 연결</h3>
+<div class="table-scroll compact" tabindex="0"><table>
+<thead>
+<tr>
+<th>요구</th>
+<th>적용 검수</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D01~D04 다양한업종·제작·문의·AI</td>
+<td>QA07~24, QA50~80, QA121~128</td>
+</tr>
+<tr>
+<td>D05 모바일·PC</td>
+<td>QA57~59, QA119, 제품별 실제 핵심 경로</td>
+</tr>
+<tr>
+<td>D06~D09 알림·무인증접수</td>
+<td>QA17~21, QA35~41, QA141, QA148~155</td>
+</tr>
+<tr>
+<td>D10~D13 사이트·서비스·도메인</td>
+<td>QA07~15, QA53~75, QA134~138</td>
+</tr>
+<tr>
+<td>D14~D15 예약·수동일정</td>
+<td>QA25~34, QA139, QA153, QA156</td>
+</tr>
+<tr>
+<td>D16~D19 가입·체험·구독·서비스대금 제외</td>
+<td>QA01~06, QA42~49, QA125~126, QA146~147</td>
+</tr>
+<tr>
+<td>D20~D21 승인된정보·초안·복구</td>
+<td>QA08~12, QA22~24, QA63~75, QA84~90, QA135~138</td>
+</tr>
+<tr>
+<td>최신 결정: 두 독립 제품·Field 외부설치</td>
+<td>B01~B12 전체, QA121~160</td>
+</tr>
+<tr>
+<td>Firsthand식 홍보·매체 역할</td>
+<td>QA87~114, QA118~119, Distribution 게이트</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-76">실제 테스트 결과 기록 형식</h3>
+<pre><code class="language-text">QA ID / Product / Release / Commit:
+Environment / Browser / Device / Provider mode:
+Fixture (synthetic only):
+Command and reproduction:
+Expected / Actual:
+Result: not_run | passed | failed | blocked_integration | not_applicable_with_evidence
+Evidence file / logs / screenshots:
+Owner / reviewed_at / blocker / next action:
+</code></pre>
+<p>현재 이 패키지의 160개 서비스 인수 항목은 <strong>not_run</strong>이다. 문서·JSON 예제·작업 DAG·HTML 보고서 표시 검사는 별도의 <code>quality_checks/DOCUMENT_QA.md</code>에만 기록한다.</p>
+<hr />
+<h2 id="section-77">TASKS — 독립 제품 개발 작업 보드 v3.0</h2>
+<p>최근 C03/A05/QA24 AI 실패 질문 초안 포화 복구: AP 사람 문의 초안이 5,000자 한도에 가까워 AI 실패 질문을 자동으로 더하지 못하면 누락을 명시한다. 기존 입력은 자르지 않고 AI 질문 칸에 원문을 남기며, 고객이 초안을 줄인 뒤 같은 질문을 한 번 넣을 수 있다. 4,990자 초안/공급사 503의 320px Chromium red→green, 최종 새 mock <strong>41820</strong> 양제품 build/ready와 전체 AP↔Field HTTP/320px 1/1(112초), lint/typecheck/unit/Python 구문 통과. API/DB/schema·권한·제품 간 계약 변경 없음; 이 수정 뒤 제품 DB/계약/보안은 재실행하지 않았다. 실제 모델·정식 QA24/G-A2·사용자 디자인 검토는 남아 C03/A05 <code>in_progress</code>다.</p>
+<p>최근 A05/C03/QA21·24 오래된 AI 실행 결과 미상: AP 고객 AI 실행이 5분 넘게 <code>in_progress</code>이면 같은 키 조회/재시도에 <code>result_unknown</code>을 표시한다. DB 실행은 임의 성공/실패로 바꾸지 않고 다른 키 질문을 차단하며 원래 모델이 늦게 끝나면 완료 답변을 복구한다. AP 링크는 새로고침 뒤 미상 질문을 사람 문의 초안에 남기고 iframe은 재조회·AP 사람 문의를 안내한다. AP 격리 DB 20/20, 새 mock <strong>26057</strong> 양제품 build/ready, 전체 AP↔Field HTTP/320px 브라우저 1/1(114초), 계약 정적 2/2+제품 DB 5/5·보안 기본(AP 20/20·Field 19/19/tenant/관리자)·lint/typecheck/unit 통과. 실제 공급사 종료 조회/수동 해소·운영 타임아웃 정책·정식 QA21/24/G·디자인 검토는 남아 A05/C03 <code>in_progress</code>다.</p>
+<p>최근 A05/C03/QA21·24 AI 질문 응답 분실 복구: AP 상담 링크와 외부 iframe은 질문마다 임의 멱등 키를 보내며 서버는 같은 대화·키·질문에 모델 실행/사용량/원본을 한 번만 기록한다. 완료·진행·실패 상태 조회와 동일 키 재시도, 다른 질문 409를 제공한다. AP 링크는 같은 탭 새로고침 뒤 결과를 복구하고 위젯은 결과 미상 때 명시 재조회를 제공한다. 위젯의 대화 목록이 200이어도 수락 답변이 빠져 있으면 임시 답변을 유지한다. AP 격리 DB 20/20과 동시 POST 200/202·모델 1회·원본 2메시지, 최종 mock <strong>61826</strong> 양제품 build/ready, 전체 AP↔Field HTTP/320px 브라우저 1/1(105초), 계약 정적 2/2+제품 DB 5/5·보안 기본(AP 20/20·Field 19/19/tenant/관리자)·lint/typecheck/unit 통과. 실모델·프로세스 중단 in_progress 자동 재개·정식 QA21/24/G-A2·사용자 디자인 검토는 남아 A05/C03 <code>in_progress</code>다.</p>
+<p>최근 C03/QA21·24 AI 답변 원본 재조회 실패 복구: AP 고객이 AI 답변 POST 200 뒤 대화 GET 503을 만나도 수락 답변을 같은 화면에 표시하고 원본 복구 전 AI 재질문을 막는다. 사람 문의는 계속 가능하다. 재조회 200의 같은 답변을 확인하면 원본 대화로 교체한다. 신규 320px 브라우저 검사는 답변 미표시 timeout red→응답 주입 복구 green이다. AP 격리 DB 합성 모델 POST 200→GET 원본 1/1, 새 mock <strong>5260</strong> 양제품 build/ready, 실제 AP↔Field 전체 HTTP/320px 1/1(103초), lint/typecheck/unit 통과. 실제 공급사·정식 QA21/24/G-A2·사용자 디자인 검토와 AI POST 응답 분실 멱등 복구는 남아 C03 <code>in_progress</code>다.</p>
+<p>최근 C03/QA24 AI 실패 질문 초안: AP 상담 링크에서 대화 시작 503·근거 거절 422·네트워크 중단·서버 500 때 고객 질문을 사람 문의 초안에 보존한다. 기존 초안은 유지하고 같은 질문 재시도는 중복 추가하지 않는다. 320px 브라우저 응답 주입 검사는 시작 503에서 red→수정 뒤 네 오류·기존 초안/중복 green이다. 최종 새 mock <strong>42212</strong> 양제품 build/ready, 실제 AP↔Field HTTP/320px 1/1(103초), lint/typecheck/단위 검사/Python 구문 통과. 실제 모델 응답·공급사/정식 QA24/G-A2·사용자 디자인 검토는 남아 C03 <code>in_progress</code>다.</p>
+<p>최근 I04/C03/QA143 익명 Field 사전 조회 한도: AP 조직별 원자적 1분 기본 120건(환경변수 1~1000)으로 유효 연결의 공개 <code>/me</code>·<code>/facts</code> 사전 조회를 외부 호출 전에 제한한다. 429·<code>Retry-After</code>에서 고객 연락처/대화 상태는 저장되지 않고 사람 문의·이미 수락된 제출 키 복구는 계속된다. AP 격리 DB 20/20은 한도 2의 동시 GET 3개→200/200/429, Field 호출 4회/추가 0회, 회복/사람 문의를 확인했다. 새 mock <strong>13869</strong> 양제품 build/ready, 실제 AP↔Field HTTP/320px 1/1(한도 UI 주입·정상 직접 요청/전달), 계약 정적 2/2+제품 DB 5/5·보안 기본(AP 20/20·Field 19/19/tenant/관리자)·lint/typecheck/unit 통과. 운영 IP/역프록시·실부하/정상 고객 차단 정책·실공급사/정식 QA/G-I2와 디자인 검토는 남아 I04/C03 <code>in_progress</code>다.</p>
+<p>최근 I04/C03/QA143 Field 사전 현행 상태: AP 익명 상담은 Field 연결 메타데이터에 더해 공개 <code>/me</code>의 필수 요청 scope와 승인 <code>/facts</code>의 서비스 1개 이상을 연락처 저장 전에 확인한다. Field 권한/정보 미확인과 서비스 0개를 고객 화면에서 구분하고 직접 준비 POST는 각각 503/409로 PII 저장 전 거절한다. AP 격리 DB 20/20(장애·서비스 없음·회복/연결 상태 보존), 새 mock <strong>82858</strong> 양제품 build/ready, 실제 HTTP/320px 1/1(정상 직접 요청·Field 접수와 장애 UI 주입), 계약 정적 2/2+제품 DB 5/5·보안 기본(AP 20/20·Field 19/19/tenant/관리자)·lint/typecheck/unit 통과. 운영 사전 조회 호출량 정책, 실 Field 장기 장애/공급사·정식 QA/G-I2·디자인 검토는 남아 I04/C03 <code>in_progress</code>다.</p>
+<p>최근 I04/C03/QA16 연락처 제출 전 Field 경로 확인: 익명 AP 상담 세션이 활성 배포의 owner 위임·AP OAuth 동의/refresh·Field 연결/scope 설정 여부를 <code>{ready:boolean}</code>로 확인한다. 연결 경로가 없으면 연락처 입력란 위에 사유/재확인/사람 문의를 보이고 직접 요청 준비를 비활성화하며, 서버 <code>destination=field</code>도 409로 연락처 저장 전 거절한다. AP 격리 DB 20/20(무연결 PII null/상태 유지, 연결 뒤 직접 준비), 최종 새 mock <strong>54308</strong> build/ready와 실제 AP↔Field HTTP/320px 1/1, 계약 정적 2/2+제품 DB 5/5, 보안 기본(AP 20/20·Field 19/19/tenant/관리자)·lint/typecheck/unit 통과. 사전 확인은 Field 현행 서비스/가격·가동 보증이 아니며 Field API 재조회/별도 동의는 유지한다. 실공급사·정식 QA/G-I2/디자인 검토는 남아 I04/C03 <code>in_progress</code>다.</p>
+<p>최근 I04/C03/QA16 직접 Field 준비 응답 분실 복구: 320px 실제 브라우저에서 AP <code>destination=field</code> POST 201을 서버에 저장한 뒤 응답만 끊었다. 새로고침 뒤 동일 ID/확인키를 읽기 전용 recover로 찾고, 사라진 사진을 같은 화면에서 다시 선택해 AP 요약 메시지에 붙였다. 최종 Field 조건·사진 전달의 별도 동의 후 Field 비공개 복사/사업자 열람까지 양제품 HTTP 1/1 통과. 원본 1건·준비 시 사업자 알림/Field 요청 0건, AP 격리 DB 20/20·계약 정적 2/2+DB 5/5·보안 기본(AP 20/20·Field 19/19)·lint/typecheck/unit·새 mock <strong>17073</strong> build/ready 통과. 파일 바이트는 임시 저장하지 않는다. 실모델/공급사·실 객체 저장소·정식 QA/G-I2와 디자인 검토는 남아 I04/C03 <code>in_progress</code>다.</p>
+<p>최근 I04/C03/QA141 직접 Field 요청 사진: AP 상담 링크의 <code>external_ready</code> 마지막 고객 요약에만 확인키로 사진을 붙이고 AI 질문에는 거부한다. 고객은 Field 전송 사진을 별도로 선택·동의한다. AP 인증 복사 경로는 action/연결/위임/동의를 확인하고 Field는 자체 저장소에 복사했다. 같은 화면 즉시 첨부와 확인키로 AP 대화 재열람 뒤 재선택·첨부를 각각 320px 양제품 HTTP/브라우저에서 확인했다. AP 격리 DB 20/20, 계약 정적 2/2+DB 5/5, 보안 기본(AP 20/20·Field 19/19·tenant/관리자), lint/typecheck, 새 mock <strong>82435</strong> build/ready 통과. 실 객체 저장소/악성코드·응답 분실 주입·실모델/공급사·정식 QA/G-I2와 디자인 검토는 남아 I04/C03 <code>in_progress</code>다.</p>
+<p>최근 I04/C03/QA16 AI 대화→Field 직접 요청: AP 상담 링크에서 사람 문의 접수 없이 같은 AP 대화에 연락처·동의·별도 확인키를 붙여 <code>external_ready</code>로 준비한다. AP 사업자 문의함/알림·Field ActionRequest는 준비만으로 생성하지 않고, Field 현재 조건·수신 사업자·전달 항목의 별도 동의 뒤 기존 요청 API로 보낸다. 연결이 없으면 고객 확인키로 AP 대화를 열어 사람 문의로 전환할 수 있다. AP 격리 DB 20/20, 계약 명령 정적 2/2+제품 DB 5/5, 새 mock <strong>20145</strong> 양 API/웹 build·ready와 실제 두 제품 HTTP/320px 브라우저 1/1, 보안 명령(AP 20/20·Field 19/19·tenant/관리자)·lint/typecheck 통과. 실모델 화면 응답·직접 요청 사진/운영 공급사·정식 QA/G-I2와 디자인 검토는 남아 I04/C03 <code>in_progress</code>다.</p>
+<p>최근 C03/I04/QA156 Field 조건 변경 재확인: AP 고객의 최종 Field 요청 제출에서 현재 가격/시간/정책이 바뀌어 409가 오면 이전 조건 카드·동의·제출 키를 지우고 Field 현재 availability를 다시 읽는다. 새 조건을 보여준 뒤 시간/요약과 전달 항목 재확인·재동의를 요구한다. AP DB는 25,000→30,000원 변경 뒤 구 hash 제출 409·외부 전송 0건, 320px 실제 양제품 HTTP/브라우저는 변경 조건 재조회·재동의·전달을 확인했다. lint/typecheck·새 mock <strong>47268</strong> 빌드/ready 통과. 정식 운영 공급사/장애·QA156/G-I2 전체는 미검수로 C03/I04 <code>in_progress</code>다.</p>
+<p>최근 I02/QA134 AP·Field 서비스 출처 매핑: AP owner가 최신 직접 승인 서비스와 Field 승인 snapshot을 함께 보고 이름이 겹치는 서비스마다 별도/AP 우선/Field 우선을 선택한다. AP 직접 승인본은 보존하고 새 connector 공개본의 해당 설명/AI 근거만 선택에 맞게 구성한다. AP/Field 버전 변경 409, owner 범위, 매핑 재시도 멱등을 AP DB에서 확인했다. 양제품 실제 HTTP 1/1·320px Chromium 연결/중복 선택/재열람 1/1, 계약·장애·AP E2E·보안·lint/typecheck와 새 mock <strong>45262</strong> 빌드/ready 통과. 사용자 디자인 확인·실모델/공급사·전체 QA134/G-I2는 남아 I02 <code>in_progress</code>다.</p>
+<p>최근 A09/I02/I06/I07 갱신·해제 경합: Field facts 응답 대기 중 AP owner가 연결을 해제해도 worker가 새 검토 초안을 저장하던 결함을 격리 DB에서 <code>completed</code> red로 재현했다. source 저장은 연결 행 잠금과 현재 위임/조직/상태 재확인 뒤에만 수행한다. 수정 후 AP 20/20, 계약 정적 2/2+DB 5/5, 연결 장애 정적 2/2·AP 3/3·Field 2/2·양제품 HTTP/worker 1/1, lint/typecheck·새 mock <strong>14173</strong> 빌드/ready 통과. 해제 후 새 snapshot은 없고 기존 source/예약/원본은 보존한다. 정식 운영/공급사/G-I는 미검수이며 관련 Task <code>in_progress</code>다.</p>
+<p>최근 A09/I02/C03 공식 정보 갱신: AP OpenAPI preview.7의 <code>ap.sources.refresh</code>·source 버전/갱신 요청/상태 API, 예상 버전·멱등 키의 내구 작업/worker, Field owner BFF와 320px 화면을 연결했다. Field 승인 사실은 AP 검토 초안으로만 들어가며 AP 사업자 승인/AI 공개는 별도다. 기존 OAuth resource DB 허용 scope를 <code>000054</code> migration으로 갱신했다. AP/Field 격리 DB 20/20·19/19, 계약 정적 2/2+DB 5/5, 실제 양방향 HTTP 1/1·320px 브라우저 1/1, 보안 기본 검사·lint/typecheck·새 mock 양 API/웹 build/ready 통과. 실운영 client 재동의·공급사/전체 QA·출시 게이트는 남아 A09/I02/C03 <code>in_progress</code>다.</p>
+<p>최근 C03/A10/F10/I07/D05 로컬 전체 기능 검수: 실행 중 mock <strong>11532</strong>에서 AP/Field/매체 브라우저 표준 E2E 3/3·3/3·2/2, 연결 장애 검수(계약 2/2·AP DB 3/3·Field DB 2/2·두 제품 HTTP/worker 1/1), 보안 기본 검수(AP DB 20/20·Field DB 19/19·tenant 1/1·양 관리자 각 1/1), lint/typecheck가 모두 exit 0이다. 첫 보안 실행은 Field 합성 테스트 정리의 간헐적 FK 오류로 실패해 테스트 소유 전달 사건을 먼저 정리하도록 고쳤고, 전체 보안 명령을 다시 통과했다. 실공급사·상대 제품 전원 차단 독립성 재검사·정식 QA/출시 게이트와 사용자 디자인 검토는 남아 작업 상태를 올리지 않았다.</p>
+<p>최근 A02/F05/C03 후속 사진 재첨부: 비회원 추가 질문 POST 응답 분실→새로고침 뒤 복구된 AP/Field 메시지 ID에 실제 PNG를 다시 골라 비공개 첨부 한 건을 저장하고, 이어 같은 PNG를 새 질문에도 다시 선택해 별도 첨부했다. 파일 input을 성공 시 비우지 않아 두 번째 같은 파일 선택이 React 상태를 바꾸지 않는 결함을 수정했다. 새 mock <strong>11532</strong>의 320px 전체 사업자→고객 브라우저 AP/Field 각 1/1, lint/typecheck·양제품 build/ready 통과. 실 S3/HEIC·사진 보존/복구·실공급사·정식 QA/G는 남아 <code>in_progress</code>다.</p>
+<p>최근 A02/A03/F05/F06 후속 질문 새로고침 복구: AP/Field 비회원 추가 질문 POST가 저장되고 응답을 잃어도 같은 탭의 1시간 임시 제출 키·현재 확인키·본문 SHA-256으로 읽기 전용 GET에서 원본 메시지 ID를 찾는다. 고객 원문/사진 바이트는 임시 저장하지 않는다. Field 복구 조회 503 때 수정 질문 신규 POST 0건, 확인키 교체 차단·명시 재조회 후 원래 키 복원, 두 제품 320px 전체 브라우저 각 1/1을 확인했다. 격리 DB AP 20/20·Field 19/19, lint/typecheck/unit·양제품 빌드/ready·tenant/격리 검수 통과. 탭 종료·타 기기 확인키 미보관, 사진 재선택/재첨부 별도 브라우저 검수, 실공급사·정식 QA/G는 남아 <code>in_progress</code>다.</p>
+<p>최근 A02/A03/F05/F07 공개 접수 새로고침 복구: AP 직접 문의·상담 인계와 Field 직접 문의·예약의 첫 POST가 서버에 저장된 뒤 응답을 잃어도 같은 탭 새로고침에서 현재 원본/확인키를 복구한다. 제품별 읽기 전용 GET은 조직/대화 ID·두 무작위 키 해시를 검사하고, 브라우저에는 1시간 임시 경로/키/입력 SHA-256만 저장한다. 격리 DB AP 20/20·Field 19/19, 320px 전체 사업자→고객 브라우저 각 1/1(응답 분실·새로고침·Field 복구 조회 503/수정 입력 차단), tenant 1/1, lint/typecheck/unit·빌드/ready 통과. 후속 메시지 새로고침, 닫힌 탭·타 기기 확인키 미보관, 실공급사/정식 QA/G는 남아 <code>in_progress</code>다.</p>
+<p>최근 C03/F02/F04/F05 Field 고객처럼 첫 문의 테스트: 개설 완료에서 사업자 플랫폼의 공개 고객 문의 화면을 테스트 모드로 연다. 같은 서비스·이름·내용 입력으로 Field <code>is_test</code> 원장에 기록하고 현재 공개 사이트 revision과 고객 화면의 최신 승인 카탈로그 서비스를 서버가 확인한다. 비로그인/타 조직은 테스트 제출·일반 문의·예약 조작을 볼 수 없으며, 응답 분실 뒤 같은 입력은 기존 ID·변경 입력은 409다. 320px 전체 사업자→비회원 실문의·두 예약 브라우저 1/1, Field 격리 DB 19/19, tenant 1/1, lint/typecheck/unit·빌드/ready 통과. 검증 자기 수신처·실발송 공급사/정식 QA/G는 남아 QA69 전체는 <code>blocked_integration</code>, 관련 Task는 <code>in_progress</code>다.</p>
+<p>최근 C03/F04/F05/F06 Field 내부 첫 문의 검사: 승인 사이트 버전마다 인증 사업자가 내부 테스트 문의 한 건을 만들고, 응답 분실/병렬 재시도는 같은 기록으로 수렴한다. 테스트에는 고객 연락처·동의·외부 알림/outbox·사용량·예약 점유가 없고 문의함/내보내기에 테스트로 표시한다. 사업자 답변도 외부 발송하지 않는다. Field 격리 DB 19/19·320px 전체 사업자→실고객 문의/두 예약 브라우저 1/1·tenant 1/1·로컬 보안 기본 검수/빌드/ready 통과. 검증 자기 수신처·실발송 공급사가 없어 QA69 전체는 <code>blocked_integration</code>, 관련 Task는 <code>in_progress</code>다.</p>
+<p><strong>총 46개 작업. 현재 C00은 implemented, C01·C02·C03·A00·A01·A02·A03·A04·A05·A06·A07·A08·A09·F00·F01·F02·F03·F04·F05·F06·F07·F08·F09·I00·I01·I02·I03·I04·I05·I06·I07·D00·D01·D02·D03·D04는 in_progress이며 나머지 9개는 planned다. verified는 0개다. 작업별 상태는 아래 실행 현황을 따른다. 부분 구현과 화면 검토본은 해당 작업의 완료·출시 승인을 의미하지 않는다.</strong></p>
+<p>최근 I02/QA136 AP 상담 연결 근거 확인: 사업자 AI 테스트와 비회원 AI 답변이 연결된 Field source를 근거로 쓰기 전 Field 공개 facts의 revision/hash를 재확인한다. 변경 사건이 아직 AP에 오지 않았거나 Field 조회가 실패해도 오래된 <code>field:*</code> 근거를 제외하고 AP native 정보와 사람 인계를 유지한다. 생성 중 변경된 연결 근거로 만든 고객 답변은 저장/노출하지 않는다. 오래된 확인 시각은 실제 동일 버전 확인 후 갱신하며, 답변용 <code>/me</code> 일시 장애는 연결 상태를 영구 <code>degraded</code>로 만들지 않는다. 격리 AP DB 20/20, 계약 정적 2/2+DB 5/5, 연동 장애 명령 2/2+3/3+2/2+HTTP 1/1, AP 브라우저 표준 3/3, 보안 기본 검수·lint/typecheck·양제품 새 빌드/ready 통과. 실제 모델의 의미 검증·운영 장기 장애/공급사·QA136/G-I2 전체는 미완료로 I02 <code>in_progress</code>다.</p>
+<p>최근 I02/I07 Field 승인 정보 변경 전달: Field 승인 release/outbox의 최신 상태를 연결별 내구 전송 원장에 재조정하고 HMAC <code>field.facts.changed</code>를 AP 공개 inbox에 전달한다. AP는 현재 owner/grant/동의·서명·시간창을 검증한 뒤 전역 event ID 멱등 원장에 202를 기록하고 별도 worker가 Field 공개 facts를 재조회해 AP source를 <code>pending_review</code>로 만든다. 중복/역순·응답 미상·권한 회수와 승인 버전 불변을 로컬 DB/HTTP에서 검수했다. AP/Field 격리 DB 20/20·19/19, 정적 계약 2/2+DB 5/5, 장애 명령의 양제품 HTTP/worker 1/1, 최종 새 빌드 HTTP 수동/자동 worker 각 1/1, 기존 320px 연결 화면 1/1, lint/typecheck 통과. 실 운영 장애/공급사·중요값 live 재확인·전체 QA135~140/G-I는 미검수로 I02/I07은 <code>in_progress</code>다.</p>
+<p>최근 C03/F02/F04 Field 개설 완료: 공개 상태 재조회 후 로컬 tenant 운영 주소·고객 문의 화면·사업 운영 이동·선택 AP 연결을 별도 완료 카드에 연결했다. 공개 확인 실패/POST 결과 미상 또는 주소 null이면 완료/고객 링크를 숨기고 재조회한다. 새 mock <strong>4479</strong>의 320px 사업자→공개→고객 문의·두 예약 브라우저 1/1에는 주소 null 주입→복구가 포함되고, tenant HTTP 1/1·lint/typecheck/unit·빌드/ready 통과. 실제 테스트 문의의 서버 test flag/검증 수신처(QA69), DNS/TLS/전체 QA/G는 남아 C03/F02/F04 <code>in_progress</code>다.</p>
+<p>최근 C02/C03 로컬 보안 명령: 미구현 <code>pnpm test:security</code> exit 2를 로컬 mock 고정 환경의 실제 권한·격리 runner로 교체했다. 전체 mock <strong>24533</strong>에서 제품 간 import 금지, 양방향 DB credential 거부, AP 임시 DB 20/20·Field 18/18, tenant HTTP 1/1·AP/Field 관리자 320px 브라우저 각 1/1을 통과했다. 비 mock 차단 exit 1·하위 검사 강제 exit 7→상위 exit 1/임시 DB 정리, lint/typecheck/unit exit 0. 실공급사·침투/운영 게이트는 남아 C02/C03 <code>in_progress</code>, R00 전체 QA 추적은 미완료다.</p>
+<p>최근 C03/F04 Field 공개 사이트 장애 회복: 승인 사이트 홈/하위 페이지 조회가 503이면 320px 브라우저에서 일시 장애 안내와 같은 URL 새로고침을 보여주고, API 회복 후 실제 공개 콘텐츠로 복귀한다. 별도 실제 Next/장애 API/Chromium 1/1, 기존 tenant 차단 1/1·Field 사업자→고객 문의/두 예약 1/1, lint/typecheck/unit·전체 mock <strong>24533</strong> 빌드/ready exit 0. API/DB 변경 없음. 실 DNS/TLS·전체 접근성/QA/G는 남아 C03/F04 <code>in_progress</code>다.</p>
+<p>최근 C03/F04/F05 Field tenant 공개 문의 장애 구분: tenant <code>/public/:organizationId</code>의 사이트 소유 검증에서 Field API 404/조직 불일치는 404, API 503·네트워크 단절은 비공개 본문 없는 no-store 503/새로고침 안내로 구분한다. 실제 Next proxy unit은 기존 404 오표시 red→12/12 green, 새 전체 mock <strong>37244</strong>의 tenant 실제 HTTP 소유/차단 1/1·양 API/웹 ready·lint/typecheck/unit exit 0. 서버 간 장애 실제 HTTP 주입·DNS/TLS/정식 QA/G는 미검수로 C03/F04/F05 <code>in_progress</code>다.</p>
+<p>최근 A02/C03 AP 후속 사진 조회 복구: AP 고객 추가 질문의 실제 PNG 업로드 201 ACK 뒤 대화 GET 단절을 사진 저장 실패로 표시하지 않고 AP 확인키로 명시 재조회한다. 320px 신규 사업자→상담 링크·일반 외부 소유 위젯/비회원 대화 전체 브라우저에서 201 ACK→GET 단절→비공개 이미지/첨부 한 건 1/1, AP DB 18/18, lint/typecheck/unit·전체 mock build exit 0. 실공급사·정식 QA/G는 남아 A02/C03 <code>in_progress</code>다.</p>
+<p>최근 A02/A03/C03 AP 후속 질문 조회 복구: 고객 질문 POST 201 ACK 뒤 원본 대화 GET이 끊겨도 질문 저장 성공과 같은 확인키의 명시 재조회를 유지한다. 320px 상담 링크·외부 위젯 전체 브라우저에서 POST ACK→GET 단절→원본 메시지 한 건 1/1, AP DB 18/18, lint/typecheck/unit·전체 mock build exit 0. 실모델/발송·정식 QA/G는 남아 <code>in_progress</code>다.</p>
+<p>최근 F05/C03 후속 사진 조회 복구: 고객이 추가 질문에 실제 PNG를 첨부하고 업로드 201 ACK를 받은 뒤 대화 GET이 끊겨도 사진 저장 성공과 재조회 경로를 유지한다. 320px 전체 사업자→비회원 문의/답변·두 예약 브라우저에서 201 ACK→GET 단절→명시 재조회·실제 비공개 이미지/첨부 한 건 1/1, 격리 Field DB 17/17, lint/typecheck/unit·전체 mock build exit 0. 실발송·정식 QA/G는 남아 F05/C03 <code>in_progress</code>다.</p>
+<p>최근 F05/F06/C03 고객 후속 질문 조회 복구: Field 고객 추가 질문 POST 201/ACK 뒤 대화 GET가 끊겨도 질문 저장을 실패/미상으로 바꾸지 않고 같은 확인키의 명시 재조회로 원본 메시지를 확인한다. 320px 전체 신규 사업자→비회원 문의/답변·두 예약 브라우저에서 POST ACK→GET 단절→재조회·추가 메시지 한 건 1/1, 격리 Field DB 17/17, lint/typecheck/unit·전체 mock build exit 0. 사진 업로드 뒤 보조 조회 단절·실발송·정식 QA/G는 남아 <code>in_progress</code>다.</p>
+<p>최근 F07/C03 변경 조건 재확인 복구: 고객이 새 카탈로그 가격/서비스/시간에 동의하는 POST의 응답 분실을 확인키·예약 사건 revision/카탈로그 revision·선택 서비스/현재 시간으로 대조한다. 첫 예약 GET 503 동안 재제출을 닫고 명시 재조회한다. 320px 사업자 가격 변경 승인→고객 조건 동의 ACK 분실/재조회·사건 한 건 포함 전체 브라우저 1/1, 격리 Field DB 17/17, lint/typecheck/unit·전체 mock build exit 0. 실발송·정식 QA/G는 남아 F07/C03 <code>in_progress</code>다.</p>
+<p>최근 F07/C03 고객 예약 처리 복구: Field 고객의 제안 수락·시간 변경·취소 요청 POST 응답 분실을 결과 미상으로 표시하고 확인키로 원본 사건 revision/유형/입력을 대조한다. 예약 GET 장애 중에는 후속 조작을 닫고 명시 재조회한다. 320px 전체 사업자→고객 브라우저에서 세 고객 요청 각각 ACK 분실→첫 GET 503→재조회/사건 한 건 1/1, Field DB 17/17, lint/typecheck/unit·전체 mock build exit 0. 서비스 조건 재확인 응답 분실·실발송·정식 QA/G는 남아 F07/C03 <code>in_progress</code>다.</p>
+<p>최근 F07/C03 예약 처리 결과 미상 복구: Field 사업자의 확정·시간 제안·취소·거절 POST가 서버에 반영됐지만 응답이 끊기면 같은 예약의 사건 revision/유형/입력을 재조회한다. 조회 장애 중에는 예약 처리 버튼을 닫고 명시 재조회를 제공한다. 320px 전체 사업자·고객 브라우저에서 네 경로 ACK 분실→첫 GET 503→사건 한 건 확인 1/1, Field DB 17/17, lint/typecheck/unit·전체 mock build exit 0. 실발송·정식 QA/G는 남아 F07/C03 <code>in_progress</code>다.</p>
+<p>최근 F07/C03: Field 사업자 전화 예약 수동 등록의 서버 commit 뒤 응답 분실을 같은 제출 키로 복구한다. 병렬 동일 제출은 예약/점유/사건/outbox 한 건, 다른 본문은 409, 만료된 체험의 기존 키는 200·새 요청은 403이다. 격리 Field DB 17/17, 320px 신규 사업자→사이트/문의/두 예약→전화 예약 ACK 분실·재시도 1/1, lint/typecheck/unit·전체 mock 빌드 exit 0. 운영 발송·정식 QA/G는 남아 F07/C03 <code>in_progress</code>다.</p>
+<p>최근 I04/C03: AP 고객의 Field 전달 기록 GET 503 중에는 새 외부 요청 양식을 숨기고 재조회 성공 뒤에만 연다. 320px 실제 브라우저에서 서비스 GET 503→재시도 중 기록 GET 503→재시도 복구를 red→green 확인했다. AP→Field 전체 HTTP/브라우저 1/1, lint/typecheck/unit·새 전체 mock 빌드 exit 0, 양 API ready/웹 200. 정식 QA139/141/143·실공급사/운영 장기 장애는 남아 I04/C03 <code>in_progress</code>다.</p>
+<p>최근 A07/F09/C03 체험 상태 복구: AP/Field 구독 GET 503 뒤 이전 데이터로 조작하던 문제를 막고, 체험 시작·종료 POST의 서버 반영 뒤 응답 분실은 결과 미상→실제 상태 재조회로 구분했다. 320px 두 제품 브라우저에서 GET 503/POST 응답 분실 3종과 키보드 Enter 재조회, 기존 만료 업무 접근을 포함한 HTTP 1/1, lint/typecheck/unit·두 웹 build exit 0, 전체 mock <strong>5390</strong> ready. 실결제·전체 접근성·정식 QA는 남아 A07/F09/C03 <code>in_progress</code>다.</p>
+<p>최근 A08/C03 AP 기록 파일 확장: 직접 문의/대화/사진 파일에 owner 계정·구성원, 자체 mock 체험 동의/종료, 지식·AI 초안/승인본, 상담 배포의 상태·허용 origin을 추가했다. 세션·비밀번호·토큰·사이트 소유 증명값은 제외한다. 합성 DB red→1/1, AP DB 18/18, 실 웹 프록시·320px 신규 사업자→일반 외부 사이트 위젯/고객 문의·답변→실제 다운로드 각 1/1, lint/typecheck/unit·AP build exit 0, 전체 mock <strong>98525</strong> ready. 전체 계정/OAuth/매체 원장·보존/삭제·실구독/정식 QA/G는 남아 A08/C03 <code>in_progress</code>다.</p>
+<p>최근 F09/C03 Field 운영 파일 확장: 기존 사업·사이트·문의·예약·외부 수신 기록에 owner 계정 식별 정보, 구성원 역할, 자체 mock 체험 동의/종료 예약, AP 연결 범위·상태·양방향 해제 메타데이터를 추가했다. 토큰·세션·비밀번호·AP 원문은 제외한다. 합성 DB red→1/1, Field DB 17/17, 실 웹 프록시·320px 실제 다운로드 각 1/1, lint/typecheck/unit·Field build exit 0, 로컬 mock <strong>39559</strong> ready. 계정/연동의 전체 사건 원장·실구독·보존/삭제·정식 QA/G는 남아 F09/C03 <code>in_progress</code>다.</p>
+<p>최근 C03 작업실 조회 복구: AP/Field의 세션·사업 초안 GET 503을 비로그인/조직 없음으로 오인하던 흐름을 오류 안내와 재시도로 분리했다. 양제품 320px 전체 사업자→고객 브라우저 각 1/1에서 세션/초안 503→재시도→기존 업무 완료, lint/typecheck/unit·양 웹 build exit 0, 새 로컬 mock 세션 <strong>85209</strong>의 두 API ready·웹 200을 확인했다. 실인증 공급사/전체 접근성·정식 QA는 남아 C03은 <code>in_progress</code>다.</p>
+<p>최근 F09/C03 Field 운영 파일 보강: 예약이 아닌 외부 문의를 포함한 Field 수신 업무 요청 전체와 복사 완료 사진 바이트를 조직 owner의 파일에 추가했다. 복사 대기·실패는 상태/오류 코드로 표시하고 AP 원본 대화·토큰·객체 키는 제외한다. 동일 UUID의 사이트/외부 사진 분리, 누락/손상 503·감사 건수, 외부 요청 500/첨부 2,500건 상한을 합성 DB에서 확인했다. 최종 Field DB 17/17, 실 웹 프록시/320px 사업자 흐름 각 1/1, lint/typecheck/unit·Field 빌드 exit 0, 전체 mock 세션 <strong>11909</strong> ready. 운영 실구독·보존/삭제·전체 계정 아카이브·정식 QA/G는 남아 F09/C03은 <code>in_progress</code>다.</p>
+<p>최근 C02/A08/F09 로컬 백업 검수: AP/Field mock DB를 제품별 <code>pg_dump -Fc</code>와 참조 사진으로 분리하고, 새 네트워크 단절 PostgreSQL 17에서 복원·파일 SHA-256·제품 스키마를 확인하는 명령과 runbook을 추가했다. 실제 서비스 자료를 복제하지 않은 합성 검사 8/8, lint/typecheck/unit exit 0, 양 API ready·웹 <code>/workspace</code> 200. 운영 S3/DB 백업·삭제/revoke 원장 재적용·RPO/RTO와 QA47/G는 남아 세 작업 모두 <code>in_progress</code>다.</p>
+<p>최근 A05/C03 AP 배포 복구: 상담 링크·소유 위젯 생성에 조직 범위의 선택적 UUID 재시도 키와 DB 유일 제약을 적용해 응답 분실·동시 POST가 한 배포로 수렴한다. 배포 목록 GET 실패는 빈 목록이 아니며 생성/활성화 조작을 닫고 재시도한다. 활성화 POST 성공 뒤 조회 실패와 POST 응답 분실도 실제 상태 재조회로 구분한다. 320px 신규 사업자→외부 사이트 위젯→고객 문의/답변 1/1, AP DB 18/18, Field 연결 소비자 1/1, lint/typecheck/unit exit 0. 실도메인·공급사·정식 QA는 남아 A05/C03은 <code>in_progress</code>다.</p>
+<p>최근 C03 실제 작업실 주 동작 복구: Field 가입/로그인 버튼이 브라우저 기본 회색으로 남던 문제를 AP와 같은 무상태 공통 폼 스타일로 고쳤다. 실제 Chromium의 전후 이미지, AP/Field 각 320·640px의 48px 버튼·16px 글자·키보드 초점·가로 넘침 없음, 양제품 신규 사업자→고객 브라우저 각 1/1을 확인했다. 전체 시각/접근성·정식 QA는 남아 C03은 <code>in_progress</code>다.</p>
+<p>최근 A04/C03 AP AI 초안 저장 복구: 설정 PUT 응답 분실을 ‘미전달’로 단정하지 않고 결과 미상→GET 재조회로 서버 revision을 확인한다. GET 장애 중에는 입력/승인을 보류하고, 실제 409 충돌에서는 서버 초안과 화면 입력을 비교해 명시 선택한다. 320px AP 신규 사업자→외부 사이트 위젯→비회원 문의/답변 전체 브라우저 1/1, AP DB 18/18, lint/typecheck/unit exit 0. 실공급사·정식 QA는 남아 A04/C03은 <code>in_progress</code>다.</p>
+<p>최근 A04/C03 AP AI 승인 복구: 승인 AI/지식 필수 GET의 503을 ‘없음’으로 표시하지 않고 같은 화면에서 재시도한다. 승인 POST commit 뒤 응답 분실은 결과 미상으로 남겨 GET 재조회로 실제 revision을 확인하고, POST 성공 뒤 조회만 실패한 경우는 승인 완료와 조회 실패를 구분한다. 320px 신규 AP 사업자→일반 외부 사이트 위젯→비회원 문의/답변 브라우저 1/1, AP DB 18/18, 지식 자동 저장 1/1, Field 연결 소비자 1/1, lint/typecheck/unit exit 0을 통과했다. 실모델·공급사와 전체 출시 QA는 남아 A04/C03은 <code>in_progress</code>다.</p>
+<p>최근 F02/F04/C03 공개 상태 복구: Field 사이트 편집에서 사진·승인 정보·공개본·과거 릴리스·AI 작업의 필수 조회 실패를 빈 상태로 오인하지 않고, 모든 조회가 성공한 뒤에만 편집/공개/복구를 연다. 공개 POST 성공 뒤 상태 GET 연결만 끊긴 경우 공개 완료와 재조회 필요를 구분한다. 320px 신규 사업자→공개→고객 문의/두 예약 실제 브라우저에서 공개 GET 503·릴리스 GET 503·POST 뒤 GET 단절과 재시도가 1/1, 자동 저장 1/1, tenant 1/1, Field DB 17/17을 통과했다. 실공급사/전체 출시 QA는 남아 F02/F04/C03은 <code>in_progress</code>다.</p>
+<p>같은 단계의 공개 POST 응답 분실도 서버 commit 뒤 결과 미상으로 표시하고 재공개 대신 재조회한다. 실제 320px 전체 브라우저 red→최종 mock 세션 <strong>17539</strong>에서 green 1/1, 서버 공개 revision 일치·해당 릴리스 한 건·추가 공개 POST 없음 확인. F02/F04/C03은 <code>in_progress</code>다.</p>
+<p>최근 F02/C03 초기 조회 복구: 사이트 편집 첫 사업 정보·초안 GET에 각각 한 번 503을 주입한 실제 320px 검수에서 오류 안내/재시도 부재를 red로 확인했다. 상태 구분과 같은 화면 재시도를 연결한 뒤 자동 저장/충돌·모바일 전환/재개 1/1, Field 전체 사업자 흐름 1/1, tenant host 1/1을 통과했다. C02/I07의 표준 Field DB 검사는 실행 중 사건 worker와 공유 큐를 소비해 16/17로 간헐 실패하던 원인을 임시 독립 PostgreSQL DB로 격리했다. worker를 켠 채 17/17 연속 2회, 의도한 자식 실패 exit 1·임시 DB 정리, 서버 ready를 확인했다. F02/C02/C03/I07은 계속 <code>in_progress</code>다.</p>
+<p>최근 C02/C03 독립 검수 보강: 상대 제품·DB·큐가 없는 상태의 표준 제품별 단독 명령에 실제 320px 사업자·고객 브라우저 경로를 추가했다. Field 단독 사이트/직접 문의/두 예약과 AP 단독 외부 소유 위젯/문의가 각각 1/1 통과했고 전체 mock을 복구했다. 실모델·발송·청구·DNS/TLS의 완전 독립 출시 조건은 남아 <code>in_progress</code>다.</p>
+<p>최근 F02/C03 보강: Field 사이트 초안을 저장한 뒤 새로고침해도 URL의 유효한 단계·페이지를 복원하고, 별도 로그인 브라우저의 일반 편집 URL은 서버 draft의 편집 단계로 이어진다. 320px 실제 브라우저/PG17에서 기존 초기화 red→수정 후 자동 저장 1/1, 사업자→고객 1/1, tenant 1/1, DB 17/17을 확인했다. URL은 UI 위치만 보관하며 F02/C03은 <code>in_progress</code>다.</p>
+<p>최근 F04/C03 보강: 승인된 Field 사이트의 홈/소개 페이지별 문서 제목·설명과 검증된 tenant canonical을 공개하고, 작업실·mock 검토본에 noindex를 적용했다. PG17/실 HTTP/320px tenant 브라우저 1/1, Field 사업자→고객 1/1, 자동 저장 1/1, DB 17/17을 통과했다. 실제 DNS/TLS·검색엔진 검수는 아니므로 F04/C03은 <code>in_progress</code>다.</p>
+<p>최근 C02/A05/C03 독립 검수: Field 서비스·DB·Valkey가 실제 없는 상태에서 AP만 빌드/실행해 새 사업자의 승인 지식·AI→일반 외부 사이트 소유 증명/위젯 활성화→고객 AP 인계/사람 문의→사업자 답변·확인키 열람을 실제 HTTP로 통과했다. <code>pnpm test:independence:agent</code> exit 0, 전체 mock 복구 뒤 두 API ready·웹 HTTP 200. 실모델/발송/결제/운영 DNS는 포함하지 않아 작업 상태는 <code>in_progress</code>다.</p>
+<p>최근 A05/C03 보강: AP 새 사업자가 Field/매체가 아닌 일반 외부 사이트를 등록·소유 확인·위젯 활성화하고 320px 고객이 위젯에서 AP 사람 문의를 제출해 사업자 답변·확인키 재열람까지 완료했다. 모델 미설정 위젯 인계의 AP 원본/고객 세션 누락과 별도 고객의 직접 문의 링크 404를 고쳤다. 합성 외부 사이트의 소유 증명은 실제 HTTP 경로로 검사했고 운영 DNS/TLS 검수는 아니다. AP 웹 1/1, AP DB 18/18, Field 연결 회귀 1/1이며 A05/C03은 <code>in_progress</code>다.</p>
+<p>최근 F05/F06/C03 보강: Field 사업자 답변 저장 응답 중 작성한 비공개 메모가 재조회에서 사라지는 문제를 320px 실제 웹에서 재현해 수정했다. 다른 문의를 선택할 때만 작성칸을 초기화하고 저장 후 같은 문의를 갱신할 때는 미제출 초안을 보존한다. <code>pnpm test:spike:field-owner-flow:http</code> 1/1은 가입·사이트 공개·직접 문의·두 예약 방식까지 포함해 통과했다. C02/I07의 Field DB 검사는 실행 중인 사건 worker와 경합하는 전역 삽입 건수 대신 자기 합성 연결의 불변 조건을 확인하도록 바꿨으며, worker가 켜진 상태에서 전체 17/17을 연속 3회 통과했다. 관련 작업 상태는 계속 <code>in_progress</code>다.</p>
+<p>최근 F02/F04/F05/F06/F07/C03 연결 검수: 새 Field 사업자가 320px 실제 웹에서 가입→조직→사업 정보 승인→2페이지 사이트 공개를 하고, 별도 비회원 브라우저가 tenant 사이트에서 직접 문의→사업자 답변→확인키 재열람까지 완료했다. 희망시간형과 시간표형 예약도 각각 비회원 접수→사업자 최종 확정→확인키 상태 조회를 통과했고, 확정된 10시는 다른 서비스 시간표에서 제외됐다. <code>pnpm test:spike:field-owner-flow:http</code> 1/1, Field DB 17/17. 이 범위는 기능 경로 검수이며 작업 상태는 계속 <code>in_progress</code>다.</p>
+<p>최근 A00/A01/A02/A03/A05/C03 연결 검수: 새 AP 사업자가 320px 실제 웹에서 지식·AI를 승인하고 상담 링크를 활성화했다. 별도 비회원 브라우저는 모델 미설정 차단을 확인한 뒤 사람 문의를 제출하고, 사업자 답변은 확인키로 재열람했다. 사업자 답변 저장 중 작성한 비공개 메모 초안 보존과 모바일 상담 링크 줄바꿈을 고쳤다. <code>pnpm test:spike:agent-owner-flow:http</code> 1/1, AP DB 18/18. 실모델·알림/결제와 전체 완료 기준은 남아 <code>in_progress</code>다.</p>
+<p>C=계약/인프라, A=AP, F=Field, I=연동, D=배포·매체, R=회귀/이행. 이전 T00~T23 통합 작업표를 대체한다. 한 작업을 에이전트 한 번의 실행으로 끝내야 한다는 시간 추정은 아니다. 필요하면 같은 부모 ID 아래 하위 작업으로 나눈다.</p>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>제품</th>
+<th>작업</th>
+<th>선행</th>
+<th>필수 산출·검수</th>
+<th>QA 연결</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C00</td>
+<td>계약/조율</td>
+<td>저장소·실제 구현·위험 인벤토리</td>
+<td>없음</td>
+<td>기존 데이터/코드 유무·권한·보존·변경 범위 ADR</td>
+<td>QA115, QA116</td>
+</tr>
+<tr>
+<td>C01</td>
+<td>계약/조율</td>
+<td>제품 경계·OpenAPI·이벤트·상태·QA 고정</td>
+<td>C00</td>
+<td>B01~B12·양방향 scope·필드·오류 계약·구버전 대응</td>
+<td>QA121~QA160</td>
+</tr>
+<tr>
+<td>C02</td>
+<td>인프라</td>
+<td>독립 배포/DB/큐/키/CI 프로필</td>
+<td>C01</td>
+<td>AP-only·Field-only 실행과 import/권한 제한</td>
+<td>QA123, QA124</td>
+</tr>
+<tr>
+<td>C03</td>
+<td>디자인</td>
+<td>공통 무상태 UI·역할별 라우트 설계</td>
+<td>C01</td>
+<td>14px·모바일·제품 이동·비연결/오류 상태</td>
+<td>QA57, QA58, QA119</td>
+</tr>
+<tr>
+<td>A00</td>
+<td>AP</td>
+<td>AP 계정·조직·DB·권한 기반</td>
+<td>C02</td>
+<td>자체 이메일/카카오·세션·AP migrations·outbox</td>
+<td>QA01~QA06, QA125</td>
+</tr>
+<tr>
+<td>A01</td>
+<td>AP</td>
+<td>직접 지식·서비스·승인 버전</td>
+<td>A00</td>
+<td>source 출처·revision·KnowledgeRelease</td>
+<td>QA22, QA81, QA134</td>
+</tr>
+<tr>
+<td>A02</td>
+<td>AP</td>
+<td>자체 비회원 접수·대화·사진·접근</td>
+<td>A00</td>
+<td>Field 없는 first-party intake·확인키·합성 테스트</td>
+<td>QA16~QA20, QA41</td>
+</tr>
+<tr>
+<td>A03</td>
+<td>AP</td>
+<td>자체 문의함·사람 인계·답변</td>
+<td>A02</td>
+<td>대화 원본·mode·internal note·단일 발송 이벤트</td>
+<td>QA21, QA41, QA144</td>
+</tr>
+<tr>
+<td>A04</td>
+<td>AP</td>
+<td>실제 AI 안내·테스트·가드레일</td>
+<td>A01, A03</td>
+<td>모델 어댑터·근거·도구 선택·예산·실패 대체</td>
+<td>QA22~QA24, QA117</td>
+</tr>
+<tr>
+<td>A05</td>
+<td>AP</td>
+<td>상담 링크·기본 외부 위젯·handoff</td>
+<td>A04, C03</td>
+<td>campaign/publisher 없는 설치·origin·기본 SDK</td>
+<td>QA94, QA97~QA102, QA127, QA128</td>
+</tr>
+<tr>
+<td>A06</td>
+<td>AP</td>
+<td>독립 메시지·푸시·대체발송</td>
+<td>A03</td>
+<td>실제 공급사·한 발송 주체·원장·미상 처리</td>
+<td>QA35~QA40</td>
+</tr>
+<tr>
+<td>A07</td>
+<td>AP</td>
+<td>독립 구독·크레딧·가격 동의</td>
+<td>A00</td>
+<td>AP-only billing·갱신/해지·공급사 검수</td>
+<td>QA42~QA46, QA126, QA146</td>
+</tr>
+<tr>
+<td>A08</td>
+<td>AP</td>
+<td>AP 관리자·보존/삭제·백업·신고</td>
+<td>A00, A06, A07</td>
+<td>원본 보존·AP 권한·복구·운영 runbook</td>
+<td>QA47~QA49, QA157</td>
+</tr>
+<tr>
+<td>A09</td>
+<td>AP</td>
+<td>공식 통합자 API·인가·외부 client 계약</td>
+<td>A01, A03, A05</td>
+<td>AP OAuth server·scope·위임 API·등록 client·문서</td>
+<td>QA129~QA133</td>
+</tr>
+<tr>
+<td>A10</td>
+<td>AP</td>
+<td>AI Core 단독 실검수</td>
+<td>A05, A06, A07, A08, A09</td>
+<td>Field 없는 실제 외부사이트/실알림/구독·QA 증빙</td>
+<td>QA117, QA121, QA127, QA128</td>
+</tr>
+<tr>
+<td>A11</td>
+<td>AP</td>
+<td>AI Core 독립 공개 승인</td>
+<td>A10</td>
+<td>G-A1~G-A3·G-L1 적용 증빙·배포/되돌림</td>
+<td>QA121, QA120</td>
+</tr>
+<tr>
+<td>F00</td>
+<td>Field</td>
+<td>Field 계정·조직·DB·권한 기반</td>
+<td>C02</td>
+<td>자체 이메일/카카오·세션·Field migrations·outbox</td>
+<td>QA01~QA06, QA125</td>
+</tr>
+<tr>
+<td>F01</td>
+<td>Field</td>
+<td>사업/서비스·원본 카탈로그 버전</td>
+<td>F00</td>
+<td>구조화 가격·두 예약 설정·FieldCatalogRelease</td>
+<td>QA53, QA77</td>
+</tr>
+<tr>
+<td>F02</td>
+<td>Field</td>
+<td>5단계·템플릿·직접 편집·미디어</td>
+<td>F01, C03</td>
+<td>실입력·다중페이지·사진·재개·모바일</td>
+<td>QA51~QA62, QA70, QA71</td>
+</tr>
+<tr>
+<td>F03</td>
+<td>Field</td>
+<td>사이트 제작 LLM·취소·충돌</td>
+<td>F02</td>
+<td>AP없는 제작 어댑터·JSON 제한·작업/비용</td>
+<td>QA54, QA63, QA64, QA122</td>
+</tr>
+<tr>
+<td>F04</td>
+<td>Field</td>
+<td>사이트 공개·복구·기본/자체 도메인</td>
+<td>F03</td>
+<td>Field내 원자성·실제 TLS·AP영향 분리</td>
+<td>QA07~QA15, QA65~QA75</td>
+</tr>
+<tr>
+<td>F05</td>
+<td>Field</td>
+<td>직접 문의·비회원·사진·후속 접근</td>
+<td>F00, F01</td>
+<td>AP없어도 저장·capability·안전 연락</td>
+<td>QA17~QA20, QA41, QA143</td>
+</tr>
+<tr>
+<td>F06</td>
+<td>Field</td>
+<td>직접 문의함·답변·내부 메모</td>
+<td>F05</td>
+<td>자체 대화 원본·server 상태·outbox</td>
+<td>QA41, QA143</td>
+</tr>
+<tr>
+<td>F07</td>
+<td>Field</td>
+<td>두 예약 방식·달력·수동 일정</td>
+<td>F01, F06</td>
+<td>요청/확정·DB충돌·변경·취소·snapshot</td>
+<td>QA25~QA34</td>
+</tr>
+<tr>
+<td>F08</td>
+<td>Field</td>
+<td>자체 알림·대체발송·이력</td>
+<td>F06, F07</td>
+<td>자체 공급사 검수·미상·중복·한도</td>
+<td>QA35~QA40</td>
+</tr>
+<tr>
+<td>F09</td>
+<td>Field</td>
+<td>구독·관리자·보존·복구</td>
+<td>F00, F04, F08</td>
+<td>독립 청구/해지·정리모드·Field 운영실</td>
+<td>QA42~QA49, QA146, QA157</td>
+</tr>
+<tr>
+<td>F10</td>
+<td>Field</td>
+<td>Field Core 단독 실검수</td>
+<td>F04, F07, F08, F09</td>
+<td>AP 없는 사이트→직접문의→예약·실알림·구독</td>
+<td>QA50, QA80, QA122</td>
+</tr>
+<tr>
+<td>F11</td>
+<td>Field</td>
+<td>Field Core 독립 공개 승인</td>
+<td>F10</td>
+<td>G-F1~G-F3·G-L1 적용 증빙·배포/되돌림</td>
+<td>QA120, QA122</td>
+</tr>
+<tr>
+<td>I00</td>
+<td>연동</td>
+<td>Field 역방향 인가·OAuth 양방향 마법사</td>
+<td>A09, F00</td>
+<td>서로 다른 token/audience·거부/취소·scope</td>
+<td>QA129~QA132</td>
+</tr>
+<tr>
+<td>I01</td>
+<td>연동</td>
+<td>조직·AI·actor·source 매핑·기능 발견</td>
+<td>I00, A01, F01</td>
+<td>connection ledger·설치만/부분연결·허용리소스</td>
+<td>QA130, QA133, QA134</td>
+</tr>
+<tr>
+<td>I02</td>
+<td>연동</td>
+<td>승인 정보 sync·최신성·재조정</td>
+<td>I01, F04</td>
+<td>Field source→AP 검토·revision/hash·live 중요값</td>
+<td>QA84, QA135~QA138, QA156</td>
+</tr>
+<tr>
+<td>I03</td>
+<td>연동</td>
+<td>Field 사이트에 외부 SDK 설치</td>
+<td>I01, A05, F04</td>
+<td>일반외부사이트와동일한 public 계약·origin</td>
+<td>QA86, QA94, QA128</td>
+</tr>
+<tr>
+<td>I04</td>
+<td>연동</td>
+<td>외부 문의/예약 요청·고객 인계</td>
+<td>I01, A02, F07</td>
+<td>동의·idempotence·unknown·수신 snapshot·Field capability</td>
+<td>QA139~QA142, QA153, QA155</td>
+</tr>
+<tr>
+<td>I05</td>
+<td>연동</td>
+<td>Field 문의 통합뷰·AP 답변·알림 소유</td>
+<td>I04, A03, A06, F06, F08</td>
+<td>원본 API·reply actor·event route·미전달 표시</td>
+<td>QA144, QA145, QA148, QA149</td>
+</tr>
+<tr>
+<td>I06</td>
+<td>연동</td>
+<td>해제·부분 장애·구독 종료·삭제</td>
+<td>I02, I03, I05</td>
+<td>양방향 revoke·원격대기·업무보존·새 알림경로</td>
+<td>QA146, QA150~QA155</td>
+</tr>
+<tr>
+<td>I07</td>
+<td>연동</td>
+<td>fault injection·권한/계약 회귀</td>
+<td>I06</td>
+<td>복수 origin·결과미상·서명재생·scope공격·version 호환</td>
+<td>QA131, QA132, QA140, QA158, QA159</td>
+</tr>
+<tr>
+<td>I08</td>
+<td>연동</td>
+<td>Field Connector 공개 승인</td>
+<td>I07, A11, F11</td>
+<td>G-I1~G-I3·동일 외부 client 계약·고객 E2E</td>
+<td>QA50, QA80, QA160</td>
+</tr>
+<tr>
+<td>D00</td>
+<td>배포/매체</td>
+<td>AP 홍보 카드·검토·공개</td>
+<td>A01, A04</td>
+<td>campaign/knowledge 참조·광고표시·revision</td>
+<td>QA87~QA91</td>
+</tr>
+<tr>
+<td>D01</td>
+<td>배포/매체</td>
+<td>매체 조직·도메인·광고 위치</td>
+<td>A00, A09</td>
+<td>매체 RBAC·소유 증명·slot·AP 관리</td>
+<td>QA92, QA94, QA95</td>
+</tr>
+<tr>
+<td>D02</td>
+<td>배포/매체</td>
+<td>정확한 카드 버전 배치 승인</td>
+<td>D00, D01</td>
+<td>사업자공개와매체승인분리·상태·중지</td>
+<td>QA90~QA96</td>
+</tr>
+<tr>
+<td>D03</td>
+<td>배포/매체</td>
+<td>외부 기사 카드·AP 접수 전환</td>
+<td>A05, D02</td>
+<td>Field 없이 광고 대화→AP 접수·권한/고지</td>
+<td>QA97~QA103, QA118</td>
+</tr>
+<tr>
+<td>D04</td>
+<td>배포/매체</td>
+<td>성과·개인정보 없는 집계·export</td>
+<td>A02, D03</td>
+<td>source event·데모제외·작은집단/차분억제</td>
+<td>QA104~QA107</td>
+</tr>
+<tr>
+<td>D05</td>
+<td>배포/매체</td>
+<td>Distribution 독립 검수·출시</td>
+<td>D04, A10</td>
+<td>G-D1~G-D2·제휴 증빙·AP만으로완료</td>
+<td>QA108~QA114, QA118</td>
+</tr>
+<tr>
+<td>R00</td>
+<td>검수/이행</td>
+<td>기존120개 재귀속·추가40개 검수 추적</td>
+<td>C01</td>
+<td>QA01~QA160적용제품·게이트·기존변경근거</td>
+<td>QA01~QA160</td>
+</tr>
+<tr>
+<td>R01</td>
+<td>검수/이행</td>
+<td>기존 서버 존재 시 이행·없으면 N/A 증빙</td>
+<td>C00, I06</td>
+<td>원본분류·동의·건수·백업·전환·복구</td>
+<td>QA115</td>
+</tr>
+<tr>
+<td>R02</td>
+<td>최종</td>
+<td>두제품+연동+매체 전체 최종 인수</td>
+<td>A11, F11, I08, D05, R00, R01</td>
+<td>G-S1·독립/연결회귀·릴리스 evidence·운영 인계</td>
+<td>QA120, QA160</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-78">실행 현황 — 2026-09-25</h3>
+<p>C03/I04/QA136·143 복구: 고객이 Field <code>/me</code> 503을 한 번 받았다는 이유로 AP 연결이 영구 <code>degraded</code>가 되던 문제를 고쳤다. 격리 AP DB에서 실패 표시·기존 <code>review_required</code> 보존→재조회 <code>available</code> 복구를 red/green으로 확인했다. 새 양제품 mock HTTP/320px 연결 1/1, 최종 <code>pnpm test:security</code> 전체와 lint/typecheck exit 0. 실 운영 장기 장애·정식 QA/G-I2는 남아 C03/I04 <code>in_progress</code>다.</p>
+<p>C03/I04/QA143 AP DB/API 추가 근거: 같은 AP 조직·배포의 실제 연결 원장 세 건(정상·facts 503·scope 재동의)을 격리 AP DB에서 고객 <code>/field-services</code>로 조회했다. 정상 연결의 25,000원 확인→동의/전달은 계속되고, 나머지는 각각 오류 상태/빈 서비스로 표시된다. 잘못된 고객 확인키 401, 권한 연결 직접 가용성 403, 다른 연결 조직 사실 502를 확인했다. <code>pnpm test:db:agent</code> 20/20, lint/typecheck exit 0. Field 공개 전송은 테스트 stub이므로 실제 두 Field 조직 HTTP 장애와 정식 QA143/G-I2는 미검수, C03/I04 <code>in_progress</code>다.</p>
+<p>C02/C03/A10/F10 독립 실행 재검수: 전체 mock을 내리고 상대 제품 compose 컨테이너/포트가 실제 없는 상태에서 <code>pnpm test:independence:agent</code>와 <code>pnpm test:independence:field</code>가 각각 exit 0이었다. AP 외부 위젯→고객 문의/답변, Field 사이트→직접 문의/두 예약 방식의 320px 브라우저 각 1/1을 포함한다. 볼륨을 삭제하지 않고 전체 mock을 다시 기동했다. 이는 로컬 mock 검수이며 실 LLM·알림·결제/운영 독립성·정식 QA121~124/143/G 게이트 완료가 아니므로 관련 Task는 <code>in_progress</code>다.</p>
+<p>C03/I04/QA143 추가 로컬 UI 근거: AP 고객 목록에 정상 Field 연결과 facts 장애·재동의 필요 연결을 함께 주입한 320px Chromium에서 정상 서비스만 선택/현재 가격 확인/동의·실제 전달했고, 문제 연결의 서비스는 숨기며 장애와 재동의를 다른 안내로 표시했다. 양제품 HTTP/브라우저 1/1, lint/typecheck exit 0. 복합 목록은 브라우저 응답 주입이므로 실제 두 연결의 서버 원장과 정식 QA143/G-I2는 계속 미검수; C03/I04 <code>in_progress</code>다.</p>
+<p>C03/I04/QA156 추가 로컬 근거: 고객의 Field 전달 조건 사전 확인이 409이면 이전 가격·시간을 버리고 현재 availability를 재조회해 새 조건의 재확인을 요구한다. 503/응답 장애에서는 이전 가격을 숨긴다. 320px 실제 양제품 HTTP/브라우저에서 409→변경 가격, 503→과거 가격 제거, 회복→동의/실제 전달 및 최종 제출 409도 확인했다. C03/I04와 정식 QA156/G-I2는 계속 <code>in_progress</code>다.</p>
+<p>C03/I04 추가 로컬 근거: AP 고객의 Field 연결별 facts 조회가 부분 실패해 목록 API는 200인 경우에도 현재 Field 서비스·가격·전달 양식을 숨기고 장애 안내/재조회 버튼을 표시한다. AP 원본 문의와 이전 Field 전달 기록은 유지된다. 320px Chromium에서 실패 주입→복구→현행 조건 확인→동의/실제 전달을 포함한 양제품 HTTP 검사가 1/1 통과했다. <code>pnpm lint</code>·<code>pnpm typecheck</code>도 exit 0이다. 전체 C03/I04와 QA143/G-I2는 계속 <code>in_progress</code>다.</p>
+<p>AP 고객 상담 링크의 첫 배포 GET 503·네트워크 장애를 404 비활성과 구분하고 화면 재조회로 복구했다. 같은 320px 고객 브라우저에서 링크 503→재조회→공개 정보 503→재조회→사람 문의 전체 흐름을 통과했다. 고객 공개 정보 첫 조회 503·네트워크 장애도 AP/Field에서 404 미공개와 분리하고 화면 재조회로 복구했다. Field 실제 사업자→고객 흐름에서도 503 주입→재조회→문의/예약을 통과했으며 C03/A05/F05 상태는 계속 <code>in_progress</code>다.</p>
+<p>C03/F07 추가 로컬 근거: Field 시간표형 예약의 가능 시간 첫 조회 503에서 같은 날짜 재조회 버튼이 없던 것을 320px Chromium red로 확인했다. 수정 뒤 재조회 200, 고객 이름·연락처·동의 유지, 실제 요청→사업자 최종 확정을 검수했다. 이미 고른 시간에서 날짜를 바꿔 GET 응답을 지연해도 이전 슬롯이 즉시 사라지고 제출이 비활성화됨을 확인했다. <code>pnpm test:spike:field-owner-flow:http</code> 1/1(재실행 포함), lint/typecheck/unit exit 0. 실알림·전체 QA26/34/G-F2와 사용자 접근성·디자인 검토는 남아 C03/F07은 <code>in_progress</code>다.</p>
+<p>로컬 전체 mock 서버에서 표준 <code>pnpm test:e2e:agent</code>(3개 Chromium/HTTP 흐름), <code>pnpm test:e2e:field</code>(3개), <code>pnpm test:e2e:distribution</code>(2개)를 실행해 통과했다. 이 명령은 합성 계정과 로컬 PG17·Valkey의 기능 회귀 검사이며 A10/F10/D05의 실공급사·독립 운영 환경·출시 증빙을 대체하지 않는다. 해당 Task 상태는 아래와 같다.</p>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Task</th>
+<th>State</th>
+<th>실제 근거</th>
+<th>남은 완료 기준</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C00</td>
+<td>implemented</td>
+<td><code>docs/technical/C00_INVENTORY.md</code>; 초기 로컬 저장소·도구·환경 조사</td>
+<td>외부 운영 자산·QA115/116은 미확인. 검증 완료로 표시하지 않음</td>
+</tr>
+<tr>
+<td>C01</td>
+<td>in_progress</td>
+<td><code>docs/technical/TECH_STACK.md</code>, <code>ARCHITECTURE.md</code>; AP/Field OAuth 교차 token, AP mock 위젯 first-party handoff·대화 SSE 부분 spike 표준 <code>pnpm test:contracts</code>가 공개 OpenAPI 정적 2/2와 제공자/소비자 DB 5/5를 실제 실행했다.</td>
+<td>실행 OpenAPI·양방향 조직/actor scope·consumer test·버전/오류 계약·실대화</td>
+</tr>
+<tr>
+<td>C02</td>
+<td>in_progress</td>
+<td>제품별 Fastify/PG/migration, DB 자격증명 교차 거부, Field 전용 Valkey 8.1.10 mock 인스턴스·키·작업 ID 큐·별도 worker. 중복 전달/재시작/큐 장애 재조정 로컬 검사. <code>mock:run</code>/제품별 단독 명령으로 제품별 compose→migration→build→API/웹/구성된 worker를 기동하고 종료 시 자기 프로세스만 내리며 DB 볼륨을 유지한다. 전체 명령의 양방향 로컬 OAuth client 등록 확인→API 재기동·연결 HTTP 1/1. 표준 <code>pnpm test:db:agent</code>는 AP mock 작업 DB를 직접 사용하던 runner를 고쳐 제품별 임시 DB에서 16개 파일·20/20을 실행하고 삭제했다. <code>test:db:field</code>도 독립 임시 DB 17/17이다. 자식 검사 강제 실패 때 AP 임시 DB 삭제와 상위 nonzero를 확인했다. 표준 <code>test:independence:agent</code>와 <code>:field</code>는 반대 제품 컨테이너/포트가 없는 실제 로컬 mock에서 자기 DB·인증만 전달한 API/웹의 가입→조직→승인→직접 업무·체험을 각자 통과했고 반대 제품이 있으면 실패한다. 각 독립 명령에 반대 제품·컨테이너/포트 부재의 320px 실제 사업자·고객 브라우저 1/1을 추가했다.</td>
+<td>신규 빈 DB의 최초 client 생성 전체 검수·AP 전용 큐·양쪽 실제 서버 ACL/백업·CI, 실모델/발송/PG/DNS를 포함한 정식 AP-only/Field-only QA121~124/G 검사</td>
+</tr>
+<tr>
+<td>C03</td>
+<td>in_progress</td>
+<td>AP/Field 별도 Next 웹과 52개 경로 HTTP 200, 모바일 전체 메뉴, Field 편집·예약 방식 미리보기, AP 지식·안전 접수 및 Field 직접 문의 상세 화면. 52개 경로 320px 가로 넘침 없음·최소 14px 확인, 주요 화면 390/768/1440px 확인. Field 사업장 호스트의 타 조직 공개 화면/관리실은 서버에서 404, 소유 사이트→직접 문의·예약 시작은 320px 브라우저 검사. 로컬 mock 두 제품 홈은 각자 실제 <code>/workspace</code>가 기본이고 비저장 시안은 별도 링크다. <code>design_preview</code>는 시안만 기본이며 같은 빌드의 두 프로필 실제 HTTP·mock 320px 진입을 확인. 새 mock 실행 명령에서도 두 <code>/workspace</code> HTTP 200. AP 고객 Field 연결 정보 첫 조회 503을 320px 실제 브라우저에서 주입해 오류·기존 기록·재시도 후 원래 흐름 복구를 확인했다. AP/Field 비로그인 세션 200/null이 거짓 장애로 보이는 문제를 고쳐 작업·연결 로그인 5화면을 320px 실제 브라우저에서 재검수했다. 양쪽 사업자 작업 화면의 제품별 로그아웃과 독립 세션 폐기를 320px 실제 브라우저/HTTP에서 검수했다. Field 실제 페이지 편집의 모바일 편집/초안 미리보기 전환·페이지 ID 연동·미저장 입력 보존·1440px 동시 표시를 PG17/320px Chromium에서 검수했다. Field 승인 사이트 페이지별 제목/설명·tenant canonical, 작업실/검토본 noindex를 실 HTTP에서 확인했다. Field 실제 편집기의 새로고침/별도 브라우저 재개·잘못된 페이지 URL 대체를 PG17/320px Chromium에서 검수했다. AP-only·Field-only 실제 320px 가입→공개/접수→답변·예약 흐름을 반대 제품 부재에서 검수했다. Field 편집 320px에서 섹션별 이름이 있는 버튼의 Enter 순서 변경·삭제, 저장 초안과 공개 화면의 순서를 확인했다. AP 매체 320px에서 첫 목록/세부 목록 503과 조직 생성 201 뒤 목록 503을 재조회해 조직·도메인·광고 위치 등록까지 확인했다. 매체 조직 POST 응답 분실 뒤 같은 입력 재시도는 같은 제출 키로 서버 원본 한 건을 복구한다. AP와 Field <code>/admin</code>은 각각 별도 관리자 membership의 제품별 집계 상태만 320px에서 표시하며 일반 계정을 거부한다. 관리자 세션의 상대 제품 운영 API 접근은 양방향 401이다. 양 관리자 화면은 제품별 최근 대기 사건 20건의 ID·유형·시각·미연결 상태를 고객 원문 없이 표시하고 조회 감사 원장을 남긴다. AP/Field 관리자 6개 실제 URL은 각 제품의 조직·발송·AI/제작·체험·감사 집계를 보여주고 320px/390px 키보드 전환과 14px·noindex·잘못된 경로 404를 검수했다.</td>
+<td>일부 화면 공통 템플릿 상세화, 사용자 시각 검토, 200% 확대·키보드 전체 경로·스크린리더, 실제 데이터 상태 연결과 QA57/58/119 전체 검수</td>
+</tr>
+<tr>
+<td>A00·A01</td>
+<td>in_progress</td>
+<td>AP 전용 조직/membership/지식 초안·승인·공개 버전과 outbox, 로컬 가입·작업 화면. 직접 지식 입력을 약 1초 뒤 서버 자동 저장하고 미완성 상호·서비스·FAQ도 비공개 초안으로 재개한다. 공개 승인 때 완성도를 다시 검사하고 기존 공개본을 유지한다. 지연 응답/응답 분실·오프라인·409 양방향 선택을 실제 320px 웹에서 검수했다. 초안과 공개 revision을 별도 표시한다. 사업 DB 3/3·브라우저 1/1</td>
+<td>실메일·카카오, source 충돌·외부 변경 검수, AI 설정/사용량/복구/정식 QA</td>
+</tr>
+<tr>
+<td>A09</td>
+<td>in_progress</td>
+<td>AP OAuth code+PKCE·명시 조직/AI/배포 선택·동의, client/actor/resource/scope 제한 공개 읽기·선택 철회. <code>/me</code>, 고객 공개 메시지 cursor, 위임 사람 답변의 revision·멱등·감사·outbox/알림 원장. 별도 <code>ap.sources.refresh</code>의 현재 source·예상 버전/멱등 내구 갱신 작업·상태 조회·Field 재시도 worker와 검토 초안 저장. 기존 OAuth resource scope migration. OpenAPI preview.7 정적/제품별 DB 계약, AP/Field 격리 DB, 양방향 HTTP·320px 브라우저 통과</td>
+<td>운영 client 심사/재동의, 배포 관리·남은 사건/connection revoke scope, 완성 OpenAPI·버전 호환·정식 QA129~133</td>
+</tr>
+<tr>
+<td>A02·A03</td>
+<td>in_progress</td>
+<td>AP 전용 비회원 직접 접수·별도 확인키·메시지 sequence·사업자 답변/내부 메모·후속 대화. 상담 링크에서는 익명 AI 대화와 최종 사람 접수를 동일 원본 ID에 기록하고 생성 중 인계 시 AI 답변을 억제. 직접/AI 인계 접수와 후속 메시지는 재시도 키로 응답 분실·동시 제출을 한 원본으로 복구. 고객 제출 메시지 사진은 AP 전용 비공개 저장소에 WebP/EXIF 제거 후 저장하고 확인키 고객·조직 사업자만 읽으며 AI 질문 원문에는 붙이지 않는다. 확인키 5회 실패/15분 제한·교체 시 이전 키 폐기·새 키 재열람/응답 분실 복구를 AP DB/Chrome 320px에서 검수. AP 직접 문의·상담 인계 신규 제출을 조직·정규화 연락처별 15분 5건으로 제한하고 DB 테스트에서 재시도·만료를 확인. 조직 전체 신규 접수는 기본 15분 60건(제품별 설정)으로 제한하고 번호 변경·멱등 재시도·만료를 DB에서 확인. AP 직접 문의·상담 인계 첫 제출은 응답 분실 뒤 같은 탭 새로고침에서 두 무작위 키로 현재 원본/확인키를 복구하고 320px 실제 브라우저에서 확인. 후속 고객 질문도 현재 확인키·제출 키로 새로고침 뒤 원본 메시지 ID를 찾고, 조회 장애 중 수정 본문 재제출을 차단한다.</td>
+<td>실공급사 비용 정책·신고/조직 한도 DoS 대응·실알림·사진 보존/복구·실 S3/HEIC·정식 QA19 전체</td>
+</tr>
+<tr>
+<td>A04</td>
+<td>in_progress</td>
+<td>AP AI 설정 초안·승인 지식 결합, Responses 어댑터와 공급사 미설정 차단, 사업자 테스트 및 고객 링크 답변의 근거 ID·숫자·사용량 검사. 고객/사업자 테스트 한도 분리. 고객 모델 입력에 같은 원본 대화의 최근 공개 고객/AI 메시지 최대 6개·각 500자만 승인 사실과 분리해 전달하고 첫 대화/다른 대화는 섞이지 않는 합성 DB·어댑터 검사를 통과했다</td>
+<td>실제 모델 품질·문맥/근거 의미 검수·실예산/복구·정식 QA22~24/117</td>
+</tr>
+<tr>
+<td>A05</td>
+<td>in_progress</td>
+<td>AP 단독 상담 링크·소유 사이트 배포 원장, DNS TXT/로컬 HTTP 소유 검증, 정확한 origin/CSP의 SDK iframe, nonce→세션→1회 handoff→AP 1차 상담. 링크와 외부 iframe의 고객 AI 질문→같은 AP 원본 대화 사람 접수, inline/floating 설치 모드를 분리 origin 합성 브라우저에서 확인. link의 AI 미사용 직접 접수도 활성 배포 원본으로 만들며 AI/사람 동시 시작은 세션 POST 1회로 공유하는 320px 실제 브라우저 검수 통과. 신규 AP 사업자가 일반 외부 사이트를 직접 등록하고 위젯의 모델 미설정→AP 사람 문의/답변·확인키, 새 비회원의 직접 문의 링크까지 별도 HTTP 사이트/320px 실제 브라우저 1/1로 검수했다.</td>
+<td>실소유 도메인/다중 ancestor·제3자 쿠키 강제 차단 브라우저·실모델·남용 방지/복구·정식 QA94/97~102/127/128</td>
+</tr>
+<tr>
+<td>A06</td>
+<td>in_progress</td>
+<td>AP 문의 commit과 같은 트랜잭션의 outbox·알림 원장, owner/editor 내부 처리 알림·읽음, 기존 outbox 멱등 보충, 고객 외부 알림 <code>blocked_integration</code> 표시. AI 질문·내부 메모는 무알림</td>
+<td>AP 자체 카카오/문자/푸시 공급사·콜백/unknown·실패 대체·사용량/남용/복구 및 정식 QA35~40</td>
+</tr>
+<tr>
+<td>A07</td>
+<td>in_progress</td>
+<td>AP 자기 조직의 이번 UTC 월 고객 AI·사업자 테스트·공급사 응답/토큰, 사람 문의·Field 외부 요청 수락/미상을 실제 DB에서 분리 집계하고 <code>/workspace/usage</code>에 표시한다. 기록된 토큰을 비용/청구액으로 전환하지 않는다. AP DB 1/1·실제 320px 웹·양제품 HTTP 1/1 검수. 제품별 PG trial 원장·owner 명시 동의 14일 mock 체험/종료 예약, DB 1/1·실제 HTTP/320px 1/1 검수. AP mock 체험 만료 시 새 업무는 403으로 차단하고 기존 접수/예약 처리는 유지한다. 영향 DB·실제 HTTP/320px 종료 화면 검수 통과.</td>
+<td>승인 plan version·실운영 체험 정책·독립 결제/갱신/해지·크레딧/초과 한도·실운영 정리/보존 정책·실결제 PG/정식 QA42~46/113/126/147/G-A1</td>
+</tr>
+<tr>
+<td>A08</td>
+<td>in_progress</td>
+<td>AP owner/editor의 직접 문의 한 건 JSON/인증 사진 다운로드. 추가로 조직 owner가 자기 조직의 모든 직접 문의·메시지·내부 메모·사진 원본 WebP를 한 JSON(base64)에 묶어 내려받는다. 상대 조직/editor/무인증은 거절하고 확인키/저장소 키는 제외한다. 사진 손상·누락은 503, 500건·64 MiB 초과는 413이며 성공 생성 감사 원장을 기록한다. 이전 AP DB 18/18·실 웹 프록시 1/1·320px 사업자 다운로드 1/1 검수. AP 전용 관리자 membership/API/집계·최근 대기 사건 화면은 임시 DB 20/20과 320px 브라우저 1/1로 검수했다. 비공개 payload는 제외하고 조회 감사 원장을 남긴다. 비 mock은 MFA 연결 전 503이다. AP 관리자 6개 경로는 실제 집계·최신 관리자 조회 metadata와 미연결 청구/지원 사유를 표시한다.</td>
+<td>전체 계정/배포/청구 아카이브·대용량 분할 export·보존/삭제·백업/복구·신고·운영 runbook과 정식 QA47~49/157</td>
+</tr>
+<tr>
+<td>F00·F01</td>
+<td>in_progress</td>
+<td>Field 전용 조직/membership/카탈로그 초안·승인·공개 버전과 outbox, 기본 예약 방식·서비스별 상속/명시 선택·가격 저장. 공개 승인 시 실제 예약 방식으로 고정하고 미승인 변경은 기존 공개본에 영향 없음. 사업정보/서비스를 약 1초 뒤 자동 저장하고 지연 응답·응답 분실·오프라인·409 충돌을 320px 실제 웹에서 검수했다. 빈 상호·서비스명·소요시간 0도 비공개 초안으로 저장·재조회하며 미완성 승인은 거부한다. Field DB 3/3·브라우저 1/1</td>
+<td>실메일·카카오, 사용량/복구·정식 QA53/57/61/62/77·G-F1 전체</td>
+</tr>
+<tr>
+<td>F02·F04</td>
+<td>in_progress</td>
+<td>Field 사이트 초안 revision/편집, 3개 배치·최대 5개 소개 페이지, 기본 slug 공개, 승인 카탈로그 결합, 과거 디자인을 초안으로 복구. 사업자 사진 업로드·WebP/EXIF 정규화·alt/조직 권한·서버 보관함/공개 참조와 320px 브라우저 흐름 부분 검수. AI 배치 제안은 사진·alt를 보존하거나 공간 부족 시 실패 처리. 편집 1초 자동 저장·응답 지연 중 추가 입력/응답 분실/오프라인·충돌의 입력 보존과 명시 버전 선택을 실제 320px 브라우저에서 검수. 사업장 A 호스트의 타 사업장 공개 문의/사이트와 관리실 404, A 승인 사이트→문의·예약 시작 및 소유 증명은 실제 HTTP/320px 브라우저 검사 1/1. 공개 다중 페이지의 실제 slug 직접 링크·새로고침·뒤로/앞으로·초안 비노출·tenant 경계 404를 320px HTTP/브라우저에서 검수했다. 편집기 페이지 삭제 후 재추가 경로 중복을 고치고 수동 경로 입력의 선택 유지·중복/형식 오류·수정 후 서버 저장을 320px 실브라우저에서 검수했다. 모바일 페이지 편집/초안 미리보기 전환에서 선택 페이지·키보드 Enter·미저장 입력/자동 저장을 보존하고 데스크톱 동시 표시를 320/1440px 브라우저에서 검수했다. 승인 공개 페이지별 SEO 메타데이터와 서버 검증 tenant canonical, 미공개 페이지 404/작업실 noindex를 Field mock HTTP에서 확인했다. 저장된 초안의 단계/페이지를 유효 URL과 서버 revision으로 재개하며 별도 로그인 브라우저에서 편집 내용 확인·잘못된 page ID 홈 복귀를 검수했다. 섹션 2개 순서를 키보드로 변경하고 임시 섹션을 삭제한 뒤 서버 초안·승인 공개본·고객 화면 순서를 320px 브라우저에서 확인했다.</td>
+<td>HEIC 서버 codec·실 S3 버킷/ACL·백업/정리, 자체 도메인 DNS/TLS, 접근성 전체·정식 QA09/60/62/G-F1 전체</td>
+</tr>
+<tr>
+<td>F03</td>
+<td>in_progress</td>
+<td>Field 전용 Responses 배치 제안, DB 작업 상태·단일 활성 작업·토큰·revision 검증. Field Valkey ID 큐와 별도 worker, 재시작 대기 작업 처리·결과 미상 자동 재호출 금지. 사진/alt가 있는 초안은 제안 미리보기와 적용에서 보존, 공간 부족 시 거부. 생성 3/3·큐 1/1·worker 1/1 합성 테스트</td>
+<td>실모델 응답·실비용 정산, 실제 서버 큐 장애/복구·정식 QA54/63/64/122</td>
+</tr>
+<tr>
+<td>F05·F06</td>
+<td>in_progress</td>
+<td>Field 비회원 직접 문의·별도 확인키·후속 대화·사업자 문의함/답변·outbox. 직접 접수와 고객 추가 질문/사업자 답변의 재시도 키로 응답 분실·병렬 제출을 한 원본/사건으로 복구. 고객 메시지 비공개 사진은 별도 Field 저장소에 WebP/EXIF 제거 후 저장하고 확인키 고객·조직 사업자만 읽는다. 사업자 내부 메모는 고객 조회에서 제외하고 알림/outbox·문의 상태를 바꾸지 않으며 재시도 복구한다. 문의 확인키 5회 실패/15분 제한·교체 시 이전 키 폐기·새 키/사진 재열람을 Field DB/Chrome 320px에서 검수. Field 직접 문의·예약 신규 제출의 공유 원장을 15분 5건으로 제한하고 DB 테스트에서 재시도·만료를 확인. Field 조직 전체 신규 접수 기본 15분 60건(별도 설정), 번호 변경·멱등 재시도·만료와 예약→문의 공유를 DB에서 확인. 직접 문의 첫 제출의 응답 분실 뒤 같은 탭 새로고침 원본/확인키 복구와 다른 입력 차단을 320px 브라우저에서 확인. 후속 고객 질문도 현재 확인키·제출 키로 새로고침 뒤 원본 메시지 ID를 찾고, 조회 장애 중 수정 본문 재제출·확인키 교체를 차단한다.</td>
+<td>실공급사 비용 정책·신고/조직 한도 DoS 대응·실제 발송·사진 보존/복구·실 S3/HEIC·정식 QA19 전체</td>
+</tr>
+<tr>
+<td>F07</td>
+<td>in_progress</td>
+<td>Field 예약 정책·두 방식 요청·제안/고객 수락/확정·변경/취소·수동 일정/전화 예약, DB 배타 점유와 처리 기록. 자정 영업/휴무, 카탈로그 변경 후 고객 재동의·대체 서비스. 기본 방식 상속은 승인 때 실제 방식으로 고정하고 기존 예약 snapshot을 유지. DST 반복/누락 현지 시각과 경과 시간·현지 날짜 기간을 보정했다. 비회원 제출 재시도 키·DB 유일 제약·확인키 복구와 웹 프록시 중복 요청 검수. 예약 확인키 5회 실패/15분 제한·교체 시 이전 키 폐기·새 키 재열람을 Field DB/Chrome 320px에서 검수. 공개 예약·직접 문의 공유 제출 한도 15분 5건 및 조직 전체 기본 15분 60건, 429/재시도·만료를 Field DB에서 확인. 비회원 첫 예약 제출 응답 분실 뒤 새로고침 원본/확인키 복구를 320px 브라우저에서 확인.</td>
+<td>실공급사 비용 정책·신고/조직 한도 DoS 대응·실알림/복구·정식 QA19/25~34 전체</td>
+</tr>
+<tr>
+<td>F08</td>
+<td>in_progress</td>
+<td>Field 문의·예약 outbox와 같은 DB 트랜잭션의 알림 원장, owner/editor 내부 목록·읽음, 기존 사건 멱등 보충. 고객 대상 사건은 <code>blocked_integration</code>; 내부 메모는 무알림. 화면은 내부 기록과 외부 미발송을 구분한다. DB 2개 테스트와 Chrome 320/390px에서 문의·예약 알림 열기/읽음 확인</td>
+<td>자체 카카오/문자/푸시 공급사·콜백/unknown·대체발송·한도/복구·정식 QA35~40</td>
+</tr>
+<tr>
+<td>F09</td>
+<td>in_progress</td>
+<td>Field owner/editor의 직접 문의 한 건과 owner의 예약 한 건 JSON export를 유지한다. 추가로 조직 owner가 Field 사업정보·사이트 초안/공개본·사이트 사진, 모든 직접 문의/메모/비공개 사진, 예약·사건·알림·수동 차단/허용된 AP 출처 메타데이터를 한 JSON으로 내려받는다. AP 원문/확인키/객체 키는 제외하고 타 조직/editor/무인증을 거절한다. 500건·64 MiB 초과 413/사진 손상·누락 503, 성공 생성 감사 원장. Field DB 17/17·첨부 DB 1/1·실 웹 프록시/320px 다운로드 1/1 검수. 이후 Field 수신 외부 문의/예약 요청과 복사 완료 사진·대기/실패 상태를 같은 파일에 포함하고 동일 UUID의 사이트/외부 사진 분리를 DB·실 웹에서 확인했다. Field 월별 제작 AI/문의/예약 출처 사용량 화면, 자체 mock trial/종료·만료 후 기존 업무 접근은 유지한다. Field 관리자 전용 membership/API/집계·최근 대기 사건 화면은 임시 DB 18/18과 320px 브라우저 1/1로 검수했다. 비공개 payload는 제외하고 조회 감사 원장을 남긴다. 비 mock은 MFA 미연결 503이다. Field 관리자 6개 경로는 실제 집계·최신 관리자 조회 metadata와 미연결 DNS/청구/지원 사유를 표시한다.</td>
+<td>독립 구독/실청구·정리 모드, 전체 계정/연동 수신 후속 이력·대용량 분할 아카이브·실운영 보존/삭제/복구·관리자 관리 조치/MFA/감사와 정식 QA42~49/113/146/147/157</td>
+</tr>
+<tr>
+<td>I00</td>
+<td>in_progress</td>
+<td>Field BFF의 AP code+PKCE와 AP BFF의 별도 Field code+PKCE를 교환·각 제품 DB에 암호화 보관한다. Field owner→AP owner→Field owner의 두 동의 전체 Chromium 320px 흐름과 양쪽 <code>review_required</code>를 확인했다. Field가 만료 AP access token을, AP가 만료 Field access token을 각 제품의 공개 OAuth endpoint에서 refresh rotation하고 <code>/me</code>를 재검증한다. 갱신 실패는 <code>degraded</code>로 보존하고 자동 재시도하지 않는다. 실제 양쪽 서버 HTTP·DB 각 1/1, 320px 브라우저 검수 통과. 로컬 두 웹 host를 분리해 쿠키 충돌을 방지한다. 전체 mock 실행은 로컬 client 설정을 자동 등록/검사한 뒤 새 API로 시작하며 실제 양방향 연결 HTTP 1/1을 재검사했다</td>
+<td>신규 빈 DB 최초 등록 검수, 양방향 revoke/재인가·결과 미상 복구, 운영 client 심사·정식 QA129~132/G-I1</td>
+</tr>
+<tr>
+<td>I01</td>
+<td>in_progress</td>
+<td>양쪽 원장에 AP/Field grant·조직·AI·actor를 같은 connection ID로 bind한다. Field 공개 OAuth bearer <code>capabilities</code>는 계약 버전과 동의한 사실/가용성 조회·외부 요청 접수 scope를 표시한다. AP owner는 동의·Field grant·조직을 확인해 공개 HTTP로 연결별 지원 기능을 읽고 잘못된 버전/형식/장애를 거부한다. Field 계약·DB, AP DB, 실제 양쪽 HTTP·320px 브라우저 검수. 상태는 <code>review_required</code>이며 설치 성공이 아니다</td>
+<td>source/deployment 매핑·부분연결·권한 변경/상태 조정·정식 QA130/133/134</td>
+</tr>
+<tr>
+<td>I02</td>
+<td>in_progress</td>
+<td>AP owner가 Field 승인본을 공개 API로 조회해 AP 별도 <code>KnowledgeSource</code>/불변 snapshot에 저장하고 revision/hash 충돌을 격리한다. 명시 출처 승인 뒤 사업 소개·서비스 설명을 따로 선택해 native 지식을 보존한 새 AP KnowledgeRelease를 생성한다. 직접 입력 초안 revision과 전체 공개 revision을 분리했다. 이름이 겹치는 Field 서비스는 별도/AP 우선/Field 우선을 명시 선택하고 AP 승인본 버전을 고정한다. Field 가격·영업시간·예약 조건은 정적 AI 근거에서 제외하며, 상담 직전 Field 공개 facts revision/hash를 재확인한다. 새 지식 버전은 별도 AI 승인이 필요하다. DB·양쪽 실제 mock 서버 HTTP·Chromium 320px 공개/재열람 검수 통과</td>
+<td>실모델 의미 검증, 가격·예약·영업시간의 live 재확인과 사용자 확인, revoke/부분 장애, 정식 QA134~138/156·G-I2</td>
+</tr>
+<tr>
+<td>I03</td>
+<td>in_progress</td>
+<td>Field 사업장별 <code>field-&lt;slug&gt;.localhost:3002</code> origin 공개와 1일 증명값, AP mock 전용 well-known 소유 확인, AP OAuth가 선택한 활성 <code>owned_embed</code> 공개 배포 목록·Field 원장 설치/중지·일반 AP SDK 로딩을 연결했다. 잘못된 조직·배포·origin 거부, 실제 양쪽 서버 HTTP OAuth→설치와 Chromium 320px 위젯/직접 문의·예약/타 호스트 404를 확인했다.</td>
+<td>운영 DNS/TLS·실도메인, revoke/배포 중지·AP 장애 상태 재조정, 정식 QA86/94/128·G-I1</td>
+</tr>
+<tr>
+<td>I04</td>
+<td>in_progress</td>
+<td>Field OAuth 현재 조건 조회·외부 요청 멱등 수신/원요청 확인·미확정 예약 snapshot/outbox. AP 고객 확인키·명시 동의 ActionRequest와 결과 미상 조회/동일 ID 재전송. Field owner/editor 외부 문의 snapshot 목록·내부 알림. AP 고객은 별도 동의의 1회 Field 코드로 독립 예약 확인키를 받는다. Field 공개 OAuth 사건 API는 연결 예약의 rev0/제안/확정/변경/취소를 PII 없이 제공한다. AP는 고객 확인키의 수동 조회에서 revision/ID를 검사해 자체 사건·고객 알림 원장에 멱등 반영하고 320px에서 확정·미발송을 구분한다. 양쪽 DB·실제 HTTP/브라우저 통과. 연결별 HMAC 키 bind·Field 내구 전송 원장/worker→AP durable inbox/worker, 역순·재시도·멱등 및 실제 HTTP 확인. 모델 미설정 상담 링크도 AP 원본을 먼저 만들고 질문 실패를 명시한 뒤 같은 원본의 사람 접수·동일 화면 Field 별도 동의/일반 문의 전달을 320px 실제 연결 브라우저와 AP DB에서 확인했다. AI 미사용 직접 접수와 세션 시작 중 AI/사람 동시 제출도 같은 link 원본·Field 문의로 이어졌다. 고객이 선택한 AP 문의 사진 UUID와 별도 동의를 ActionRequest에 고정하고, Field는 업무 수락 뒤 자체 worker/비공개 저장소에 복사한다. 실패 재시도·사업자 인증 열람을 양쪽 DB 및 320px 실제 HTTP에서 확인했다.</td>
+<td>실모델 응답 중 화면 인계·route 전환·AP 처리 결과 조회, 첨부 실 객체 저장소/악성코드 검사·revoke/장애/운영 독립성·정식 QA139~145/148~149/153/155/G-I1~I2</td>
+</tr>
+<tr>
+<td>I05</td>
+<td>in_progress</td>
+<td>Field owner가 AP 공개 원본 대화·메시지를 읽고 별도 reply scope·revision/멱등 키로 AP에 답변한다. Field 미전송 본문은 암호화하고 AP 수락 뒤 제거한다. 응답 미상→서버/320px 브라우저 재시작 동일 키 replay와 AP 단일 message/알림 원장·<code>blocked_integration</code>을 확인했다. 연결 예약은 Field가 고객 알림을 중복 만들지 않고 AP가 Field 원본 사건 ID·revision을 수동 조회로 보관하며 고객 알림 원장을 한 번만 만든다. 연결 예약 후속 사건은 Field 서명 webhook이 AP 원장·단일 고객 알림으로 자동 반영되며 수동 조회도 유지. AP 공개 OAuth 사건 delivery 조회와 Field owner 화면은 로컬 전송 ACK·AP 처리·고객 알림/열람을 분리한다. 연결 해제 뒤에도 ACK 사건의 AP 상태를 별도 HMAC 읽기 전용 경로로 재확인하며 원격 장애는 확인 불가로 표시한다. 제공자/소비자 DB 각 1/1, 별도 worker 실제 HTTP·320px 화면 확인.</td>
+<td>route 전환·발송 직전 재확인, 키 회전/보존·실 공급사/운영 검수, 정식 QA144~145/148~149·G-I2</td>
+</tr>
+<tr>
+<td>I06</td>
+<td>in_progress</td>
+<td>양쪽 owner 해제→내구 원격 ACK, 기존 예약/확인키 보존, Field owner 직접 연락 기록과 해제 뒤 서명 AP 사건 상태 복구를 로컬 mock에서 검수했다. 기존 연결 예약별 고객 확인키의 향후 Field 알림 명시 동의/철회→Field owner의 양쪽 해제 ACK 확인→AP의 서명 사건/알림 대조·세대 1 종료 영수증→Field 세대 2 활성화도 추가했다. 전환 ID·동의·AP 대조 기준을 Field DB에 AP 호출 전 저장하며 응답 분실·양쪽 API 재시작/브라우저 새로고침 뒤 재사용한다. 기준 뒤 예약 사건은 고객 직접 연락 <code>reached</code> 기록 전 활성화를 거부하고 AP의 더 최신 inbox 사건도 종료를 거부한다. AP의 202 수신·해제 경쟁은 connection lock으로 고정하고 이미 수신한 사건은 해제 뒤 내부 처리하며 종료 뒤 남은 사건은 거부한다. 새 세대 사건은 Field 고객 알림 원장 <code>blocked_integration</code>으로만 기록하고 AP 전송에서 제외한다. AP/Field DB, 정적 계약, 양방향 실제 HTTP/worker 및 320px 고객/사업자 화면 통과했다.</td>
+<td>실 공급사 unknown 조회/발송 직전 route 재확인, 구독 종료·삭제/보존 정책·운영 서버 장애/복구와 정식 QA146/148~155·G-I1/G-I3</td>
+</tr>
+<tr>
+<td>I07</td>
+<td>in_progress</td>
+<td>표준 <code>pnpm test:integration:faults</code>의 placeholder를 실제 로컬 연결 회귀로 교체했다. 정확한 AP/Field mock DB·Field Valkey·두 API/웹을 사전 확인하고 공개 계약 정적 2/2, 양쪽 DB fault 3/3+2/2, 분리 HTTP·worker 1/1을 순차 실행해 통과했다. 결과 미상·중복/역순·해제·scope/서명 거부의 기존 assertion을 유지하며 child 실패는 상위 실패로 전파한다.</td>
+<td>실제 서비스 중단/장기 장애·키 회전·구버전 consumer·복수 origin/권한 공격, 정식 QA131/132/140/158/159와 G-I 전체</td>
+</tr>
+<tr>
+<td>D00</td>
+<td>in_progress</td>
+<td>AP 승인 지식에 바인딩된 카드 초안·명시 owner 공개·불변 release·중지/재공개, 필수 광고 표시, 지식 변경 시 노출 보류. AP DB 1/1과 Chrome 320px에서 초안/공개 분리·새 지식 재승인·중지 확인</td>
+<td>AI 문구 생성/검토 정책, 구조화 가격 source, 정식 QA87~91·매체 배치/운영 검수</td>
+</tr>
+<tr>
+<td>D01</td>
+<td>in_progress</td>
+<td>AP 계정 아래 매체 조직/membership을 사업 조직과 분리, HTTPS origin DNS TXT 소유 확인(7일 유효), article/sidebar 위치 등록·활성/중지와 매체 사건 원장. AP DB 1/1·Chrome 320px 검수. 첫 목록/세부 목록 조회 실패를 로그인과 구별하고, 조직 생성 201 뒤 조회 실패는 생성 성공으로 유지하며 재조회·조직 한 건/도메인·위치 등록을 320px 브라우저에서 확인했다. 사용자별 선택 UUID 키로 병렬·응답 분실 매체 생성을 201/200 같은 ID·outbox 한 건으로 수렴시키고, 다른 이름 409·다른 사용자 독립을 AP DB 19/19/320px 브라우저에서 검수했다. D02에서 배치 승인 연결</td>
+<td>실제 매체 도메인/DNS, A09 공식 client, AP 관리자, 정식 QA92/94/95·운영 게이트</td>
+</tr>
+<tr>
+<td>D02</td>
+<td>in_progress</td>
+<td>사업자 현재 카드 release→활성 매체 slot 배치 요청, 매체 owner의 정확한 release/hash 승인·거절·중지, 사업자 취소, 공개 조건 재검사·AP 미리보기. 요청/승인 사건과 재시도 키를 AP DB에 기록. AP DB 1/1·Chrome 320px에서 요청→승인→공개→취소 확인. D03 설치/상담 연결</td>
+<td>실제 제휴 매체 도메인, 매체 운영/관리자, 성과·정식 QA90~96·Distribution gate</td>
+</tr>
+<tr>
+<td>D03</td>
+<td>in_progress</td>
+<td>매체 owner가 승인 배치의 정확한 origin용 설치 코드를 발급, AP iframe 카드·질문·희망 조건→짧은 1회 handoff→AP 상담/동의 접수. AP 원본에 서버 고정 placement 귀속, 철회 뒤 새 요청 거부. AP DB 1/1·별도 origin Chrome 320px 확인</td>
+<td>실매체 도메인/TLS·실모델/알림, 제3자 쿠키 강제 차단·중첩 ancestor·정식 QA97~103/118·출시 gate</td>
+</tr>
+<tr>
+<td>D04</td>
+<td>in_progress</td>
+<td>AP 배치 문의 시작·연락처 동의 접수를 DB 사건으로 1회 기록, 미리보기/테스트/식별된 봇 제외. 사업자·매체의 완료 UTC 주 8개만 5 미만 억제·구간값으로 JSON/CSV 제공. Field의 AP 수신 확정 사건을 같은 배포 문의에 귀속해 최초 예약 확정 1회만 구간 집계하고 미연결은 미지원, 매출·수금은 미측정으로 표시한다. AP owner가 매체 승인 배포를 명시 OAuth 선택하면 Field 소비자가 이를 읽고 사이트 설치에서는 제외한다. 실제 매체 카드→AP live 문의 5건→Field 예약/확정→서명 사건 AP 처리→완료 주 사업자/매체 JSON·CSV <code>5-9</code>와 320px 매체 화면 <code>5~9건</code> 양방향 HTTP/browser 1/1, AP DB 18/18·Field DB 17/17·계약 2+5 통과</td>
+<td>실매체 DNS/TLS, 원래 사건 시각의 완료 주 도달/운영 데이터, 고도화 봇·복수 역할 차분 공격·정식 QA104~107/G-D2, 실매체 운영 검수</td>
+</tr>
+<tr>
+<td>나머지 9개</td>
+<td>planned</td>
+<td>개별 task의 완료 근거 없음</td>
+<td>각 행의 Definition of Done과 QA·gate</td>
+</tr>
+</tbody>
+</table></div>
+<p>실행 명령·환경·결과·미실행 항목은 <code>DEVELOPMENT_STATUS.md</code>, <code>docs/technical/SPIKE_REPORT.md</code>, <code>docs/CODEX_HANDOFF.md</code>에 기록한다. Git 저장소와 commit ID는 아직 없다.</p>
+<h3 id="section-79">실행 순서와 독립 출시</h3>
+<p><strong>C00 → C01 → C02/C03 → A 트랙과 F 트랙 병렬.</strong> AP Core는 A11에서 Field/매체 없이 출시할 수 있다. Field Core는 F11에서 AP 없이 출시할 수 있다. I 트랙은 두 제품의 공개 계약을 이용해 통합하며 I08에서 별도로 승인한다. D05는 AP의 매체 확장 출시이며 Field/연동을 선행으로 요구하지 않는다.</p>
+<p>AP A09가 일반 통합자에게 제공하는 인가/API이고, I00는 Field가 외부 리소스 서버로 제공하는 역방향 구현이다. 이를 서로의 런타임 의존으로 합치지 않는다. 실제 API/인증을 구현하기 전에 UI 목업을 만들 수 있으나 해당 task를 verified로 표시할 수는 없다.</p>
+<p>R01은 운영 서버/DB가 없다는 인벤토리 증빙이 있으면 not_applicable로 종료한다. 있는 경우 이행 검수는 생략하지 않는다. R02는 모든 제품의 기존 요구가 충족됐는지 검수하며 독립 Core 출시에 영향을 주는 선행 작업이 아니다.</p>
+<h3 id="section-80">모든 작업의 Definition of Done</h3>
+<p>UI·API·도메인·DB·권한·이벤트·사용량·오류·보안·테스트·롤백이 해당 범위에서 연결되어야 한다. <code>implemented</code>는 코드 완료이며 <code>verified</code>는 실행 증빙이 있는 상태다. 외부 승인 부재는 blocked_integration이다. QA의 제품별 적용을 생략하거나 다른 제품의 완료로 대체하지 않는다.</p>
+<p>API/스키마 변경은 Coordinator가 계약을 승인하고 AP/Field 각 consumer 테스트를 통과한 뒤 병합한다. 공통 migration을 두 제품이 동시에 쓰지 않는다.</p>
+<h3 id="section-81">에이전트별 소유 경로</h3>
+<div class="table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>담당</th>
+<th>기본 소유</th>
+<th>변경 금지/협의</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Coordinator</td>
+<td>공개 계약·상태·작업·ADR</td>
+<td>DB 직접 병합은 제품 담당 리뷰</td>
+</tr>
+<tr>
+<td>AP Agent</td>
+<td>agent-web/worker/domain/db</td>
+<td>Field 코드 import 금지</td>
+</tr>
+<tr>
+<td>Field Agent</td>
+<td>field-web/worker/domain/db</td>
+<td>AP 코드 import 금지</td>
+</tr>
+<tr>
+<td>Connector Agent</td>
+<td>generated clients·integration adapter·contract tests</td>
+<td>상대 내부 repository 호출 금지</td>
+</tr>
+<tr>
+<td>Distribution Agent</td>
+<td>AP campaign/publisher/embed</td>
+<td>Field reservation 구현 금지</td>
+</tr>
+<tr>
+<td>Reliability</td>
+<td>CI·인프라·복구·security/e2e</td>
+<td>게이트 우회·skip을 pass로 처리 금지</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="section-82">작업 카드 기본 형식</h3>
+<pre><code class="language-text">Task / Parent / Product:
+State / Owner:
+Dependencies / Requirement / QA / Gate:
+Allowed paths / Forbidden imports:
+Contract inputs and outputs:
+Acceptance and failure cases:
+Tests run / environment / commit / evidence:
+Provider approvals / blockers:
+Migration / rollback / handover:
+</code></pre>
+<hr />
+<h2 id="section-83">AGENTS.md — 독립 AI 플랫폼 + Field, 개발 기준 v3.0</h2>
+<p>이 패키지는 <strong>개발 명세</strong>다. 운영 앱·실제 외부 연동·상용 배포가 이미 존재한다고 가정하지 않는다. 기존 PRD v2.0과 통합 AGENTS/TASKS는 이력 자료이며 이번 제품 경계와 충돌할 때 사용하지 않는다.</p>
+<h3 id="section-84">1. 먼저 읽을 것</h3>
+<ol>
+<li><code>docs/00_PRODUCT_ARCHITECTURE.md</code>의 B01~B12와 21개 결정.</li>
+<li>본인이 담당하는 <code>docs/01_AGENT_PLATFORM_PRD.md</code> 또는 <code>docs/02_FIELD_PRD.md</code>.</li>
+<li><code>docs/03_INTEGRATION_CONTRACT.md</code> — 서로의 내부 코드가 아니라 이 계약만 사용.</li>
+<li><code>TASKS.md</code>의 선행 작업·릴리스·완료 기준.</li>
+<li><code>docs/06_REQUIREMENTS_QA.md</code>의 적용 QA, <code>docs/04_SECURITY_OPERATIONS_RELEASE.md</code>의 게이트.</li>
+</ol>
+<p>마스터 문서는 <code>AI_Field_Service_Operator_Final_Development_Plan_v3.0.md</code>다. 분할 문서와 내용은 동일 기준이며 변경 시 분할 원문→마스터 재생성 순서를 유지한다. UI v3는 시각·기능 참고일 뿐, 단일 계정·공유 DB·로컬 저장·역할 탭은 운영 아키텍처가 아니다.</p>
+<h3 id="section-85">2. 가장 중요한 구현 규칙</h3>
+<ul>
+<li>AP는 Field가 없는 환경에서 가입·AI·지식·외부 설치·상담·알림·결제까지 동작한다.</li>
+<li>Field는 AP가 없는 환경에서 사이트 제작(자체 제작 LLM 포함)·직접 문의·예약·알림·결제까지 동작한다.</li>
+<li>AP/Field domain·repository·DB·identity/session·worker queue·secret을 공유하지 않는다. 같은 monorepo라도 네트워크 계약으로 연결한다.</li>
+<li>Field는 일반 외부 사이트와 같은 AP SDK/공개 API를 사용한다. 내부 DB 우회·고객별 설치 대행·공통 superadmin 금지.</li>
+<li>기본 AP 상담 위젯에 campaign/publisher/Field booking 의존성을 만들지 않는다.</li>
+<li>Field의 제작 AI와 AP의 고객 상담 AI를 혼동하지 않는다.</li>
+<li>AP 원본 대화는 AP API로 읽고 쓴다. Field 원본 대화는 Field가 유지한다. 원문 양방향 복제로 해결하지 않는다.</li>
+<li>업무 제출은 고객 동의 후 AP ActionRequest→Field 외부 요청이다. AP는 예약을 확정하지 않는다.</li>
+<li>연결은 두 방향의 scope·토큰·조직·actor 동의를 가진다. API 토큰을 상대 제품 로그인으로 사용하지 않는다.</li>
+<li>하나의 사건은 한 제품만 고객/사업자 알림을 보낸다. unknown 상태에서 이중 문자 재발송 금지.</li>
+<li>제품 간 가격/정보 변경에 공유 DB 트랜잭션을 가정하지 않는다. source revision·검수·중요값 재확인·stale 대체 필수.</li>
+<li>연결 해제는 양쪽 구독 해지나 데이터 삭제가 아니다. 기존 예약·원본·법정 보존·고객 접근 경로를 유지한다.</li>
+<li>사이트·지식·카드는 명시 승인 전 초안이다. 숫자/자격/경력/후기를 AI가 만들어 넣지 않는다.</li>
+<li>고객 OTP·회원가입을 새로 강제하지 않는다. 번호/알림 링크만으로 대화 권한을 주지도 않는다.</li>
+<li>외부 문서 자동 수집·사진 진단·고객 결제·광고비 정산·임의 MCP 도구는 범위 밖이다.</li>
+</ul>
+<h3 id="section-86">3. 작업과 소유 경로</h3>
+<p>Coordinator는 schema/API/event/권한 변경과 ADR 병합을 조율한다. AP Agent는 AP 앱/도메인/DB, Field Agent는 Field 앱/도메인/DB, Connector Agent는 공개 HTTP client/bridge/권한 매핑만 담당한다. Distribution Agent는 AP의 campaign/publisher 기능만 다룬다. 한 사람이 순차 실행해도 같은 작업 ID를 사용한다.</p>
+<p>공통 UI는 데이터 접근 없는 컴포넌트다. 생성 클라이언트는 버전이 고정된 계약에서만 만든다. 다른 worktree가 수정 중인 migration·DTO를 임의 덮어쓰지 않는다. 변경이 필요한 경우 계약 PR→consumer test→구현 PR 순서다.</p>
+<p>저장소가 이미 있으면 구조·잠금 파일·테스트·마이그레이션·운영 데이터 유무부터 조사한다. 기존 코드를 지우고 새 monorepo를 만드는 일을 자동으로 수행하지 않는다. 실제 운영 데이터 복제·삭제·계정 이전·카드 청구·고객 메시지 발송은 별도 권한 없이는 하지 않는다.</p>
+<h3 id="section-87">4. 환경과 상태</h3>
+<p><code>mock</code>, <code>sandbox</code>, <code>live</code>를 분리한다. production에 mock·예시 로그인·고정 모델 답변·localStorage 원장·가짜 DNS/결제 성공이 들어가면 부팅/CI가 실패해야 한다.</p>
+<p>외부 credential/계약이 없으면 상태는 <code>blocked_integration</code>이다. 내부 단위 테스트는 진행할 수 있지만 출시 게이트를 통과 처리하지 않는다. 다른 제품 장애를 검증할 때는 환경변수 제거·네트워크 거부·서버 미배포로 실제 독립성을 검사한다. 빈 fixture를 서버 장애로 대체하지 않는다.</p>
+<h3 id="section-88">5. 저장소에 마련할 검수 명령 계약</h3>
+<p>다음 명령은 구현팀이 실제 스크립트로 만들어야 한다. 현재 문서 패키지에 서비스 테스트가 구현되어 있다는 뜻이 아니다.</p>
+<pre><code class="language-bash">pnpm lint
+pnpm typecheck
+pnpm test:unit
+pnpm test:db:agent
+pnpm test:db:field
+pnpm test:contracts
+pnpm test:independence:agent
+pnpm test:independence:field
+pnpm test:integration:faults
+pnpm test:e2e:agent
+pnpm test:e2e:field
+pnpm test:e2e:distribution
+pnpm test:security
+pnpm build:agent
+pnpm build:field
+</code></pre>
+<p><code>test:independence:agent</code>는 Field 서비스·DB·비밀값 없이 실제 AP 서버/DB로, 반대도 동일하게 실행한다. <code>test:integration:faults</code>는 지연·순서 역전·중복·revoke·scope 거부·결과 미상을 재현한다. 프로덕션 공급사 검수는 별도 gate/evidence로 분리한다.</p>
+<p>실패한 테스트를 삭제하거나 기대값을 현재 버그에 맞추지 않는다. 미실행·skip은 그대로 보고한다. 실패가 CI non-zero로 전파되어야 한다. pass 개수만 보고하지 말고 어떤 제품/환경/커밋인지 남긴다.</p>
+<h3 id="section-89">6. UI 및 완료 조건</h3>
+<p>고객·사업자/서비스 제공자·매체·각 제품 관리자 화면을 유지한다. 글자 최소14px, 본문/입력16px, 모바일320px부터 검수한다. 조작 가능한 버튼에는 실제 API 또는 비활성 사유가 필요하다. UI 입력·저장·반영·공개·전달·확정·발송·열람 상태를 구분한다.</p>
+<p>한 작업의 Done은 UI+API+domain+DB+권한+이벤트+사용량+오류+테스트+복구가 연결된 상태다. 코드 완료와 출시 승인은 분리한다. 모든 작업 시작 전 파일 범위·관련 요구/QA·명령을 기록한다.</p>
+<h3 id="section-90">7. 작업 보고 템플릿</h3>
+<pre><code class="language-text">Task ID / Product / Owner:
+State: planned | in_progress | implemented | blocked | blocked_integration | verified
+Requirements / QA / Gate:
+Changed paths and reasons:
+Contract / schema / migration changes:
+Tests actually run, commands, environment, commit:
+Not tested and why:
+Failure cases and rollback:
+External approvals still needed:
+Next dependency:
+</code></pre>
+<h3 id="section-91">8. 에이전트 최초 실행 프롬프트</h3>
+<pre><code class="language-text">AGENTS.md와 최종 개발 계획 v3.0, TASKS.md를 읽고 현재 저장소를 조사하라.
+C00부터 작업한다. AP와 Field는 별도 제품·DB·로그인·구독·배포다.
+Field는 정식 외부 클라이언트이고 두 제품 domain/db를 직접 import하지 않는다.
+AP 단독 고객은 Field 계정·예약·매체 없이 외부 사이트에 상담 AI를 설치할 수 있어야 한다.
+기존 셀프 사이트 제작·두 예약 방식·비회원 접수·역할·최소14px를 유지하라.
+먼저 계약/의존성/인프라 격리 검수 계획을 제시하고 승인된 작업 범위 내 구현하라.
+미연결 공급사를 성공 모의 처리하지 말고 실제 테스트와 미실행 항목을 구분하라.
+이번 턴에서는 선택한 Task의 코드·검수·차단 원인까지 보고하고 출시/청구/삭제를 임의 수행하지 마라.
+</code></pre>
+<hr />
+<p><strong>문서 종료 — v3.0 개발 기준. 구현·실서비스 인수 결과는 별도로 기록한다.</strong></p>
+<div class="version">2026-09-24 · v3.0 · 실행 증빙 없는 항목은 완료로 판단하지 않습니다.</div></main></div><script>
+const toc=document.getElementById('toc');
+document.getElementById('menu').onclick=()=>{const o=toc.classList.toggle('open');document.getElementById('menu').setAttribute('aria-expanded',String(o));};
+document.getElementById('filter').addEventListener('input',e=>{let q=e.target.value.trim().toLowerCase();toc.querySelectorAll('a').forEach(a=>a.classList.toggle('hidden',!a.textContent.toLowerCase().includes(q)));});
+document.getElementById('print').onclick=()=>window.print();
+toc.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{if(innerWidth<761){toc.classList.remove('open');document.getElementById('menu').setAttribute('aria-expanded','false')}}));
+</script></body></html>

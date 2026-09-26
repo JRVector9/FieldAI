@@ -1,0 +1,13 @@
+.agent-field-connections{min-width:0;overflow-wrap:anywhere}
+.agent-field-connections>ul,.agent-field-connections>ul>li{min-width:0}
+.agent-field-revoke{margin-top:16px;padding-top:14px;border-top:1px solid #dce5ef}
+.agent-field-revoke label{display:flex;align-items:flex-start;gap:9px;min-width:0;font-size:15px;line-height:1.6}
+.agent-field-revoke input[type="checkbox"]{width:19px;height:19px;flex:none;margin-top:3px}
+.agent-field-revoke button{margin-top:12px;min-height:44px}
+.agent-source-mapping{min-width:0;padding:14px;border:1px solid #dce5ef;border-radius:12px;background:#f7fafc}
+.agent-source-mapping p,.agent-service-choice p{font-size:15px;line-height:1.6}
+.agent-source-mapping ul{padding-left:20px}
+.agent-service-choice{min-width:0;padding:12px 0;border-bottom:1px solid #dce5ef}
+.agent-service-choice label{display:flex;align-items:flex-start;gap:9px;min-width:0;font-size:15px;line-height:1.6}
+.agent-service-choice label+label{display:block;margin-top:9px}
+.agent-service-choice select{display:block;width:100%;min-width:0;min-height:44px;margin-top:5px;font-size:16px}

@@ -1,0 +1,24 @@
+{
+  "connection_id": "con_example_001",
+  "source_id": "source_field_example",
+  "source_revision": 11,
+  "published_at": "2026-09-24T09:00:00Z",
+  "content_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "business": {
+    "external_org_id": "field_org_example",
+    "name": "테스트 사업체",
+    "summary": "합성 테스트 데이터입니다."
+  },
+  "services": [
+    {
+      "external_service_id": "field_service_example",
+      "entity_revision": 7,
+      "name": "세탁기 청소",
+      "active": true,
+      "price_mode": "quote",
+      "price_krw": null,
+      "duration_minutes": 90,
+      "booking_mode": "preferred"
+    }
+  ]
+}
