@@ -1,6 +1,16 @@
 # 로컬 기능 검수 현황 — 2026-09-26
 
-**개발 잔여 대조(2026-09-26):** docs/technical/DEVELOPMENT_REMAINING_AUDIT.md에 TASKS46개 인벤토리/확인된 내부6묶음을 기록했다. native widget 종료, 유료 billing, 메시지 발송, 자체 domain, public client write 계약, OAuth/복원 수명 보완이 남는다. 외부 key 부재와 내부 미구현을 구분하며 전체/C03 in_progress. 코드 단계는 eab1d30 커밋/당시 status clean. 이 문서 대조는 테스트 실행/전체160 QA 통과가 아니다. 다음은 widget→billing/발송/주소/public client 구현이다.
+**최신 완료 원장:** TASKS 상단 내부33개[x]/남은7개[ ]를 따른다. A05.WIDGET-END(fe6a524)와 **A07.F09.PLAN-BASIS(b639a4d)**는 완료 범위로 다시 구현하지 않는다. 유료 전체 A07.F09.PAID의 owner 동의/provider·worker/갱신/해지/환불/제공량/UI는 미완료다. 전체 C03/QA160/출시·사용자 최종 시안 인수는 완료가 아니다. 아래 과거 “남음/다음 작업/runtime”은 당시 이력이며 최신 체크/인계가 우선한다.
+
+## 최신 A07.F09.PLAN-BASIS — 코드 b639a4d / 내부 저장 기반 완료
+
+- 제품별 AP69/Field63·billing-routes/billing/billing-period·app 등록·native DB/calendar 검사·package unit 등록. 가격 요청/다른 operator 승인/retire·승인 불변·own 최근100 billing 조회·plan과 consent 경제/약관/제공량 binding·기간 유일/겹침 차단·KST 월말 계산을 완료했다. owner 명시 유료 동의나 결제 성공을 구현/검수했다는 뜻이 아니다.
+- 실제 집중검사: Node24.18.0/own UUID PG17에서 `node /tmp/ap-paid-run-focused-db.mjs`38087 및 Field75037 **각3/3 fail0/skip0 exit0**, /tmp/{ap,field}-paid-period-overlap-green.log. 각각 새 billing1+변경과 관련된 기존 trial2만 실행했다. calendar95519 각1/1, /tmp/{ap,field}-paid-period-final-green.log. root 전체 unit/DB/E2E/QA/G는 미실행이며 이전 AP29/Field30을 합산하지 않는다.
+- 마지막 type60326/21102·lint67398·build63017/63888 exit0. `node tools/check-import-boundaries.mjs` exit0, /tmp/paid-basis-import-boundaries.log. 실제 red consent81570/29885·overlap41766/44669의 missing rejection을 저장 제약으로 수정했다. live test plan 비노출·live 가격 승인503·sandbox admin503은 실제 외부 MFA/가격 gate 미연결 상태다.
+- CLI gpt-6-sol/high 첫87487 P2 consent(raw confidence 미출력) 수정, sandbox 권한 우회 제안은 보안5.3/QA157·후속 인증 지시에 따라 보류했다. 두 번째2765 P2 overlap(raw confidence0.94) 수정. 최종 repair4350 exit0 **No remaining P1/P2 finding in the billing period overlap repair**, raw confidence 미출력. 리뷰는 static이며 실제 DB tests는 위 root 실행 결과다.
+- managed48590 생존 확인/정상 종료exit0 후 **53591** /tmp/paid-basis-managed-runtime.log 양제품build/migrate/ready·독립 retention worker ready·양웹200, 신규 무인증 price API401. 기준 owner/billing/admin/billing HTML을 실제 Chromium320으로 열고 두 prototype 캡처를 직접 확인했다. 이 backend 단계에서 native billing UI/전체 시각·동선 검수는 하지 않았다. checkout503·실 PG/MFA·provider/worker/환불/제공량/UI는 남는다.
+
+## 이력 — 1차 잔여 대조/회수 단계
 
 
 **2026-09-26 AP native 회수 단계 최종:** AP74855 29/29·Field52785 30/30·전체 type/lint57153·최신 lint37774 exit0. 실제 Field 미배포 AP independence53496 exit0(own native 회수/token200→401 포함). 세 번째 review62519 P2 package cwd 문제는 AP 생성/기존 journal 경로 절대화·key/파일 보존으로 보완, actual 설정2/2와 마지막 repair review87113 exit0/추가P1/P2 없음. 리뷰 내부 test는 read-only EPERM 미실행이며 root 설정2/2와 구분한다. mock36780 양 API/웹·retention worker ready/health 실제 확인. 전체/C03/A08는 in_progress. 다음은 전체 문서 기능 대조로 남은 범위 확정이며 위젯/일반 OAuth lifecycle·legacy/Field key·유료 구독 원장/외부 발송 adapter·최종 사용자 화면/실 공급사·운영 QA/G는 완료되지 않았다. 자세한 현재 사실은 docs/CODEX_HANDOFF.md 상단 참조. 아래 누적 기록의 이전 handle/미완료는 당시 이력이다.

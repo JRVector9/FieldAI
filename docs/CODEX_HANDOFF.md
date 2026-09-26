@@ -12,10 +12,52 @@
 
 - 사용자가 **“완료된 작업은 체크하고, 에이전트가 잊고 같은 작업을 다시 하지 않도록 반드시 지켜”**라고 명시했다.
 - 작업 재개 전에 `TASKS.md` 상단 **완료 체크 — 재작업 방지 기준**을 먼저 읽는다. 이 목록이 완료 세부 ID의 기준 원장이다. 상세 규칙은 `AGENTS.md`6.1. 기억 부재/compaction으로 완료 항목을 재구현·검수 반복하지 않는다.
-- 최초 체크 정리는 현재 로그/AP29·Field30/commit/source와 기존 evidence로 로컬 완료31개[x]/잔여8개[ ]를 기록했다. 이후 A05.WIDGET-END(fe6a524) 완료로 현재는32개[x]/잔여7개[ ]이며 아래 최신 단계와 TASKS 원장이 우선한다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다. phase plan에서 이미 구현된 AP native 회수5개가 아직 `[ ]`였던 것을 실제 결과에 맞춰 `[x]`로 수정했다.
+- 최초 체크 정리는 현재 로그/AP29·Field30/commit/source와 기존 evidence로 로컬 완료31개[x]/잔여8개[ ]를 기록했다. 위젯(fe6a524) 완료 당시32개[x]/7개[ ]였고, **A07.F09.PLAN-BASIS(b639a4d)** 추가로 현재 **33개[x]/7개[ ]**다. 아래 최신 단계와 TASKS 원장이 우선한다. 전체 부모Task/QA160/출시를 완료 처리한 것은 아니다. phase plan에서 이미 구현된 AP native 회수5개가 아직 `[ ]`였던 것을 실제 결과에 맞춰 `[x]`로 수정했다.
 - 신규 오류/요구변경/현재상태 불일치가 확인됐을 때만 같은 완료 ID에 재개 사유·증거·추가 범위를 먼저 기록한다. 이전 완료 근거/commit은 삭제하지 않는다.
 - 변경 파일: AGENTS.md·TASKS.md·PHASE_2_EXECUTION_PLAN·DEVELOPMENT_REMAINING_AUDIT·이 인계. 문서 변경으로 서비스 테스트 재실행 없음, diff 체크만 수행. 현재 mock36780 양 ready/생존을 실제 재확인했다.
 - 원래 진행 목표는 계속 전체 v3/C03 로컬 기능이다. 체크 정리 당시 다음은 A05.WIDGET-END였으며 현재 진행 상태는 바로 아래 별도 세부 작업 기록을 따른다.
+
+## 현재 인수인계 — A07.F09.PLAN-BASIS 완료 (2026-09-26)
+
+- **Objective / Task / Product / Owner / State:** 전체 v3/C03 기능과 사용 가능한 로컬 환경 구축은 active/in_progress. 이번은 A07.F09.PLAN-BASIS / AP와 Field 각 자체 소유 경로 / 순차 Coordinator·AP·Field / implemented 및 아래 내부 범위 verified. 직전 goal 턴은 위젯/체크의 progress였고 이번도 실제 코드·검수·런타임·완료 체크의 progress다. main A07.F09.PAID 전체·QA160·출시는 미완료다.
+- **완료/코드 commit:** **b639a4d**, 가격 버전 요청→다른 operator 승인→판매 중지, 승인 불변·제품별 자체 조회, immutable consent/plan snapshot·기간 중복/겹침 차단, 원래 KST 일시를 유지한 월말 계산. TASKS33[x]/7[ ]·paid plan/phase/coverage/audit를 같은 checkpoint에 갱신했다. 이 ID를 기억 부재로 재작업하지 않는다. owner 유료 동의/카드 인증/결제 성공·worker/갱신/해지/유예/환불/제공량/UI는 포함하지 않는다.
+- **Modified paths / requirements:** AP migration69·Field63, 각 src/billing-routes.ts/billing.ts/billing-period.ts·app.ts·test/paid-billing.db.test.ts/billing-period.test.ts·package unit script. TASKS·새 A07_F09_PAID_EXECUTION_PLAN·PHASE_2_EXECUTION_PLAN·LOCAL_FUNCTIONAL_COVERAGE·DEVELOPMENT_REMAINING_AUDIT·이 인계/옵시디언. AP PRD2.8·Field3.8·보안5.4/5.5·QA43~46/113/126/146의 저장 기반 부분이며 해당 QA/G 전체 pass가 아니다. 공개 cross-product 계약/SDK/scopes 변경 없음.
+- **Key decisions:** AP/Field DB/domain/가격/identity/이벤트를 공유하지 않는다. 통합 제안29,000/31,900원을 가격으로 승계/seed하지 않는다. 승인 가격/약관/환불/제공량은 새 불변 버전, `(subscription_id,billing_period)` 유일하며 같은 구독의 `[start,end)` overlap은 DB exclusion으로 거절한다. 기간 상관은 승인 plan과 consent snapshot을 검증한다. 판매 중지는 새 가입만 막고 기존 원장 유지. non-mock admin/MFA와 live 가격 승인 미연결은503/blocked_integration이며 mock 승인을 live 승인으로 바꾸지 않는다. 제공량은 현재 저장만 했으며 사용량 제한 구현은 다음 단계다.
+- **Tests actually run / environment:** Node24.18.0·각 own UUID PG17. focused runners `/tmp/ap-paid-run-focused-db.mjs` **38087**, Field equivalent **75037 exit0 각각3/3 fail0/skip0** (/tmp/{ap,field}-paid-period-overlap-green.log: 새billing1+관련기존trial2). calendar `tsx --test test/billing-period.test.ts` **95519 각1/1** (/tmp/{ap,field}-paid-period-final-green.log). 마지막 API type **60326/21102**, lint **67398**, API build **63017/63888 exit0**, import boundary command exit0(/tmp/paid-basis-import-boundaries.log). 이전 AP29/Field30을 재실행하거나 새 pass 개수에 합산하지 않았다. package unit에 calendar를 등록했지만 root 전체 unit/DB/E2E/security/QA/G는 미실행이다.
+- **Failures / independent review:** 초기 plan404/calendar 부재 red 뒤 구현. review87487 exit0/P2 consent snapshot 불일치(raw confidence 미출력)는 실제81570/29885 missing rejection red→guard/각3green으로 보완. sandbox admin 우회 권고는 보안5.3/QA157·사용자 인증 후속 지시에 따라 미반영했으며 두 번째2765도 이를 정상 미연결 의존성으로 확인했다. 2765 exit0/P2 overlap(raw confidence0.94)은41766/44669 red→Exclusion/위38087·75037 green으로 보완. 최종 gpt-6-sol/high **4350 exit0**, /tmp/paid-period-overlap-repair-review.log: **No remaining P1/P2 finding in the billing period overlap repair** (raw confidence 미출력). 리뷰 자체는 static·DB tests 미실행이며 root 검수와 구분한다. 리뷰 안의 /dev/fd diff EPERM은 Python 정규화 static 비교로 대체했다.
+- **Current environment / schema:** 확인된48590 정상 종료exit0 뒤 **managed53591**, /tmp/paid-basis-managed-runtime.log. 양제품build/migrate/API ready·양웹200·독립 retention worker ready. 현재 AP http://localhost:3001/workspace / Field http://localhost:3002/workspace. 신규 price API 무인증401, 실제 own managed DB에서 AP000069/Field000063 적용과 기간 unique/exclusion을 조회했다(/tmp/paid-basis-managed-schema-check.log). 이제69/63은 적용/커밋됐으므로 수정하지 않고 추가 schema는 **AP70/Field64**로 만든다. Field 제작 모델 미설정은 blocked_integration 유지. observation timeout으로 중복 기동하지 않는다.
+- **Reference / not tested:** owner/billing/admin/billing 기준 HTML을 실제 Chromium320으로 열고 /tmp/ap-paid-{owner,admin}-prototype-320.png를 직접 확인했다. 이번 backend 기반에는 native billing UI를 추가하지 않았고 전체 시각/동선/실기기·사용자 최종 테스트는 미완료다. 실 Toss 호출/카드 청구/메시지/운영 삭제/외부 배포 없음. 시험 DB/fixture는 자기 UUID만 정리했다. 실제 가격/세금/법무/MFA/PG 계약·키와 G-A1/F3/L1은 별도 외부 승인이다.
+- **Next dependency / rollback:** 남은 A07.F09.PAID의 **owner 명시 동의→제품별 Toss port/인증/거래 worker→동일 주문 unknown 복구·갱신/해지→환불/제공량→시안 UI** 순서로 계속한다. 가격 기반·trial/usage/위젯/보존/회수를 다시 만들지 않는다. 미래 결제 결과는 원격 주문/금액/통화/MID 확인 후에만 반영하며 현재 checkout503을 fake paid로 바꾸지 않는다. 승인 원장/기존 기록을 삭제·변조하는 rollback은 하지 않는다. 같은 product 내부 보완 schema는 새 migration으로 추가한다.
+
+### 다음 에이전트의 정확한 명령 — 저장 기반은 완료 범위
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+sed -n '1,82p' TASKS.md
+sed -n '1,72p' docs/CODEX_HANDOFF.md
+git status --short
+git log -2 --oneline
+cat docs/technical/A07_F09_PAID_EXECUTION_PLAN.md
+cat apps/agent-api/src/subscription.ts
+cat apps/agent-api/src/billing-routes.ts
+cat apps/field-api/src/billing-routes.ts
+rg -n 'BusinessRuntime|resolveUserId|createAgentApp|createFieldApp' apps/agent-api/src/business.ts apps/field-api/src/business.ts apps/agent-api/src/server.ts apps/field-api/src/server.ts
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+새 owner 동의/provider 범위·관련QA·파일·명령을 plan에 기록하고 그 행동의 native 실패부터 구현한다. 이미 끝난 가격/월말/위젯 검수를 무관하게 다시 실행하지 않는다. 필요한 새 native paid 검사는 위 own UUID focused runner로 실행하고 실 PG는 연결 전 blocked 상태를 유지한다. 현재53591을 확인해 유지하고 최신 build가 필요한 경우에만 정상 종료/기동한다. 아래 착수/이전 환경은 당시 이력이다.
+
+## 이력 — A07.F09.PAID 착수 (2026-09-26)
+
+- 목표는 전체 v3/C03 로컬 기능이며 active다. 이전 턴은 위젯 fe6a524와 완료 체크0802a23의 실제 progress였고, 현재 작업 시작 전 TASKS 완료32개/미완료7개·git status clean·HEAD0802a23을 확인했다. 새 미완료 A07.F09.PAID만 선택했다.
+- 실행 계획: docs/technical/A07_F09_PAID_EXECUTION_PLAN.md 및 phase 마지막 착수 범위. 먼저 제품별 가격/동의/기간 원장·native API, 다음 provider/worker·갱신/해지/미상·환불/제공량·시안 UI. v3 승인 범위대로 순차 실행하며 완료된 trial/usage/위젯/보존/회수를 다시 구현하지 않는다.
+- 시안 owner/billing/admin/billing을 실제 Chromium320으로 열고 /tmp/ap-paid-owner-prototype-320.png /tmp/ap-paid-admin-prototype-320.png를 직접 확인했다. 통합 제안금액을 최종 가격으로 승계하지 않는다. 공식 Toss API/멱등 header를 조회했지만 실 공급사 호출/결제는 미실행이다.
+- 현재 부분 구현: AP69/Field63의 제품별 plan/subscription/consent/period/transaction/authorization/credential/request/event schema와 각 billing-routes/billing/billing-period·app 등록·DB/calendar 검사. plan 요청/다른 operator 승인/판매 중지·승인 불변/동일 key409·월말 원래 KST 기준일·own 최근100 billing 조회만 실제 연결했다. owner 유료 동의/PG/worker/환불/제공량/UI는 아직 미구현이며 A07.F09.PAID 전체를 체크하지 않는다. live 가격 승인은 미구현 MFA/운영 승인 대신 mock 승인하지 않고503으로 남긴다.
+- 실제 검사: AP53054/month calculator 부재 red→1/1(/tmp/ap-paid-period-green.log), native24059 plan404 red→최종77913 exit0 3/3(/tmp/ap-paid-basis-final-db.log: 새1+기존관련trial2). Field native10713 plan404 red→최종45417 exit0 3/3(/tmp/field-paid-basis-final-db.log), calendar red→1/1(/tmp/field-paid-period-green.log). 모두 own UUID PG17 DB/명시 합성 fixture이며 생성한 DB만 정리했다. 원장 중복/변조·test plan live 노출 차단·live 승인503·가격 retire 뒤 기존period 보존, provider 부재 checkout503/구독0을 확인했다. 아직 유료 동의를 검수했다고 주장하지 않는다.
+- 추가 실제 수정/검수: 독립87487 exit0의 P2 동의/승인 plan 불일치를 AP81570/Field29885 실제 red로 확인한 뒤 consent_guard로 승인/판매 가능·subscription/금액/세금/약관/환불/제공량/유예 snapshot binding을 보완했다. green11231/83629 각3/3. non-mock admin은 실제 MFA 미연결(보안5.3·QA157·AUTH.LIVE)로503을 유지하며 sandbox 우회 권고는 반영하지 않았다. 후속2765 exit0의 P2 기간 overlap(raw confidence0.94)은41766/44669 red→각 자체 btree_gist exclusion으로 **38087/75037 exit0 각3/3**, /tmp/{ap,field}-paid-period-overlap-green.log. 겹침23P01·인접 기간 허용·기존 consent 변조 거절을 실제 확인했다. 이 검수는 기존 완료 기능 전체 재실행이 아니다.
+- 빌드/타입 당시 기록: basis build63017/63888·repair type92001/99292·lint76003 exit0. 최종 static calendar95519 exit0 각1/1, /tmp/{ap,field}-paid-period-final-green.log. 제품 경계 명령 exit0(/tmp/paid-basis-import-boundaries.log). package unit 계약에 calendar를 등록했으며 루트 전체 unit는 실행하지 않았다. 후속 최종 type60326/21102·lint67398·repair4350도 exit0로 완료했고 현재 완료 기록은 위를 따른다.
+- 현재 리뷰/환경: gpt-6-sol/high overlap repair4350(/tmp/paid-period-overlap-repair-review.log) 진행 중. 코드 기준0802a23 이후 미커밋이며 실제 live/API 돈 청구는 없다. managed48590은 실제 생존/양ready를 재확인했고 이전 위젯 코드로 계속 실행 중이다. 새69/63은 managed DB에 아직 적용하지 않았다. 이번 추가 migration은 격리 UUID fixture에만 적용/정리한 새 미커밋 파일이며 기존 적용 migration은 변경하지 않았다. 남은 concrete issue→**A07.F09.PLAN-BASIS만 완료 체크/commit**→provider/worker·owner 동의 단계로 계속한다. main A07.F09.PAID 전체는[ ] 유지. 과거 검사나 managed handle을 timeout만으로 중복 시작하지 않는다.
 
 ## 현재 인수인계 — A05.WIDGET-END 완료 (2026-09-26)
 

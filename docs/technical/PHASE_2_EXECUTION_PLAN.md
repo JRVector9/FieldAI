@@ -1919,3 +1919,18 @@ AP와 Field의 독립 웹 앱에서 문서의 역할별 화면·이동 경로·�
 - 두 번째 리뷰46246 exit0의 P2: implicit embed start가 provider/일 한도 미설정일 때 종료 원본 확인보다 먼저503을 반환한다. 추가 범위는 A05.WIDGET-END의 상태 우선순위뿐이다. 동일 종료 fixture에서 provider undefined/한도0의410을 먼저 재현하고 session/종료 확인 뒤 기존 gate를 적용한다. 실 LLM 연결이나 이전 adapter 재구현은 하지 않는다.
 - 단계 완료 실제 근거: 위 우선순위503 red58484→DB79104 exit0 2/2(/tmp/ap-widget-end-gate-priority-green.log), final API type14816/lint45013 exit0. 마지막 UI 변경 뒤 browser6355 2/2·build72657/type70754/lint29628 exit0는 위 기록 그대로다. 별도 CLI gpt-6-sol/high repair16296 exit0(/tmp/ap-widget-end-gate-repair-review.log): No concrete remaining P1/P2 findings, 리뷰 자체 테스트 미실행/수정 없음. raw confidence 미출력. runtime32741 정상 종료exit0→48590 최종 양제품build/ready·양웹200, Field 제작 모델 미설정 blocked_integration 유지. 코드 commit fe6a524, 완료 체크/인계/coverage/audit/옵시디언을 같은 단계에 기록한다. 다음 미완료 세부는 A07.F09.PAID다. 이전 red/진행중 기록은 당시 이력이며 재작업 지시가 아니다.
 - 검수: 기존 실제 정리 fixture에서 implicit 종료 start410·hand-off410/no ticket·활성/다른 ID restart409·새 ID/현재 대조·retry 추가생성0을 실제 red→green. 변경한 AP native test 파일만 별도 UUID PG17 DB에서 실행하고 type/lint/build·좁은320px renderer 분기/응답 유실/늦은 결과를 확인한다. 무관한 Field 전체검사/기존 이미완료 보존 복원·전체 E2E를 반복하지 않는다. 사용자 최종 테스트는 후속이다.
+
+### A07.F09.PAID — 독립 유료 구독 착수 (2026-09-26, in_progress)
+
+- TASKS 완료32/미완료7 원장을 읽고 A07.F09.PAID만 선택했다. 코드 기준0802a23/status clean. trial/usage/위젯/보존·회수 완료 항목은 재개하지 않는다.
+- 전체 실행/파일/QA/명령/완료 체크: `docs/technical/A07_F09_PAID_EXECUTION_PLAN.md`. AP PRD2.8·Field3.8·보안5.4/5.5·QA43~46/113/126/146 로컬 부분. 가격/약관 승인·실 공급사/출시 gate는 후속이다.
+- 1차 코드 범위: AP69/Field63 migration, 각 billing/period/routes·subscription·app/business·paid-billing DB/calendar 검사. 먼저 AP native plan404/calendar 부재를 실제 red로 실행한다. 다음 provider/worker·환불/제공량·owner/admin UI를 같은 전체 목표로 이어간다.
+- 시안 owner/billing/admin/billing을 file:// Chromium320으로 실제 열어 /tmp/ap-paid-{owner,admin}-prototype-320.png 직접 확인했다. 기존 통합29,000/31,900원 가격은 승계하지 않는다.
+- 설계 기준: 제품별 불변 승인 plan·명시 동의·(subscription,period) 유일 거래·월말 원래 기준일. unknown은 같은 거래 조회로 대조하고 새 청구/가짜 성공으로 해결하지 않는다.
+- [ ] 전체 원장/기간/owner 동의 native API, [ ] provider/worker·갱신/해지/미상, [ ] 환불/제공량/cleanup 제한, [ ] 시안 owner/admin UI. 아래 PLAN-BASIS 완료 부분은 유지하고 남은 owner 동의/provider부터 이어간다.
+
+- 1차 구현 당시 이력: AP69/Field63 native plan 요청/다른 운영자 승인/retire·승인 불변, own billing 최근100 조회와 schema 기간 유일/동의 binding·원래 KST 월말 계산. AP77913 3/3/Field45417 3/3(각 새1+관련기존trial2)·제품별 calendar1/1 통과. API type78751/35863·lint41444도 실제 exit0. 당시 review87487의 P2 consent binding을 다음 기록대로 보완했다. 유료 owner 동의/PG/worker/환불/제공량/UI 미구현이며 위 전체 Paid 체크박스는[ ]로 유지한다.
+
+- [x] **A07.F09.PLAN-BASIS / b639a4d:** AP69/Field63·각 billing/period/routes·app·package unit 등록·native DB/calendar 저장 기반. 다른 운영자 승인·가격 불변·판매 중지·own 조회·consent/plan snapshot binding·기간 유일/overlap23P01·인접 허용·원래 KST 월말까지 완료했다. 기존 완료 trial/usage/위젯/보존/회수를 재개한 것이 아니다.
+- 실제 red/green: consent81570/29885 missing rejection→11231/83629 각3/3, overlap41766/44669 missing rejection→**38087/75037 각3/3 fail0/skip0** /tmp/{ap,field}-paid-period-overlap-green.log. calendar95519 각1/1, API 최종 type60326/21102·lint67398·build63017/63888 exit0, 직접 import 경계 exit0. gpt-6-sol/high review87487 P2 consent/raw confidence 미출력은 반영, sandbox admin은 추가 인증 미연결 의존성이므로 우회하지 않았다. repair2765 P2 overlap/raw confidence0.94는 실제 red→제약으로 반영, 최종 narrow repair4350 exit0/남은P1/P2 없음(raw confidence 미출력). 리뷰는 static이며 DB 검사는 root가 실행했다.
+- 환경/완료 체크: 확인된48590 정상 종료exit0→**53591** /tmp/paid-basis-managed-runtime.log 최신 양제품build/migrate/ready·양웹200·독립 retention worker ready. 새 price API 무인증401로 등록 확인. 아직 owner 동의/유료 checkout503·실 PG/MFA·worker/환불/제공량/UI는 미완료. TASKS33[x]/7[ ]·plan/coverage/audit/인계·옵시디언을 같은 checkpoint에 갱신한다. managed에 적용한69/63을 앞으로 수정하지 않고 schema 추가는70/64로 한다.
