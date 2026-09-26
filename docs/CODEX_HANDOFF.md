@@ -7,6 +7,41 @@
 - 화면·기능 구현 중에도 해당 역할의 시안을 수시로 다시 확인한다. 경로 기록만으로 시안을 확인했다고 보고하지 말고, 실제 열어 본 화면과 비교 범위를 작업 기록에 남긴다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03/F09 Field 권한 회수·격리 복원 (2026-09-26)
+
+- **현재 목표/상태:** 전체 v3.0/C03 기능을 실제 사용할 수 있는 독립 AP/Field 로컬 환경으로 끝까지 연결한다. e28229f 이후 이번 회수/복원 단계는 progress다. **전용 route key 수명·legacy 회수 baseline·신뢰 checkpoint/원장 동시 rollback·삭제 원장 전체 누락/운영 복구, AP 자체 보존·전체 PRD/역할/QA/G·사용자 최종 시각/동선·실 공급사는 남아 C03/F09/전체 목표 in_progress**다. 커밋은 `git log -1 --oneline`으로 확인한다. 상단 시안 경로를 유지한다.
+- **범위/수정 파일:** 보안5.5·Field PRD3.6~3.9·QA47/150/151/153/157의 로컬 부분. 새 Field migration000061, `src/revocation-{journal,restore,restore-cli,checkpoint-cli}.ts`, `test/revocation-restore.db.test.ts`. 기존 Field app/business/ap-connector/integrator-routes/ap-connection-revoke-receiver·AP 연결 DB 검사/API package, mock env·격리 DB runner/.gitignore, phase plan/TASKS/DEVELOPMENT_STATUS/LOCAL_FUNCTIONAL_COVERAGE/LOCAL_BACKUP_RUNBOOK/이 인계. AP domain/DB/공개 계약·UI 코드 변경 없음.
+- **완료/설계:** native owner 연결/선택 회수와 인증된 AP 서명 회수 수신 3경로는 대상 lock/권한 검증 후 Field 서명/fsync 원장을 먼저 쓰고 DB를 commit한다. 기록 실패는503이며 성공이 아니다. commit 미확인 의도도 복원에서는 보수적으로 회수한다. 성공 반복은 같은 DB 회수 ID/결과를 돌려주며 원장 추가가 없다. Field 전용 directory/key는 mock setup에 추가됐고 값은 출력/커밋하지 않았다. DB suite는 별도 임시 원장/키를 사용한다. 원문/연락처/토큰/route key가 journal에 들어가지 않는다.
+- **DB/키 결정:** 회수 AP access/refresh ciphertext는 null이 되고 revoked 연결/selection/token의 재활성화를 거절한다. 새 token INSERT의 selection share lock으로 발급 미commit 행을 회수 쿼리에서 빠뜨리는 실제 경합을 막는다. provider의 이미 회수된 token timestamp 갱신은 최초 값으로 유지한다. event route key는 durable 원격 회수/서명 ACK 재시도용으로 유지하며 일반 AP 조회/도구에서는 revoked 연결을 차단한다. **전용 키의 종료 수명/legacy baseline은 미완료**다. migration61은 현재 mock에 적용됐으므로 이후 SQL 변경은 새 migration으로 한다. 회수 비밀값을 롤백으로 되살리지 않는다.
+- **복원/완전성:** 원장 밖의 최신 quiesced checkpoint에 전체 entry ID/내용 hash를 별도 서명해 보관한다. missing/tampered/추가 미대조 entry·없는 전체 directory·실제 AP namespace 혼합·조직/선택 binding 오류는 전체 변경 전에 실패하거나 transaction rollback한다. 별도 Field DB/로컬 mock binding만 허용하고 active DB 이름의 localhost/URL escape 별칭을 거절한다. native 선택/access/refresh/동의·연결/설치 차단, 수신 회수 ID/중복 ACK와 백업 후 outbound 의도의 blocked 재대조 상태를 복원한다. 새 remote ACK/자동 네트워크 발송은 만들지 않는다. 기존 업무/고객 key/예약·구독을 보존한다. 기존 삭제 replay와 회수 replay를 모두 수행해야 한다. checkpoint+원장 동시 과거 교체, legacy 회수 누락, 운영 보관 공급사/RPO/RTO를 인증하지 않는다.
+- **실제 검수:** 최종 `pnpm test:db:field` **8959 30/30**(`/tmp/field-revocation-complete-db.log`), 임시 test/restore DB·원장 제거. 실제 해제 전 PG17 dump/restore→기존 bearer200→checkpoint export/restore CLI→401·refresh/동의 제거·ciphertext null·재활성화 거절·원문/확인키 유지·반복0, 서명/누락/미대조/whole directory/AP namespace/binding rollback·active alias/잘못된 port 거절·수신 ACK·outbound blocked를 확인했다. outbound restore 의도 한 건은 합성 journal fixture이며 native outgoing revoke/retry는 기존 실제 연결 DB/HTTP 검사에서 확인했다. 최종 전체 typecheck **52968**, lint **45964**, Field build **73538 exit0**(`/tmp/field-revocation-complete-{type,lint,build}.log`), diff check exit0.
+- **실제 HTTP/시안:** 새 mock **21041** 양제품 API/웹 build/ready·Field retention worker ready. 양제품 native HTTP/320px **12875 1/1**(`/tmp/field-revocation-http-verified.log`): SDK/원문/답변·동의/1회 handoff·기존 업무/예약/고객 알림과 명시 회수/원격 장애 durable retry·AP 시작 회수를 확인했다. 첫9294는 실행 중 event worker flag 누락으로 수동 delivery가 empty였고 실패했으며 `FIELD_EVENT_WORKERS_RUNNING=1`로 기존 자동 처리 검사를 실행했다. 기준 HTML admin/audit를 Chromium320으로 열고 `/tmp/field-revocation-prototype-320.png`를 실제 열었다. 사용자 최종 UI/동선 인수와 전체 AP DB/표준 E2E/security/independence/공급사 QA/G는 이번 변경으로 미실행이다.
+- **실패 접근:** 최초35414는 회수 뒤 ciphertext Buffer vsnull red. 새 fixture44717의 catalog_drafts 부재409를 native 초기 초안으로 고쳤다.64485 journal 실패200 vs503 red→기록 연결.14109는 새 fixture의 불필요한 outgoing pending을 기존 전역 worker가 집은 충돌→fixture route 제거.26076 늦은 token 경합 red→share lock.47445는 agent namespace 가정을 실제 ap로 수정했다.31325 local port CLI guard,95693 수신 ID,36876 outbound intent 복원 부재를 실제 red→green으로 고쳤다. journal 전역 lock을 대상 lock 뒤에 잡는 방식은 selection/connection 간 역순 대기를 만들 수 있어 사용하지 않고 UUID별 파일 원자 교체/native 대상 lock을 사용한다. 예상값을 버그에 맞춰 낮추지 않았다.
+- **현재 환경:** 54477 생존 확인 후 새 빌드 반영을 위해 Ctrl+C/exit1 정상 종료했고 현재 **21041**(`/tmp/field-revocation-native-runtime.log`)만 유지한다. AP http://localhost:3001/workspace, Field http://localhost:3002/workspace. 양 API ready를 마지막에 실제 확인했다. 제작 LLM은 model 미설정 blocked_integration. 합성 테스트 회수/복원만 실행했으며 실 사용자 회수·운영 자료 삭제/배포·청구·발송 없음. 최신 restore-only 변경은 Field build73538에 반영했고 API 경로는 HTTP12875 검수 때와 같다.
+- **남은 동일 단계/다음 의존성:** Field 전용 event route key 종료 수명·legacy 회수 baseline·삭제 원장의 전체 ID/hash checkpoint/유실·미확인 결과 대조를 조사하고 native 동작/복원 증빙까지 연결한다. checkpoint/원장 동시 과거 교체·운영 보관/실 복구 게이트는 별도다. 이후 AP 익명30/업무180/사진90의 AP 자체 정책·종결/hold/정리·독립 worker·복원과 전체 PRD/역할/QA/G를 요구별로 대조한다. 전체 기능 목표를 회수 subset으로 축소하지 않는다. 외부 credential 없음은 계속 가능한 내부 작업의 중단 사유가 아니다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -2 --oneline
+sed -n '1,40p' docs/CODEX_HANDOFF.md
+cat docs/technical/LOCAL_BACKUP_RUNBOOK.md
+cat apps/field-api/src/retention-journal.ts
+cat apps/field-api/src/retention-restore-cli.ts
+cat apps/field-api/src/revocation-journal.ts
+cat apps/field-api/src/ap-connection-revoke.ts
+rg -n 'event_secret_cipher|event_key_id|revoked|retention' apps/field-api/src/ap-connection-revoke-receiver.ts apps/field-api/migrations
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+pnpm test:db:field
+pnpm typecheck
+pnpm lint
+# 21041이 실행 중인 현재 환경에서 관련 연동 HTTP 검수 명령:
+FIELD_EVENT_WORKERS_RUNNING=1 FIELD_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python FIELD_DISTRIBUTION_BROWSER_PYTHON=/tmp/fieldai-ui-venv/bin/python node --test tools/spikes/ap-field-connection-http.test.mjs
+```
+
+확인된 runtime21041을 유지한다. 관찰 timeout만으로 재기동하지 않는다. CLI export는 쓰기를 중단한 독립 journal에서만 실행하며 신뢰 checkpoint 자체를 DB 과거 백업으로 대체하지 않는다. 시안은 인계 상단에 계속 보존한다.
+
 ## 최신 인수인계 — C03/F09 Field 정리 실행·독립 worker·삭제 원장 재적용 (2026-09-26)
 
 - **현재 목표/상태:** 전체 v3.0/C03 기능을 실제 사용할 수 있는 독립 AP/Field 로컬 환경으로 끝까지 연결한다. `c87f14f` 이후 이번 구현은 progress이며 **revoke 원장/전체 원장 유실·운영 복원·AP 보존/전체 PRD·QA·G/사용자 최종 시각·동선은 남아 전체 목표/F09/C03은 in_progress**다. 커밋은 `git log -1 --oneline`으로 확인한다.

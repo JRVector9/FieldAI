@@ -30,6 +30,7 @@ import { registerFieldCustomerSupportRoutes } from './customer-support.js';
 import { registerFieldRetentionRoutes } from './retention-routes.js';
 import { registerFieldRetentionPurgeRoutes } from './retention-purge-routes.js';
 import { registerFieldRetentionConsumers } from './retention-consumers.js';
+import { fieldRevocationJournalFromEnvironment } from './revocation-journal.js';
 
 export function createFieldApp(
   probe: () => Promise<void>,
@@ -41,6 +42,7 @@ export function createFieldApp(
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 8 * 1024 * 1024 },
     (_request, body, done) => done(null, body));
   if (businessRuntime) {
+    businessRuntime = { ...businessRuntime, revocationJournal: businessRuntime.revocationJournal ?? fieldRevocationJournalFromEnvironment() };
     registerFieldAdminRoutes(app, businessRuntime);
     registerFieldModerationRoutes(app, businessRuntime);
     registerFieldCustomerSupportRoutes(app, businessRuntime);

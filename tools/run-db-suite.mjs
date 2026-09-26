@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { readdirSync } from 'node:fs';
+import { readdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from 'pg';
@@ -53,6 +54,11 @@ async function runIsolatedSuite() {
   const admin = new Client({ connectionString: adminUrl.toString() });
   await admin.connect();
   let created = false;
+  const revocationRoot = product === 'field' ? mkdtempSync(resolve(tmpdir(), 'field-suite-revocations-')) : null;
+  if (revocationRoot) {
+    env.FIELD_REVOCATION_JOURNAL_DIRECTORY = revocationRoot;
+    env.FIELD_REVOCATION_JOURNAL_SECRET = `synthetic-${randomUUID()}-${randomUUID()}`;
+  }
   try {
     await admin.query(`create database "${database}"`);
     created = true;
@@ -61,6 +67,7 @@ async function runIsolatedSuite() {
     process.stdout.write(`${product}: isolated test database ${database}\n`);
     runSuite();
   } finally {
+    if (revocationRoot) rmSync(revocationRoot, { recursive: true, force: true });
     try {
       if (created) {
         await admin.query(`drop database "${database}" with (force)`);

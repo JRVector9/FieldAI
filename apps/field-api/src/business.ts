@@ -6,6 +6,7 @@ import type { FieldSiteGenerator } from './field-openai.js';
 import type { FieldSiteMediaStore } from './site-media.js';
 import type { ApConnectorConfig } from './ap-connector.js';
 import { rejectExpiredTrial } from './trial-access.js';
+import type { FieldRevocationJournal } from './revocation-journal.js';
 
 export type FieldBusinessRuntime = {
   pool: Pool;
@@ -16,6 +17,7 @@ export type FieldBusinessRuntime = {
   siteMedia?: FieldSiteMediaStore;
   inquiryMedia?: FieldSiteMediaStore;
   apConnector?: ApConnectorConfig;
+  revocationJournal?: Pick<FieldRevocationJournal, 'append'>;
 };
 
 type Service = {

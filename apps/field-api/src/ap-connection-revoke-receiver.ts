@@ -2,6 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
 import { unsealApEventSecret } from './integrator-routes.js';
+import { recordFieldRevocation } from './revocation-journal.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -53,6 +54,9 @@ export function registerApConnectionRevokeReceiver(app: FastifyInstance, runtime
         await db.query('rollback'); return reply.code(409).send({ error: 'revocation_id_conflict' });
       }
       if (!prior.rows[0]) {
+        await recordFieldRevocation(runtime.revocationJournal, { targetKind: 'connection', targetId: connectionId,
+          organizationId: connection.organization_id, selectionId: connection.field_grant_id && uuid.test(connection.field_grant_id) ? connection.field_grant_id : null,
+          source: 'remote', revocationId });
         await db.query(`insert into field.ap_received_connection_revocations(id,connection_id)
           values ($1,$2)`, [revocationId, connectionId]);
         await db.query(`update field.ap_connections set status = 'revoked',updated_at = now()

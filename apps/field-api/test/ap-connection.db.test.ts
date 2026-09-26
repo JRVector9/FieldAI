@@ -472,6 +472,10 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
     assert.equal(revokedConnection.statusCode, 200, revokedConnection.body);
     assert.equal(revokedConnection.json().localStatus, 'revoked');
     assert.equal(revokedConnection.json().remoteState, 'pending');
+    const discardedTokens = (await pool.query(`select access_token_cipher,refresh_token_cipher
+      from field.ap_connections where id=$1`, [connectionId])).rows[0];
+    assert.equal(discardedTokens.access_token_cipher, null);
+    assert.equal(discardedTokens.refresh_token_cipher, null);
     assert.equal((await app.inject({ url: conversationUrl, headers: ownerHeaders })).statusCode, 409);
     assert.equal((await pool.query(`select count(*)::integer as count from field.external_work_requests
       where id = $1`, [externalId])).rows[0]?.count, 1);

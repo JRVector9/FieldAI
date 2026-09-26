@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
+import { recordFieldRevocation } from './revocation-journal.js';
 
 export type ApConnectorConfig = {
   issuer: string;
@@ -320,6 +321,10 @@ export function registerApConnectorRoutes(app: FastifyInstance, runtime: FieldBu
         await db.query('rollback'); return reply.code(404).send({ error: 'connection_not_found' });
       }
       if (connection.status !== 'revoked') {
+        const revocationId = connection.event_key_id && connection.event_secret_cipher ? randomUUID() : null;
+        await recordFieldRevocation(runtime.revocationJournal, { targetKind: 'connection', targetId: connection.id,
+          organizationId: connection.organization_id, selectionId: connection.field_grant_id && uuid.test(connection.field_grant_id) ? connection.field_grant_id : null,
+          source: 'owner', revocationId });
         await db.query(`update field.ap_connections set status = 'revoked',updated_at = now()
           where id = $1`, [connection.id]);
         await db.query(`update field.site_ap_installations set status = 'paused',updated_at = now()
@@ -337,7 +342,7 @@ export function registerApConnectorRoutes(app: FastifyInstance, runtime: FieldBu
         if (connection.event_key_id && connection.event_secret_cipher) {
           await db.query(`insert into field.ap_connection_revocations(id,connection_id)
             values ($1,$2) on conflict (connection_id) do nothing`,
-          [randomUUID(), connection.id]);
+          [revocationId, connection.id]);
         }
         await db.query(`insert into field.outbox(id,organization_id,event_type,aggregate_id,payload)
           values ($1,$2,'field.ap_connection.revoked',$3,$4::jsonb)`,

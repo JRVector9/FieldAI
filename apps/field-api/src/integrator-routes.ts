@@ -4,6 +4,7 @@ import type { FieldBusinessRuntime } from './business.js';
 import { fieldIntegratorGrant } from './integrator-auth.js';
 import { inspectStoredApGrant, refreshStoredApGrant } from './ap-connector.js';
 import { integratorAvailability } from './bookings.js';
+import { recordFieldRevocation } from './revocation-journal.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const allowedScopes = new Set(['field.facts.read', 'field.availability.read',
@@ -134,12 +135,15 @@ export function registerFieldIntegratorRoutes(app: FastifyInstance, runtime: Fie
     const db = await runtime.pool.connect();
     try {
       await db.query('begin');
-      const selected = await db.query<{ organization_id: string }>(
-        `select s.organization_id from field.oauth_selections s
+      const selected = await db.query<{ organization_id: string; revoked_at: Date | null }>(
+        `select s.organization_id,s.revoked_at from field.oauth_selections s
          join field.memberships m on m.organization_id = s.organization_id
          where s.id = $1 and s.actor_user_id = $2 and m.user_id = $2 and m.role = 'owner'
          for update of s`, [request.params.id, actor.userId]);
       if (!selected.rows[0]) { await db.query('rollback'); return reply.code(404).send({ error: 'selection_not_found' }); }
+      if (!selected.rows[0].revoked_at) await recordFieldRevocation(runtime.revocationJournal, {
+        targetKind: 'selection', targetId: request.params.id, organizationId: selected.rows[0].organization_id,
+        selectionId: request.params.id, source: 'owner', revocationId: null });
       const changed = await db.query(
         'update field.oauth_selections set revoked_at = now() where id = $1 and revoked_at is null returning id',
         [request.params.id]);

@@ -1,5 +1,18 @@
 # 2단계 실행 계획 — 제품별 화면 우선
 
+### C03/F09 Field 권한 회수·격리 복원 — 2026-09-26 작업 시작
+
+- 현재 결과: native 3경로의 사전 서명/fsync 기록·503 rollback, migration61의 AP ciphertext null/재활성화 거절·늦은 token 회수 경합, 별도 checkpoint/격리 복원 CLI·전체 검증/transaction·수신 ID/원격 재대조 blocked 상태를 구현했다. 최종 Field DB8959 30/30, 실제 PG17 dump/restore·CLI/누락/변조/전체 디렉터리 없음/미대조/실제 AP namespace/binding rollback·원문/확인키 보존·반복0, type52968/lint45964/build73538 exit0. native mock21041 HTTP/320px12875 1/1. 전체 운영 복구/C03 완료는 아니다.
+- 실패/수정: Buffer null 단언35414 red→보존 비밀값 폐기. 첫 새 fixture44717은 catalog_drafts가 없어409였고 초기 초안을 실제 native 모델로 마련했다. 64485 원장 실패200 vs503 red→native 기록 연결. 14109는 별도 fixture의 outgoing pending을 기존 전역 worker가 집어 blocked가 되어 테스트 fixture의 불필요한 outgoing route를 제거했다. 26076 늦은 token/회수 true vsfalse red→parent selection share lock. 47445는 초기 namespace 가정 agent와 실제 AP ap의 차이로 Missing rejection→실제 ap 차단. 31325 잘못된 local port CLI red→로컬 Field DB binding 제한. 95693 수신 receipt 부재,36876 원격 pending 복원 부재 red→ID/blocked 복원. HTTP9294는 live worker flag 누락→올바른 기존 자동 worker 모드12875로 통과했다.
+
+- Task/Product/Owner: C03/F09 / Field / 순차 실행, in_progress. 전체 기능 목표를 유지하며 이번에는 연결/선택 권한 회수의 독립 기록과 복원 재적용을 연결한다.
+- 요구/QA/Gate: Field PRD3.6~3.9, 보안5.5의 백업 후 revoke 재적용·연결 비밀값 사용 차단/폐기, QA47/150/151/153/157. 공급사 인증·운영 MFA·실 복구 게이트는 별도 미완료다.
+- 범위: 새 migration61(회수 후 토큰 ciphertext null 및 재활성화 금지, 복원 감사), Field revocation-journal/restore/CLI와 native revoke 3경로, business runtime/API package, mock 환경·격리 DB suite, 기존 AP 연결 DB 검사와 새 Field 회수 DB 검사, 인계/복원 runbook/진행 문서. AP DB/domain·공개 HTTP 계약·예약/업무 원본은 변경하지 않는다.
+- 설계: 권한 검증·대상 row lock 후 회수 의도를 Field 전용 서명/fsync 원장에 먼저 기록하고 DB 차단/토큰 폐기와 같은 트랜잭션을 완료한다. 원장 실패는 503이며 성공을 표시하지 않는다. commit 결과 미상도 회수 기록을 재적용하는 보수적인 복구를 사용한다. event route key는 기존 durable 원격 회수/서명 ACK 재시도용으로만 유지하며 일반 AP access/refresh ciphertext를 즉시 비운다. 그 전용 키의 종료 수명은 별도 후속 검수로 남긴다.
+- 복원: 별도 Field DB만 허용하며 AP 스키마가 있으면 거부한다. 신뢰 경로에 따로 보관한 최신 서명 checkpoint에 기록된 ID/내용 해시와 원장 전체를 일치 검증한 뒤 native 선택·토큰·연결·설치 차단과 감사 재적용을 수행한다. 누락/변조/추가 미대조 기록은 변경 전 실패한다. 기존 예약/고객 경로·구독은 보존한다. checkpoint 자체와 원장을 함께 과거로 바꾸는 공격/운영 보관 공급사 검수는 로컬 성공으로 인증하지 않는다. 기존 삭제 원장 전체 누락 검수는 다음 필수 작업이다.
+- 검수 순서/명령: 기존 실제 연결 해제 후 ciphertext null 단언을 먼저 red 확인 → 새 회수/실패/격리 복원 검사 → `pnpm test:db:field`(별도 PG17 DB), `pnpm typecheck`, `pnpm lint`, `pnpm build:field`, 확인된 mock 프로세스 정상 재기동/양 API ready·기존 연동 HTTP 검사. 사용자 최종 시각·동선 인수와 무관한 전체 선택적 테스트는 반복하지 않는다.
+- 롤백: migration61 이후 회수 ciphertext는 되살리지 않는다. 원장을 보존하고 과거 코드가 nullable 값을 읽지 않도록 배포 순서를 지킨다. 실 사용자 회수/운영 데이터 삭제/배포·발송·청구는 실행하지 않는다.
+
 ### C03/F09 Field 정리 실행·독립 worker·복원 원장 — 2026-09-26
 
 - 현재 결과(부분 progress): migration60·job 요청/별도 승인/취소·독립 worker·실제 파일 제거/부재 확인·문의/예약/수신 원문 제거, DB tombstone/child/support/답변 제약·늦은 복사 claim 확인, 기존 관리자 안의 실행 UI와 새 FieldRetentionNotice·native DTO/소비자·삭제 서명 원장/격리 복원 재적용을 연결했다. 새로운 FieldRetentionJobs 파일을 별도로 만들지 않고 기존 FieldRetentionAdmin에 동일 원장/ACK 잠금 흐름으로 통합했다. 수동 연락 원장에는 자유 메모가 없어 method/outcome/이력은 유지한다. 실제 최종 Field DB56067 29/29, 실제 PG17 dump→별도 DB/사진 복원·반복 재적용/미확인 intent·손상 서명 거절, typecheck58010/lint99020 exit0. standalone worker는 FIELD_DB/private media/journal만 제공한 실제 프로세스로 ready/empty였다.

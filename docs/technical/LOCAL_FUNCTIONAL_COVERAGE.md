@@ -1,5 +1,13 @@
 # 로컬 기능 검수 현황 — 2026-09-26
 
+## 최신 Field 권한 회수·격리 복원 — e28229f 이후 작업트리
+
+- 실제 Field DB **8959 30/30**, `/tmp/field-revocation-complete-db.log`. 별도 PG17 test/restore DB와 테스트 전용 원장 정리. native 회수 3경로의 인증/반복·서명 실패·원장 실패503/DB rollback, AP ciphertext null/재활성화 거절, 늦은 token 발급/회수 경합을 확인했다.
+- 실제 PG17 해제 전 dump→별도 restore, 기존 bearer 200→원장/CLI 적용→401·refresh 회수/동의 제거·원문/확인키 유지·반복0. checkpoint export 실제 CLI도 실행했다. 누락/변조/없는 전체 디렉터리/미대조 추가 entry·AP namespace 혼합·조직/선택 binding 오류 rollback·현재 DB localhost 별칭/잘못된 로컬 port CLI 거절을 확인했다. native 수신 회수 ID/ACK 중복을 복구하고, 백업 이후 원격 회수 intent fixture는 acked 대신 blocked 재대조로 남겼다.
+- 실제 HTTP/320px **12875 1/1**, `/tmp/field-revocation-http-verified.log`: 기존 SDK·AP 원문/답변·동의/1회 handoff·수신 업무/예약/알림·Field 명시 회수/원격 장애 retry·AP 시작 회수/고객 기존 경로를 확인했다. 첫 **9294**는 실행 중인 event worker를 알리는 `FIELD_EVENT_WORKERS_RUNNING=1`이 없어 수동 전달이 empty였고 실패했다. 실제 worker 모드로 재실행했으며 ACK 기대값을 낮추지 않았다.
+- 최종 typecheck **52968**, lint **45964**, Field build **73538 exit0**; native mock **21041** 양제품 API/웹 ready/Field retention worker ready. 기준 HTML admin/audit를 Chromium 320px로 열고 `/tmp/field-revocation-prototype-320.png`를 실제 확인했다. 이번 변경은 UI 코드 수정이 아니며 사용자 최종 시각/흐름 인수는 미검수다.
+- 남음: 전용 route key 종료 수명·legacy 회수 baseline·신뢰 checkpoint/원장 동시 rollback, 기존 삭제 원장 전체 누락/미확인 삭제 결과 추가 대조·운영 보관/복원, AP 자체 보존/정리, 전체 PRD/역할/QA/G·실 공급사·사용자 최종 인수. C03/F09 전체는 in_progress다. 전체 AP DB/표준 E2E/security/independence 명령을 이번 변화로 다시 실행하지 않았다.
+
 ## 최신 Field 정리 실행 — c87f14f 이후 작업트리
 
 - 최종 실제 Field DB: **56067 29/29**, `/tmp/field-retention-phase-db-final.log`, 별도 임시 DB 제거. 공개 문의/실제 사진→요청·별도 승인·멱등/권한·파일 실패 재시도·증빙 ACK 실패와 재기록, 원문/파일 부재·receipt/export·DB 재저장/지원 거절, 지원 승인과 삭제의 실제 경합, 예약 원문/이벤트 사유/달력 label·수신 snapshot/늦은 답변, 사진 scope 원문 유지·승인 후 hold, 늦은 복사 claim의 파일 재쓰기0회, Field 환경만으로 standalone worker 실행을 확인했다.

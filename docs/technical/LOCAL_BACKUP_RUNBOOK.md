@@ -50,4 +50,35 @@ node --env-file=/absolute/protected/path/field-restored.env \
   apps/field-api/dist/retention-restore-cli.js --offline-restored
 ```
 
-실제 검수는 `pnpm test:db:field`의 합성 fixture로 한다. 격리 Field DB를 `pg_dump -Fc`로 백업하고 새 임시 DB에 PG17 `pg_restore`한 뒤, 정리 전 사진을 별도 파일 경로에 복원한다. 원장 재적용 후 파일 부재/원문 제거/재저장 거부/반복 적용을 검사한다. 운영 S3·백업 보관 공급사·원장 전체 유실/누락 탐지·삭제 결과 미상의 추가 대조·**연결/토큰 revoke 원장 재적용**·실 RPO/RTO·운영 복원 인증은 여전히 남아 있다. 이 명령의 성공만으로 전체 복구 게이트를 통과 처리하지 않는다.
+실제 검수는 `pnpm test:db:field`의 합성 fixture로 한다. 격리 Field DB를 `pg_dump -Fc`로 백업하고 새 임시 DB에 PG17 `pg_restore`한 뒤, 정리 전 사진을 별도 파일 경로에 복원한다. 원장 재적용 후 파일 부재/원문 제거/재저장 거부/반복 적용을 검사한다. 이 삭제 검사는 회수 원장을 포함하지 않으며 아래 절의 별도 명령/검사를 함께 수행해야 한다. 운영 S3·백업 보관 공급사·삭제 원장 전체 유실/누락 탐지·삭제 결과 미상의 추가 대조·실 RPO/RTO·운영 복원 인증은 여전히 남아 있다.
+
+## Field 연결·OAuth 권한 회수 원장 재적용
+
+`FIELD_REVOCATION_JOURNAL_DIRECTORY`와 별도 `FIELD_REVOCATION_JOURNAL_SECRET`을 사용한다. Field owner의 연결/선택 권한 회수와 검증된 AP 서명 회수 수신은 native 대상 lock·권한 검증 뒤 서명 원장을 fsync하고 DB 상태를 commit한다. 원장에는 조직·대상·선택·회수 ID/시각/출처만 있고 원문/연락처/token/route key는 없다. 기록 실패는 503이며 회수 완료가 아니다. commit 미확인 의도도 복원에서는 보수적으로 회수한다. 반복 성공 요청은 같은 DB 결과를 돌려주며 원장을 추가하지 않는다.
+
+AP access/refresh ciphertext는 Field 연결 해제 즉시 null이 되고 재활성화/재저장을 DB가 거절한다. 별도의 event route key는 원격 회수와 인증된 ACK 재시도에 아직 필요해 유지한다. 일반 데이터 조회/도구에는 revoked 연결을 허용하지 않는다. 이 전용 키의 최종 폐기 수명·legacy 회수 baseline은 후속 필수 작업이다.
+
+복원에는 **모든 Field 원장 작성자를 중단한 뒤 마지막으로 내보낸 신뢰 checkpoint**를 별도 보호 경로에서 제공한다. checkpoint는 전체 entry ID·내용 해시의 서명 목록이다. 누락·변조·추가 미대조 entry·없는 디렉터리·다른 제품 namespace·조직/선택 binding 불일치는 실패한다. checkpoint export가 원장 유실 이전의 마지막 기록까지 포함했다는 보관 근거가 필요하다. 이미 원장이 유실된 뒤 checkpoint를 새로 만들거나 DB 백업에 들어 있던 과거 checkpoint로 대체하지 않는다. checkpoint와 원장을 함께 과거로 바꾸는 경우를 로컬 HMAC만으로 검출한다고 주장하지 않는다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+# 이 명령 전에 Field API/event worker 등 모든 회수 원장 작성자를 중단한다.
+# 보호된 환경에 기존 DIRECTORY/SECRET와 mock profile을 지정한다.
+# FIELD_REVOCATION_CHECKPOINT_OUTPUT=/absolute/protected/separate/field-revocations-latest.json
+node --env-file=/absolute/protected/path/field-journal.env \
+  apps/field-api/dist/revocation-checkpoint-cli.js --quiesced
+
+# 별도 DB에 복원한 후 API/worker가 없는 상태에서 실행한다.
+# FIELD_DATABASE_URL=... (현재 서비스 DB 식별만; 이 DB에는 접속하지 않음)
+# FIELD_REVOCATION_RESTORE_DATABASE_URL=... (별도 Field 복원 DB)
+# FIELD_REVOCATION_RESTORE_CHECKPOINT_FILE=/absolute/protected/separate/field-revocations-latest.json
+# FIELD_REVOCATION_JOURNAL_DIRECTORY=... (기존 독립 원장)
+# FIELD_REVOCATION_JOURNAL_SECRET=... (기존 키)
+# FIELD_PROFILE=mock
+node --env-file=/absolute/protected/path/field-restored.env \
+  apps/field-api/dist/revocation-restore-cli.js --offline-restored
+```
+
+checkpoint 출력은 원장 디렉터리 밖의 새 파일(0600)이어야 한다. CLI는 현재 DB 이름의 localhost/127.0.0.1·URL escape 별칭을 거절하고, 분리된 로컬 Field 복원 DB만 대상으로 한다. 원격 운영 복구 명령이 아니다. 복원 함수는 전체 검증 후 한 transaction으로 연결/설치·선택/access/refresh token·동의를 차단하고 `field.revocation_restore_audit`에 entry ID/결과를 남긴다. 기존 업무·고객 확인키·예약/구독을 삭제하지 않는다. 원격 ACK를 새로 만들거나 자동 네트워크 발송을 시작하지 않으며 기존 미완료 회수 행은 재대조 필요 상태로 막는다. 새 덤프에서 아직 없던 대상은 `target_absent`로 기록한다. 삭제 재적용과 회수 재적용 모두 성공하고 추가 복구 검수를 마친 뒤 서비스 재개를 판단한다.
+
+실제 격리 DB 검사는 해제 전 PG17 dump→별도 restore→기존 bearer 200 확인→원장/CLI 적용→bearer 401·토큰 회수/비밀값 null·재활성화 거절·반복0, 기존 고객 문의/확인키 유지, 원장 누락/변조/미대조/전체 디렉터리 없음·AP namespace 혼합·binding 오류의 전체 rollback을 검사한다. 이는 실 공급사 보관·원장/신뢰 checkpoint 동시 rollback 방지·기존 회수 baseline·운영 RPO/RTO 인증을 대신하지 않는다.

@@ -43,6 +43,12 @@ for (const product of requested.length ? [...new Set(requested)] : ['agent', 'fi
   if (!isAgent && !content.includes('FIELD_RETENTION_JOURNAL_SECRET=')) {
     appendFileSync(path, `FIELD_RETENTION_JOURNAL_SECRET=${randomBytes(32).toString('base64url')}\n`, { mode: 0o600 });
   }
+  if (!isAgent && !content.includes('FIELD_REVOCATION_JOURNAL_DIRECTORY=')) {
+    appendFileSync(path, 'FIELD_REVOCATION_JOURNAL_DIRECTORY=infra/field/revocation-journal\n', { mode: 0o600 });
+  }
+  if (!isAgent && !content.includes('FIELD_REVOCATION_JOURNAL_SECRET=')) {
+    appendFileSync(path, `FIELD_REVOCATION_JOURNAL_SECRET=${randomBytes(32).toString('base64url')}\n`, { mode: 0o600 });
+  }
   if (isAgent && !content.includes('AP_INQUIRY_MEDIA_DIRECTORY=')) {
     appendFileSync(path, 'AP_INQUIRY_MEDIA_DIRECTORY=infra/agent/inquiry-media\n', { mode: 0o600 });
   }
