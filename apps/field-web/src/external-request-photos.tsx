@@ -49,6 +49,7 @@ export function ExternalRequestPhotos({ requestId, organizationId }: {
     {attachments.length === 0 && !error && <p>전달된 사진이 없습니다.</p>}
     {attachments.map((item, index) => <div key={item.id}><p>사진 {index + 1}: {
       item.state === "copied" ? "Field에 비공개 복사 완료"
+        : item.state === "purged" ? "보존 기간 종료 · Field 수신 사진 정리됨"
         : item.state === "copy_failed" ? `복사 실패 · 자동 재시도 대기 (${item.error ?? "원인 확인 중"})`
           : "비공개 복사 대기 중"}</p>
       {item.state === "copied" && <CopiedPhoto requestId={requestId} attachmentId={item.id} />}</div>)}

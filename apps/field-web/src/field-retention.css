@@ -6,4 +6,5 @@
 .field-retention-panel .form-fields{margin:20px 0;grid-template-columns:minmax(0,1fr)}.field-retention-panel :is(input,textarea,select){font-size:16px;min-width:0;max-width:100%;width:100%;box-sizing:border-box}
 .field-retention-panel textarea{min-height:100px;padding:12px;border:1px solid #d8d9df;border-radius:11px;resize:vertical}.field-retention-panel .form-fields>div>label{display:block;margin-bottom:8px}
 .field-retention-panel article{border:1px solid #dce1e9;border-radius:14px;padding:18px;margin:16px 0;min-width:0}.field-retention-work{background:#f7faff}
+.field-retention-panel input[type=checkbox]{width:18px;height:18px;flex-shrink:0}.field-retention-job{background:#f8fafc}
 @media(max-width:600px){.field-retention-panel{padding:18px}.field-retention-panel article{padding:14px}}

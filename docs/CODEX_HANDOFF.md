@@ -7,6 +7,34 @@
 - 화면·기능 구현 중에도 해당 역할의 시안을 수시로 다시 확인한다. 경로 기록만으로 시안을 확인했다고 보고하지 말고, 실제 열어 본 화면과 비교 범위를 작업 기록에 남긴다.
 - 화면·동선 작업은 이 HTML을 직접 열어 해당 역할·화면을 확인하고 실제 AP/Field 화면과 대조한다. 시안의 통합 계정·공유 데이터 표현은 `AGENTS.md`와 v3.0 개발 문서의 독립 제품 경계에 맞춰 해석한다.
 
+## 최신 인수인계 — C03/F09 Field 정리 실행·독립 worker·삭제 원장 재적용 (2026-09-26)
+
+- **현재 목표/상태:** 전체 v3.0/C03 기능을 실제 사용할 수 있는 독립 AP/Field 로컬 환경으로 끝까지 연결한다. `c87f14f` 이후 이번 구현은 progress이며 **revoke 원장/전체 원장 유실·운영 복원·AP 보존/전체 PRD·QA·G/사용자 최종 시각·동선은 남아 전체 목표/F09/C03은 in_progress**다. 커밋은 `git log -1 --oneline`으로 확인한다.
+- **요구/수정 파일:** Field PRD3.6~3.9 F-A06·보안5.5·QA46/49/119/157/159의 로컬 부분. 새 migration60, `src/retention-{purge-routes,purge,purge-worker,journal,consumers,restore,restore-cli}.ts`, `test/retention-purge.db.test.ts`; 기존 app/bookings/retention-routes/work-retention/external-request-attachment-worker·integrator DB 검사/Field API package. 웹 새 FieldRetentionNotice, 기존 FieldRetentionAdmin/field-retention.{ts,css}/field-api/field-public/field-booking/field-workspace/field-owner-reservation-inbox/external-request-photos. mock-run/setup-mock-env/E2E 등록/retention HTTP·browser/.gitignore 및 실행 계획/TASKS/DEVELOPMENT_STATUS/coverage/backup runbook/이 인계. AP 내부/DB/공개 계약 변경 없음.
+- **완료/결정:** UUID 멱등키·native kind/id/org/승인 policy·scope photos/work·revision/anchor와 원문/메시지·사진/예약 사건·점유·연결 예약 digest에 묶인 불변 요청→다른 operator 승인→취소를 구현했다. 실행 직전 현재 정책/양 운영자 membership을 잠가 확인하고 업무·연결 예약/수신을 정해진 순서로 잠근다. hold·현재 지원·전달·기한·basis 변경은 blocked/stale다. non-mock 운영 MFA gate는503 유지다. 독립 worker는 Field PG/private files/journal만 사용하며 AP/Valkey/제작 LLM 환경이 없는 실제 프로세스로 ready/empty였다. mock:run에 별도 관리 프로세스로 등록했다.
+- **원문/소비자:** 실제 immutable 사진을 delete→get 부재 확인 뒤 photo purged/null metadata로 남긴다. work는 문의/예약 이름·전화·지역/선호시간/제출/메시지·내부 메모, 예약 이벤트 사유/달력 label, 수신 customer/request snapshot·summary/outbox 원문을 제거한다. 업무/예약/처리/감사 ID와 확인키 권한은 유지하며 키 교체도 가능하다. DB parent/child/지원 승인/수신 답변 제약과 API410이 재저장을 거절한다. 늦은 복사는 파일 쓰기 전 현재 parent/claim을 잠가 이미 완료/정리된 사진을 다시 쓰지 않는다. 관리자 job 요청/별도 승인/취소·조회 실패 metadata 유지/잠금·ACK 재확인과 고객/사업자 종료 안내를 연결했다. 사진 scope는 원문/새 대화를 유지한다.
+- **독립 원장/복원:** Field만의 HMAC entry·700/600 파일·fsync/atomic rename을 사용한다. file_prepared는 의도, file_deleted는 실제 부재 확인이다. SQL 준비 뒤 commit 전 purge_prepared, commit 후 completed를 기록한다. 마지막 기록 실패는 실제 completed + completion_receipt_pending으로 구분하고 다음 처리 때 증빙만 재기록한다. PG17 dump를 별도 임시 DB에 실제 restore하고 별도 경로에 원래 사진을 복원한 뒤, 삭제 원장 재적용·파일 부재/원문 제거/재저장 거절·반복0을 확인했다. 미확인 의도/손상 서명·job 바인딩·다른 제품 DB·사진 증빙 누락은 성공이 아니다. 로컬 restore CLI는 현재 DB와 다른 이름/실제 파일 경로를 요구하며 localhost 별칭도 실제 거절했다. **revoke 재적용·원장 전체 유실/누락 감지·실 운영 보관/복구를 완료했다고 주장하지 않는다.**
+- **실제 DB/정적 검사:** 최초87481 원문 재저장 Missing rejection→SQL 보호 **42685 29/29**. 마지막 증빙 실패24406 retry/receipt_pending red→5453 29/29. standalone 모듈 부재62361→38859 29/29. restore 첫17551은 get 반환 Buffer를 .data로 잘못 읽은 fixture 오류→56231 실제 restore 후 모듈 부재 red→50020 29/29. 수신 늦은 답변78868 rejection 부재·늦은 복사51556 put1 vs0→66762 29/29. 실제 지원 승인 경합9223 29/29·사진 scope/승인 후 hold33304 29/29. **최종 `pnpm test:db:field` 56067 29/29**(`/tmp/field-retention-phase-db-final.log`, 모든 임시 DB/restore DB 제거), 전체 typecheck **58010 exit0**(`/tmp/field-retention-phase-type.log`), lint **99020/78685 exit0**, Python/Node 구문/diff exit0. 마지막 CLI 보완 `pnpm build:field` **96874 exit0**와 현재 DB alias 지정 CLI **expected exit1**(`/tmp/field-retention-cli-active-db-denied.log`)를 실제 실행했다.
+- **실제 HTTP/시안:** 초기 old UI 실행 원장 부재72258 red→79382 양제품 build/ready에서 job 라벨7645 red. 선택 항목이 감싼 label의 accessible name에 섞인 것을 Chromium exact0/partial1로 재현하고 label/id를 분리했다. 최종 **54477**에서 native HTTP/320px **73367 1/1**(`/tmp/field-retention-jobs-final-browser.log`): 정책/hold/preview/수신 종결 회귀, job ACK 유실/동일 요청·승인 전 취소/다른 승인·worker 실제 completed/파일 부재, 고객 원문 미표시/추가 질문 종료, job503 metadata 유지/잠금/복구·가로 넘침/pageerror0. 실제 reference HTML admin/audit를 다시 열고 `/tmp/field-retention-execution-prototype-320.png`, 실제 `/tmp/field-retention-jobs-320.png`/`field-retention-ended-customer-320.png`를 열었다. 표준 Field E2E7개 중 해당 HTTP 검사만 실행했고 전체/AP DB/정식 QA/G는 이번 변경으로 미실행이다.
+- **현재 환경/복구:** mock85257 확인 후 정상 종료,79382 새 빌드/ready 확인 후 UI 수정 반영을 위해 정상 종료, 현재 **54477**(`/tmp/field-retention-execution-final-runtime.log`) 양 API ready/웹 ready·Field retention worker ready 및 합성 job completed를 실제 확인했다. AP http://localhost:3001/workspace, Field http://localhost:3002/workspace, 관리자 /admin/audit. 제작 LLM은 model 미설정 blocked_integration이다. 실행한 정리는 테스트가 만든 합성 업무/사진뿐이며 운영/실 사용자 삭제·배포/청구/발송 없음. 롤백으로 제거된 원문/파일을 되살릴 수 없고 tombstone/독립 원장/기존 원장 ID를 보존한다. 기존 코드가 purged 사진을 ready로 오인하지 않도록 호환 검토가 필요하다.
+- **다음 필수 작업:** 같은 F09 범위의 Field 연결/token revoke 독립 기록·복원 재적용과 원장 완전성/미확인 결과 대조를 이어간다. Field native revoke/membership/token 경로와 기존 migration/consumer를 먼저 실제 파일로 조사하고 범위/QA/명령을 기록한다. 이후 AP 익명30/업무180/사진90의 AP 자체 정책·종결·hold·정리/독립 worker/복원, 전체 PRD/역할·명령/G를 요구별로 대조한다. 사용자 최종 시각·동선과 공급사/운영 MFA/법무는 미완료다. 외부 미연결 상태는 전체 내부 작업 중단 사유로 쓰지 않는다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -2 --oneline
+sed -n '1,36p' docs/CODEX_HANDOFF.md
+cat docs/technical/LOCAL_BACKUP_RUNBOOK.md
+cat apps/field-api/src/retention-journal.ts
+cat apps/field-api/src/retention-restore.ts
+rg --files apps/field-api/src apps/field-api/migrations | rg 'revoke|connection|integrator|oauth'
+rg -n 'revoke|revoked|access_token_cipher|refresh_token_cipher' apps/field-api/src apps/field-api/migrations
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+mock54477은 생존을 확인하고 유지한다. 관찰 timeout만으로 중복 기동하지 않는다. 빌드 반영 때에만 확인된 프로세스를 정상 종료/재기동한다. 시안 경로는 상단에 유지한다. 전체 기능 목표를 삭제 실행 subset으로 축소하지 않는다.
+
 ## 최신 인수인계 — C03/F09 Field 보존·종결·분쟁 보류 기반 (2026-09-26)
 
 - **현재 목표/상태:** 시안/v3.0 전체 기능을 끝까지 연결하고 실제 사용할 수 있는 독립 AP/Field 로컬 환경을 유지한다. a13510e 기반 작업트리의 이번 단계는 정책·종결/재개 시각·보류·미리보기 UI/API/DB/권한/감사/복구를 연결한 progress다. 실제 정리 job/worker·개인정보/사진 제거·소비자/복원 원장 재적용은 필수로 남아 C03/F09/전체 목표는 미완료다. 단계 커밋은 `git log -1 --oneline`으로 확인한다.

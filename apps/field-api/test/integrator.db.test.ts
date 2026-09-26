@@ -740,6 +740,18 @@ test('Field owner delegates only approved catalog facts to a selected OAuth clie
     assert.equal(copied.statusCode, 200, copied.body);
     assert.equal(copied.headers['content-type'], 'image/webp');
     assert.ok(copied.rawPayload.length > 0);
+    // 이전 복사 시도가 늦게 끝나도 새 claim/완료 뒤 immutable 파일을 다시 쓰지 않는다.
+    await pool.query("update field.external_request_attachments set state='copy_failed',copied_at=null,next_attempt_at=now() where id=$1", [photoRows.rows[0]!.id]);
+    let staleWrites = 0;
+    const staleConnector = { ...photoConnector, fetcher: async (input: RequestInfo | URL, init?: RequestInit) => {
+      const response = await photoConnector.fetcher(input, init);
+      if (new URL(String(input)).pathname.includes('/attachments/')) await pool.query(`update field.external_request_attachments
+        set attempt_count=attempt_count+1,state='copied',copied_at=now(),lease_until=null where id=$1`, [photoRows.rows[0]!.id]);
+      return response;
+    } };
+    assert.equal(await copyExternalRequestAttachmentOnce(pool, staleConnector, { ...inquiryMedia,
+      put: async (key: string, bytes: Buffer) => { staleWrites++; await inquiryMedia.put(key, bytes); } }), 'retry');
+    assert.equal(staleWrites, 0);
     assert.equal((await app.inject({ url: `/v1/owner/external-requests/${photoRequestId}`
       + `/attachments/${photoRows.rows[0]!.id}`, headers: { cookie: outsider.cookie } })).statusCode, 404);
     const ownerExternal = await app.inject({ url: '/v1/owner/external-requests',

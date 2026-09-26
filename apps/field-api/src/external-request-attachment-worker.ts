@@ -13,9 +13,10 @@ export async function copyExternalRequestAttachmentOnce(pool: Pool, connector: A
   const selected = await pool.query<Claim>(
     `with candidate as (
        select p.id from field.external_request_attachments p
-       where (p.state in ('pending','copy_failed') and p.next_attempt_at <= now())
-          or (p.state = 'copying' and p.lease_until <= now())
-       order by p.next_attempt_at,p.created_at for update skip locked limit 1
+       join field.external_work_requests w on w.id=p.external_request_id
+       where w.retention_work_purged_at is null and ((p.state in ('pending','copy_failed') and p.next_attempt_at <= now())
+          or (p.state = 'copying' and p.lease_until <= now()))
+       order by p.next_attempt_at,p.created_at for update of p skip locked limit 1
      )
      update field.external_request_attachments p
        set state = 'copying',attempt_count = p.attempt_count + 1,
@@ -75,14 +76,25 @@ export async function copyExternalRequestAttachmentOnce(pool: Pool, connector: A
   const normalized = await normalizeSiteImage(bytes);
   if (!normalized) return fail('invalid_source_media');
   const key = `${claim.organization_id}/${claim.id}.webp`;
-  try { await media.put(key, normalized.data); }
-  catch { return fail('media_unavailable'); }
-  const saved = await pool.query(`update field.external_request_attachments
+  const db = await pool.connect();
+  try {
+    await db.query('begin');
+    // 파일 쓰기 전 현재 업무/claim을 잠가 늦은 복사가 정리된 파일을 재생성하지 못하게 한다.
+    const parent = (await db.query<{ retention_work_purged_at: Date | null }>(`select retention_work_purged_at from field.external_work_requests
+      where id=$1 and organization_id=$2 for update`, [claim.external_request_id, claim.organization_id])).rows[0];
+    const current = (await db.query<{ state: string; attempt_count: number }>('select state,attempt_count from field.external_request_attachments where id=$1 for update', [claim.id])).rows[0];
+    if (!parent || parent.retention_work_purged_at || current?.state !== 'copying' || current.attempt_count !== claim.attempt_count) {
+      await db.query('rollback'); return 'retry';
+    }
+    await media.put(key, normalized.data);
+    const saved = await db.query(`update field.external_request_attachments
      set state = 'copied',object_key = $3,sha256 = $4,byte_size = $5,
        width = $6,height = $7,copied_at = now(),lease_until = null,error_code = null
      where id = $1 and attempt_count = $2 and state = 'copying'`,
   [claim.id, claim.attempt_count, key,
     createHash('sha256').update(normalized.data).digest('hex'), normalized.data.length,
     normalized.width, normalized.height]);
-  return saved.rowCount ? 'copied' : 'retry';
+    await db.query('commit'); return saved.rowCount ? 'copied' : 'retry';
+  } catch { await db.query('rollback'); return fail('media_unavailable'); }
+  finally { db.release(); }
 }

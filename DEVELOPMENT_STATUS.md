@@ -1,5 +1,9 @@
 # 개발 진행 상태 — 2026-09-26
 
+## 최신 C03/F09 Field 실제 정리·독립 worker·삭제 원장 재적용
+
+Field native 정리 요청·다른 operator 승인·취소, 실행 직전 현재 업무/정책/권한·hold/support/전달·기한/basis 재확인과 실제 파일 삭제/부재 확인·원문 제거를 연결했다. 문의/예약/수신 사본의 원문·연락 정보와 예약 이벤트 사유/달력 label/outbox를 정리하며 ID/이력/확인키 권한은 유지한다. 사진만 정리하는 scope와 DB 재저장 차단·늦은 복사 claim 검사, 관리자 원장/ACK 복구·고객/사업자 종료 안내를 구현했다. 처리기는 Field PG/private files/독립 서명 원장만 필요하며 AP/Valkey/제작 LLM 없이 실제 별도 프로세스가 실행된다. PG17 dump→별도 임시 DB/사진 복원→삭제 원장 재적용도 검수했다. 실제 최종 `pnpm test:db:field` **56067 29/29**, HTTP/320px **73367 1/1**, typecheck **58010**/lint **99020 exit0**. mock **54477** 양제품 build/ready·실제 synthetic job completed. Field migration60; AP 내부/DB/공개 계약 변경 없음. revoke 원장·원장 전체 유실/운영 복구·AP 자체 보존·전체 PRD/QA/G·사용자 최종 디자인/흐름·실 공급사는 남고 C03/F09 전체는 `in_progress`다.
+
 ## 최신 C03/F09 Field 보존·종결·분쟁 보류 기반 (2026-09-26)
 
 최근 C03/F09 Field 보존 기반(2026-09-26): 실제 종결/재개 시각·legacy 원장 근거, 기간 immutable 정책 요청/다른 운영자 승인/중단, 조직·업무 종류/ID에 묶인 분쟁/법정 기록 검토/조사 hold·다른 운영자 해제·검토 초과 유지, 메타데이터 preview100개+cursor를 연결했다. 미승인 정책/진행 업무/미확인 종결/미래 일정/보류/전달 대기/지원 열람/기한을 구분하며 수신 예약은 Field 예약 종결을 따른다. Field 수신 문의의 native 업무 종결/ACK 복구·목록 상태/대기 집계도 AP 원본과 별도로 연결했다. Field migration000059, AP 내부/공개 계약 변경 없음. Field DB 최종28/28(93261), 실제 legacy migration1/1, 최신 mock85257 HTTP/320px36901 1/1·기존 관리자87655 1/1, 최종 typecheck37941/lint57228 exit0. 표준 Field E2E7개 등록 뒤 전체 명령 미실행. 이 단계는 삭제 실행이 아니며 정리 job/worker·파일/개인정보 제거/소비자·복원 후 원장 재적용과 AP 자체 보존 구현·전체 명세 검수는 필수로 남아 C03/F09 in_progress다. 운영 MFA/법무/실 공급사/사용자 최종 인수도 미완료다.

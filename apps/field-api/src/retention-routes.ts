@@ -20,7 +20,7 @@ const policyView = (p: RetentionPolicy) => ({ id: p.id, workDays: p.work_days, p
 const holdView = (h: Hold) => ({ id: h.id, organizationId: h.organization_id, targetKind: h.target_kind, targetId: h.target_id,
   reasonCode: h.reason_code, reason: h.reason, reference: h.reference, reviewDueAt: h.review_due_at, createdBy: h.created_by,
   createdAt: h.created_at, releasedBy: h.released_by, releasedAt: h.released_at, state: h.released_at ? 'released' : 'active' });
-async function adminFor(request: FastifyRequest, reply: FastifyReply, runtime: FieldBusinessRuntime, edit = true) {
+export async function retentionAdminFor(request: FastifyRequest, reply: FastifyReply, runtime: FieldBusinessRuntime, edit = true) {
   reply.headers({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' });
   if (process.env.FIELD_PROFILE !== 'mock') { fail(reply, 503, 'blocked_integration'); return null; }
   if (request.method !== 'GET' && request.headers.origin !== undefined && ![
@@ -32,6 +32,7 @@ async function adminFor(request: FastifyRequest, reply: FastifyReply, runtime: F
   if (!role || edit && role !== 'operator') { fail(reply, 403, 'admin_membership_required'); return null; }
   return user;
 }
+const adminFor = retentionAdminFor;
 async function audit(db: PoolClient, user: string, action: string, reason: string, fields: {
   policy?: string; hold?: string; org?: string; kind?: string; target?: string; key?: string; requestHash?: string; result?: unknown;
 } = {}) {

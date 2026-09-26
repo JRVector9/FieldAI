@@ -1,5 +1,13 @@
 # 로컬 기능 검수 현황 — 2026-09-26
 
+## 최신 Field 정리 실행 — c87f14f 이후 작업트리
+
+- 최종 실제 Field DB: **56067 29/29**, `/tmp/field-retention-phase-db-final.log`, 별도 임시 DB 제거. 공개 문의/실제 사진→요청·별도 승인·멱등/권한·파일 실패 재시도·증빙 ACK 실패와 재기록, 원문/파일 부재·receipt/export·DB 재저장/지원 거절, 지원 승인과 삭제의 실제 경합, 예약 원문/이벤트 사유/달력 label·수신 snapshot/늦은 답변, 사진 scope 원문 유지·승인 후 hold, 늦은 복사 claim의 파일 재쓰기0회, Field 환경만으로 standalone worker 실행을 확인했다.
+- 실제 복원: 위 DB 검사에서 정리 전 isolated DB의 PG17 dump를 별도 임시 DB에 restore하고 별도 경로에 실제 사진을 복원했다. 서명 원장 재적용 후 파일 부재/원문 제거·tombstone 재저장 거절·반복 적용0, 미확인 intent/손상 서명 거절을 확인했다. 운영 revoke/전체 원장 유실·실 RPO/RTO는 이 검사가 아니다.
+- 실제 native HTTP/320px: **73367 1/1**, `/tmp/field-retention-jobs-final-browser.log`. 관리자 요청 ACK 유실/동일 요청, 승인 전 취소·다른 운영자 승인·독립 worker actual deletion/부재·고객 종료 안내/추가 질문 종료, job 원장503 metadata 유지/잠금/복구와 기존 정책/hold/preview/수신 종결 회귀를 확인했다. 가로 넘침/pageerror0. 기준 HTML admin/audit와 `/tmp/field-retention-jobs-320.png`, `/tmp/field-retention-ended-customer-320.png`를 실제 열었다. 전체 시각 인수는 미검수다.
+- 전체 typecheck **58010**, lint **99020 exit0**; Python/Node 구문·diff exit0. mock **54477** 양제품 API/웹 build/ready·Field worker ready/합성 completed를 실제 확인했다. 표준 Field E2E7개 중 이 HTTP 검사만 실행했으며 전체 명령/AP DB/전체 회귀/정식 QA/G는 미실행이다.
+- 남음: Field revoke 복원·원장 전체 유실/미확인 결과 대조/운영 복구, AP 자체 보존·정리, 전체 명세/역할·G 검수, 실 공급사·법무/MFA·사용자 최종 인수. C03 전체 완료를 주장하지 않는다.
+
 ## 최신 Field 보존 기반 — a13510e 이후 작업트리
 
 - 실제 검수: `pnpm test:db:field` **28/28,93261**(`/tmp/field-retention-pagination-green.log`, 임시 DB 제거); `node --test tools/spikes/field-retention-migration.test.mjs` **1/1**(`/tmp/field-retention-migration.log`,58→실제 legacy 자료→59·별도 DB 제거).

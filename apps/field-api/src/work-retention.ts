@@ -2,11 +2,17 @@ import type { Pool, PoolClient } from 'pg';
 
 export type RetentionKind = 'inquiry' | 'reservation' | 'external_request';
 export const RETENTION_TABLES = { inquiry: 'field.inquiries', reservation: 'field.reservations', external_request: 'field.external_work_requests' };
+export type WorkRetentionRow = { retention_work_purged_at?: Date | null; retention_photos_purged_at?: Date | null };
+export function workRetentionRecord(row: WorkRetentionRow) {
+  return row.retention_work_purged_at || row.retention_photos_purged_at ? {
+    workPurgedAt: row.retention_work_purged_at?.toISOString() ?? null, photosPurgedAt: row.retention_photos_purged_at?.toISOString() ?? null,
+  } : undefined;
+}
 export type RetentionPolicy = { id: string; work_days: number; photo_days: number; reference: string; reason: string;
   requested_by: string; request_hash: string; created_at: Date; approved_by: string | null; approved_at: Date | null;
   approval_reason: string | null; retired_at: Date | null };
 export type RetentionWork = { target_kind: RetentionKind; target_id: string; organization_id: string; state: string;
-  revision: number; closed_at: Date | null; activity_at: Date | null; future_at: Date | null; pending: boolean; created_at: Date; cursor_at: string };
+  revision: number; closed_at: Date | null; activity_at: Date | null; future_at: Date | null; pending: boolean; created_at: Date; cursor_at: string; work_purged_at: Date | null };
 
 // 이 조회는 Field 원장의 메타데이터만 읽는다. AP 원문/접속이나 개인정보를 포함하지 않는다.
 export const RETENTION_WORK_QUERY = `
@@ -14,7 +20,7 @@ export const RETENTION_WORK_QUERY = `
     greatest((select max(m.created_at) from field.inquiry_messages m where m.inquiry_id=i.id),
       (select max(a.created_at) from field.inquiry_attachments a where a.inquiry_id=i.id)) as activity_at,
     null::timestamptz as future_at,
-    exists(select 1 from field.inquiry_messages m where m.inquiry_id=i.id and m.sender='owner' and m.delivery_state in ('pending','unknown')) as pending,i.created_at
+    exists(select 1 from field.inquiry_messages m where m.inquiry_id=i.id and m.sender='owner' and m.delivery_state in ('pending','unknown')) as pending,i.created_at,i.retention_work_purged_at as work_purged_at
   from field.inquiries i where i.organization_id=$1
   union all
   select 'reservation',r.id,r.organization_id,r.state,r.revision,r.retention_closed_at,
@@ -23,7 +29,7 @@ export const RETENTION_WORK_QUERY = `
     greatest(r.requested_start_at,r.confirmed_end_at,r.proposal_end_at,
       (select max(upper(o.occupied)) from field.occupancies o where o.reservation_id=r.id)),
     exists(select 1 from field.outbox o where o.aggregate_id=r.id::text and o.organization_id=r.organization_id
-      and o.payload->>'notification' in ('pending','unknown') and o.delivered_at is null),r.created_at
+      and o.payload->>'notification' in ('pending','unknown') and o.delivered_at is null),r.created_at,r.retention_work_purged_at
   from field.reservations r where r.organization_id=$1
   union all
   select 'external_request',e.id,e.organization_id,
@@ -35,22 +41,24 @@ export const RETENTION_WORK_QUERY = `
       (select max(a.created_at) from field.reservation_attachments a where a.reservation_id=e.reservation_id)),
     greatest(r.requested_start_at,r.confirmed_end_at,r.proposal_end_at,
       (select max(upper(o.occupied)) from field.occupancies o where o.reservation_id=r.id)),
-    exists(select 1 from field.external_request_attachments a where a.external_request_id=e.id and a.state<>'copied')
+    exists(select 1 from field.external_request_attachments a where a.external_request_id=e.id and a.state in ('pending','copying','copy_failed'))
       or exists(select 1 from field.ap_reply_drafts d where d.external_request_id=e.id and d.state<>'accepted')
       or exists(select 1 from field.outbox o where o.aggregate_id=r.id::text and o.organization_id=e.organization_id
-        and o.payload->>'notification' in ('pending','unknown') and o.delivered_at is null),e.received_at
+        and o.payload->>'notification' in ('pending','unknown') and o.delivered_at is null),e.received_at,e.retention_work_purged_at
   from field.external_work_requests e left join field.reservations r on r.id=e.reservation_id and r.organization_id=e.organization_id
   where e.organization_id=$1`;
 
-export async function previewRetention(db: Pool | PoolClient, organizationId: string, policyId: string, before?: string) {
+export async function previewRetention(db: Pool | PoolClient, organizationId: string, policyId: string, before?: string,
+  only?: { kind: RetentionKind; id: string }) {
   const policy = (await db.query<RetentionPolicy>('select * from field.work_retention_policies where id=$1', [policyId])).rows[0];
   const now = (await db.query<{ now: Date }>('select clock_timestamp() as now')).rows[0]!.now;
   const cursor = before ? JSON.parse(Buffer.from(before, 'base64url').toString()) as { kind: string; id: string; at: string } : null;
   const rows = (await db.query<RetentionWork>(`with work as (${RETENTION_WORK_QUERY}) select *,
     to_char(created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as cursor_at from work
-    where $2::timestamptz is null or (created_at,target_kind,target_id)<($2::timestamptz,$3::text,$4::uuid)
+    where ($2::timestamptz is null or (created_at,target_kind,target_id)<($2::timestamptz,$3::text,$4::uuid))
+      and ($5::text is null or (target_kind=$5 and target_id=$6::uuid))
     order by created_at desc,target_kind desc,target_id desc limit 101`,
-  [organizationId, cursor?.at ?? null, cursor?.kind ?? null, cursor?.id ?? null])).rows;
+  [organizationId, cursor?.at ?? null, cursor?.kind ?? null, cursor?.id ?? null, only?.kind ?? null, only?.id ?? null])).rows;
   const items = [];
   for (const row of rows.slice(0, 100)) {
     // 수신 예약과 원본 예약의 보류·지원 승인도 양방향으로 확인한다.
@@ -68,7 +76,7 @@ export async function previewRetention(db: Pool | PoolClient, organizationId: st
     const anchor = row.closed_at ? new Date(Math.max(row.closed_at.getTime(), row.activity_at?.getTime() ?? 0)) : null;
     const workDueAt = anchor && policy ? new Date(anchor.getTime() + policy.work_days * 86400000) : null;
     const photoDueAt = anchor && policy ? new Date(anchor.getTime() + policy.photo_days * 86400000) : null;
-    const reason = !policy?.approved_at || policy.retired_at ? 'policy_not_approved'
+    const reason = row.work_purged_at ? 'work_already_purged' : !policy?.approved_at || policy.retired_at ? 'policy_not_approved'
       : !['closed','completed','canceled','rejected','expired','no_show'].includes(row.state) ? 'active_work'
         : !row.closed_at ? 'unknown_closure' : row.future_at && row.future_at > now ? 'future_schedule'
           : protection.held ? 'active_hold' : row.pending ? 'pending_delivery' : protection.supported ? 'active_support'

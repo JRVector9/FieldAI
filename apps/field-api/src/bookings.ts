@@ -9,6 +9,7 @@ import { reservationAttachments } from './reservation-attachments.js';
 import { decodeOwnerListCursor, encodeOwnerListCursor } from './owner-list-cursor.js';
 import { parseRequestFallback, requestFallback, reviewRequestFallback, type FallbackRow } from './public-request-fallback.js';
 import { receivedWorkPolicy, receivedWorkRecord, type ReceivedWorkRow } from './received-work-record.js';
+import { workRetentionRecord, type WorkRetentionRow } from './work-retention.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -22,7 +23,7 @@ type Policy = {
 };
 type Service = { id: string; name: string; description: string; bookingMode: 'request' | 'slot'; durationMinutes: number; priceAmount: number | null };
 type Release = { revision: number; content: { services: Service[] } };
-type Reservation = FallbackRow & {
+type Reservation = FallbackRow & WorkRetentionRow & {
   id: string; organization_id: string; catalog_revision: number; service_id: string;
   service_snapshot: Service; booking_mode: 'request' | 'slot'; customer_name: string;
   customer_phone: string; visitor_key_hash: string | null; preferred_time_text: string | null;
@@ -133,6 +134,7 @@ function publicReservation(row: Reservation) {
     phone: row.customer_phone, preferredTimeText: row.preferred_time_text,
     requestMessage: row.request_message, visitRegion: row.visit_region,
     fallback: requestFallback(row),
+    retention: workRetentionRecord(row),
     requestedStartAt: iso(row.requested_start_at), confirmedStartAt: iso(row.confirmed_start_at),
     confirmedEndAt: iso(row.confirmed_end_at), proposalStartAt: iso(row.proposal_start_at),
     proposalEndAt: iso(row.proposal_end_at), proposalAcceptedAt: iso(row.proposal_accepted_at),
@@ -668,11 +670,11 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
       : decodeOwnerListCursor(rawCursor, operator.id, 'external_request');
     if (rawCursor !== undefined && !cursor)
       return reply.code(400).send({ error: 'invalid_external_request_cursor' });
-    const result = await runtime.pool.query<ReceivedWorkRow & { id: string; service_snapshot: Service;
+    const result = await runtime.pool.query<ReceivedWorkRow & WorkRetentionRow & { id: string; service_snapshot: Service;
       customer_snapshot: { name: string; phone: string; verified: boolean };
       summary: string; status: string; received_at: Date; is_test: boolean; field_work_state: string; field_work_revision: number; retention_closed_at: Date | null; cursor_timestamp: string }>(
       `select id,service_snapshot,customer_snapshot,summary,status,received_at,is_test,
-         provider,connection_id,action_request_id,consent_record_id,consent_confirmed_at,processing_policy,field_work_state,field_work_revision,retention_closed_at,
+         provider,connection_id,action_request_id,consent_record_id,consent_confirmed_at,processing_policy,field_work_state,field_work_revision,retention_closed_at,retention_work_purged_at,retention_photos_purged_at,
          to_char(received_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as cursor_timestamp
        from field.external_work_requests
        where organization_id = $1 and kind = 'inquiry'
@@ -682,11 +684,11 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
     const page = result.rows.slice(0, 100);
     return reply.header('Cache-Control', 'private, no-store').send({
       inquiries: page.map(row => ({ id: row.id, service: row.service_snapshot,
-        customerName: row.customer_snapshot.name, customerPhone: row.customer_snapshot.phone,
+        customerName: row.retention_work_purged_at ? '[보존 기간 종료]' : row.customer_snapshot.name, customerPhone: row.customer_snapshot.phone ?? '',
         customerVerified: row.customer_snapshot.verified, summary: row.summary,
         status: row.status, receivedAt: row.received_at.toISOString(), isTest: row.is_test,
         fieldWorkState: row.field_work_state, fieldWorkRevision: row.field_work_revision, closedAt: row.retention_closed_at,
-        receivedRecord: receivedWorkRecord(row) })),
+        receivedRecord: receivedWorkRecord(row), retention: workRetentionRecord(row) })),
       nextCursor: result.rows.length > 100
         ? encodeOwnerListCursor(operator.id, 'external_request', page[page.length - 1]!.cursor_timestamp,
           page[page.length - 1]!.id) : null,
@@ -697,21 +699,21 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
     const operator = await operatorOrganization(request, reply, runtime);
     if (!operator) return reply;
     if (!uuid.test(request.params.id)) return reply.code(404).send({ error: 'external_request_not_found' });
-    const result = await runtime.pool.query<ReceivedWorkRow & { id: string; service_snapshot: Service;
+    const result = await runtime.pool.query<ReceivedWorkRow & WorkRetentionRow & { id: string; service_snapshot: Service;
       customer_snapshot: { name: string; phone: string; verified: boolean };
       summary: string; status: string; received_at: Date; is_test: boolean; field_work_state: string; field_work_revision: number; retention_closed_at: Date | null }>(
       `select id,service_snapshot,customer_snapshot,summary,status,received_at,is_test,
-         provider,connection_id,action_request_id,consent_record_id,consent_confirmed_at,processing_policy,field_work_state,field_work_revision,retention_closed_at
+         provider,connection_id,action_request_id,consent_record_id,consent_confirmed_at,processing_policy,field_work_state,field_work_revision,retention_closed_at,retention_work_purged_at,retention_photos_purged_at
        from field.external_work_requests where organization_id=$1 and id=$2 and kind='inquiry'`,
       [operator.id, request.params.id]);
     const row = result.rows[0];
     if (!row) return reply.code(404).send({ error: 'external_request_not_found' });
     return reply.header('Cache-Control', 'private, no-store').send({ id: row.id, service: row.service_snapshot,
-      customerName: row.customer_snapshot.name, customerPhone: row.customer_snapshot.phone,
+      customerName: row.retention_work_purged_at ? '[보존 기간 종료]' : row.customer_snapshot.name, customerPhone: row.customer_snapshot.phone ?? '',
       customerVerified: row.customer_snapshot.verified, summary: row.summary,
       status: row.status, receivedAt: row.received_at.toISOString(), isTest: row.is_test,
       fieldWorkState: row.field_work_state, fieldWorkRevision: row.field_work_revision, closedAt: row.retention_closed_at,
-      receivedRecord: receivedWorkRecord(row) });
+      receivedRecord: receivedWorkRecord(row), retention: workRetentionRecord(row) });
   });
 
   app.get('/v1/booking-policy', async (request, reply) => {

@@ -188,6 +188,11 @@ async function main() {
             process.stderr.write(`${error.message}; AP core remains ready, event processing is unavailable\n`);
           }, root, false);
       } else {
+        start('Field retention worker', process.execPath,
+          ['--env-file=infra/field/.env', 'apps/field-api/dist/retention-purge-worker.js'],
+          environment, managed, error => {
+            process.stderr.write(`${error.message}; Field core remains ready, retention processing is unavailable\n`);
+          }, root, false);
         if (configured('field', ['FIELD_AP_OAUTH_ISSUER', 'FIELD_AP_CLIENT_ID',
           'FIELD_AP_CLIENT_SECRET', 'FIELD_AP_TOKEN_KEY']))
           start('Field AP event worker', process.execPath,

@@ -36,8 +36,10 @@ export type ReceivedWorkRecord = { receivedAt: string;
   consent: { recordId: string; confirmedAt: string; version: string | null; items: string[] | null };
   retention: { policyVersion: string; state: 'proposed' | 'approved';
     startsAfter: 'field_work_closed'; workDays: number; photoDays: number } | null };
+export type WorkRetention = { workPurgedAt: string | null; photosPurgedAt: string | null };
 export type Inquiry = {
   id: string;
+  retention?: WorkRetention;
   state: string;
   revision?: number;
   organizationId?: string;
@@ -61,6 +63,7 @@ export type BookingPolicy = {
   beforeMinutes: number; afterMinutes: number; minLeadMinutes: number; horizonDays: number;
 };
 export type Reservation = {
+  retention?: WorkRetention;
   id: string; organizationId: string; catalogRevision: number; service: Service;
   businessName?: string;
   fallback?: RequestFallback | null;

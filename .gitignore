@@ -11,4 +11,5 @@ coverage/
 *.tsbuildinfo
 infra/field/media/
 infra/field/inquiry-media/
+infra/field/retention-journal/
 infra/agent/inquiry-media/

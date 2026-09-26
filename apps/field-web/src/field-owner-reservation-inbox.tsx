@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { requestJson, type FallbackCandidate, type Reservation } from "./field-api";
 import { FieldFallbackReview } from "./FieldFallbackReview";
+import { FieldRetentionNotice } from "./FieldRetentionNotice";
 
 type ReplyAttempt = { messageId: string; body: string };
 
@@ -94,9 +95,10 @@ export function OwnerReservationInboxThread({ id, onBack, onManage, onOpenFallba
       <div className="field-owner-reservation-summary"><div><strong>{reservation.service.name}</strong><span>{stateNames[reservation.state] ?? reservation.state}</span></div><p>{reservation.bookingMode === "slot" ? "요청 시간" : "희망 시간"}: {reservation.requestedStartAt ? timeLabel(reservation.requestedStartAt, reservation.timezone) : reservation.preferredTimeText ?? "시간 조율 중"}</p>{reservation.proposalStartAt && <p>제안 시간: {timeLabel(reservation.proposalStartAt, reservation.timezone)}</p>}<button type="button" onClick={() => onManage(id)}>예약 확인·시간 제안</button></div>
       <p className="field-owner-reservation-thread-note">예약 상태 변경은 예약·일정에서 처리합니다. 이 대화와 고객 답변은 Field 원본에 저장됩니다.</p>
       <FieldFallbackReview fallback={reservation.fallback} review={reservation.fallbackReview} onOpenCandidate={onOpenFallbackCandidate} />
+      <FieldRetentionNotice retention={reservation.retention} />
       <ol className="field-owner-inbox-messages">{reservation.requestMessage && <li className="customer"><strong>고객 · 예약 요청</strong><p>{reservation.requestMessage}</p><small>{timeLabel(reservation.createdAt, reservation.timezone)}</small></li>}{reservation.messages?.map(message => <li key={message.id} className={message.sender === "owner" ? "mine" : "customer"}><strong>{message.sender === "owner" ? "나 · 사업자" : "고객"}</strong><p>{message.body}</p><small>{timeLabel(message.createdAt, reservation.timezone)}{message.sender === "owner" ? " · Field 열람 가능 · 외부 알림 연동 전" : ""}</small></li>)}{!reservation.requestMessage && !reservation.messages?.length && <li>아직 대화 메시지가 없습니다.</li>}</ol>
       {status && <p className="field-owner-reservation-reply-status" role="status">{status}</p>}
-      {reservation.source === "public" ? <form className="form-fields field-owner-reservation-reply" onSubmit={event => void sendReply(event)}><label>예약 고객에게 답변<textarea required maxLength={5000} value={pendingReply?.body ?? replyBody} readOnly={Boolean(pendingReply)} onChange={event => setReplyBody(event.target.value)} placeholder="예약에 관한 답변을 입력하세요" /></label><button type="submit" disabled={busy || (!pendingReply && !replyBody.trim())}>{pendingReply ? "답변 결과 확인·재시도" : "예약 답변 저장"}</button></form> : <p>AP 출처 예약의 고객 대화는 AP 원본에서 이어집니다.</p>}
+      {reservation.retention?.workPurgedAt ? null : reservation.source === "public" ? <form className="form-fields field-owner-reservation-reply" onSubmit={event => void sendReply(event)}><label>예약 고객에게 답변<textarea required maxLength={5000} value={pendingReply?.body ?? replyBody} readOnly={Boolean(pendingReply)} onChange={event => setReplyBody(event.target.value)} placeholder="예약에 관한 답변을 입력하세요" /></label><button type="submit" disabled={busy || (!pendingReply && !replyBody.trim())}>{pendingReply ? "답변 결과 확인·재시도" : "예약 답변 저장"}</button></form> : <p>AP 출처 예약의 고객 대화는 AP 원본에서 이어집니다.</p>}
       <p className="field-owner-reservation-thread-note">고객은 예약 확인키로 답변을 읽을 수 있습니다. 외부 문자·카카오 알림은 연동 전입니다.</p>
     </>}
   </section>;
