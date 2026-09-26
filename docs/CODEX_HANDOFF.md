@@ -9,6 +9,31 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
+## QA 준비 완료 — 테스트 계정 6개와 Field 실행표 (2026-09-27)
+
+- **Task ID / Product / Owner / State:** QA.TEST-PREPARATION / Field + AP 연동 계정 / Coordinator / verified(계정·엑셀 준비 범위). 사용자 요청은 로컬 테스트 계정 생성과 Field QA 엑셀 제공이다. 기존 서비스 내부 완료52개·7pending·고정 디자인·소스2362761은 유지하며 기능QA 통과나 출시 승인이 아니다.
+- **Requirements / QA / Gate:** Field PRD3.2~3.8, 개발 QA01~QA160의 Field/공통/연동 적용. 변경 전 파일 범위·요구·명령은 `/private/tmp/fieldai-qa-20260927-01a0d09c/scope.md`에 기록했다. 공급사·운영 게이트는 이번에 실행하지 않았다.
+- [x] **테스트 계정 준비:** Field 사업자 `field.qa.owner.20260927@example.invalid`, 다른 사업장 `field.qa.other.20260927@example.invalid`, 신규 가입 `field.qa.fresh.20260927@example.invalid`, Field 관리자 A/B `field.qa.admin-a.20260927@example.invalid` / `field.qa.admin-b.20260927@example.invalid`, 별도 AP `field.qa.ap.20260927@example.invalid`. 6개 실제 로컬 가입·이메일/비밀번호 로그인·세션을 확인했고 관리자2개는 기존 own mock 도구로 별도 operator membership을 부여·보호 API 접근을 확인했다. 비밀번호는 제공 엑셀에만 전달하고 저장소에는 기록하지 않는다.
+- [x] **Field QA 엑셀 준비:** `/Users/jr/.codex/outputs/fieldai-qa-20260927-01a0d09c/Field_QA_테스트_2026-09-27.xlsx`. `시작안내`(6계정·각 비밀번호·정확한 역할별 접속 주소·초기 상태), `Field QA`(문서142개+최근 내부 기능3개=145개·구체적인 선행/실행/기대·결과 드롭다운·집계), `전체 QA 목록`(원본160개 그대로·Field142개 연결·AP 독립/매체18개 별도 범위), `오류 기록`(빈20행·실제 결함 아닌 작성 예시) 4시트. 모든 기능 결과는 **미실행145 / 통과0 / 실패0**다. AP SDK/매체가 함께 있는 원본 항목은 Field 관점만 포함한다.
+- **Initial data / Decisions:** 주 Field 사업장에 가상 사업 정보·FAQ·요청형30분59,000원/시간표형60분79,000원/상속형20분견적문의 서비스 초안만 저장했다. 기본 방식 요청형. 사이트·공개본·고객문의·예약·결제·AP AI·설치·연결은 생성/승인하지 않았다. 신규 계정은 조직 없음, 다른 사업장은 별도 조직, AP는 별도 조직·빈 지식 초안이다. 가상 번호01000000000은 형식 확인용이다. 사용자 직접 승인·공개·고객 흐름 검수부터 진행한다.
+- **Changed paths / Contract / Schema:** 저장소에서는 이 인계 기록만 변경한다. 계정/빌더/검수 스크립트·민감 자격 파일·미리보기는 위 private tmp, 결과물은 outputs 경로다. 앱 코드·reference·계약·schema·migration·TASKS52개 완료원장은 변경하지 않았다. local mock 신규 테스트 계정/조직/관리자 권한만 추가했고 운영 자료를 복사하지 않았다.
+- **Tests actually run / Environment / Commit:** Node24.18.0, source2362761의 현재 managed54544/own UUID PG17·제품별 Valkey. 최초 `node accounts.mjs`는 Field5개 가입/로그인/준비 성공 뒤 AP 조직 생성 후 잘못된 Field 초안 경로를 요청해 exit1; `node resume-ap.mjs`가 기존 AP 계정/조직을 정확한 `/v1/knowledge/draft`로 확인·복구해 exit0. 재가입/비밀번호 초기화 없음. 실제 로그 `account-results.log`, `ap-account-recovered.log`. `node build-workbook.mjs` exit0(4시트·6계정·145/160행·COUNTIF 실제 상태변경1건→집계변경→미실행 원복·오류0·7개 bounded render). `python3 verify-workbook.py` exit0(ZIP 무결성·원본160행 정확일치·계정/비밀번호/역할URL 일치·145미실행·수식cache145/145/0/0/0/0·드롭다운·4필터·고정5행/2열·예시/빈결함행 확인). 최종 각 시트 렌더를 실제 시각 확인했다. `curl -fsS http://127.0.0.1:4321/health/ready` ready. 검수 상세는 private tmp의 `workbook-verification.json`, `xlsx-structure-verification.json`, `formula-errors.ndjson`(matched0)이다.
+- **Failed approaches / Recovery:** AP용 준비 스크립트에서 Field 사업 초안 경로를 잘못 사용한 실패를 위 로그에 보존했다. 제품 전용 AP 지식 초안을 조회해 기존 계정만 회복했고 서비스 코드/기대값은 바꾸지 않았다. credentials JSON은0600이며 재가입 스크립트를 다시 실행하지 않는다. 렌더의 병합 제목 일부 범위 누락은 전체 병합 너비를 포함해 최종 파일에서 확인했다. 엑셀 재생성은 같은 최종 파일을 갱신하며 추가 변형 결과물은 만들지 않았다.
+- **Not tested / External approvals / Next dependency:** 사용자 기능QA145개·전체QA160·실브라우저 로그인 동선·모바일320px·실기기·공급사/운영/출시 게이트 미실행. 확인한 것은 계정 API 로그인/권한과 문서 결과물이다. 실메일/카카오/MFA/LLM/PG/발송/VAPID/DNS/TLS는 blocked_integration 유지. 실제 청구/발송/환불/운영 삭제/배포 없음. 다음은 사용자가 엑셀에 직접 결과를 적고 실패의 구체적 재현 증거를 공유하는 것이다. 기존52개를 기억 부족이나 미실행 상태만으로 다시 개발하지 않는다.
+
+### Exact commands for next agent — QA 준비 결과 조회만
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+sed -n '1,70p' docs/CODEX_HANDOFF.md
+curl -fsS http://127.0.0.1:4321/health/ready
+curl -fsS http://127.0.0.1:4311/health/ready
+cat /private/tmp/fieldai-qa-20260927-01a0d09c/xlsx-structure-verification.json
+```
+
+사업자 주소 `http://127.0.0.1:3002/workspace`, Field 관리자 `http://127.0.0.1:3002/admin`, AP `http://localhost:3001/workspace`. 계정 비밀번호는 엑셀 `시작안내` 시트에 있다. `accounts.mjs`와 관리자 grant는 이미 완료했으므로 재실행하지 않는다. 살아 있는 managed54544를 중복 기동하거나 테스트 조직/사용자/초안을 초기화하지 않는다. 결과물 생성 범위만 완료 체크했으며 서비스QA 실행 결과와 분리한다.
+
 ## 현재 완료 checkpoint — 2362761 / 내부 기능·로컬 사용 환경 (2026-09-27)
 
 - **Current objective / State:** v3/C03의 확정 내부 기능을 끝까지 구현하고 독립 로컬 사용 환경을 마련하는 범위는 완료했다. source2362761, TASKS52[x]/7[ ] (기존49개 유지). 최종 read-only 요구/코드 대조에서 이번3개 이외 추가 확정 내부 누락은 없었다. 실공급사/운영·사용자최종 테스트·전체QA160/출시 승인과 전체Task46 verified는 별도 미완료다. 디자인은 고정하고 새 기능만 `(추가)`.
