@@ -1,4 +1,4 @@
-# CODEX 인수인계 — 2026-09-27
+# CODEX 인수인계 — 2026-09-28
 
 ## 사용자 지정 기준 시안 — 작업 재개 시 필수 확인
 
@@ -8,6 +8,44 @@
 - 원본에 있는 화면을 처음 구현할 때 해당 HTML/CSS를 직접 읽고 그대로 기준으로 사용한다. 이미 완료된 화면은 구체적 새 오류/요구 변경 없이 다시 작업하지 않는다. 제품별 API·권한·실제 상태는 v3.0 독립 제품 경계를 따른다.
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
+
+## Laya 다국어 로컬 설치 — 사용자 요청 (2026-09-28)
+
+- **Task ID / Product / Owner / State:** LOCAL.LAYA-MULTILINGUAL / 독립 Mac 로컬 도구 / Coordinator / implemented 및 로컬 GPU 실행 verified. 사용자 요청은 `laya-mlx`와 multilingual 모델 설치이며 AP/Field 서비스 연동이나 출시 승인 요청이 아니다. 착수 전 TASKS 완료 원장·현재 인계·git 상태/최근 이력·기존 설치 여부를 확인했다. 시작 checkout `69cfd3a`, git clean. 파일 범위·검수 명령은 설치 전에 `/private/tmp/laya-install-20260927-i31k5uot/scope.json`에 기록했다(착수 9/27, 완료 보고 기준 9/28).
+- **Completed / Modified files:** `/Users/jr/.local/share/laya-mlx/.venv`에 기존 ARM Python3.12.13으로 `laya-mlx==0.2.0`·MLX/Metal0.32.2 및 의존성20개 설치. 모델 `aac6fef/laya-multilingual-mlx` revision `f2b4faf51023039425946074e2cf1361d2db11d5`를 `models/multilingual`에 다운로드. 가중치643,835,426bytes, manifest에 나열된11개 파일 SHA256/크기 모두 실제 일치(합계678,236,275bytes). `questions.json`, `smoke.py/log/results`, `model-verification.json`, `runtime-verification.json`, `cli-result/verification.json`, `installation.json`, `requirements-lock.txt`, `README.md`를 같은 설치 경로에 보존. `~/.local/bin/laya-mlx`는 해당 venv CLI symlink, `laya-multilingual`은 다운로드 모델을 선택하고 HF offline을 설정하는 실행 파일이다. 저장소 변경은 이 인계 기록뿐이다.
+- **Key decisions / Requirements / QA / Gate:** 사용자 로컬 설치 범위. Python 전역 환경 대신 독립 venv·고정 package/model revision·기존 PATH 경로를 사용했다. multilingual322M/FP16/Metal GPU만 설치했다. HTTP 서버나 자동 시작 작업은 만들지 않았다. AP/Field의 기존 코드·DB·환경·TASKS52[x]/7pending·시안·6개QA 계정·서버를 변경하지 않았고 모델 공급사 blocked_integration/제품 독립성 게이트를 통과로 바꾸지 않았다.
+- **Tests actually run / Commands / Environment / Commit:** Apple M5 Max/128GiB/macOS27.0/ARM Python3.12.13, 서비스 소스69cfd3a. `uv venv --python /Users/jr/.local/bin/python3.12 /Users/jr/.local/share/laya-mlx/.venv` exit0; `uv pip install --python .../.venv/bin/python laya-mlx==0.2.0` session50779 exit0; pinned `snapshot_download(...,token=False)` session38910 exit0. Python manifest SHA/크기11개 검사 exit0. `uv pip check --python .../.venv/bin/python` exit0/20개 compatible, `laya-mlx --version` 0.2.0. `.../.venv/bin/python .../smoke.py > .../smoke.log 2>&1` session97673 **exit1**: 5언어6개 합성 입력의 실제3종판단 실행·출력형태/분포·output_tokens0·한국어 반복일치 전부 확인, 팀 분류5/6·환불 yes/no6/6. HF offline 및 Python socket network guard를 켰고 실제 DeviceType.gpu였다. 별도 `laya-multilingual --state '같은 요금이 두 번 결제됐어요. 중복 결제 금액을 환불해주세요.' --questions .../questions.json` session24624 exit0; 실제 JSON 독립 검사 exit0(billing, refund0.9886, output_tokens0; 정확한 확률은 cli-result.json 기준). 설치/추론 관찰은 README에 보존했다.
+- **Failed approaches / Limits:** 스페인어 구매·가격 문의 `es-sales`는 예상sales 대신 billing을 선택해 semantic smoke가 non-zero로 종료했다. 기대값/모델을 결과에 맞추지 않았으며 실패 출력·exit1을 보존했다. 실행 구조 검사의 별도 pass는 의미 정확도6/6을 뜻하지 않는다. Score는 범위/분포만 검사했고 실제 긴급도 품질은 평가하지 않았다. 최초 경로조회 exit1은 기존 설치 부재 확인이며 설치 실패가 아니다. 설치 자체의 의존성·파일·로컬 GPU·한국어 CLI 실행은 완료다.
+- **Remaining / Recovery / External approvals:** 한국어 실제 업무 데이터 정확도/확률 보정/성능 반복측정·HTTP API·AP/Field adapter·제품별 usage/권한/장애 검수는 미실행. 사용자 요청한 설치 범위는 완료이며 앱 연동은 후속 요청 범위다. 재설치/모델 재다운로드는 필요 없다. 같은 smoke의 스페인어 오분류를 숨기거나 통과로 변경하지 않는다. 이 도구는 on-demand CLI/Python이며 별도 장기 프로세스가 없다.
+
+### Exact commands for next agent — 설치 사용/조회
+
+```bash
+laya-mlx --version
+cat /Users/jr/.local/share/laya-mlx/runtime-verification.json
+cat /Users/jr/.local/share/laya-mlx/cli-verification.json
+laya-multilingual --state '같은 요금이 두 번 결제됐어요. 중복 결제 금액을 환불해주세요.' --questions /Users/jr/.local/share/laya-mlx/questions.json
+```
+
+사용 안내는 `/Users/jr/.local/share/laya-mlx/README.md`다. smoke를 의도적으로 재현할 때는 `/Users/jr/.local/share/laya-mlx/.venv/bin/python /Users/jr/.local/share/laya-mlx/smoke.py`이며 보존된 스페인어 사례로 exit1이 예상된다. 완료된 서비스 기능을 재구현하거나 현재 서버를 재기동하지 않는다.
+
+## GitHub 공개 게시 준비 — 사용자 요청 (2026-09-28)
+
+- **Task / Product / Owner / State:** C02.REPOSITORY.PUBLIC-PUBLISH / AP + Field repository / Coordinator / in_progress. 사용자가 `커밋하고 public으로 깃헙에 올려`를 명시 승인했다. 최초 checkout69cfd3a/main·working tree clean·remote 없음. 활성 GitHub 계정은 JRVector9이고 `JRVector9/FieldAI`가 없어 해당 이름으로 새 PUBLIC 저장소에 기존 main 이력을 게시한다.
+- **Completed preparation / Files:** 공개 대상 기존 코드·문서·시안·52커밋 이력을 확인했다. `.gitignore`에 계정 비밀번호를 포함한 `docs/Field_QA_테스트_2026-09-27.xlsx`의 영구 제외를 추가했고 이 인계 기록을 갱신했다. 기존 local `.git/info/exclude`도 유지한다. 엑셀은 사용자 요청대로 로컬 docs에 그대로 있으며 `.env`·미디어·journal·DB/개인 자격 파일과 함께 업로드하지 않는다. 서비스 코드·계약·schema·TASKS52개 완료·디자인 변경 없음.
+- **Actual checks / Environment:** 게시 범위·파일·명령·credential 제외 정책을 변경 전에 `/private/tmp/fieldai-public-publish-20260928-ftpbiypu/scope.json`에 기록했다. 공식 release checksum을 확인한 gitleaks8.30.1을 private tmp에서만 사용. `gitleaks git . --log-opts=--all --redact=100 --max-archive-depth=3` **exit0**, 기존52커밋/약12.19MB·누출0(`gitleaks-history.log/json`). 별도 Python 실제 local private credential exact-match 검사 **exit0**: 고유1452 history blob·기존 ZIP2개/48member·19개 현재 private credential 값 대조·일치0(`known-credentials-history.json`). 로그에는 원문 secret을 출력하지 않았다. 기존 엑셀/양 `.env` ignore·Git 이력 내 민감 파일 부재 확인. 서비스 테스트는 재실행하지 않았다.
+- **Decisions / Failed approaches / Remaining:** 기존 이력을 보존하고 main을 정상 push한다. history rewrite/force push·계정/DB 재생성·실공급사/운영 배포 없음. 최초 `gh repo view JRVector9/FieldAI`의 not-found와 gitleaks 미설치는 준비 상태 확인이며 게시 실패가 아니다. 새 PUBLIC 저장소 생성·push·원격 visibility와 commit 일치 확인이 남았다. 다음 명령은 현재 repository가 실제 미생성인 경우에만 적용한다.
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git diff --check
+gh repo create JRVector9/FieldAI --public --source=. --remote=origin
+git push -u origin main
+gh repo view JRVector9/FieldAI --json url,visibility,defaultBranchRef
+git rev-parse HEAD
+gh api repos/JRVector9/FieldAI/commits/main --jq .sha
+```
 
 ## 현재 로컬 서버 — 사용자 요청으로 재기동 (2026-09-27)
 

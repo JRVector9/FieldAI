@@ -17,3 +17,6 @@ infra/agent/inquiry-media/
 infra/agent/retention-journal/
 
 infra/agent/revocation-journal/
+
+# Local QA workbook includes test account passwords.
+docs/Field_QA_테스트_2026-09-27.xlsx
