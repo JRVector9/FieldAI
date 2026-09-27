@@ -28,6 +28,8 @@
 
 **F01.CATALOG 스타일 누락 재개(2026-09-28, 기존[x] 유지):** 서비스 카드/사업 정보 입력 폼은 정상이나 실제 펼친 공개 관리의 `현재 초안 승인` 버튼은 native 기본 스타일이다. 추가 범위는 `.field-owner-catalog-editor button`의 기본/disabled 및 관련 공개 관리 링크·설명 간격만이다. 기존 폼 submit의 blue 스타일과 서비스 카드 디자인·승인/자동저장/충돌 handler는 보존한다.
 
+**2026-09-28 위 스타일 보완 구현 완료 — f1f4f0a:** F02.EDITOR/F04.BASIC-PUBLISH의 wizard/실제 상호3개 template card·F09.TRIAL/F09.AI-ENTITLEMENT의 usage/subscription 버튼·F07.BOOKING 하단 카드/폼·F01.CATALOG 승인 버튼 scoped CSS를 반영했다. API/state handler prefix 실제 비교 동일, 계약/schema 변경 없음. Field 웹 단위76/76(새3개 포함)·typecheck·lint·최종web build exit0. Chrome에서 wizard5단계·usage/subscription·관리실 today/inbox/services/notifications/more/domain을 실제 확인했고 design320/390/768/1440px 확인. 마지막 booking/catalog 추가 CSS는 build/실제 제공 CSS 확인까지 완료했으나 Chrome cgWindowNotFound·browser unavailable로 최종 시각 재확인은 미실행이다. 실계정 입력/승인/공개/예약/체험/내보내기 제출은 하지 않았다. 기존52[x]/7pending·최종 사용자 인수/전체 QA는 유지하며 상세 evidence는 phase/coverage/인계에 기록한다.
+
 - [x] **C02.LOCAL** 제품별 API/웹·PG17/migration/키·Field Valkey·managed mock 실행/정상 종료·DB 볼륨 유지. `tools/mock-run.mjs`, 양제품 health 실제ready. 운영 ACL/CI는 별도다.
 - [x] **A00.LOCAL / F00.LOCAL** 로컬 이메일 계정/별도 세션·조직/membership·다른 조직 접근 차단. `auth.ts/business.ts`, 양제품 business-core DB 검사. 실메일/카카오/MFA는 별도다.
 - [x] **A01.NATIVE** AP 직접 지식 초안 자동저장·미완성 비공개·지역/시간·명시 승인·불변 공개본. `business-core.db.test.ts`, 지역/시간441c60c. 새로운 public client write와 혼동하지 않는다.

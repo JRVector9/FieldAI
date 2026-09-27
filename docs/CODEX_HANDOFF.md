@@ -9,6 +9,31 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
+## 사이트 제작·관리실 디자인 누락 보완 — 사용자 요청 (2026-09-28)
+
+- **Task / Product / Owner / State:** F02.EDITOR/F04.BASIC-PUBLISH + 확인된 F09.TRIAL/F09.AI-ENTITLEMENT/F07.BOOKING/F01.CATALOG 스타일 재개 / Field / Coordinator / implemented; 사이트 wizard/usage/subscription의 로컬 시각 범위 verified. 기존52[x]/7pending·완료 backend/API/DB와 최종 인수는 유지한다. 시작 checkoutb55a82d/clean, 사용자 exact URL `/workspace/site?step=design&page=7336e361-ef86-489b-ae30-7d3b7043fd96`. 작업 시작 전에 완료 원장/인계/현재 코드·시안을 확인하고 코드 변경 전에 동일 ID의 현재 CSS/실제 Chrome 증거·추가 범위를 TASKS와 F02_EDITOR_DESIGN_REPAIR_EXECUTION_PLAN에 기록했다.
+- **Completed / Modified paths:** 코드 **f1f4f0a**. `apps/field-web/src/site-editor-frame.tsx`, `site-editor-design.tsx`, `site-editor.css` 생성: 원본 v3 wizard/sidebar/stage와 실제 상호 기반3개 template thumbnail·선택 상태·모바일 layout 적용. `site-editor.tsx`의 기존 navigation/카드 markup만 연결, layout CSS import 추가. `field-usage.tsx`/`field-subscription.tsx`의 scoped 클래스 및 `site.css`에서 새로고침/체험/내보내기·예약 하단 카드/폼·사업 정보 승인 버튼의 누락 스타일 보완. 새 `test/site-editor-design.test.tsx`는 실제 상호 escaping/선택 상태/fallback/pages 직계 구조 보존을 검사한다. TASKS/phase/coverage/잔여 audit/이 인계에 완료/미실행을 연결했다.
+- **Key decisions / Requirements / QA:** 고정 `reference/field_ui_prototype_v3.html`의 v2WizardFrame/v2StepBar/v2TemplateCards/v2Thumb을 적용했다(render3의 create 화면이 그대로 사용). 기존 pages 편집 grid와 public SiteRenderer·폰트 `(추가)`는 유지한다. 실제 사업자 초안의 상호를 카드에 사용하고 시안 사업체/허구 가격을 넣지 않는다. Field PRD3.2/3.3·QA55/57/58/61/62의 적용 시각 범위. 계약/schema/migration/독립 제품 경계·AI/예약/승인/공개 handler 변경 없음; Python 변경 전후 state/API handler prefix 비교 실제 동일.
+- **Tests actually run / Environment:** Node24.18.0/Next16.3.6/Mac local mock. `pnpm --filter @fieldai/field-web exec tsx --test test/site-editor-design.test.tsx`: 최초 missing module exit1(`/private/tmp/fieldai-design-red.log`) → 구현 후3/3 exit0. `pnpm --filter @fieldai/field-web test:unit`76/76·fail0/skip0 exit0(`fieldai-design-unit.log`), `typecheck` exit0(`fieldai-design-typecheck.log`), root `pnpm lint` 최초71443/최종93745 exit0(`fieldai-design-final-lint.log`), `pnpm build:web:field` 최종89850 exit0(`fieldai-design-verified-build.log`), `git diff --check` exit0. 이후 변경은 검수 문서뿐이다.
+- **Actual browser scope:** Chrome CUA에서 design/business/contact/publish/pages5단계와 usage/subscription(하단 체험/내보내기 포함), 관리실 today/inbox/reservations/services/사업 정보 폼/notifications/more/domain을 직접 확인했다. DevTools width320/390/768/1440에서 design 카드·단계 메뉴의 반응형 배치 확인. 데이터 입력/템플릿 변경/초안 저장/승인/공개/체험/예약/내보내기 제출은 하지 않았다. 사업 초안revision1·사이트초안revision0·미승인/미공개/체험미시작 표시 유지. 스크린샷 증거는 tool transcript이며 PNG 저장/수치 overflow 측정/전수 접근성 검사 주장은 아니다.
+- **Failed approaches / Not tested:** 최종 booking/catalog 추가CSS와 integrations 정상 재확인은 CUA `cgWindowNotFound`, Chrome/IAB `Browser is not available`로 미실행이다. native `launch_app`도 제공되지 않았다. 다른 UI 기술로 우회하지 않았다. integrations의 일시 전체 CSS 부재는 running production Next의 .next 빌드 교체 중 관찰이므로 별도 제품 결함으로 재구현하지 않았다. 최종 재기동 뒤 route200·최신 compiled CSS의 실제 제공을 확인했다. design console의 catalog/public-site404두 건은 미승인/미공개 상태에 대응하며 console/pageerror0을 주장하지 않는다. 초기 DevTools AX setValue가 width1/1320이 되어 triple-click+paste로320 정확 값부터 다시 검수했다. DB/전체QA160/다른권한·실기기/실공급사/최종 인수는 재실행하지 않았다.
+- **Current local runtime / Recovery:** 초기77439는 현재 listener/controller가 없어 재기동했다. 이번 초기15771/controller53700·중간2639/controller17763은 build 반영 후 정상 SIGTERM/exit0으로 종료했다. **최신 managed session10995/controller95568**이 실행 중이며 로그 `/private/tmp/fieldai-design-complete-managed.log`, Next children96925/96941·양API/web/workerready 확인. 기존 `pnpm mock:run`과 DB/환경/계정을 유지했다. 실제 Python read-only 검사 exit0(`/private/tmp/fieldai-design-verification.json`): 양ready200, site/usage/subscription/integrations200, 제공CSS1파일에 wizard/template/account/booking/catalog 최신 규칙 존재. 새 공급사 연결·고객 발송/청구/공개/운영 삭제·remote push 없음. 아래77439/54544는 과거 이력이다.
+- **Remaining / Next:** Chrome이 다시 사용 가능하면 최종 예약 하단/카탈로그 승인 버튼·integrations 시각 재확인부터 수행한다. 사이트 wizard와 내부 완료52개를 다시 구현하지 않는다. 사용자 최종 시안·실데이터/권한 동선과 기존7parent 외부/출시 게이트는 남는다. rollback은 이 frontend commit만 revert하는 것이며 API/초안 revision을 되돌리는 작업은 필요 없다.
+
+### Exact commands for next agent — 이번 보완 조회
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+git log -3 --oneline
+git show --stat f1f4f0a
+cat /private/tmp/fieldai-design-verification.json
+tail -n 20 /private/tmp/fieldai-design-complete-managed.log
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+다음 브라우저 시각 확인 URL은 `/workspace`의 예약·일정/서비스→사업 정보·공개 관리 및 `/workspace/integrations`다. 사이트 요청 URL은 위 exact page query를 유지한다. 현재10995가 실행 중이면 두 번째 launcher를 시작하지 않는다. 정상 서비스를 `.next` build로 교체할 때에는 build 후 controller를 정상 종료하고 같은 managed를 재기동해야 기존 CSS asset 응답이 섞이지 않는다.
+
 ## Laya 다국어 로컬 설치 — 사용자 요청 (2026-09-28)
 
 - **Task ID / Product / Owner / State:** LOCAL.LAYA-MULTILINGUAL / 독립 Mac 로컬 도구 / Coordinator / implemented 및 로컬 GPU 실행 verified. 사용자 요청은 `laya-mlx`와 multilingual 모델 설치이며 AP/Field 서비스 연동이나 출시 승인 요청이 아니다. 착수 전 TASKS 완료 원장·현재 인계·git 상태/최근 이력·기존 설치 여부를 확인했다. 시작 checkout `69cfd3a`, git clean. 파일 범위·검수 명령은 설치 전에 `/private/tmp/laya-install-20260927-i31k5uot/scope.json`에 기록했다(착수 9/27, 완료 보고 기준 9/28).
@@ -48,7 +73,7 @@ git rev-parse HEAD
 gh api repos/JRVector9/FieldAI/commits/main --jq .sha
 ```
 
-## 현재 로컬 서버 — 사용자 요청으로 재기동 (2026-09-27)
+## 이력 — 사용자 요청 로컬 서버 재기동 (2026-09-27, 현재는 위10995)
 
 - **Task / Product / Owner / State:** C02.LOCAL.RUNTIME / AP + Field / Coordinator / verified(기동·접속 확인 범위). 완료된 C02.LOCAL 구현을 재작업한 것이 아니라 기존 실행 명령을 사용한 운영 작업이다. TASKS52[x]/7pending과 기능QA 미실행 상태를 유지한다.
 - **Current objective / Completed:** 사용자의 `로컬 서버 띄어봐` 요청. 시작 전에 TASKS 완료 원장·인계·git 상태/최근 commit·기존 실행 도구를 확인했다. 3001/3002/4311/4321의 listener와 이전 controller는 없었고 기존 own PostgreSQL17.11 두 컨테이너·Field Valkey8.1.10은 healthy였다. `pnpm mock:run`으로 양제품 기존 build/migration·mock connector·API/웹/worker를 기동했다. **현재 managed session77439**가 실행 중이다. 이전54544는 종료된 과거 세션이다.

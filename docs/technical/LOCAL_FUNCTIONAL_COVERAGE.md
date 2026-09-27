@@ -1,5 +1,17 @@
 # 로컬 기능 검수 현황 — 2026-09-27
 
+## 사용자 신고 스타일 보완 — f1f4f0a (2026-09-28)
+
+F02.EDITOR/F04.BASIC-PUBLISH의 실제 디자인 단계에 CSS가 없다는 신고를 원본 v3 wizard와 대조했다. 사이트 wizard4단계·실제 상호 기반 template3개 카드·usage/subscription 버튼·booking 하단 카드/폼·catalog 승인 버튼을 scoped 보완했다. 기존52개[x]/7pending과 완료 API/DB/schema/공개 사이트/pages 레이아웃은 유지한다.
+
+- 실제 `pnpm --filter @fieldai/field-web exec tsx --test test/site-editor-design.test.tsx`: 최초 module 부재 exit1(`/private/tmp/fieldai-design-red.log`), 구현 후3/3 exit0. 실제 상호 escaping/단일 선택/빈 상호 fallback와 pages direct-child 보존을 검사한다.
+- 실제 `pnpm --filter @fieldai/field-web test:unit`:76/76·fail0/skip0 exit0(`/private/tmp/fieldai-design-unit.log`), 허용 font/image/editor-preview 등 기존 검사 포함. `typecheck` exit0(`fieldai-design-typecheck.log`), root `pnpm lint` exit0(`fieldai-design-final-lint.log`), `pnpm build:web:field` exit0(`fieldai-design-verified-build.log`), `git diff --check` exit0. Node24.18.0/Next16.3.6/Mac local mock, 소스 commitf1f4f0a.
+- 실제 Chrome CUA: 사용자 exact design URL·business/contact/publish/pages·usage/subscription/체험영역·workspace today/inbox/services/notifications/more/domain 확인. DevTools 실제 width320/390/768/1440에서 design 단계의 카드/메뉴 배치 확인. 사업 초안revision1·사이트초안revision0·미승인/미공개/체험미시작을 유지했고 입력/저장/승인/공개/체험/예약/다운로드는 실행하지 않았다. screenshot은 도구 transcript 증거이며 PNG 파일 보관이나 수치 overflow 측정은 아니다.
+- 최종 booking/catalog scoped CSS의 시각 재확인과 integrations 정상 재확인은 Chrome `cgWindowNotFound`·Chrome/IAB unavailable로 미실행이다. integrations의 일시 CSS 미로딩 화면은 running Next build 교체 중의 관찰이므로 실제 제품 디자인 결함으로 체크하지 않았다. 최종 재기동 후 해당 route200 및 새 compiled CSS를 실제 GET 확인했다. design console404두 건은 승인 catalog/공개 site 부재에 대응하며 pageerror0 주장하지 않는다.
+- 실제 Python read-only 검사 exit0(`/private/tmp/fieldai-design-verification.json`): 변경 전후3개 컴포넌트의 state/API handler prefix 동일, 양 ready200·site/usage/subscription/integrations200, 제공CSS1파일에서 template/wizard/account/booking/catalog 새 규칙 존재. latest managed10995/controller95568의 양제품 정상ready 확인. 이 검사는 브라우저 시각·DB 원장/실공급사/모든 역할·QA160 통과를 대신하지 않는다.
+
+실제 실패/복구/잔여와 정확 명령은 F02_EDITOR_DESIGN_REPAIR_EXECUTION_PLAN 및 CODEX_HANDOFF 최신 섹션을 따른다.
+
 ## 현재 내부 완료 checkpoint — 2362761 (2026-09-27)
 
 기존49개 완료 유지, **TASKS52[x]/7[ ]**. 남은 확정 내부3범위 F03.ALLOWED-FONT / I03.SOURCE-SYNC-STATUS / I06.AUTH-LIFECYCLE.UI를 완료했다. 새 상태 표시는 실제 API/원장 값이고 추가 기능만 `(추가)`이며 원본 reference와 기존 플랫폼 CSS는 변경하지 않았다.

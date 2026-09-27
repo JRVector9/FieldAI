@@ -1,5 +1,11 @@
 # 개발 종료까지 남은 범위 — 2026-09-26 1차 코드 대조
 
+## 사용자 신고 디자인 누락 보완 — f1f4f0a (2026-09-28)
+
+- 기존 F02.EDITOR/F04.BASIC-PUBLISH·F09.TRIAL/F09.AI-ENTITLEMENT·F07.BOOKING·F01.CATALOG 완료 이력을 보존하고 구체적 native 버튼/단계 CSS 누락만 재개했다. scoped wizard/template/card/button/form 스타일 구현 완료, Field 웹76/76·type/lint/build 실제exit0, 최신 managed10995 반영.
+- Chrome에서 사이트5단계와 usage/subscription·사업자 주요 관리실 실제 확인, design320/390/768/1440px 시각 검수 완료. 마지막 booking/catalog 추가CSS와 integrations 정상 재확인은 도구 cgWindowNotFound/Browser unavailable 때문에 브라우저 미실행이며 최종route200/compiled CSS 제공 확인까지 완료다.
+- 사용자 실제 입력/승인/공개/예약·결제/공급사·전체 역할/접근성/QA160·최종 인수는 여전히 별도다. 이 수정으로 기존52[x]/7pending이나 출시 게이트를 전체 통과로 바꾸지 않는다. 다음은 완료 wizard를 재구현하는 대신 최종 새 하단 CSS의 시각 확인과 사용자 지적된 새 증거에 따른 보완이다.
+
 ## 현재 내부 구현 종료 checkpoint — 2362761 (2026-09-27)
 
 TASKS **52[x]/7[ ]**, 기존49개 보존. 허용폰트·AP source 실제상태/현재snapshot수신시각·기존연결key상태/명시종료 UI까지 연결했다. source29파일/672insert29delete, 원본시안/플랫폼CSS·기존worker/domain·적용schemaAP81/Field73 유지. 새 기능만 `(추가)`.
