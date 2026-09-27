@@ -85,21 +85,21 @@ export function FieldSubscription() {
   }
 
   return <div className="site-shell"><header className="site-header"><a href="/"><Brand product="Field" /></a><nav aria-label="작업 메뉴"><a href="/workspace">사업 운영</a><a href="/workspace/usage">사용량</a></nav></header>
-    <main className="feature-section"><div className="feature-heading"><p className="eyebrow">Field · 체험과 구독</p><h1>Field 이용 상태</h1><p>Field 체험과 유료 구독은 AP와 별도로 관리합니다.</p></div>
-      <button type="button" disabled={busy} onClick={() => void load()}>상태 새로고침</button>
+    <main className="feature-section field-account-page"><div className="feature-heading"><p className="eyebrow">Field · 체험과 구독</p><h1>Field 이용 상태</h1><p>Field 체험과 유료 구독은 AP와 별도로 관리합니다.</p></div>
+      <button className="field-account-button" type="button" disabled={busy} onClick={() => void load()}>상태 새로고침</button>
       {notice && <p role="status" className="state-message">{notice} {notice.includes("로그인") || notice.includes("조직") ? <a href="/workspace">사업 정보 화면 열기</a> : null}</p>}
       {data && <FieldBillingSettings organizationId={data.organizationId} canManage={data.canManage} />}
       {data && <div className="special-grid"><section className="special-panel"><h2>카드 없는 체험</h2>
         {data.mode === "unavailable" && <p>체험 정책이 승인되지 않아 이 환경에서는 시작할 수 없습니다.</p>}
         {data.mode === "mock_trial" && data.state === "not_started" && <><p>로컬 mock 전용 14일 체험 제안입니다. 카드 등록이나 자동 유료 전환은 없습니다.</p>
-          {data.canManage ? <><label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /> 14일 체험(로컬 검수용)을 시작하는 데 동의합니다.</label><p><button type="button" disabled={busy || !consent} onClick={() => void post("trial")}>Field 체험 시작</button></p>{!consent && <p>시작하려면 위 조건에 동의해 주세요.</p>}</> : <p>시작 권한은 조직 owner에게 있습니다.</p>}</>}
+          {data.canManage ? <><label className="field-account-consent"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /> 14일 체험(로컬 검수용)을 시작하는 데 동의합니다.</label><p><button className="field-account-button" type="button" disabled={busy || !consent} onClick={() => void post("trial")}>Field 체험 시작</button></p>{!consent && <p>시작하려면 위 조건에 동의해 주세요.</p>}</> : <p>시작 권한은 조직 owner에게 있습니다.</p>}</>}
         {data.trial && <><p>시작: {date(data.trial.startedAt)}</p><p>종료: {date(data.trial.endsAt)}</p>
           <p>상태: {data.state === "trialing" ? "체험 중" : "체험 종료"}</p>
           {data.state === "trial_ended" && <p>새 사이트 제작·문의·예약 요청은 중지됩니다. 기존 문의와 예약의 열람·답변·처리, 기록 내보내기 및 연결 해제는 계속할 수 있습니다.</p>}
           {data.trial.cancelRequestedAt ? <p>종료 예약 기록: {date(data.trial.cancelRequestedAt)}</p> : null}
-          {data.state === "trialing" && !data.trial.cancelRequestedAt && data.canManage && <button type="button" disabled={busy} onClick={() => void post("cancel")}>체험 종료 예약</button>}
+          {data.state === "trialing" && !data.trial.cancelRequestedAt && data.canManage && <button className="field-account-button" type="button" disabled={busy} onClick={() => void post("cancel")}>체험 종료 예약</button>}
           <p>종료 예약을 해도 남은 체험 기간은 유지됩니다. 체험 종료 시 자동 청구는 없습니다.</p></>}
         </section>
-        <section className="special-panel"><h2>운영 기록 내보내기</h2><p>Field 사업자 계정·조직 구성원, 체험·AP 연결 상태, 사업 정보·사이트 초안과 공개본·직접 문의·예약, Field가 수신한 외부 업무 요청과 복사 완료한 고객 사진을 JSON 파일 하나에 담습니다. 복사 대기·실패 사진은 상태와 실패 원인을 기록합니다. 인증 비밀과 AP 상담 원문은 포함하지 않습니다.</p>{data.canManage ? <p><button type="button" disabled={busy} onClick={() => void downloadOperations()}>Field 운영 기록·사진 전체 다운로드</button></p> : <p>조직 owner만 묶음 파일을 만들 수 있습니다.</p>}<p>한 번에 각 기록 최대 500건, 외부 첨부 최대 2,500건·전체 64 MiB까지 만들 수 있습니다. 초과하거나 복사 완료 사진을 읽을 수 없으면 파일이 생성되지 않습니다.</p></section></div>}
+        <section className="special-panel"><h2>운영 기록 내보내기</h2><p>Field 사업자 계정·조직 구성원, 체험·AP 연결 상태, 사업 정보·사이트 초안과 공개본·직접 문의·예약, Field가 수신한 외부 업무 요청과 복사 완료한 고객 사진을 JSON 파일 하나에 담습니다. 복사 대기·실패 사진은 상태와 실패 원인을 기록합니다. 인증 비밀과 AP 상담 원문은 포함하지 않습니다.</p>{data.canManage ? <p><button className="field-account-button" type="button" disabled={busy} onClick={() => void downloadOperations()}>Field 운영 기록·사진 전체 다운로드</button></p> : <p>조직 owner만 묶음 파일을 만들 수 있습니다.</p>}<p>한 번에 각 기록 최대 500건, 외부 첨부 최대 2,500건·전체 64 MiB까지 만들 수 있습니다. 초과하거나 복사 완료 사진을 읽을 수 없으면 파일이 생성되지 않습니다.</p></section></div>}
     </main></div>;
 }

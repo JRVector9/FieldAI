@@ -2,6 +2,8 @@
 
 ## 완료 체크 — 재작업 방지 기준 (2026-09-27)
 
+**F02.EDITOR / F04.BASIC-PUBLISH 디자인 누락 재개(2026-09-28):** 사용자가 실제 `/workspace/site?step=design&page=7336e361-ef86-489b-ae30-7d3b7043fd96` 화면의 디자인 누락을 신고했다. 실제 Chrome에서 design/contact/publish의 시스템 기본 버튼을 확인했다. 현재 `.state-switch`와 `.deployment-options` 공통 CSS는 a/div만 꾸미며 실제 editor는 button을 사용하고, 전용 스타일은 pages 단계에만 있다. 기존 완료[x]/commit2362761과 API·자동저장·공개 이력은 유지한다. 추가 범위는 고정 시안의 wizard 단계 레이아웃/실제 상호를 사용하는 3개 템플릿 카드/폼·비활성 상태 스타일, 다른 Field 화면에서 확인된 같은 누락만이다. 기존 pages 편집기·공개 사이트 디자인은 재설계하지 않는다. 범위·QA·검수 명령은 `docs/technical/F02_EDITOR_DESIGN_REPAIR_EXECUTION_PLAN.md`에 기록한다. 상태: in_progress, 사용자 최종 인수/실 공급사 게이트는 별도다.
+
 **사용자 필수 지침: 완료된 작업을 체크하고, 후속 에이전트가 같은 작업을 다시 하지 않도록 유지한다.** 이 섹션이 현재 세부 완료의 기준 원장이다. `[x]`는 아래에 적힌 **내부/로컬 범위** 완료이며 전체 부모 Task·운영 출시·사용자 최종 시안 인수 완료가 아니다. 기억 부재로 재작업하지 않는다.
 
 근거 스냅샷: AP 실제29/29(`/tmp/ap-revocation-metadata-cache-db.log`)·Field30/30(`/tmp/ap-revocation-runner-field.log`), Node24.18.0/제품별 mock PG17, AP 단독 실행 실제통과(`/tmp/ap-revocation-independent-standalone.log`). 코드가 포함된 최신 commit **eab1d30** 및 이전 원본 구현 commit, `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`의 범위별 실제 결과. 아래 해당 native 테스트 파일과 현재 구현도 직접 대조했다. 이번 체크 정리는 테스트 재실행이 아니다.
@@ -18,7 +20,13 @@
 
 **C02.LOCAL 추가 오류 재개(2026-09-27, 기존[x] 유지):** delivery Field fixture가 peer 제품의 migration 인자를 넘겼고 `tools/run-migrations.mjs`의 무조건 own .env fallback으로 AP mock에73~75가 적용됐다. 실제 own pgmigrations/catalog 조회와 Public Agent 호출부 read-only 조사로 확인했다. 변경 전 추가 범위는 `.env` 읽기 전에 own URL 부재+peer URL 명시를 거부하는 최소 guard와 새 `tools/test/migration-selection.test.mjs`다. 양URL 부재인 정상 managed는 기존 fallback 유지, own UUID 명시도 유지. 양URL 모두 명시된 잘못된 product는 이 guard만으로 구별하지 못한다. 검수는 실제 runner를 child에서 import하고 loadEnvFile canary로 DB에 접근하지 않은 채 잘못된제품이 먼저 거부되는지 확인한다. 기존 환경/DB/서버를 재구현하거나 완료 체크를 되돌리지 않는다.
 
+**F09.TRIAL / F09.AI-ENTITLEMENT 화면 스타일 추가 재개(2026-09-28):** 같은 사용자 요청의 다른 페이지 조사에서 `/workspace/usage`와 `/workspace/subscription`의 새로고침·체험·내보내기 버튼이 Chrome에서 시스템 기본 스타일로 보였다. 카드와 유료 billing-settings의 기존 디자인은 정상이다. 추가 범위는 해당 두 화면의 누락된 버튼·카드 간격·동의 checkbox 정렬에만 한정하고 기존[x]/a974b90/5ceec42 및 체험·결제 API를 보존한다. 위 F02 실행 계획에서 함께 검수한다.
+
 ### 완료된 내부 세부 작업 — 같은 범위를 다시 구현하지 않는다
+
+**F07.BOOKING 스타일 누락 재개(2026-09-28, 기존[x] 유지):** 실제 사업자 예약·일정 화면에서 상단 일정 카드는 정상이나 하단 `booking-columns`의 수동 일정 추가 버튼이 native 회색으로 표시되고 하단 두 영역에 카드 구성이 없다. `site.css`의 해당 영역은 grid/li/margin만 정의되어 있다. 추가 범위는 기존 하단 예약·수동 일정 카드와 폼/버튼의 scoped CSS뿐이다. Field booking API·일정 입력·확정/차단/해제 handler·기존 native 완료를 변경하지 않는다. F02 실행 계획의 다른 화면 조사 근거로 연결한다.
+
+**F01.CATALOG 스타일 누락 재개(2026-09-28, 기존[x] 유지):** 서비스 카드/사업 정보 입력 폼은 정상이나 실제 펼친 공개 관리의 `현재 초안 승인` 버튼은 native 기본 스타일이다. 추가 범위는 `.field-owner-catalog-editor button`의 기본/disabled 및 관련 공개 관리 링크·설명 간격만이다. 기존 폼 submit의 blue 스타일과 서비스 카드 디자인·승인/자동저장/충돌 handler는 보존한다.
 
 - [x] **C02.LOCAL** 제품별 API/웹·PG17/migration/키·Field Valkey·managed mock 실행/정상 종료·DB 볼륨 유지. `tools/mock-run.mjs`, 양제품 health 실제ready. 운영 ACL/CI는 별도다.
 - [x] **A00.LOCAL / F00.LOCAL** 로컬 이메일 계정/별도 세션·조직/membership·다른 조직 접근 차단. `auth.ts/business.ts`, 양제품 business-core DB 검사. 실메일/카카오/MFA는 별도다.

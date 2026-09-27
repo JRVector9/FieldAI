@@ -123,6 +123,12 @@
 .booking-columns{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:30px}
 .booking-columns li{margin:8px 0}
 .booking-columns .knowledge-source{margin-top:18px}
+.booking-columns>div{min-width:0;padding:24px;border:1px solid #e4e8ef;border-radius:18px;background:#fff}
+.booking-columns h3{font-size:19px;margin-bottom:10px}.booking-columns p{font-size:16px;color:#667184;line-height:1.65;margin:10px 0 16px}
+.booking-columns button{min-height:44px;padding:10px 16px;border:1px solid #dce3ed;border-radius:10px;background:#fff;color:#253347;font-size:16px;font-weight:600;cursor:pointer;max-width:100%;white-space:normal}
+.booking-columns button:disabled{opacity:.5;cursor:not-allowed}
+.booking-columns .form-fields>h3,.booking-columns .form-fields>p{grid-column:1/-1;margin:0}
+.booking-columns .form-fields select{min-height:48px;width:100%;min-width:0;border:1px solid #d8d9df;border-radius:11px;padding:11px 13px;background:#fff;font-size:16px}
 @media(max-width:700px){.booking-overview-grid,.booking-columns{grid-template-columns:1fr}.booking-page-heading h2{font-size:27px}.booking-page-heading button{width:100%}.booking-agenda-card,.booking-request-card{padding:18px}.booking-agenda-list{min-height:150px}.booking-request-list{max-height:350px}}
 
 .site-editor-pages{height:calc(100dvh - 76px);min-height:560px;padding:0!important;display:grid;grid-template-columns:310px minmax(0,1fr);grid-template-rows:60px 52px minmax(0,1fr) 68px;background:#f3f7fd;overflow:hidden}
@@ -156,6 +162,19 @@
 .site-editor-pages>.preview-action p{font-size:14px;color:#697382}
 @media(max-width:700px){.site-editor-pages{grid-template-columns:minmax(0,1fr);grid-template-rows:58px 44px 52px minmax(0,1fr) 66px;min-height:0}.site-editor-pages>.state-switch{grid-column:1;grid-row:1;padding:6px 12px}.site-editor-pages>p:not(.state-message){grid-column:1;grid-row:2;padding:0 17px}.site-editor-pages>.editor-switch{grid-column:1;grid-row:3;display:flex;align-items:center;gap:8px;padding:5px 15px;background:#f3f7fd}.site-editor-pages>.editor-switch button{flex:1;min-height:42px;border:1px solid #dfe6ef;background:#fff;border-radius:9px;font-size:14px;font-weight:600}.site-editor-pages>.editor-switch button[aria-pressed=true]{background:#eaf2fd;color:#075ba9;border-color:#afcef2}.site-editor-pages>.site-editor-inputs,.site-editor-pages>.site-editor-preview{grid-column:1;grid-row:4}.site-editor-pages>.site-editor-inputs{border-right:0;padding:22px 20px}.site-editor-pages>.site-editor-preview{margin:0 12px 12px}.site-editor-pages>.preview-action{grid-column:1;grid-row:5;padding:8px 16px}.site-editor-pages>.preview-action p{max-width:55%}.site-editor-pages>.state-message{bottom:72px}}
 .customer-banner code{overflow-wrap:anywhere;word-break:break-word}
+.field-account-page .field-account-button{display:inline-flex;justify-content:center;align-items:center;min-height:48px;padding:11px 18px;border:1px solid #dce3ed;border-radius:10px;background:#fff;color:#253347;font-size:16px;font-weight:600;cursor:pointer;max-width:100%;white-space:normal}
+.field-account-page .field-account-button:hover:not(:disabled){background:#eff5fd;border-color:#92b7e4}
+.field-account-page .field-account-button:disabled{opacity:.5;cursor:not-allowed}
+.field-account-page>.field-account-button{margin-bottom:24px}
+.field-account-page>.special-grid,.field-account-page>.special-panel{margin-top:24px}
+.field-account-page>.special-grid p,.field-account-page>.special-panel p{margin-top:14px;line-height:1.75}
+.field-account-page>.special-grid li{margin:9px 0;font-size:16px}
+.field-account-consent{display:flex;align-items:flex-start;gap:10px;margin-top:20px;font-size:16px;line-height:1.6;cursor:pointer}
+.field-account-consent input{width:20px;height:20px;flex-shrink:0;margin:3px 0 0;accent-color:#0066cc}
+.field-owner-catalog-editor button{min-height:44px;padding:10px 16px;border:1px solid #dce3ed;border-radius:10px;background:#fff;color:#253347;font-size:16px;font-weight:600;cursor:pointer;max-width:100%;white-space:normal}
+.field-owner-catalog-editor button:disabled{opacity:.5;cursor:not-allowed}
+.field-owner-catalog-editor>.special-panel>p{margin-top:14px;line-height:1.65}
+.field-owner-catalog-editor>.special-panel>p>a{display:inline-flex;align-items:center;min-height:44px;color:#0066cc;font-size:16px}
 .field-ap-installation p,.field-ap-installation code{overflow-wrap:anywhere;word-break:break-word}
 .inquiry-private-photo{max-width:100%;margin:12px 0}
 .inquiry-private-photo img{display:block;max-width:100%;max-height:320px;object-fit:contain;border-radius:10px}

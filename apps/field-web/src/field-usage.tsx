@@ -33,8 +33,8 @@ export function FieldUsage() {
   useEffect(() => { void load(); }, [load]);
 
   return <div className="site-shell"><header className="site-header"><a href="/"><Brand product="Field" /></a><nav aria-label="작업 메뉴"><a href="/workspace">사업 운영</a><a href="/workspace/site">사이트 편집</a></nav></header>
-    <main className="feature-section"><div className="feature-heading"><p className="eyebrow">Field · 사용량</p><h1>이번 달 사용 기록</h1><p>Field 조직의 사이트 제작 AI, 직접 문의와 예약 출처를 별도 원장에서 확인합니다.</p></div>
-      <button type="button" disabled={busy} onClick={() => void load()}>기록 새로고침</button>
+    <main className="feature-section field-account-page"><div className="feature-heading"><p className="eyebrow">Field · 사용량</p><h1>이번 달 사용 기록</h1><p>Field 조직의 사이트 제작 AI, 직접 문의와 예약 출처를 별도 원장에서 확인합니다.</p></div>
+      <button className="field-account-button" type="button" disabled={busy} onClick={() => void load()}>기록 새로고침</button>
       {status && <p role="status" className="state-message">{status} {status.includes("로그인") || status.includes("조직") ? <a href="/workspace">사업 운영 화면 열기</a> : null}</p>}
       {summary && <><p>집계 기간: {summary.period.start.slice(0, 10)}부터 {summary.period.end.slice(0, 10)} 전까지 (UTC)</p>
         <div className="special-grid"><section className="special-panel"><h2>사이트 제작 AI</h2><ul>
