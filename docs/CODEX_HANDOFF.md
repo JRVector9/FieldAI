@@ -9,6 +9,28 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
+## 현재 로컬 서버 — 사용자 요청으로 재기동 (2026-09-27)
+
+- **Task / Product / Owner / State:** C02.LOCAL.RUNTIME / AP + Field / Coordinator / verified(기동·접속 확인 범위). 완료된 C02.LOCAL 구현을 재작업한 것이 아니라 기존 실행 명령을 사용한 운영 작업이다. TASKS52[x]/7pending과 기능QA 미실행 상태를 유지한다.
+- **Current objective / Completed:** 사용자의 `로컬 서버 띄어봐` 요청. 시작 전에 TASKS 완료 원장·인계·git 상태/최근 commit·기존 실행 도구를 확인했다. 3001/3002/4311/4321의 listener와 이전 controller는 없었고 기존 own PostgreSQL17.11 두 컨테이너·Field Valkey8.1.10은 healthy였다. `pnpm mock:run`으로 양제품 기존 build/migration·mock connector·API/웹/worker를 기동했다. **현재 managed session77439**가 실행 중이다. 이전54544는 종료된 과거 세션이다.
+- **Changed paths / Decisions:** 서비스 코드·계약·schema·TASKS·시안·엑셀 변경 없음. 현재 실행 상태를 이 인계 기록에 갱신했다. 기존 DB 볼륨·원장·환경/secret·6개 테스트 계정을 유지하며 새 mock 계정/초안/공개본은 만들지 않았다. 범위와 실행 전 상태는 `/private/tmp/fieldai-local-restart-20260927-1doctb6i/scope.json`에 명령 실행 전에 기록했다.
+- **Commands actually run / Environment / Commit:** Node24.18.0/pnpm10.33.4, local mock/제품별 기존 PG17/Field Valkey, 코드2362761·시작 checkout d55e058. `pnpm mock:run > /private/tmp/fieldai-local-restart-20260927-1doctb6i/managed.log 2>&1`의 실제 양API/웹 build·기동 완료, `Mock services ready` 확인. `node /private/tmp/fieldai-local-restart-20260927-1doctb6i/verify.mjs /private/tmp/fieldai-local-restart-20260927-1doctb6i` **exit0**: 양API ready200, AP workspace/Field workspace/Field admin200·HTML, 양 `.env` SHA256 동일, own DB read-only조회로 Field5/AP1 테스트 계정 존재 확인. 상세 `runtime-verification.json`. 기능QA/브라우저 조작/외부 공급사 테스트는 실행하지 않았다.
+- **Failure / Recovery / Remaining:** 이번 기동 실패 없음. 최초 lsof/pgrep exit1은 대상 listener/controller 부재 확인이다. billing/notification/custom-domain/model 공급사는 여전히 blocked_integration, Field route-key worker는 local_reconciliation이다. 실제 청구/발송/운영 삭제/배포 없음. 다음은 사용자가 기존 엑셀로 기능·화면을 검수하는 것이며 준비된 계정/조직을 초기화하거나 동일 기능을 다시 구현하지 않는다.
+- **Current URLs:** Field `http://127.0.0.1:3002/workspace`, Field 관리자 `http://127.0.0.1:3002/admin`, AP `http://localhost:3001/workspace`. Field127.0.0.1/AP localhost를 유지한다. 계정·비밀번호는 `docs/Field_QA_테스트_2026-09-27.xlsx`의 `시작안내` 시트다.
+
+### Exact commands for next agent — 실행 상태 조회
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+git status --short
+tail -n 25 /private/tmp/fieldai-local-restart-20260927-1doctb6i/managed.log
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+cat /private/tmp/fieldai-local-restart-20260927-1doctb6i/runtime-verification.json
+```
+
+현재77439가 실행 중이면 두 번째 launcher를 띄우지 않는다. 실제 controller와 네 listener가 모두 없을 때만 기존 `pnpm mock:run`을 사용한다. 아래54544/83305 등의 실행 정보는 각 완료 시점의 이력이다.
+
 ## QA 준비 완료 — 테스트 계정 6개와 Field 실행표 (2026-09-27)
 
 - **Task ID / Product / Owner / State:** QA.TEST-PREPARATION / Field + AP 연동 계정 / Coordinator / verified(계정·엑셀 준비 범위). 사용자 요청은 로컬 테스트 계정 생성과 Field QA 엑셀 제공이다. 기존 서비스 내부 완료52개·7pending·고정 디자인·소스2362761은 유지하며 기능QA 통과나 출시 승인이 아니다.
