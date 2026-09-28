@@ -7,6 +7,7 @@ import { publicInstallationFor } from './ap-public-installation-execution.js';
 import { rejectExpiredTrial } from './trial-access.js';
 import { activeSiteOrigin, primarySiteOrigin, resolvedCustomHost } from './custom-domains.js';
 import { isSiteFont, type SiteFont } from './site-fonts.js';
+import { bookingScheduleReady } from './bookings.js';
 
 type Section = { id: string; kind: 'hero' | 'text' | 'service_list' | 'faq'; heading: string; body: string; assetId?: string; alt?: string };
 type Page = { id: string; slug: string; title: string; sections: Section[] };
@@ -509,13 +510,18 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
       if (await rejectExpiredTrial(reply, client, organization.organization_id)) {
         await client.query('rollback'); return reply;
       }
-      const catalog = await client.query<{ id: string; revision: number }>(
-        `select id, revision from field.catalog_releases where organization_id = $1
+      const catalog = await client.query<{ id: string; revision: number;
+        content: { services: { bookingMode: 'request' | 'slot'; durationMinutes: number }[] } }>(
+        `select id, revision, content from field.catalog_releases where organization_id = $1
          order by revision desc limit 1`, [organization.organization_id],
       );
       if (!catalog.rows[0]) {
         await client.query('rollback');
         return reply.code(409).send({ error: 'catalog_not_approved' });
+      }
+      if (!await bookingScheduleReady(client, organization.organization_id, catalog.rows[0].content.services)) {
+        await client.query('rollback');
+        return reply.code(409).send({ error: 'booking_schedule_not_ready' });
       }
       const id = randomUUID();
       const content = JSON.stringify(draft.rows[0].content);

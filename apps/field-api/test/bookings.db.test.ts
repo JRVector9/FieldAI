@@ -35,7 +35,7 @@ function futureWeekday() {
   throw new Error('no weekday');
 }
 
-test('a first published Field site accepts request bookings without a hidden schedule and keeps slot bookings unready', async () => {
+test('a first published Field site accepts requests and blocks a later slot release until real hours exist', async () => {
   const account = await owner();
   const app = createFieldApp(async () => undefined, auth.handler, base, {
     pool,
@@ -51,17 +51,17 @@ test('a first published Field site accepts request bookings without a hidden sch
     const catalog = { expectedRevision: 0, businessName: '첫 예약 준비 검수', industry: '',
       introduction: '', region: '', openingHours: '', contactPhone: '', services: [
         { id: requestServiceId, name: '희망시간 접수', description: '', bookingMode: 'request', durationMinutes: 30, priceAmount: null },
-        { id: slotServiceId, name: '시간표 접수', description: '', bookingMode: 'slot', durationMinutes: 30, priceAmount: null },
       ] };
     assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft',
       headers: { cookie: account.cookie }, payload: catalog })).statusCode, 200);
     assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases',
       headers: { cookie: account.cookie }, payload: { expectedRevision: 1 } })).statusCode, 201);
     assert.equal((await app.inject({ method: 'POST', url: '/v1/sites', headers: { cookie: account.cookie } })).statusCode, 201);
+    const siteContent = { template: 'essential', palette: '#264653', pages: [
+      { id: randomUUID(), slug: 'home', title: '홈', sections: [] },
+    ] };
     assert.equal((await app.inject({ method: 'PUT', url: '/v1/sites/draft', headers: { cookie: account.cookie },
-      payload: { expectedRevision: 0, template: 'essential', palette: '#264653', pages: [
-        { id: randomUUID(), slug: 'home', title: '홈', sections: [] },
-      ] } })).statusCode, 200);
+      payload: { expectedRevision: 0, ...siteContent } })).statusCode, 200);
     assert.equal((await app.inject({ method: 'POST', url: '/v1/sites/releases',
       headers: { cookie: account.cookie }, payload: { expectedRevision: 1 } })).statusCode, 201);
     const request = await app.inject({ method: 'POST', url: `/v1/public/catalog/${organizationId}/reservations`,
@@ -70,9 +70,46 @@ test('a first published Field site accepts request bookings without a hidden sch
     assert.equal(request.statusCode, 201, request.body);
     assert.equal(request.json().bookingMode, 'request');
     assert.equal(request.json().timezone, 'Asia/Seoul');
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft', headers: { cookie: account.cookie },
+      payload: { ...catalog, expectedRevision: 1, services: [...catalog.services,
+        { id: slotServiceId, name: '시간표 접수', description: '', bookingMode: 'slot', durationMinutes: 30, priceAmount: null }] } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 2 } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/sites/draft', headers: { cookie: account.cookie },
+      payload: { expectedRevision: 1, ...siteContent } })).statusCode, 200);
+    const blocked = await app.inject({ method: 'POST', url: '/v1/sites/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 2 } });
+    assert.equal(blocked.statusCode, 409, blocked.body);
+    assert.equal(blocked.json().error, 'booking_schedule_not_ready');
+    const releases = await app.inject({ url: '/v1/sites/releases', headers: { cookie: account.cookie } });
+    assert.deepEqual(releases.json().releases.map((item: { revision: number }) => item.revision), [1]);
     const slot = await app.inject({ url: `/v1/public/catalog/${organizationId}/availability?serviceId=${slotServiceId}&date=${futureWeekday()}` });
     assert.equal(slot.statusCode, 409, slot.body);
     assert.equal(slot.json().error, 'policy_not_set');
+    const allDays = Object.fromEntries(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+      .map(day => [day, { open: '10:00', close: '18:00' }]));
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/booking-policy', headers: { cookie: account.cookie },
+      payload: { expectedRevision: 0, timezone: 'Asia/Seoul', weekly: { mon: { open: '10:00', close: '10:15' } },
+        closedDates: [], specialDates: {}, beforeMinutes: 0, afterMinutes: 0,
+        minLeadMinutes: 60, horizonDays: 30 } })).statusCode, 200);
+    const tooShort = await app.inject({ method: 'POST', url: '/v1/sites/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 2 } });
+    assert.equal(tooShort.statusCode, 409, tooShort.body);
+    assert.equal(tooShort.json().error, 'booking_schedule_not_ready');
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/booking-policy', headers: { cookie: account.cookie },
+      payload: { expectedRevision: 1, timezone: 'Asia/Seoul', weekly: allDays,
+        closedDates: [], specialDates: {}, beforeMinutes: 0, afterMinutes: 0,
+        minLeadMinutes: 60, horizonDays: 30 } })).statusCode, 200);
+    const publishedSlot = await app.inject({ method: 'POST', url: '/v1/sites/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 2 } });
+    assert.equal(publishedSlot.statusCode, 201, publishedSlot.body);
+    const available = await app.inject({ url: `/v1/public/catalog/${organizationId}/availability?serviceId=${slotServiceId}&date=${futureWeekday()}` });
+    assert.equal(available.statusCode, 200, available.body);
+    const startAt = (available.json() as { slots: { startAt: string }[] }).slots[0]?.startAt;
+    assert.ok(startAt);
+    const slotRequest = await app.inject({ method: 'POST', url: `/v1/public/catalog/${organizationId}/reservations`,
+      payload: { serviceId: slotServiceId, startAt, name: '시간표 고객', phone: '010-2222-4444', consent: true } });
+    assert.equal(slotRequest.statusCode, 201, slotRequest.body);
   } finally { await app.close(); }
 });
 

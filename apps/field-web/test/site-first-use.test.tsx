@@ -40,6 +40,12 @@ test("site publish permission uses only the matching Field organization", () => 
   assert.equal(sitePublishPermissionFromSubscription({ product: "field", organizationId: "other", canManage: true }, "org"), null);
 });
 
+test("a slot service with no valid schedule blocks the publish action with a repair link", () => {
+  const guidance = sitePublishGuidance({ ...ready, bookingBlocked: true });
+  assert.match(guidance?.reason ?? "", /시간표.*설정/);
+  assert.equal(guidance?.href, "/workspace?section=calendar");
+});
+
 test("site contact step distinguishes request intake from slot schedule readiness", () => {
   const services = [
     { id: "request", name: "희망시간", description: "", bookingMode: "request" as const, durationMinutes: 30, priceAmount: null },
@@ -50,6 +56,12 @@ test("site contact step distinguishes request intake from slot schedule readines
   assert.equal(siteBookingReadiness(services, "failed", null).slotReady, false);
   assert.match(siteBookingReadiness(services, "failed", null).message, /확인하지 못/);
   assert.equal(siteBookingReadiness(services, "ready", { weekly: {}, specialDates: {} }).slotReady, false);
+  assert.equal(siteBookingReadiness(services, "ready", {
+    weekly: { mon: [] as unknown as { open: string; close: string } }, specialDates: {},
+  }).slotReady, false);
+  assert.equal(siteBookingReadiness(services, "ready", {
+    weekly: {}, specialDates: { "2026-10-01": [] as unknown as { open: string; close: string } },
+  }).slotReady, false);
   assert.equal(siteBookingReadiness(services, "ready", {
     weekly: { mon: { open: "10:00", close: "18:00" } }, specialDates: {},
   }).slotReady, true);

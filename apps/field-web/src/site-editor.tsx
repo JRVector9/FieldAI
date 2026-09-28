@@ -32,7 +32,7 @@ function resumedPosition(draft: SiteDraft, search: string): { step: Step; pageId
 export function sitePublishGuidance(state: { restricted: boolean; busy: boolean; dirty: boolean;
   approved: boolean; canManage: boolean | null; canStartNew: boolean | null;
   revision: number; publishedRevision: number | null;
-  publishedCatalogRevision: number | null; approvedRevision: number }):
+  publishedCatalogRevision: number | null; approvedRevision: number; bookingBlocked?: boolean }):
   { reason: string; href: string | null; label: string | null } | null {
   if (state.dirty) return { reason: "변경 내용을 먼저 서버에 저장해 주세요.", href: null, label: null };
   if (state.restricted) return { reason: "사이트 공개가 제한되어 있습니다.", href: "/workspace/moderation", label: "신고·검토 결과 보기" };
@@ -41,6 +41,7 @@ export function sitePublishGuidance(state: { restricted: boolean; busy: boolean;
   if (state.canStartNew === null) return { reason: "이용 상태를 확인하지 못했습니다. 구독 상태를 다시 확인해 주세요.", href: "/workspace/subscription", label: "구독 상태 확인(추가)" };
   if (!state.canStartNew) return { reason: "현재 이용 상태에서는 새 사이트 버전을 공개할 수 없습니다.", href: "/workspace/subscription", label: "구독 상태 확인(추가)" };
   if (!state.approved) return { reason: "사업 정보를 먼저 승인해 주세요.", href: "/workspace?section=services&edit=business&returnTo=publish", label: "사업 정보 입력·승인 열기(추가)" };
+  if (state.bookingBlocked) return { reason: "시간표 예약을 공개하려면 유효한 영업시간을 먼저 설정해 주세요.", href: "/workspace?section=calendar", label: "예약 정책 열기(추가)" };
   if (state.busy) return { reason: "진행 중인 작업이 끝나면 다시 확인해 주세요.", href: null, label: null };
   if (state.revision === 0) return { reason: "사이트 초안을 먼저 저장해 주세요.", href: null, label: null };
   if (state.publishedRevision === state.revision && state.publishedCatalogRevision !== null && state.approvedRevision > state.publishedCatalogRevision)
@@ -82,8 +83,12 @@ export function siteBookingReadiness(services: Catalog["services"], state: "load
     : "등록된 예약 서비스가 없습니다." };
   if (state === "loading") return { slotReady: false, message: "시간표 예약 정책을 확인하고 있습니다." };
   if (state === "failed") return { slotReady: false, message: "시간표 예약 정책을 확인하지 못했습니다. 설정 상태를 다시 확인해 주세요." };
+  const validHours = (hours: { open: string; close: string }) =>
+    typeof hours?.open === "string" && typeof hours?.close === "string"
+    && /^([01]\d|2[0-3]):[0-5]\d$/.test(hours.open)
+    && /^([01]\d|2[0-3]):[0-5]\d$/.test(hours.close) && hours.open !== hours.close;
   const configured = state === "ready" && policy !== null
-    && (Object.keys(policy.weekly).length > 0 || Object.keys(policy.specialDates).length > 0);
+    && [...Object.values(policy.weekly), ...Object.values(policy.specialDates)].some(validHours);
   return configured
     ? { slotReady: true, message: "시간표가 설정됐습니다. 실제 신청 가능한 시간은 고객 화면에서 다시 확인해 주세요." }
     : { slotReady: false, message: "시간표 예약 서비스의 영업시간을 설정해야 고객이 시간을 선택할 수 있습니다. 사이트 공개와 직접 문의는 계속할 수 있습니다." };
@@ -153,9 +158,10 @@ export function SiteEditor() {
   const [assets, setAssets] = useState<SiteAsset[]>([]);
   const [uploadingSectionId, setUploadingSectionId] = useState<string | null>(null);
   const selectedPageId = site?.pages.find(page => page.id === activePageId)?.id ?? site?.pages[0]?.id;
-  const publishGuidance = site && sitePublishGuidance({ restricted: visibilityRestricted, busy, dirty, approved: Boolean(approvedCatalog), canManage: publishCanManage, canStartNew: testCanStartNew, revision: site.revision, publishedRevision, publishedCatalogRevision, approvedRevision: approvedCatalog?.revision ?? 0 });
   const inquiryTestGuidance = catalog && siteInquiryTestGuidance(catalog.organizationId, publishedRevision, visibilityRestricted, approvedCatalog?.services.length ?? 0, testCanStartNew);
   const bookingReadiness = approvedCatalog && siteBookingReadiness(approvedCatalog.services, bookingPolicyState, bookingPolicy);
+  const bookingPublishBlocked = Boolean(approvedCatalog?.services.some(service => service.bookingMode === "slot") && !bookingReadiness?.slotReady);
+  const publishGuidance = site && sitePublishGuidance({ restricted: visibilityRestricted, busy, dirty, approved: Boolean(approvedCatalog), canManage: publishCanManage, canStartNew: testCanStartNew, revision: site.revision, publishedRevision, publishedCatalogRevision, approvedRevision: approvedCatalog?.revision ?? 0, bookingBlocked: bookingPublishBlocked });
   const canCheckTestAccess = publishedRevision !== null && !visibilityRestricted && (approvedCatalog?.services.length ?? 0) > 0;
 
   const loadTestAccess = useCallback(async (organizationId: string) => {
@@ -427,7 +433,7 @@ export function SiteEditor() {
     finally { setBusy(false); }
   }
   async function publish() {
-    if (!site || dirty || publishCanManage !== true || testCanStartNew !== true) return;
+    if (!site || dirty || bookingPublishBlocked || publishCanManage !== true || testCanStartNew !== true) return;
     setBusy(true); setStatus("공개 버전을 만들고 있습니다.");
     try {
       const result = await requestJson("/v1/sites/releases", "POST", { expectedRevision: site.revision });
@@ -449,7 +455,9 @@ export function SiteEditor() {
         }
         setReleases((history.data as { releases: Release[] }).releases);
         setStatus(`사이트 ${site.revision}번이 공개되었습니다. 카탈로그 ${(result.data as { catalogRevision: number }).catalogRevision}번을 사용합니다.`);
-      } else if (result.status === 409) setStatus("초안 충돌 또는 승인된 사업 정보가 없어 공개하지 못했습니다.");
+      } else if (result.status === 409) setStatus((result.data as { error?: string }).error === "booking_schedule_not_ready"
+        ? "시간표 예약에 신청 가능한 영업시간이 없어 공개하지 못했습니다. 예약 정책을 확인해 주세요."
+        : "초안 충돌 또는 승인된 사업 정보가 없어 공개하지 못했습니다.");
       else setStatus(`공개에 실패했습니다 (${result.status}).`);
     } catch {
       setLoadState("failed");
@@ -533,7 +541,7 @@ export function SiteEditor() {
         {bookingReadiness && <p role="status">{bookingReadiness.message} {!bookingReadiness.slotReady && <a href="/workspace?section=calendar">예약 정책 확인(추가)</a>}</p>}
         {approvedCatalog && publishedCatalogRevision !== null && approvedCatalog.revision > publishedCatalogRevision && <div className="state-message" role="status"><strong>공개 사이트의 사업 정보가 오래되었습니다.</strong><p>새로 승인한 사업 정보 {approvedCatalog.revision}번을 반영하려면 사이트 초안을 다시 저장하고 공개해 주세요.</p><button type="button" disabled={busy || dirty} onClick={() => void save()}>카탈로그 반영용 초안 저장</button></div>}
         {visibilityRestricted && <p role="status">사이트 공개가 제한되었습니다. 초안과 이전 공개 버전·기존 문의·예약은 유지됩니다. <a href="/workspace/moderation">신고·검토 결과와 이의 제출</a>을 확인해 주세요.</p>}
-        <button type="button" disabled={visibilityRestricted || publishCanManage !== true || testCanStartNew !== true || busy || dirty || !approvedCatalog || site.revision === 0 || publishedRevision === site.revision} onClick={() => void publish()}>현재 초안 공개</button>
+        <button type="button" disabled={visibilityRestricted || publishCanManage !== true || testCanStartNew !== true || busy || dirty || !approvedCatalog || bookingPublishBlocked || site.revision === 0 || publishedRevision === site.revision} onClick={() => void publish()}>현재 초안 공개</button>
         {publishGuidance && <p role="status">{publishGuidance.reason} {publishGuidance.href && <a href={publishGuidance.href} aria-disabled={dirty || busy} onClick={event => { if (dirty || busy) event.preventDefault(); }}>{publishGuidance.label}</a>}{(publishCanManage === null || testCanStartNew === null) && <button type="button" onClick={() => void loadTestAccess(catalog!.organizationId)}>권한·이용 상태 다시 확인(추가)</button>}{!publishGuidance.href && (dirty || site.revision === 0 || (publishedRevision === site.revision && publishedCatalogRevision !== null && approvedCatalog && approvedCatalog.revision > publishedCatalogRevision)) && <button type="button" disabled={busy || saveState === "conflict"} onClick={() => void save()}>사이트 초안 저장하기(추가)</button>}</p>}
         {inquiryTestGuidance && <p>{inquiryTestGuidance.href ? <a href={inquiryTestGuidance.href} aria-label="첫 문의 미리 해보기(추가)" onClick={event => { event.preventDefault(); void openInquiryTest(inquiryTestGuidance.href!); }}>첫 문의 미리 해보기(추가)</a> : <button type="button" disabled>첫 문의 미리 해보기(추가)</button>} {canCheckTestAccess && testAccessState === "loading" ? "이용 상태를 확인하고 있습니다." : inquiryTestGuidance.reason ?? "현재 공개된 사이트로만 내부 테스트 문의를 남깁니다. 실제 고객 알림·실적·예약에는 포함되지 않습니다. 공개 버전마다 한 번만 기록됩니다."} {canCheckTestAccess && testAccessState === "failed" && <button type="button" onClick={() => void loadTestAccess(catalog!.organizationId)}>이용 상태 다시 확인(추가)</button>}{canCheckTestAccess && testAccessState === "ready" && testCanStartNew === false && <a href="/workspace/subscription">구독 상태 확인(추가)</a>}</p>}
         {publishedRevision !== null && siteOrigin && <section className="knowledge-source" role="region" aria-label={siteOrigin.endsWith(".localhost:3002") ? "사이트 개설 완료" : "사이트 공개본 확인"}>

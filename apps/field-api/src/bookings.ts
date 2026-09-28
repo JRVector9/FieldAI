@@ -180,7 +180,7 @@ async function releaseFor(client: Pick<PoolClient, 'query'>, organizationId: str
   );
   return result.rows[0] ?? null;
 }
-export async function availableSlots(client: Pick<PoolClient, 'query'>, organizationId: string, policy: Policy, service: Service,
+export async function availableSlots(client: Pick<PoolClient, 'query'>, organizationId: string, policy: Policy, service: Pick<Service, 'durationMinutes'>,
   day: string, ignoreOccupancy = false, now = new Date()) {
   const today = localDay(now, policy.timezone);
   const maxDay = new Date(Date.parse(`${today}T00:00:00Z`) + policy.horizon_days * 86_400_000)
@@ -242,6 +242,23 @@ export async function availableSlots(client: Pick<PoolClient, 'query'>, organiza
     }
   }
   return slots.sort((left, right) => left.startAt.localeCompare(right.startAt));
+}
+
+export async function bookingScheduleReady(client: Pick<PoolClient, 'query'>, organizationId: string,
+  services: { bookingMode: 'request' | 'slot'; durationMinutes: number }[]): Promise<boolean> {
+  const slotServices = services.filter(service => service.bookingMode === 'slot');
+  if (slotServices.length === 0) return true;
+  const policy = await policyFor(client, organizationId);
+  if (!policy) return false;
+  const longestService = slotServices.reduce((longest, service) =>
+    service.durationMinutes > longest.durationMinutes ? service : longest);
+  const now = new Date();
+  const today = localDay(now, policy.timezone);
+  for (let offset = 0; offset <= policy.horizon_days; offset += 1) {
+    const day = new Date(Date.parse(`${today}T00:00:00Z`) + offset * 86_400_000).toISOString().slice(0, 10);
+    if ((await availableSlots(client, organizationId, policy, longestService, day, true, now)).length > 0) return true;
+  }
+  return false;
 }
 
 export async function integratorAvailability(runtime: FieldBusinessRuntime, organizationId: string,
