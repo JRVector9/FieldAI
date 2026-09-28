@@ -8,9 +8,10 @@ import { Client } from 'pg';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const product = process.argv[2];
+const requestedTests = process.argv.slice(3);
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
   && product !== 'agent' && product !== 'field') {
-  process.stderr.write('usage: node tools/run-db-suite.mjs agent|field\n');
+  process.stderr.write('usage: node tools/run-db-suite.mjs agent|field [test/name.db.test.ts ...]\n');
   process.exit(2);
 }
 
@@ -21,6 +22,19 @@ export function createSuiteEnv(product) {
   for (const key of Object.keys(env)) if (key.startsWith(otherPrefix)) delete env[key];
   env[`${product === 'agent' ? 'AP' : 'FIELD'}_PROFILE`] = 'mock';
   return env;
+}
+
+export function selectSuiteTests(available, requested) {
+  const names = new Set(available.filter(name => name.endsWith('.db.test.ts')));
+  if (!requested.length) return [...names].sort().map(name => `test/${name}`);
+  const selected = new Set();
+  for (const path of requested) {
+    const name = path.startsWith('test/') ? path.slice(5) : '';
+    if (!names.has(name) || path !== `test/${name}`) throw new Error(`unknown database test: ${path}`);
+    if (selected.has(path)) throw new Error(`duplicate database test: ${path}`);
+    selected.add(path);
+  }
+  return [...selected];
 }
 
 export function assertSupportedPlatform(platform = process.platform) {
@@ -177,8 +191,7 @@ async function runSuite(test, env, signals) {
 async function runIsolatedSuite() {
   assertSupportedPlatform();
   const apiDir = resolve(root, `apps/${product}-api`);
-  const tests = readdirSync(resolve(apiDir, 'test'))
-    .filter(name => name.endsWith('.db.test.ts')).sort().map(name => `test/${name}`);
+  const tests = selectSuiteTests(readdirSync(resolve(apiDir, 'test')), requestedTests);
   if (!tests.length) throw new Error(`${product}: no database tests found`);
   const env = createSuiteEnv(product);
   const settings = product === 'agent'

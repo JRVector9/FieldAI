@@ -4,9 +4,18 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
-import { adminOperation, assertSupportedPlatform, createSuiteSignalGuard, finishSuite, hasActiveGroup, run } from '../run-db-suite.mjs';
+import { adminOperation, assertSupportedPlatform, createSuiteSignalGuard, finishSuite, hasActiveGroup, run, selectSuiteTests } from '../run-db-suite.mjs';
 
 const posixTest = process.platform === 'win32' ? test.skip : test;
+
+test('targeted DB suite accepts only existing test files in its own product directory', () => {
+  const available = ['integrator.db.test.ts', 'field-connection.db.test.ts'];
+  assert.deepEqual(selectSuiteTests(available, []), ['test/field-connection.db.test.ts', 'test/integrator.db.test.ts']);
+  assert.deepEqual(selectSuiteTests(available, ['test/integrator.db.test.ts']), ['test/integrator.db.test.ts']);
+  assert.throws(() => selectSuiteTests(available, ['../field-api/test/integrator.db.test.ts']), /unknown database test/);
+  assert.throws(() => selectSuiteTests(available, ['test/missing.db.test.ts']), /unknown database test/);
+  assert.throws(() => selectSuiteTests(available, ['test/integrator.db.test.ts', 'test/integrator.db.test.ts']), /duplicate database test/);
+});
 
 test('DB suite refuses unsupported platforms before any database work', () => {
   assert.throws(() => assertSupportedPlatform('win32'), /requires macOS or Linux/);
