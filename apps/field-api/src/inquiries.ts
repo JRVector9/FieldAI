@@ -77,8 +77,10 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
     if (!userId) return reply;
     const organizationId = await ownerOrganization(request, reply, runtime, userId);
     if (!organizationId) return reply;
-    const release = await runtime.pool.query<{ revision: number; catalog_revision: number }>(
-      `select sr.revision, cr.revision as catalog_revision from field.site_releases sr
+    const release = await runtime.pool.query<{ revision: number; catalog_revision: number; visibility_restricted: boolean }>(
+      `select sr.revision, cr.revision as catalog_revision,
+         exists(select 1 from field.site_visibility_holds h where h.site_id=s.id and h.released_at is null) as visibility_restricted
+       from field.site_releases sr
        join field.sites s on s.id=sr.site_id
        join lateral (select revision from field.catalog_releases
          where organization_id=s.organization_id order by revision desc limit 1) cr on true
@@ -87,6 +89,8 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
     const existing = await runtime.pool.query<{ id: string; state: string }>(
       `select id,state from field.inquiries where organization_id=$1
        and is_test=true and test_site_revision=$2`, [organizationId, release.rows[0].revision]);
+    if (release.rows[0].visibility_restricted && !existing.rows[0])
+      return reply.header('Cache-Control', 'private, no-store').code(409).send({ error: 'site_visibility_restricted' });
     return reply.header('Cache-Control', 'private, no-store').send({
       organizationId, siteRevision: release.rows[0].revision,
       catalogRevision: release.rows[0].catalog_revision,
@@ -110,10 +114,13 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
     const client = await runtime.pool.connect();
     try {
       await client.query('begin');
+      // Moderation holds the site row while changing visibility; read its hold after that transaction commits.
+      await client.query('select id from field.sites where organization_id = $1 for share', [organizationId]);
       await client.query('select id from field.organizations where id = $1 for update', [organizationId]);
-      const release = await client.query<{ revision: number; catalog_revision: number;
+      const release = await client.query<{ revision: number; catalog_revision: number; visibility_restricted: boolean;
         services: { id: string; name: string }[] }>(
-        `select sr.revision, cr.revision as catalog_revision, cr.content->'services' as services
+        `select sr.revision, cr.revision as catalog_revision, cr.content->'services' as services,
+           exists(select 1 from field.site_visibility_holds h where h.site_id=s.id and h.released_at is null) as visibility_restricted
          from field.site_releases sr
          join field.sites s on s.id = sr.site_id
          join lateral (select revision,content from field.catalog_releases
@@ -152,6 +159,10 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
           id: existing.rows[0].id, state: existing.rows[0].state,
           siteRevision: published.revision, isTest: true, delivery: 'not_applicable',
         });
+      }
+      if (published.visibility_restricted) {
+        await client.query('rollback');
+        return reply.header('Cache-Control', 'private, no-store').code(409).send({ error: 'site_visibility_restricted' });
       }
       if (await rejectExpiredTrial(reply, client, organizationId)) {
         await client.query('rollback');

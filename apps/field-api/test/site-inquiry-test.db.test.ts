@@ -85,6 +85,28 @@ test('approved site test inquiry stays internal, idempotent, and outside operati
     assert.equal(preflight.json().siteRevision, 1);
     assert.equal(preflight.json().catalogRevision, 2);
     assert.equal(preflight.json().existingTest, null);
+    const siteRow = await pool.query<{ id: string; release_id: string }>(
+      `select s.id, sr.id as release_id from field.sites s
+       join field.site_releases sr on sr.site_id=s.id where s.organization_id=$1`, [organizationId]);
+    const siteId = siteRow.rows[0]!.id;
+    const reportId = randomUUID();
+    await pool.query(
+      `insert into field.moderation_reports
+       (id,organization_id,site_id,site_release_id,public_snapshot,submission_key_hash,request_hash,
+        category,description,consent_version)
+       values ($1,$2,$3,$4,'{}'::jsonb,$5,$6,'other','test hold','field-site-report-v1')`,
+      [reportId, organizationId, siteId, siteRow.rows[0]!.release_id, randomUUID(), randomUUID()]);
+    await pool.query('insert into field.site_visibility_holds(site_id,report_id,created_by) values ($1,$2,$3)',
+      [siteId, reportId, 'test-reviewer']);
+    const heldPreflight = await app.inject({ url: path, headers });
+    assert.equal(heldPreflight.statusCode, 409, heldPreflight.body);
+    assert.equal(heldPreflight.json().error, 'site_visibility_restricted');
+    const heldSubmission = await app.inject({ method: 'POST', url: path, headers, payload: latestTestBody });
+    assert.equal(heldSubmission.statusCode, 409, heldSubmission.body);
+    assert.equal(heldSubmission.json().error, 'site_visibility_restricted');
+    assert.equal((await pool.query('select 1 from field.inquiries where organization_id=$1', [organizationId])).rowCount, 0);
+    await pool.query('update field.site_visibility_holds set released_by=$3,released_at=now() where site_id=$1 and report_id=$2',
+      [siteId, reportId, 'test-reviewer']);
     assert.equal((await app.inject({ method: 'POST', url: path, headers,
       payload: { ...latestTestBody, siteRevision: 2 } })).statusCode, 409);
     assert.equal((await app.inject({ method: 'POST', url: path, headers,
@@ -106,6 +128,10 @@ test('approved site test inquiry stays internal, idempotent, and outside operati
     assert.equal((await app.inject({ method: 'POST', url: path, headers,
       payload: { ...latestTestBody, message: '다른 메시지' } })).statusCode, 409);
     assert.equal((await app.inject({ url: path, headers })).json().existingTest.id, inquiryId);
+    await pool.query('update field.site_visibility_holds set released_by=null,released_at=null where site_id=$1 and report_id=$2',
+      [siteId, reportId]);
+    assert.equal((await app.inject({ url: path, headers })).json().existingTest.id, inquiryId);
+    assert.equal((await app.inject({ method: 'POST', url: path, headers, payload: latestTestBody })).statusCode, 200);
     const stored = await pool.query<{ is_test: boolean; test_site_revision: number; catalog_revision: number;
       service_id: string; consent_at: Date | null; customer_phone: string; customer_name: string; visitor_key_hash: string }>(
       'select is_test,test_site_revision,catalog_revision,service_id,consent_at,customer_phone,customer_name,visitor_key_hash from field.inquiries where id=$1',

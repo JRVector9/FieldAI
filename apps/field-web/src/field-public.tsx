@@ -73,6 +73,14 @@ export function canSubmitOwnerTest(gate: { existingTest: { id: string; state: st
 export function canShowOwnerTestForm(gate: OwnerTestGate | null): boolean {
   return Boolean(gate && !gate.existingTest);
 }
+export function ownerTestGateFailureMessage(status: number, value: unknown): string {
+  const error = value && typeof value === "object" ? (value as { error?: unknown }).error : null;
+  if (status === 401) return "사업자 로그인 후 이 화면을 다시 열어 주세요. 테스트 문의는 제출되지 않았습니다.";
+  if (status === 404) return "이 사업장의 테스트 권한이 없습니다. 테스트 문의는 제출되지 않았습니다.";
+  if (status === 409 && error === "site_visibility_restricted") return "사이트 공개 제한 상태에서는 테스트 문의를 만들 수 없습니다. 신고·검토 결과를 확인해 주세요.";
+  if (status === 409) return "사이트를 먼저 공개한 뒤 테스트해 주세요.";
+  return `테스트 권한을 확인하지 못했습니다 (${status}). 다시 불러와 주세요.`;
+}
 function ownerTestGateFromResponse(status: number, value: unknown, organizationId: string): OwnerTestGate | null {
   if (status !== 200 || !value || typeof value !== "object") return null;
   const result = value as { organizationId?: unknown; siteRevision?: unknown; existingTest?: unknown };
@@ -168,10 +176,7 @@ export function PublicCatalogPage({ id }: { id: string }) {
           existingTest: { id: string; state: string } | null });
         else {
           setTestGateFailed(true);
-          setTestStatus(result.status === 401 ? "사업자 로그인 후 이 화면을 다시 열어 주세요. 테스트 문의는 제출되지 않았습니다."
-            : result.status === 404 ? "이 사업장의 테스트 권한이 없습니다. 테스트 문의는 제출되지 않았습니다."
-              : result.status === 409 ? "사이트를 먼저 공개한 뒤 테스트해 주세요."
-                : `테스트 권한을 확인하지 못했습니다 (${result.status}). 다시 불러와 주세요.`);
+          setTestStatus(ownerTestGateFailureMessage(result.status, result.data));
         }
       }).catch(() => { if (!active) return;
         setTestGateFailed(true);

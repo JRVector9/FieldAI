@@ -7,8 +7,14 @@ let ownerTestSubscriptionAccess: typeof import("../src/field-public").ownerTestS
 let canSubmitOwnerTest: typeof import("../src/field-public").canSubmitOwnerTest;
 let canShowOwnerTestForm: typeof import("../src/field-public").canShowOwnerTestForm;
 let checkOwnerTestBeforeSubmit: typeof import("../src/field-public").checkOwnerTestBeforeSubmit;
+let ownerTestGateFailureMessage: typeof import("../src/field-public").ownerTestGateFailureMessage;
 before(async () => {
-  ({ ownerTestSubscriptionAccess, canSubmitOwnerTest, canShowOwnerTestForm, checkOwnerTestBeforeSubmit } = await import("../src/field-public.js"));
+  ({ ownerTestSubscriptionAccess, canSubmitOwnerTest, canShowOwnerTestForm, checkOwnerTestBeforeSubmit, ownerTestGateFailureMessage } = await import("../src/field-public.js"));
+});
+
+test("held site explains why a bookmarked owner test cannot be submitted", () => {
+  assert.match(ownerTestGateFailureMessage(409, { error: "site_visibility_restricted" }), /공개 제한/);
+  assert.match(ownerTestGateFailureMessage(409, { error: "site_not_published" }), /먼저 공개/);
 });
 
 test("unknown earlier test submit reconciles the site record even when subscription lookup fails", async () => {
