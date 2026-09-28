@@ -43,6 +43,13 @@ export function sitePublishGuidance(state: { restricted: boolean; busy: boolean;
   if (state.publishedRevision === state.revision) return { reason: "현재 저장본은 이미 공개되었습니다.", href: null, label: null };
   return null;
 }
+export function siteInquiryTestGuidance(organizationId: string, publishedRevision: number | null,
+  restricted: boolean, approvedServiceCount: number): { href: string | null; reason: string | null } {
+  if (restricted) return { href: null, reason: "공개 제한 상태에서는 고객 화면을 확인할 수 없습니다." };
+  if (publishedRevision === null) return { href: null, reason: "홈페이지를 먼저 공개해 주세요." };
+  if (approvedServiceCount === 0) return { href: null, reason: "승인된 서비스가 있어야 테스트 문의를 만들 수 있습니다." };
+  return { href: `/public/${encodeURIComponent(organizationId)}?ownerTest=1`, reason: null };
+}
 
 export function sameDraftContent(left: SiteDraft, right: SiteDraft) {
   const content = (draft: SiteDraft) => JSON.stringify({
@@ -103,6 +110,7 @@ export function SiteEditor() {
   const [uploadingSectionId, setUploadingSectionId] = useState<string | null>(null);
   const selectedPageId = site?.pages.find(page => page.id === activePageId)?.id ?? site?.pages[0]?.id;
   const publishGuidance = site && sitePublishGuidance({ restricted: visibilityRestricted, busy, dirty, approved: Boolean(approvedCatalog), revision: site.revision, publishedRevision, publishedCatalogRevision, approvedRevision: approvedCatalog?.revision ?? 0 });
+  const inquiryTestGuidance = catalog && siteInquiryTestGuidance(catalog.organizationId, publishedRevision, visibilityRestricted, approvedCatalog?.services.length ?? 0);
 
   const load = useCallback(async (): Promise<boolean> => {
     setLoadState("loading"); setStatus("");
@@ -452,6 +460,7 @@ export function SiteEditor() {
         {visibilityRestricted && <p role="status">사이트 공개가 제한되었습니다. 초안과 이전 공개 버전·기존 문의·예약은 유지됩니다. <a href="/workspace/moderation">신고·검토 결과와 이의 제출</a>을 확인해 주세요.</p>}
         <button type="button" disabled={visibilityRestricted || busy || dirty || !approvedCatalog || site.revision === 0 || publishedRevision === site.revision} onClick={() => void publish()}>현재 초안 공개</button>
         {publishGuidance && <p role="status">{publishGuidance.reason} {publishGuidance.href && <a href={publishGuidance.href} aria-disabled={dirty || busy} onClick={event => { if (dirty || busy) event.preventDefault(); }}>{publishGuidance.label}</a>}{!publishGuidance.href && (dirty || site.revision === 0 || (publishedRevision === site.revision && publishedCatalogRevision !== null && approvedCatalog && approvedCatalog.revision > publishedCatalogRevision)) && <button type="button" disabled={busy || saveState === "conflict"} onClick={() => void save()}>사이트 초안 저장하기</button>}</p>}
+        {inquiryTestGuidance && <p>{inquiryTestGuidance.href ? <a href={inquiryTestGuidance.href} aria-label="첫 문의 미리 해보기(추가)">첫 문의 미리 해보기(추가)</a> : <button type="button" disabled>첫 문의 미리 해보기(추가)</button>} {inquiryTestGuidance.reason ?? "현재 공개된 사이트로만 내부 테스트 문의를 남깁니다. 실제 고객 알림·실적·예약에는 포함되지 않습니다. 공개 버전마다 한 번만 기록됩니다."}</p>}
         {publishedRevision !== null && siteOrigin && <section className="knowledge-source" role="region" aria-label={siteOrigin.endsWith(".localhost:3002") ? "사이트 개설 완료" : "사이트 공개본 확인"}>
           <h3>{siteOrigin.endsWith(".localhost:3002") ? "로컬 사이트 개설 완료" : "사이트 공개본 생성"}</h3>
           <p>서버에서 사이트 {publishedRevision}번과 고객 주소를 확인했습니다.</p>
@@ -459,8 +468,6 @@ export function SiteEditor() {
           <p><a href={`${siteOrigin}/site/${site.slug}`}>공개 사이트 열기</a></p>
           <p><a href={`${siteOrigin}/public/${catalog!.organizationId}`}>고객 문의 화면 확인</a></p>
           <p>실제 문의를 제출하면 접수로 기록됩니다. 화면과 이동 경로를 먼저 확인해 주세요.</p>
-          <p><a href={`/public/${catalog!.organizationId}?ownerTest=1`}>고객처럼 첫 문의 테스트</a></p>
-          <p>사업자 세션으로 고객 문의 화면에 이름·서비스·내용을 입력합니다. 테스트 기록은 실제 고객 알림·실적·일정에 포함되지 않습니다.</p>
           <div className="preview-action"><a href="/workspace">사업 운영으로 이동</a><a href="/workspace/integrations">AP 연결 선택하기</a></div>
           <p>AP 연결은 선택입니다. Field 직접 문의와 예약은 별도로 동작합니다.</p>
           {!siteOrigin.endsWith(".localhost:3002") && <p>도메인과 TLS의 실제 운영 검증은 별도로 완료해야 합니다.</p>}
