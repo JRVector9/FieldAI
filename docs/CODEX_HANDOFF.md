@@ -9,6 +9,32 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
+## AP·Field 기능 재감사 — 읽기 전용 (2026-09-29)
+
+- **Current objective / state:** 사용자의 “한번더 기능 구현한 것 검토해 놓친것 있는지 field, ap 둘다” 요청에 따라 `main` `f199687` clean 기준으로 AP·Field·연동을 병렬 읽기 전용 검토했다. 새 기능 구현이나 완료 체크는 하지 않았다. 상세 증거·우선순위·충돌 없는 PR 순서는 `docs/technical/AP_FIELD_FUNCTION_REAUDIT_2026-09-29.md`, 기준 원장은 `TASKS.md` 상단이다.
+- **Completed work / modified files:** AP 4건(문의 `오늘` 100건 경계, viewer/editor 지식 조작, 알림 100건 접근, 동명 서비스 snapshot), Field 2건(예약 정책 없이 공개 후 제출409, 알림 pending 고정 미발송 오표시), 검수 실행기 1건(제품별 E2E의 양제품 ready 요구)을 소스 호출 경로로 확인했다. `TASKS.md`, 본 인계, 위 감사 문서만 수정. API/domain/DB/UI 구현·계약/schema/migration 변경 없음.
+- **Key design decisions:** 기존 `[x]` 완료 근거를 보존하고 새로 확인된 추가 범위만 후속으로 연다. 제품별 E2E 결합은 테스트 runner 문제이며 실제 AP/Field 런타임 독립성 위반으로 단정하지 않는다. `test:independence:*`는 별도 gate다. Field 예약 응답 `policy_not_set`은 화면에서 이유를 표시하므로 결과 미상으로 잘못 보고하지 않는다. 알림의 `pending`도 provider 발송 성공을 뜻하지 않는다.
+- **Tests actually run / environment / commit:** Mac local Node24.18.0, 코드 HEAD `f199687`. root `pnpm test:unit` exit1: AP 웹53/54, CSS import SyntaxError(`agent-customer-notification-consent.css`), Field 웹92/92 pass. 계약 단위 `node --test tools/test/agent-integrator-contract.test.mjs tools/test/field-integrator-contract.test.mjs` 3/3 pass, `node tools/check-import-boundaries.mjs` pass. AP API4311 연결 실패(미기동), Field API4321 ready200. 이번 감사의 새 DB/브라우저 종단·독립성/통합 장애/실 공급사 검수는 미실행. 문서 변경은 커밋 전 상태다.
+- **Failed approaches / unresolved:** 이전부터 열린 Field 전체 DB 3파일 실패(`ai-entitlement`, `billing-lifecycle`, `billing-refund`)·환불 1건180초 timeout은 이번 로그/소스 재검토에서 `empty`/`blocked_integration`로 확인했지만 시각·원장 값 측정 전 원인 미확정이다. AP CSS import 단위 실패도 새 발견이 아니라 현 gate 실패 재확인이다. 신규 7건은 정적 호출 경로 확인이며 실제 신규 조직/101건 fixture를 이번 감사에서 실행하지 않았다.
+- **Remaining work / rollback:** 새 발견 범위의 격리 DB·웹 회귀와 최소 수정, AP/Field 전체 gate 재실행, 기존 환불 원인 진단, 실제 제품별 독립성/브라우저/실기기/공급사 인수. 실 고객·청구·운영 데이터는 변경하지 않았으며 이번 문서 수정에는 서비스 rollback이 없다.
+
+### Exact commands for next agent — 재감사
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+sed -n '1,18p' TASKS.md
+sed -n '1,43p' docs/CODEX_HANDOFF.md
+git status --short --branch
+git log -4 --oneline
+cat docs/technical/AP_FIELD_FUNCTION_REAUDIT_2026-09-29.md
+pnpm --filter @fieldai/agent-web test:unit
+pnpm --filter @fieldai/field-web test:unit
+node --test tools/test/agent-integrator-contract.test.mjs tools/test/field-integrator-contract.test.mjs
+node tools/check-import-boundaries.mjs
+```
+
+Field 환불 gate의 후속 작업은 기존 `TASKS.md` `[ ] R00.QA / F09.REFUND-DECLINE.DB`대로 격리 DB에서 `next_attempt_at`·DB/Node clock·`error_code`·claim/lock 원장을 먼저 측정한다. 새 AP/Field 기능은 감사 문서의 순서대로 소유 파일 충돌을 피하고, 코드 변경 전에 각 세부 ID의 재개 범위/QA/검수 명령을 기록한다.
+
 ## Field 첫 사용 수리 사후 감사 — PR5/PR6 로컬 완료 (2026-09-29)
 
 - **Current objective / State:** 사용자가 PR1~PR4 수리 뒤 “또 놓친거 없는지” 재검토 요청. `3ca16ed`/clean main에서 TASKS 완료 원장·기존 인계·변경 diff/API 호출을 다시 대조했다. PR5/PR6의 발견5건은 로컬 구현/표적 검수 완료, R00.QA 전체 gate는 실패·미완료. 상세 재개 범위/QA07·09·10·17·70·71·76·79는 `TASKS.md` 상단과 `docs/technical/FIELD_FIRST_USE_AUDIT_FOLLOWUP_2026-09-29.md`에 코드 변경 전 기록했다.
