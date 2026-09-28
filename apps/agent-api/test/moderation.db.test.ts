@@ -177,7 +177,7 @@ test('AP reports restrict only the reported deployment and require approved time
       let waiting = false;
       for (let attempt = 0; attempt < 100 && !waiting; attempt++) {
         waiting = (await pool.query(`select 1 from pg_stat_activity where datname=current_database()
-          and wait_event='relation' and query like 'select 1 from ap.trial_subscriptions%'`)).rowCount! > 0;
+          and wait_event='relation' and query like '%from ap.trial_subscriptions%'`)).rowCount! > 0;
         if (!waiting) await new Promise(resolve => setTimeout(resolve, 20));
       }
       assert.ok(waiting, 'embed intake reached the actual PostgreSQL trial-check barrier');
