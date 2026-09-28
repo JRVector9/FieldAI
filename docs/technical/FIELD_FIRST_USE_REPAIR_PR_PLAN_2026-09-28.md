@@ -12,3 +12,5 @@ Task IDs: F07.BOOKING/F09.TRIAL/F06.INQUIRY, C02.LOCAL/R00.QA, F02.EDITOR/F04.BA
 조정자만 `TASKS.md`, `docs/CODEX_HANDOFF.md`, 공통 계약/schema 번호 예약, 통합 commit, managed runtime, 최종 검수/보고를 소유한다. 각 서브에이전트는 별도 worktree/브랜치에서 작업하고 자신의 범위 밖 파일이 필요하면 조정자에게 알린다. PR1과 PR2의 DB 검사는 UUID 별도 임시 DB를 사용한다. 같은 mock 컨테이너의 스키마/운영 데이터를 직접 초기화하지 않는다. PR3/4의 브라우저 사용은 조정자가 통합 뒤 수행한다.
 
 통합 순서: PR1/PR2는 파일 충돌 없이 순차 cherry-pick, PR3→PR4는 같은 웹 소유자의 직렬 commit을 순차 반영한다. 각 단위는 독립 테스트·`git diff --check`·Codex CLI read-only review 후 병합한다. 최종 `pnpm test:db:field`, Field web unit/typecheck/build와 필요한 UI/API 검사를 실제 실행하고 실패를 남긴다. 실 공급사·고객 발송·청구·운영 삭제·배포는 범위 밖이며 외부/최종 인수는 계속 미완료다.
+
+직접 재리뷰로 확인된 추가 결함(2026-09-28): PR3은 미저장 사업 정보의 `오늘` 주 행동이 페이지를 다시 열어 입력을 잃는 경로, owner 이외 역할에 승인·공개를 지시하는 경로, 새 저장/안내 조작 이름의 `(추가)` 누락을 같은 웹 소유 범위에서 보완한다. PR4는 체험 종료 후 내부 시험 링크가 활성화되어 403으로 끝나는 상태와 AP 문의에 Field 직접 문의의 알림 확인 안내를 적용한 문구를 보완한다. 각 상황의 실제 role/entitlement/원장 상태를 테스트하고 기존 첫 사용 동선 회귀를 확인한다. AP/Field 계약·서버·DB·디자인 CSS는 변경하지 않는다.
