@@ -8,8 +8,9 @@ let firstUseAction: typeof import("../src/field-workspace").firstUseAction;
 let ownerPermissionFromSubscription: typeof import("../src/field-workspace").ownerPermissionFromSubscription;
 let ownerCanStartNewFromSubscription: typeof import("../src/field-workspace").ownerCanStartNewFromSubscription;
 let siteReturnStep: typeof import("../src/field-workspace").siteReturnStep;
+let ownerSectionFromSearch: typeof import("../src/field-workspace").ownerSectionFromSearch;
 before(async () => {
-  ({ catalogApprovalIssue, canReturnToSite, firstUseAction, ownerPermissionFromSubscription, ownerCanStartNewFromSubscription, siteReturnStep } = await import("../src/field-workspace.js"));
+  ({ catalogApprovalIssue, canReturnToSite, firstUseAction, ownerPermissionFromSubscription, ownerCanStartNewFromSubscription, siteReturnStep, ownerSectionFromSearch } = await import("../src/field-workspace.js"));
 });
 
 const draft: DraftCatalog = {
@@ -109,6 +110,12 @@ test("site return retains the step that sent the owner to business editing", () 
   assert.equal(siteReturnStep("?returnTo=site"), "business");
   assert.equal(siteReturnStep("?returnTo=publish"), "publish");
   assert.equal(siteReturnStep("?returnTo=elsewhere"), null);
+});
+
+test("site booking guidance opens the existing reservation policy section", () => {
+  assert.equal(ownerSectionFromSearch("?section=calendar"), "calendar");
+  assert.equal(ownerSectionFromSearch("?section=services"), "services");
+  assert.equal(ownerSectionFromSearch("?section=unknown"), "today");
 });
 
 test("approval explains unsaved and missing required values before enabling approval", () => {

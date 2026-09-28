@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sitePublishGuidance, sitePublishPermissionFromSubscription } from "../src/site-editor";
+import { siteBookingReadiness, sitePublishGuidance, sitePublishPermissionFromSubscription } from "../src/site-editor";
 
 const ready = { restricted: false, busy: false, dirty: false, approved: true,
   canManage: true as boolean | null, canStartNew: true as boolean | null,
@@ -38,4 +38,20 @@ test("site publish permission uses only the matching Field organization", () => 
   assert.equal(sitePublishPermissionFromSubscription({ product: "field", organizationId: "org", canManage: false }, "org"), false);
   assert.equal(sitePublishPermissionFromSubscription({ product: "agent", organizationId: "org", canManage: true }, "org"), null);
   assert.equal(sitePublishPermissionFromSubscription({ product: "field", organizationId: "other", canManage: true }, "org"), null);
+});
+
+test("site contact step distinguishes request intake from slot schedule readiness", () => {
+  const services = [
+    { id: "request", name: "희망시간", description: "", bookingMode: "request" as const, durationMinutes: 30, priceAmount: null },
+    { id: "slot", name: "시간표", description: "", bookingMode: "slot" as const, durationMinutes: 30, priceAmount: null },
+  ];
+  assert.equal(siteBookingReadiness(services, "missing", null).slotReady, false);
+  assert.match(siteBookingReadiness(services, "missing", null).message, /시간표.*설정/);
+  assert.equal(siteBookingReadiness(services, "failed", null).slotReady, false);
+  assert.match(siteBookingReadiness(services, "failed", null).message, /확인하지 못/);
+  assert.equal(siteBookingReadiness(services, "ready", { weekly: {}, specialDates: {} }).slotReady, false);
+  assert.equal(siteBookingReadiness(services, "ready", {
+    weekly: { mon: { open: "10:00", close: "18:00" } }, specialDates: {},
+  }).slotReady, true);
+  assert.match(siteBookingReadiness([services[0]!], "missing", null).message, /희망시간.*접수/);
 });

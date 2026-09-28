@@ -104,6 +104,10 @@ export function siteReturnStep(search: string): "business" | "publish" | null {
   const value = new URLSearchParams(search).get("returnTo");
   return value === "publish" ? "publish" : value === "site" || value === "business" ? "business" : null;
 }
+export function ownerSectionFromSearch(search: string): "today" | "services" | "calendar" {
+  const section = new URLSearchParams(search).get("section");
+  return section === "services" || section === "calendar" ? section : "today";
+}
 export function ownerPermissionFromSubscription(value: unknown, organizationId: string): boolean | null {
   if (!value || typeof value !== "object") return null;
   const result = value as { product?: unknown; organizationId?: unknown; canManage?: unknown };
@@ -556,7 +560,7 @@ export function FieldWorkspace() {
       setReservationsNextCursor(null); setOlderReservationsState("idle");
       setPhase("catalog");
       const params = new URLSearchParams(window.location.search);
-      if (params.get("section") === "services") setActiveOwnerSection("services");
+      setActiveOwnerSection(ownerSectionFromSearch(window.location.search));
       if (params.get("edit") === "business") { setServicesEditorOpen(true); setBusinessDeepLink(true); }
       setReturnToSiteStep(siteReturnStep(window.location.search));
       await Promise.allSettled([loadOwnerPermission(value.organizationId), loadCatalogRelease(value.organizationId), loadSitePublication(), loadTodayCalendar(),

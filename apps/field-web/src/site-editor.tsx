@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { SiteEditorFrame } from "./site-editor-frame";
 import { SiteTemplateCards } from "./site-editor-design";
-import { requestJson, type Catalog } from "./field-api";
+import { requestJson, type BookingPolicy, type Catalog } from "./field-api";
 import { SiteRenderer, type SiteDraft, type SitePage, type SiteSection } from "./field-site";
 import { isSiteFont, siteFonts, type SiteFont } from './site-fonts';
 
@@ -73,6 +73,22 @@ export function siteInquiryTestGuidance(organizationId: string, publishedRevisio
   return { href: `/public/${encodeURIComponent(organizationId)}?ownerTest=1`, reason: null };
 }
 
+export function siteBookingReadiness(services: Catalog["services"], state: "loading" | "ready" | "missing" | "failed",
+  policy: Pick<BookingPolicy, "weekly" | "specialDates"> | null): { slotReady: boolean; message: string } {
+  const hasRequest = services.some(service => service.bookingMode === "request");
+  const hasSlot = services.some(service => service.bookingMode === "slot");
+  if (!hasSlot) return { slotReady: false, message: hasRequest
+    ? "희망시간 예약은 고객 요청으로 접수됩니다. 확정 가능한 시간을 정하려면 예약 정책을 설정해 주세요."
+    : "등록된 예약 서비스가 없습니다." };
+  if (state === "loading") return { slotReady: false, message: "시간표 예약 정책을 확인하고 있습니다." };
+  if (state === "failed") return { slotReady: false, message: "시간표 예약 정책을 확인하지 못했습니다. 설정 상태를 다시 확인해 주세요." };
+  const configured = state === "ready" && policy !== null
+    && (Object.keys(policy.weekly).length > 0 || Object.keys(policy.specialDates).length > 0);
+  return configured
+    ? { slotReady: true, message: "시간표가 설정됐습니다. 실제 신청 가능한 시간은 고객 화면에서 다시 확인해 주세요." }
+    : { slotReady: false, message: "시간표 예약 서비스의 영업시간을 설정해야 고객이 시간을 선택할 수 있습니다. 사이트 공개와 직접 문의는 계속할 수 있습니다." };
+}
+
 export function sameDraftContent(left: SiteDraft, right: SiteDraft) {
   const content = (draft: SiteDraft) => JSON.stringify({
     template: draft.template, palette: draft.palette, font: draft.font,
@@ -109,6 +125,8 @@ export function SiteEditor() {
   const [site, setSite] = useState<SiteDraft | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [approvedCatalog, setApprovedCatalog] = useState<Catalog | null>(null);
+  const [bookingPolicy, setBookingPolicy] = useState<Pick<BookingPolicy, "weekly" | "specialDates"> | null>(null);
+  const [bookingPolicyState, setBookingPolicyState] = useState<"loading" | "ready" | "missing" | "failed">("loading");
   const [testCanStartNew, setTestCanStartNew] = useState<boolean | null>(null);
   const [publishCanManage, setPublishCanManage] = useState<boolean | null>(null);
   const [testAccessState, setTestAccessState] = useState<"loading" | "ready" | "failed">("loading");
@@ -137,6 +155,7 @@ export function SiteEditor() {
   const selectedPageId = site?.pages.find(page => page.id === activePageId)?.id ?? site?.pages[0]?.id;
   const publishGuidance = site && sitePublishGuidance({ restricted: visibilityRestricted, busy, dirty, approved: Boolean(approvedCatalog), canManage: publishCanManage, canStartNew: testCanStartNew, revision: site.revision, publishedRevision, publishedCatalogRevision, approvedRevision: approvedCatalog?.revision ?? 0 });
   const inquiryTestGuidance = catalog && siteInquiryTestGuidance(catalog.organizationId, publishedRevision, visibilityRestricted, approvedCatalog?.services.length ?? 0, testCanStartNew);
+  const bookingReadiness = approvedCatalog && siteBookingReadiness(approvedCatalog.services, bookingPolicyState, bookingPolicy);
   const canCheckTestAccess = publishedRevision !== null && !visibilityRestricted && (approvedCatalog?.services.length ?? 0) > 0;
 
   const loadTestAccess = useCallback(async (organizationId: string) => {
@@ -183,6 +202,12 @@ export function SiteEditor() {
       if (approved.status !== 200 && approved.status !== 404)
         return failed(`승인된 사업 정보를 불러오지 못했습니다 (${approved.status}). 다시 시도해 주세요.`);
       setApprovedCatalog(approved.status === 200 ? approved.data as Catalog : null);
+      setBookingPolicyState("loading"); setBookingPolicy(null);
+      try {
+        const policy = await requestJson("/v1/booking-policy");
+        if (policy.status === 200) { setBookingPolicy(policy.data as BookingPolicy); setBookingPolicyState("ready"); }
+        else setBookingPolicyState(policy.status === 404 ? "missing" : "failed");
+      } catch { setBookingPolicyState("failed"); }
       const result = await requestJson("/v1/sites/draft");
       if (result.status === 404) { setNoSite(true); setAiJob(null); setLoadState("ready"); return true; }
       if (result.status !== 200) {
@@ -500,11 +525,12 @@ export function SiteEditor() {
       {step === "design" && <section className="special-panel"><h2>2 디자인 선택</h2><p>세 배치는 페이지 구성이 서로 다릅니다.</p><SiteTemplateCards template={site.template} businessName={catalog?.businessName ?? ""} onChange={template => change({ template })} /><div className="site-editor-design-controls"><label>강조 색상 <input type="color" value={site.palette} onChange={event => change({ palette: event.target.value })} /></label><SiteFontSelect font={site.font} onChange={font => change({ font })} /></div><div className="knowledge-source site-editor-ai"><h3>AI로 배치 제안받기</h3><p>AI는 승인된 사업 정보로 템플릿·색·페이지 구성을 제안합니다. 제안은 확인 후 초안에만 반영됩니다.</p><label>원하는 분위기와 구성<textarea value={aiPrompt} maxLength={1000} onChange={event => setAiPrompt(event.target.value)} placeholder="예: 따뜻한 분위기의 한 페이지 소개와 서비스 목록" /></label><button type="button" disabled={busy || dirty || !approvedCatalog || !aiPrompt.trim() || aiJob?.status === "queued" || aiJob?.status === "running" || aiJob?.status === "proposed"} onClick={() => void generateSite()}>AI 제안 생성</button>{dirty && <p>현재 변경을 먼저 저장한 뒤 생성해 주세요.</p>}{!approvedCatalog && <p>먼저 사업 정보를 승인해 주세요. 템플릿 편집은 계속할 수 있습니다.</p>}{aiJob && <div className="state-message" role="status"><strong>AI 작업: {aiJob.status === "queued" ? "대기" : aiJob.status === "running" ? "생성 중" : aiJob.status === "proposed" ? "제안 검토" : aiJob.status === "applied_to_draft" ? "초안 반영" : aiJob.status === "stale" ? "최신 초안과 충돌" : aiJob.status === "canceled" ? "취소" : "실패"}</strong>{aiJob.errorCode && <p>상태 코드: {aiJob.errorCode}</p>}{aiJob.inputTokens !== null && <p>모델 사용량: 입력 {aiJob.inputTokens}·출력 {aiJob.outputTokens} 토큰. 실제 비용은 공급사 정산 전입니다.</p>}{(["queued", "running", "proposed"] as const).includes(aiJob.status as "queued" | "running" | "proposed") && <button type="button" disabled={busy} onClick={() => void cancelGeneration()}>작업 취소</button>}{aiJob.status === "proposed" && aiJob.proposal && <><p>제안: {aiJob.proposal.template} · {aiJob.proposal.pages.length}개 페이지. 현재 초안은 아직 바뀌지 않았습니다.</p><SiteRenderer site={{ ...site, ...aiJob.proposal }} catalog={approvedCatalog ?? catalog!} preview /><button type="button" disabled={busy || dirty} onClick={() => void applyGeneration()}>검토한 제안을 초안에 반영</button></>}{(aiJob.status === "failed" || aiJob.status === "canceled" || aiJob.status === "stale") && <p>설명은 유지됩니다. 필요하면 새 작업을 만들거나 템플릿을 직접 편집하세요.</p>}</div>}</div></section>}
       {step === "pages" && <div className="editor-switch" role="group" aria-label="페이지 편집 화면"><button type="button" aria-pressed={mobileView === "edit"} onClick={() => setMobileView("edit")}>편집</button><button type="button" aria-pressed={mobileView === "preview"} onClick={() => setMobileView("preview")}>미리보기</button></div>}
       {step === "pages" && <section className="special-panel site-editor-inputs"><h2>3 페이지와 내용 편집</h2><p>소개 페이지는 최대 5개입니다. 문의 화면은 별도로 제공됩니다.</p><div className="deployment-options">{site.pages.map(page => <button key={page.id} type="button" aria-pressed={currentPage?.id === page.id} onClick={() => setActivePageId(page.id)}>{page.title}</button>)}<button type="button" disabled={site.pages.length >= 5} onClick={() => { let next = site.pages.length + 1; while (site.pages.some(existing => existing.slug === `page-${next}`)) next += 1; const page = { id: crypto.randomUUID(), slug: `page-${next}`, title: `페이지 ${next}`, sections: [] }; change({ pages: [...site.pages, page] }); setActivePageId(page.id); }}>페이지 추가</button></div>{currentPage && <div className="knowledge-source"><label>페이지 이름<input value={currentPage.title} maxLength={100} onChange={event => updatePage(currentPage.id, { title: event.target.value })} /></label><label>페이지 주소 경로<input value={currentPage.slug} readOnly={currentPage.slug === "home"} pattern="[a-z0-9][a-z0-9-]{0,39}" maxLength={40} onChange={event => updatePage(currentPage.id, { slug: event.target.value })} /></label>{currentPage.slug !== "home" && <button type="button" onClick={() => { change({ pages: site.pages.filter(page => page.id !== currentPage.id) }); setActivePageId(null); }}>페이지 삭제</button>}<h3>섹션</h3>{currentPage.sections.map((section, index) => <div key={section.id} className="knowledge-source" role="group" aria-label={`${index + 1}번 섹션`}><label>구성<select value={section.kind} onChange={event => updateSection(currentPage.id, section.id, { kind: event.target.value as SiteSection["kind"] })}>{kinds.map(kind => <option key={kind.id} value={kind.id}>{kind.label}</option>)}</select></label><label>제목<input value={section.heading} maxLength={200} onChange={event => updateSection(currentPage.id, section.id, { heading: event.target.value })} /></label><label>본문<textarea value={section.body} maxLength={5000} onChange={event => updateSection(currentPage.id, section.id, { body: event.target.value })} /></label><div className="site-photo-controls"><h4>섹션 사진</h4><label>서버 사진 보관함<select value={section.assetId ?? ""} disabled={busy} onChange={event => assignPhoto(currentPage.id, section.id, event.target.value)}><option value="">사진 없음</option>{assets.map((asset, assetIndex) => <option key={asset.id} value={asset.id}>사진 {assets.length - assetIndex} · {asset.width}×{asset.height} · 서버 저장 완료</option>)}</select></label><label>새 사진 업로드<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void uploadPhoto(currentPage.id, section.id, file); }} /></label>{uploadingSectionId === section.id && <p role="status">사진을 변환해 저장하고 있습니다.</p>}{section.assetId && <><img className="site-editor-photo-preview" src={`/v1/sites/assets/${section.assetId}`} alt={section.alt ?? ""} /><label>사진 설명(alt)<input required maxLength={300} value={section.alt ?? ""} onChange={event => updateSection(currentPage.id, section.id, { alt: event.target.value })} placeholder="사진에 보이는 내용을 구체적으로 적어 주세요" /></label><button type="button" disabled={busy} onClick={() => assignPhoto(currentPage.id, section.id, "")}>이 섹션에서 사진 빼기</button><p>초안에서 빼도 이미 공개된 사진은 새 공개본으로 교체할 때까지 유지됩니다.</p></>}</div><div className="preview-action"><button type="button" aria-label={`${index + 1}번 섹션 위로 이동`} disabled={index === 0} onClick={() => { const next = [...currentPage.sections]; [next[index - 1], next[index]] = [next[index]!, next[index - 1]!]; updatePage(currentPage.id, { sections: next }); }}>위로</button><button type="button" aria-label={`${index + 1}번 섹션 아래로 이동`} disabled={index === currentPage.sections.length - 1} onClick={() => { const next = [...currentPage.sections]; [next[index + 1], next[index]] = [next[index]!, next[index + 1]!]; updatePage(currentPage.id, { sections: next }); }}>아래로</button><button type="button" aria-label={`${index + 1}번 섹션 삭제`} onClick={() => updatePage(currentPage.id, { sections: currentPage.sections.filter(item => item.id !== section.id) })}>섹션 삭제</button></div></div>)}<button type="button" disabled={currentPage.sections.length >= 20} onClick={() => updatePage(currentPage.id, { sections: [...currentPage.sections, { id: crypto.randomUUID(), kind: "text", heading: "", body: "" }] })}>섹션 추가</button></div>}</section>}
-      {step === "contact" && <section className="special-panel"><h2>4 연락·예약</h2><p>고객은 Field 직접 문의를 사용할 수 있습니다. 승인된 카탈로그의 서비스별 예약 방식은 유지됩니다.</p>{approvedCatalog ? <><p>승인된 기본 방식: {approvedCatalog.defaultBookingMode === "slot" ? "시간표 선택" : "희망 시간 제출"}. 아래는 서비스별로 확정된 방식입니다.</p><ul>{approvedCatalog.services.map(service => <li key={service.id}>{service.name} · {service.bookingMode === "slot" ? "시간표 선택" : "희망 시간 제출"}</li>)}</ul></> : <p>먼저 사업 정보와 서비스를 승인해 주세요.</p>}<p>고객이 직접 문의·예약 요청을 남길 수 있고, 사업자가 관리실에서 최종 확정합니다.</p></section>}
+      {step === "contact" && <section className="special-panel"><h2>4 연락·예약</h2><p>고객은 Field 직접 문의를 사용할 수 있습니다. 승인된 카탈로그의 서비스별 예약 방식은 유지됩니다.</p>{approvedCatalog ? <><p>승인된 기본 방식: {approvedCatalog.defaultBookingMode === "slot" ? "시간표 선택" : "희망 시간 제출"}. 아래는 서비스별로 확정된 방식입니다.</p><ul>{approvedCatalog.services.map(service => <li key={service.id}>{service.name} · {service.bookingMode === "slot" ? "시간표 선택" : "희망 시간 제출"}</li>)}</ul>{bookingReadiness && <p role="status">{bookingReadiness.message} <a href="/workspace?section=calendar">영업시간·예약 정책 열기(추가)</a></p>}</> : <p>먼저 사업 정보와 서비스를 승인해 주세요.</p>}<p>고객이 직접 문의·예약 요청을 남길 수 있고, 사업자가 관리실에서 최종 확정합니다.</p></section>}
       {step === "publish" && <section className="special-panel">
         <h2>5 확인·공개</h2>
         <p>초안과 카탈로그를 확인한 뒤 사이트 버전을 공개합니다. 다른 제품과 연결하지 않아도 공개할 수 있습니다.</p>
         <p>승인한 사업 정보: {approvedCatalog ? `${approvedCatalog.revision}번` : "없음"}</p>
+        {bookingReadiness && <p role="status">{bookingReadiness.message} {!bookingReadiness.slotReady && <a href="/workspace?section=calendar">예약 정책 확인(추가)</a>}</p>}
         {approvedCatalog && publishedCatalogRevision !== null && approvedCatalog.revision > publishedCatalogRevision && <div className="state-message" role="status"><strong>공개 사이트의 사업 정보가 오래되었습니다.</strong><p>새로 승인한 사업 정보 {approvedCatalog.revision}번을 반영하려면 사이트 초안을 다시 저장하고 공개해 주세요.</p><button type="button" disabled={busy || dirty} onClick={() => void save()}>카탈로그 반영용 초안 저장</button></div>}
         {visibilityRestricted && <p role="status">사이트 공개가 제한되었습니다. 초안과 이전 공개 버전·기존 문의·예약은 유지됩니다. <a href="/workspace/moderation">신고·검토 결과와 이의 제출</a>을 확인해 주세요.</p>}
         <button type="button" disabled={visibilityRestricted || publishCanManage !== true || testCanStartNew !== true || busy || dirty || !approvedCatalog || site.revision === 0 || publishedRevision === site.revision} onClick={() => void publish()}>현재 초안 공개</button>

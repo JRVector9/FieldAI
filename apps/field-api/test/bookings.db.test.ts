@@ -35,6 +35,47 @@ function futureWeekday() {
   throw new Error('no weekday');
 }
 
+test('a first published Field site accepts request bookings without a hidden schedule and keeps slot bookings unready', async () => {
+  const account = await owner();
+  const app = createFieldApp(async () => undefined, auth.handler, base, {
+    pool,
+    resolveUserId: async (headers: IncomingHttpHeaders) =>
+      (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+  });
+  try {
+    const organization = await app.inject({ method: 'POST', url: '/v1/organizations',
+      headers: { cookie: account.cookie }, payload: { name: '첫 예약 준비 검수' } });
+    assert.equal(organization.statusCode, 201, organization.body);
+    const organizationId = organization.json().id as string;
+    const requestServiceId = randomUUID(), slotServiceId = randomUUID();
+    const catalog = { expectedRevision: 0, businessName: '첫 예약 준비 검수', industry: '',
+      introduction: '', region: '', openingHours: '', contactPhone: '', services: [
+        { id: requestServiceId, name: '희망시간 접수', description: '', bookingMode: 'request', durationMinutes: 30, priceAmount: null },
+        { id: slotServiceId, name: '시간표 접수', description: '', bookingMode: 'slot', durationMinutes: 30, priceAmount: null },
+      ] };
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft',
+      headers: { cookie: account.cookie }, payload: catalog })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 1 } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/sites', headers: { cookie: account.cookie } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/sites/draft', headers: { cookie: account.cookie },
+      payload: { expectedRevision: 0, template: 'essential', palette: '#264653', pages: [
+        { id: randomUUID(), slug: 'home', title: '홈', sections: [] },
+      ] } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/sites/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 1 } })).statusCode, 201);
+    const request = await app.inject({ method: 'POST', url: `/v1/public/catalog/${organizationId}/reservations`,
+      payload: { serviceId: requestServiceId, preferredTimeText: '다음 주 오전', name: '예약 고객',
+        phone: '010-2222-3333', consent: true } });
+    assert.equal(request.statusCode, 201, request.body);
+    assert.equal(request.json().bookingMode, 'request');
+    assert.equal(request.json().timezone, 'Asia/Seoul');
+    const slot = await app.inject({ url: `/v1/public/catalog/${organizationId}/availability?serviceId=${slotServiceId}&date=${futureWeekday()}` });
+    assert.equal(slot.statusCode, 409, slot.body);
+    assert.equal(slot.json().error, 'policy_not_set');
+  } finally { await app.close(); }
+});
+
 test('Field slots distinguish repeated DST instants and use elapsed duration at transitions', async () => {
   const organizationId = randomUUID();
   const policy = { revision: 1, timezone: 'America/New_York',

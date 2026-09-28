@@ -844,13 +844,16 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
     const service = release.content.services.find(item => item.id === body.serviceId);
     if (!service) return reply.code(404).send({ error: 'service_not_found' });
     const policy = await policyFor(runtime.pool, organizationId);
-    if (!policy) return reply.code(409).send({ error: 'policy_not_set' });
+    // A request booking records a preference, not an occupied slot. Keep its
+    // timezone explicit even before the owner configures available hours.
+    const timezone = policy?.timezone ?? (service.bookingMode === 'request' ? 'Asia/Seoul' : null);
+    if (!timezone) return reply.code(409).send({ error: 'policy_not_set' });
     const start = body.startAt === undefined ? null : validInstant(body.startAt);
     const preferred = body.preferredTimeText === undefined ? null : body.preferredTimeText;
     if (service.bookingMode === 'slot') {
       if (!start || preferred !== null) return reply.code(400).send({ error: 'invalid_slot_request' });
-      const day = localDay(start, policy.timezone);
-      const slots = await availableSlots(runtime.pool, organizationId, policy, service, day);
+      const day = localDay(start, policy!.timezone);
+      const slots = await availableSlots(runtime.pool, organizationId, policy!, service, day);
       if (!slots.some(slot => slot.startAt === start.toISOString())) return reply.code(409).send({ error: 'slot_unavailable' });
     } else if (!text(preferred, 500) || start) return reply.code(400).send({ error: 'invalid_preferred_time' });
     const id = randomUUID();
@@ -876,7 +879,7 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
            $17, $18, case when $17::text is null then null else now() end)
          on conflict (organization_id, submission_key_hash) do nothing returning *`,
         [id, organizationId, release.revision, service.id, JSON.stringify(service), service.bookingMode,
-          body.name.trim(), body.phone.trim(), hash(receiptKey), preferred, start, policy.timezone,
+          body.name.trim(), body.phone.trim(), hash(receiptKey), preferred, start, timezone,
           submissionKeyHash, requestHash, requestMessage, visitRegion, fallback?.origin ?? null,
           fallback?.actionRequestId ?? null],
       );
