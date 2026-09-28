@@ -78,22 +78,22 @@ function run(label, filename, env) {
 try {
   if (!Object.hasOwn(suites, mode))
     throw new Error('usage: node tools/run-e2e.mjs [agent|field|distribution]');
+  const products = mode === 'distribution' ? ['agent', 'field'] : [mode];
   if (process.env.NODE_ENV === 'production'
-    || ['AP_PROFILE', 'FIELD_PROFILE', 'APP_PROFILE'].some(name =>
-      process.env[name] && process.env[name] !== 'mock'))
+    || ['APP_PROFILE', ...products.map(product => product === 'agent' ? 'AP_PROFILE' : 'FIELD_PROFILE')]
+      .some(name =>
+        process.env[name] && process.env[name] !== 'mock'))
     throw new Error('local mock E2E cannot run under a non-mock profile');
-  localSettings('agent');
-  localSettings('field');
+  for (const product of products) localSettings(product);
   const python = process.env.FIELD_DISTRIBUTION_BROWSER_PYTHON
     ?? process.env.AP_BROWSER_PYTHON ?? process.env.FIELD_BROWSER_PYTHON
     ?? '/tmp/fieldai-ui-venv/bin/python';
   if (!existsSync(python)) throw new Error(`Chromium test Python is unavailable: ${python}`);
-  await Promise.all([
-    ready('http://127.0.0.1:4311/health/ready', 'agent'),
-    ready('http://127.0.0.1:4321/health/ready', 'field'),
-    ready('http://127.0.0.1:3001/workspace'),
-    ready('http://127.0.0.1:3002/workspace'),
-  ]);
+  await Promise.all(products.flatMap(product => product === 'agent'
+    ? [ready('http://127.0.0.1:4311/health/ready', 'agent'),
+      ready('http://127.0.0.1:3001/workspace')]
+    : [ready('http://127.0.0.1:4321/health/ready', 'field'),
+      ready('http://127.0.0.1:3002/workspace')]));
   const env = {
     ...systemEnv,
     AP_BROWSER_PYTHON: python,
