@@ -33,8 +33,8 @@ export function sitePublishGuidance(state: { restricted: boolean; busy: boolean;
   approved: boolean; revision: number; publishedRevision: number | null;
   publishedCatalogRevision: number | null; approvedRevision: number }):
   { reason: string; href: string | null; label: string | null } | null {
-  if (state.restricted) return { reason: "사이트 공개가 제한되어 있습니다.", href: "/workspace/moderation", label: "신고·검토 결과 보기" };
   if (state.dirty) return { reason: "변경 내용을 먼저 서버에 저장해 주세요.", href: null, label: null };
+  if (state.restricted) return { reason: "사이트 공개가 제한되어 있습니다.", href: "/workspace/moderation", label: "신고·검토 결과 보기" };
   if (!state.approved) return { reason: "사업 정보를 먼저 승인해 주세요.", href: "/workspace?section=services&edit=business&returnTo=publish", label: "사업 정보 입력·승인 열기" };
   if (state.busy) return { reason: "진행 중인 작업이 끝나면 다시 확인해 주세요.", href: null, label: null };
   if (state.revision === 0) return { reason: "사이트 초안을 먼저 저장해 주세요.", href: null, label: null };
