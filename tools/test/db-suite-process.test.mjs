@@ -4,7 +4,48 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
-import { hasActiveGroup, run } from '../run-db-suite.mjs';
+import { adminOperation, assertSupportedPlatform, createSuiteSignalGuard, hasActiveGroup, run } from '../run-db-suite.mjs';
+
+const posixTest = process.platform === 'win32' ? test.skip : test;
+
+test('DB suite refuses unsupported platforms before any database work', () => {
+  assert.throws(() => assertSupportedPlatform('win32'), /requires macOS or Linux/);
+  assert.doesNotThrow(() => assertSupportedPlatform('darwin'));
+  assert.doesNotThrow(() => assertSupportedPlatform('linux'));
+});
+
+test('stalled admin operation is bounded and disconnects before deferred interruption exits', async () => {
+  let destroyed = false;
+  const admin = { connection: { stream: { destroy() { destroyed = true; } } } };
+  const guard = createSuiteSignalGuard();
+  try {
+    const pending = adminOperation(admin, 'create database', () => new Promise(() => {}), 25);
+    process.emit('SIGTERM');
+    await assert.rejects(pending, /create database timed out/);
+    assert.equal(destroyed, true);
+    assert.throws(() => guard.check(), error => error.exitCode === 143);
+  } finally { guard.close(); }
+});
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  test(`${signal} is deferred across suite cleanup and stops the next file`, async () => {
+    const guard = createSuiteSignalGuard();
+    let cleaned = false;
+    let nextStarted = false;
+    try {
+      process.emit(signal);
+      try { await new Promise(resolveWait => setTimeout(resolveWait, 10)); }
+      finally { cleaned = true; }
+      guard.check();
+      nextStarted = true;
+    } catch (error) {
+      assert.equal(error.interrupted, true);
+      assert.equal(error.exitCode, signal === 'SIGINT' ? 130 : 143);
+    } finally { guard.close(); }
+    assert.equal(cleaned, true);
+    assert.equal(nextStarted, false);
+  });
+}
 
 test('zombie-only process groups have no active child work', () => {
   assert.equal(hasActiveGroup(' 42 Z\n 42 Z+\n', 42), false);
@@ -12,7 +53,7 @@ test('zombie-only process groups have no active child work', () => {
   assert.equal(hasActiveGroup(' 41 S\n', 42), false);
 });
 
-test('an unknown process-group probe preserves its database', async () => {
+posixTest('an unknown process-group probe preserves its database', async () => {
   const directory = mkdtempSync(resolve(tmpdir(), 'db-suite-probe-test-'));
   const probe = resolve(directory, 'ps');
   writeFileSync(probe, '#!/bin/sh\nexit 2\n');
@@ -28,7 +69,7 @@ test('an unknown process-group probe preserves its database', async () => {
   }
 });
 
-test('timeout waits for the spawned test descendant to stop before returning', async () => {
+posixTest('timeout waits for the spawned test descendant to stop before returning', async () => {
   const directory = mkdtempSync(resolve(tmpdir(), 'db-suite-process-test-'));
   const started = resolve(directory, 'started');
   const stopped = resolve(directory, 'stopped');
@@ -56,7 +97,7 @@ test('timeout waits for the spawned test descendant to stop before returning', a
   }
 });
 
-test('timeout kills a descendant that ignores graceful termination', async () => {
+posixTest('timeout kills a descendant that ignores graceful termination', async () => {
   const directory = mkdtempSync(resolve(tmpdir(), 'db-suite-force-test-'));
   const started = resolve(directory, 'started');
   const descendant = `
@@ -86,7 +127,7 @@ test('timeout kills a descendant that ignores graceful termination', async () =>
 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
-  test(`${signal} waits for the active child group and reports interruption`, async () => {
+  posixTest(`${signal} waits for the active child group and reports interruption`, async () => {
     const directory = mkdtempSync(resolve(tmpdir(), 'db-suite-interrupt-test-'));
     const started = resolve(directory, 'started');
     const stopped = resolve(directory, 'stopped');

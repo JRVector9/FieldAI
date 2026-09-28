@@ -23,6 +23,47 @@ export function createSuiteEnv(product) {
   return env;
 }
 
+export function assertSupportedPlatform(platform = process.platform) {
+  if (platform !== 'darwin' && platform !== 'linux')
+    throw new Error('DB suite process-group cleanup requires macOS or Linux; Windows is unsupported');
+}
+
+export function createSuiteSignalGuard() {
+  let signal;
+  const onSigint = () => { signal ??= 'SIGINT'; };
+  const onSigterm = () => { signal ??= 'SIGTERM'; };
+  process.on('SIGINT', onSigint);
+  process.on('SIGTERM', onSigterm);
+  return {
+    check() {
+      if (!signal) return;
+      const error = new Error(`DB suite interrupted by ${signal}`);
+      error.interrupted = true;
+      error.exitCode = signal === 'SIGINT' ? 130 : 143;
+      throw error;
+    },
+    close() {
+      process.off('SIGINT', onSigint);
+      process.off('SIGTERM', onSigterm);
+    },
+  };
+}
+
+export async function adminOperation(admin, label, operation, timeoutMs = 30000) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          admin.connection?.stream?.destroy();
+          reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally { clearTimeout(timer); }
+}
+
 export function hasActiveGroup(output, pid) {
   return output.split('\n').some(line => {
     const [group, state] = line.trim().split(/\s+/);
@@ -120,12 +161,15 @@ export async function run(command, args, env, timeout) {
   }
 }
 
-async function runSuite(test, env) {
+async function runSuite(test, env, signals) {
+  signals.check();
   await run(process.execPath, [resolve(root, 'tools/run-migrations.mjs'), product], env, 120000);
+  signals.check();
   await run('pnpm', ['--filter', `@fieldai/${product}-api`, 'exec', 'tsx', '--test', '--test-timeout=180000', '--test-force-exit', test], env, 240000);
 }
 
 async function runIsolatedSuite() {
+  assertSupportedPlatform();
   const apiDir = resolve(root, `apps/${product}-api`);
   const tests = readdirSync(resolve(apiDir, 'test'))
     .filter(name => name.endsWith('.db.test.ts')).sort().map(name => `test/${name}`);
@@ -141,13 +185,22 @@ async function runIsolatedSuite() {
     throw new Error(`${product} DB suite requires its local mock PostgreSQL database`);
   const adminUrl = new URL(source);
   adminUrl.pathname = '/postgres';
-  const admin = new Client({ connectionString: adminUrl.toString() });
-  await admin.connect();
+  const admin = new Client({
+    connectionString: adminUrl.toString(),
+    connectionTimeoutMillis: 30000,
+    statement_timeout: 30000,
+  });
+  const signals = createSuiteSignalGuard();
+  let connected = false;
   const failures = [];
   const prefix = product === 'agent' ? 'AP' : 'FIELD';
   try {
+    await adminOperation(admin, 'admin connection', () => admin.connect());
+    connected = true;
+    signals.check();
     process.stdout.write(`${product}: running ${tests.length} isolated database test files\n`);
     for (const test of tests) {
+      signals.check();
       const database = `fieldai_${product}_test_${randomUUID().replaceAll('-', '')}`;
       const journalRoot = mkdtempSync(resolve(tmpdir(), `${product}-suite-journals-`));
       let created = false;
@@ -160,13 +213,19 @@ async function runIsolatedSuite() {
           childEnv[`${prefix}_${kind}_JOURNAL_DIRECTORY`] = directory;
           childEnv[`${prefix}_${kind}_JOURNAL_SECRET`] = `synthetic-${randomUUID()}-${randomUUID()}`;
         }
-        await admin.query(`create database "${database}"`);
+        try { await adminOperation(admin, `create database ${database}`, () => admin.query(`create database "${database}"`)); }
+        catch (error) {
+          preserveResources = true; // A lost response cannot prove whether CREATE committed.
+          admin.connection.stream.destroy();
+          throw error;
+        }
         created = true;
+        signals.check();
         const testUrl = new URL(source);
         testUrl.pathname = `/${database}`;
         childEnv[settings.key] = testUrl.toString();
         process.stdout.write(`${product}: ${test} in isolated database ${database}\n`);
-        try { await runSuite(test, childEnv); }
+        try { await runSuite(test, childEnv, signals); }
         catch (error) {
           preserveResources = error.preserveDatabase === true;
           if (preserveResources || error.interrupted) throw error;
@@ -175,20 +234,32 @@ async function runIsolatedSuite() {
         }
       } finally {
         if (preserveResources) {
-          process.stderr.write(`${product}: child group still active; preserved ${database} and ${journalRoot} for safe recovery\n`);
+          process.stderr.write(`${product}: database state uncertain; preserved ${database} and ${journalRoot} for safe recovery\n`);
         } else {
           try {
             if (created) {
-              await admin.query(`drop database "${database}" with (force)`);
+              try { await adminOperation(admin, `drop database ${database}`, () => admin.query(`drop database "${database}" with (force)`)); }
+              catch (error) {
+                process.stderr.write(`${product}: DROP outcome uncertain; preserved ${database} and ${journalRoot} for safe recovery\n`);
+                admin.connection.stream.destroy();
+                throw error;
+              }
               process.stdout.write(`${product}: removed test database ${database}\n`);
             }
-          } finally { rmSync(journalRoot, { recursive: true, force: true }); }
+          } finally {
+            if (admin.connection.stream.destroyed) {
+              process.stderr.write(`${product}: preserved ${journalRoot} after admin connection loss\n`);
+            } else rmSync(journalRoot, { recursive: true, force: true });
+          }
         }
       }
+      signals.check();
     }
   } finally {
-    await admin.end();
+    try { if (connected) await adminOperation(admin, 'admin disconnect', () => admin.end()); }
+    finally { signals.close(); }
   }
+  signals.check();
   if (failures.length) throw new Error(`${product}: ${failures.length}/${tests.length} database test files failed: ${failures.join(', ')}`);
 }
 
