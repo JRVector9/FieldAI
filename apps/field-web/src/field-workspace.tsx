@@ -99,21 +99,29 @@ export function siteReturnStep(search: string): "business" | "publish" | null {
   const value = new URLSearchParams(search).get("returnTo");
   return value === "publish" ? "publish" : value === "site" || value === "business" ? "business" : null;
 }
-export function firstUseAction(state: { catalog: DraftCatalog; dirty?: boolean;
+export function ownerPermissionFromSubscription(value: unknown, organizationId: string): boolean | null {
+  if (!value || typeof value !== "object") return null;
+  const result = value as { product?: unknown; organizationId?: unknown; canManage?: unknown };
+  return result.product === "field" && result.organizationId === organizationId && typeof result.canManage === "boolean"
+    ? result.canManage : null;
+}
+export function firstUseAction(state: { catalog: DraftCatalog; dirty?: boolean; canManage: boolean | null;
   releaseState: "loading" | "ready" | "failed"; releaseRevision: number | null;
   siteState: "loading" | "ready" | "failed" | "restricted"; siteDraftRevision: number | null; sitePublishedRevision: number | null; sitePublishedCatalogRevision: number | null;
   pendingInquiries: number; pendingReservations: number }): { label: string; href: string } {
   if (state.pendingInquiries > 0) return { label: "문의 확인(추가)", href: "#owner-inquiries" };
   if (state.pendingReservations > 0) return { label: "예약 요청 확인(추가)", href: "#owner-reservations" };
+  if (state.canManage === null) return { label: "권한 상태 확인(추가)", href: "/workspace/subscription" };
   if (state.releaseState !== "ready") return { label: "사업 정보 상태 확인(추가)", href: "#owner-catalog" };
   if (state.dirty || !validCatalogDraft(state.catalog))
-    return { label: "사업 정보 완성(추가)", href: "/workspace?section=services&edit=business" };
+    return { label: state.canManage ? "사업 정보 완성(추가)" : "사업 정보 확인(추가)", href: "#owner-catalog" };
   if (state.releaseRevision !== state.catalog.revision)
-    return { label: "사업 정보 승인(추가)", href: "/workspace?section=services&edit=business" };
+    return { label: state.canManage ? "사업 정보 승인(추가)" : "사업 정보 승인 대기(추가)", href: "#owner-catalog" };
   if (state.siteState === "restricted") return { label: "홈페이지 공개 제한 확인(추가)", href: "/workspace/moderation" };
   if (state.siteState !== "ready") return { label: "홈페이지 상태 확인(추가)", href: "/workspace/site?step=publish" };
-  if (state.siteDraftRevision === null) return { label: "홈페이지 만들기(추가)", href: "/workspace/site?step=business" };
-  if (state.sitePublishedRevision !== state.siteDraftRevision || (state.sitePublishedRevision !== null && (state.sitePublishedCatalogRevision === null || state.releaseRevision! > state.sitePublishedCatalogRevision))) return { label: "홈페이지 확인·공개(추가)", href: "/workspace/site?step=publish" };
+  if (state.siteDraftRevision === null) return state.canManage ? { label: "홈페이지 만들기(추가)", href: "/workspace/site?step=business" }
+    : { label: "홈페이지 개설 권한 확인(추가)", href: "/workspace/subscription" };
+  if (state.sitePublishedRevision !== state.siteDraftRevision || (state.sitePublishedRevision !== null && (state.sitePublishedCatalogRevision === null || state.releaseRevision! > state.sitePublishedCatalogRevision))) return { label: state.canManage ? "홈페이지 확인·공개(추가)" : "홈페이지 공개 상태 확인(추가)", href: "/workspace/site?step=publish" };
   if (state.pendingInquiries > 0) return { label: "문의 확인(추가)", href: "#owner-inquiries" };
   if (state.pendingReservations > 0) return { label: "예약 요청 확인(추가)", href: "#owner-reservations" };
   return { label: "고객 홈페이지 확인(추가)", href: "/workspace/site?step=publish" };
@@ -142,6 +150,7 @@ export function FieldWorkspace() {
   const [organizationName, setOrganizationName] = useState("");
   const [catalog, setCatalog] = useState<DraftCatalog | null>(null);
   const [releaseRevision, setReleaseRevision] = useState<number | null>(null);
+  const [ownerCanManage, setOwnerCanManage] = useState<boolean | null>(null);
   const [catalogReleaseState, setCatalogReleaseState] = useState<"loading" | "ready" | "failed">("loading");
   const [sitePublicationState, setSitePublicationState] = useState<"loading" | "ready" | "failed" | "restricted">("loading");
   const [sitePublishedRevision, setSitePublishedRevision] = useState<number | null>(null);
@@ -474,6 +483,14 @@ export function FieldWorkspace() {
       setCatalogReleaseState("ready");
     } catch { setCatalogReleaseState("failed"); }
   }, []);
+  const loadOwnerPermission = useCallback(async (organizationId: string) => {
+    setOwnerCanManage(null);
+    try {
+      const result = await requestJson("/v1/subscription", "GET", undefined, undefined,
+        { "x-organization-id": organizationId });
+      if (result.status === 200) setOwnerCanManage(ownerPermissionFromSubscription(result.data, organizationId));
+    } catch { setOwnerCanManage(null); }
+  }, []);
   const loadSitePublication = useCallback(async () => {
     setSitePublicationState("loading");
     setSitePublishedRevision(null);
@@ -521,12 +538,12 @@ export function FieldWorkspace() {
       if (params.get("section") === "services") setActiveOwnerSection("services");
       if (params.get("edit") === "business") { setServicesEditorOpen(true); setBusinessDeepLink(true); }
       setReturnToSiteStep(siteReturnStep(window.location.search));
-      await Promise.allSettled([loadCatalogRelease(value.organizationId), loadSitePublication(), loadTodayCalendar(),
+      await Promise.allSettled([loadOwnerPermission(value.organizationId), loadCatalogRelease(value.organizationId), loadSitePublication(), loadTodayCalendar(),
         loadInbox(), loadExternalInquiries(value.organizationId), loadNotifications(), loadAiInstallation()]);
     } else if (result.status === 404) { setStatus(""); setPhase("organization"); }
     else if (result.status === 401) { setStatus(""); setPhase("auth"); }
     else { setPhase("failed"); setStatus("Field API에서 사업 정보를 불러오지 못했습니다. 다시 시도해 주세요."); }
-  }, [loadCatalogRelease, loadSitePublication, loadTodayCalendar, loadInbox, loadExternalInquiries, loadNotifications, loadAiInstallation]);
+  }, [loadOwnerPermission, loadCatalogRelease, loadSitePublication, loadTodayCalendar, loadInbox, loadExternalInquiries, loadNotifications, loadAiInstallation]);
   const checkSession = useCallback(async () => {
     setPhase("loading"); setStatus("");
     let result;
@@ -904,7 +921,7 @@ export function FieldWorkspace() {
   const sitePublicationDetail = sitePublicationState === "restricted" ? "신고·검토 결과에서 확인" : sitePublicationState === "failed" ? "공개 상태 조회 실패"
     : sitePublicationState === "loading" ? "공개 상태 확인 중"
       : sitePublishedRevision === null ? "공개 전" : `사이트 ${sitePublishedRevision}번`;
-  const todayAction = catalog && firstUseAction({ catalog, dirty, releaseState: catalogReleaseState, releaseRevision, siteState: sitePublicationState, siteDraftRevision, sitePublishedRevision, sitePublishedCatalogRevision, pendingInquiries, pendingReservations });
+  const todayAction = catalog && firstUseAction({ catalog, dirty, canManage: ownerCanManage, releaseState: catalogReleaseState, releaseRevision, siteState: sitePublicationState, siteDraftRevision, sitePublishedRevision, sitePublishedCatalogRevision, pendingInquiries, pendingReservations });
   const approvalIssue = catalog && catalogApprovalIssue(catalog, dirty, catalogSaveState, catalogReleaseState, releaseRevision);
   const catalogReleaseLabel = catalogReleaseState === "failed" ? "확인 불가"
     : catalogReleaseState === "loading" ? "확인 중"

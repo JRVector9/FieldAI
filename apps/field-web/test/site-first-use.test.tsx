@@ -8,7 +8,7 @@ const ready = { restricted: false, busy: false, dirty: false, approved: true,
 
 test("publish guidance names a concrete repair path without calling a draft public", () => {
   assert.deepEqual(sitePublishGuidance({ ...ready, approved: false }),
-    { reason: "사업 정보를 먼저 승인해 주세요.", href: "/workspace?section=services&edit=business&returnTo=publish", label: "사업 정보 입력·승인 열기" });
+    { reason: "사업 정보를 먼저 승인해 주세요.", href: "/workspace?section=services&edit=business&returnTo=publish", label: "사업 정보 입력·승인 열기(추가)" });
   assert.deepEqual(sitePublishGuidance({ ...ready, dirty: true, approved: false }),
     { reason: "변경 내용을 먼저 서버에 저장해 주세요.", href: null, label: null });
   assert.deepEqual(sitePublishGuidance({ ...ready, dirty: true, restricted: true }),
