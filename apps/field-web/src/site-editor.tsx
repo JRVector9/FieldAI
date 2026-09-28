@@ -77,20 +77,27 @@ export function siteInquiryTestGuidance(organizationId: string, publishedRevisio
 export function siteBookingReadiness(services: Catalog["services"], state: "loading" | "ready" | "missing" | "failed",
   policy: Pick<BookingPolicy, "weekly" | "specialDates"> | null): { slotReady: boolean; message: string } {
   const hasRequest = services.some(service => service.bookingMode === "request");
-  const hasSlot = services.some(service => service.bookingMode === "slot");
+  const slotServices = services.filter(service => service.bookingMode === "slot");
+  const hasSlot = slotServices.length > 0;
   if (!hasSlot) return { slotReady: false, message: hasRequest
     ? "희망시간 예약은 고객 요청으로 접수됩니다. 확정 가능한 시간을 정하려면 예약 정책을 설정해 주세요."
     : "등록된 예약 서비스가 없습니다." };
   if (state === "loading") return { slotReady: false, message: "시간표 예약 정책을 확인하고 있습니다." };
   if (state === "failed") return { slotReady: false, message: "시간표 예약 정책을 확인하지 못했습니다. 설정 상태를 다시 확인해 주세요." };
-  const validHours = (hours: { open: string; close: string }) =>
-    typeof hours?.open === "string" && typeof hours?.close === "string"
-    && /^([01]\d|2[0-3]):[0-5]\d$/.test(hours.open)
-    && /^([01]\d|2[0-3]):[0-5]\d$/.test(hours.close) && hours.open !== hours.close;
+  const longestDuration = Math.max(...slotServices.map(service => service.durationMinutes));
+  const validHours = (hours: { open: string; close: string }) => {
+    if (typeof hours?.open !== "string" || typeof hours?.close !== "string"
+      || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hours.open)
+      || !/^([01]\d|2[0-3]):[0-5]\d$/.test(hours.close) || hours.open === hours.close) return false;
+    const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+    const open = minutes(hours.open), close = minutes(hours.close);
+    const end = close < open ? close + 1440 : close;
+    return Math.ceil(open / 30) * 30 + longestDuration <= end;
+  };
   const configured = state === "ready" && policy !== null
     && [...Object.values(policy.weekly), ...Object.values(policy.specialDates)].some(validHours);
   return configured
-    ? { slotReady: true, message: "시간표가 설정됐습니다. 실제 신청 가능한 시간은 고객 화면에서 다시 확인해 주세요." }
+    ? { slotReady: true, message: "서비스 소요시간에 맞는 시간표가 설정됐습니다. 공개 시 실제 신청 가능 여부를 서버가 다시 확인합니다." }
     : { slotReady: false, message: "시간표 예약 서비스의 영업시간을 설정해야 고객이 시간을 선택할 수 있습니다. 사이트 공개와 직접 문의는 계속할 수 있습니다." };
 }
 

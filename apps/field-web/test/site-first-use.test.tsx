@@ -63,7 +63,16 @@ test("site contact step distinguishes request intake from slot schedule readines
     weekly: {}, specialDates: { "2026-10-01": [] as unknown as { open: string; close: string } },
   }).slotReady, false);
   assert.equal(siteBookingReadiness(services, "ready", {
+    weekly: { mon: { open: "10:00", close: "10:15" } }, specialDates: {},
+  }).slotReady, false);
+  assert.equal(siteBookingReadiness(services, "ready", {
+    weekly: { mon: { open: "10:15", close: "10:45" } }, specialDates: {},
+  }).slotReady, false);
+  assert.equal(siteBookingReadiness(services, "ready", {
     weekly: { mon: { open: "10:00", close: "18:00" } }, specialDates: {},
+  }).slotReady, true);
+  assert.equal(siteBookingReadiness(services, "ready", {
+    weekly: { mon: { open: "22:00", close: "01:00" } }, specialDates: {},
   }).slotReady, true);
   assert.match(siteBookingReadiness([services[0]!], "missing", null).message, /희망시간.*접수/);
 });
