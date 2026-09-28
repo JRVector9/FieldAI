@@ -99,6 +99,7 @@ try {
     AP_BROWSER_PYTHON: python,
     FIELD_BROWSER_PYTHON: python,
   };
+  if (mode === 'field') env.FIELD_E2E_OWN_ONLY = '1';
   if (mode === 'distribution') {
     env.FIELD_EVENT_WORKERS_RUNNING = '1';
     env.FIELD_DISTRIBUTION_E2E = '1';

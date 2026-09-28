@@ -11,7 +11,7 @@ import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 
 const mode = process.env.E2E_PREREQUISITE_MODE;
-const checked = { env: [], ready: [] };
+const checked = { env: [], ready: [], childOwnOnly: [] };
 const originalReadFileSync = fs.readFileSync;
 const originalExistsSync = fs.existsSync;
 fs.readFileSync = function (path, ...args) {
@@ -28,7 +28,10 @@ fs.existsSync = function (path) {
   if (String(path) === '/tmp/e2e-runner-browser') return true;
   return originalExistsSync.call(this, path);
 };
-childProcess.spawnSync = () => ({ status: 0, signal: null });
+childProcess.spawnSync = (_file, _args, options) => {
+  checked.childOwnOnly.push(options?.env?.FIELD_E2E_OWN_ONLY ?? null);
+  return { status: 0, signal: null };
+};
 syncBuiltinESMExports();
 globalThis.fetch = async url => {
   checked.ready.push(String(url));
@@ -90,5 +93,7 @@ for (const [mode, products] of [
     assert.deepEqual(checked.ready.toSorted(), products.flatMap(product => product === 'agent'
       ? ['http://127.0.0.1:4311/health/ready', 'http://127.0.0.1:3001/workspace']
       : ['http://127.0.0.1:4321/health/ready', 'http://127.0.0.1:3002/workspace']).toSorted());
+    assert.ok(checked.childOwnOnly.length > 0);
+    assert.deepEqual([...new Set(checked.childOwnOnly)], [mode === 'field' ? '1' : null]);
   });
 }

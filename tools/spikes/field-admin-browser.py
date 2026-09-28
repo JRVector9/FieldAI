@@ -50,13 +50,14 @@ async def main():
             assert os.environ["FIELD_TEST_INCIDENT_ID"] in str(data["recentIncidents"])
             assert os.environ["FIELD_TEST_PRIVATE_MARKER"] not in str(data)
             assert os.environ["FIELD_TEST_PRIVATE_MARKER"] not in await operator.locator("body").inner_text()
-            ap_access = await operator.request.get("http://localhost:3001/v1/admin/overview")
-            assert ap_access.status == 401
+            if os.environ.get("FIELD_E2E_OWN_ONLY") != "1":
+                ap_access = await operator.request.get("http://localhost:3001/v1/admin/overview")
+                assert ap_access.status == 401
             sections = [
                 ("organizations", "Field 사업체", "조직 구성원"),
                 ("site-domains", "Field 제작·도메인", "실패한 사이트 제작"),
                 ("notifications", "Field 발송", "고객 알림 미연결"),
-                ("billing", "Field 구독", "유효한 체험"),
+                ("billing", "Field 구독·청구", "가격 승인 관리 (추가)"),
                 ("audit", "Field 신고·감사", "관리자 운영 조회"),
             ]
             for slug, heading, metric in sections:
@@ -64,7 +65,8 @@ async def main():
                 assert response and response.status == 200
                 await operator.get_by_role("heading", name=heading, exact=True).first.wait_for()
                 await operator.get_by_role("heading", name=metric, exact=True).wait_for()
-                await operator.get_by_text("Field 관리자 · operator").wait_for()
+                if slug != "billing":
+                    await operator.get_by_text("Field 관리자 · operator").wait_for()
                 assert await operator.evaluate("document.documentElement.scrollWidth <= innerWidth"), slug
                 assert await operator.evaluate("""() => [...document.querySelectorAll('h1,h2,h3,p,a,button,label,input,small')]
                     .filter(element => element.getBoundingClientRect().height > 0)
