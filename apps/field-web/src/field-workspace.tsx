@@ -111,9 +111,10 @@ export function firstUseAction(state: { catalog: DraftCatalog; dirty?: boolean; 
   pendingInquiries: number; pendingReservations: number }): { label: string; href: string } {
   if (state.pendingInquiries > 0) return { label: "문의 확인(추가)", href: "#owner-inquiries" };
   if (state.pendingReservations > 0) return { label: "예약 요청 확인(추가)", href: "#owner-reservations" };
+  if (state.dirty) return { label: state.canManage ? "사업 정보 완성(추가)" : "사업 정보 확인(추가)", href: "#owner-catalog" };
   if (state.canManage === null) return { label: "권한 상태 확인(추가)", href: "/workspace/subscription" };
   if (state.releaseState !== "ready") return { label: "사업 정보 상태 확인(추가)", href: "#owner-catalog" };
-  if (state.dirty || !validCatalogDraft(state.catalog))
+  if (!validCatalogDraft(state.catalog))
     return { label: state.canManage ? "사업 정보 완성(추가)" : "사업 정보 확인(추가)", href: "#owner-catalog" };
   if (state.releaseRevision !== state.catalog.revision)
     return { label: state.canManage ? "사업 정보 승인(추가)" : "사업 정보 승인 대기(추가)", href: "#owner-catalog" };

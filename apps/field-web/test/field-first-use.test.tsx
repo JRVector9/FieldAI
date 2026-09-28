@@ -58,6 +58,8 @@ test("non-owners see permission-aware actions and only the own subscription can 
     { label: "홈페이지 공개 상태 확인(추가)", href: "/workspace/site?step=publish" });
   assert.deepEqual(firstUseAction({ ...state, canManage: null }),
     { label: "권한 상태 확인(추가)", href: "/workspace/subscription" });
+  assert.deepEqual(firstUseAction({ ...state, canManage: null, dirty: true }),
+    { label: "사업 정보 확인(추가)", href: "#owner-catalog" });
   assert.equal(ownerPermissionFromSubscription({ product: "field", organizationId: "org", canManage: true }, "org"), true);
   assert.equal(ownerPermissionFromSubscription({ product: "field", organizationId: "org", canManage: false }, "org"), false);
   assert.equal(ownerPermissionFromSubscription({ product: "agent", organizationId: "org", canManage: true }, "org"), null);
