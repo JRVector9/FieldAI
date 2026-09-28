@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { before } from "node:test";
 import type { DraftCatalog } from "../src/field-api";
 require.extensions[".css"] = () => {};
-const { catalogApprovalIssue, canReturnToSite, firstUseAction, ownerPermissionFromSubscription, siteReturnStep } = require("../src/field-workspace") as typeof import("../src/field-workspace");
+let catalogApprovalIssue: typeof import("../src/field-workspace").catalogApprovalIssue;
+let canReturnToSite: typeof import("../src/field-workspace").canReturnToSite;
+let firstUseAction: typeof import("../src/field-workspace").firstUseAction;
+let ownerPermissionFromSubscription: typeof import("../src/field-workspace").ownerPermissionFromSubscription;
+let siteReturnStep: typeof import("../src/field-workspace").siteReturnStep;
+before(async () => {
+  ({ catalogApprovalIssue, canReturnToSite, firstUseAction, ownerPermissionFromSubscription, siteReturnStep } = await import("../src/field-workspace.js"));
+});
 
 const draft: DraftCatalog = {
   organizationId: "org", revision: 1, businessName: "가게", industry: "", introduction: "",

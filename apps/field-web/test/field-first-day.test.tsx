@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { before } from "node:test";
 import { siteInquiryTestGuidance, siteTestAccessFromResponse, siteTestAccessFromSubscription } from "../src/site-editor";
+
+require.extensions[".css"] = () => {};
+let ownerTestSubscriptionAccess: typeof import("../src/field-public").ownerTestSubscriptionAccess;
+let canSubmitOwnerTest: typeof import("../src/field-public").canSubmitOwnerTest;
+before(async () => {
+  ({ ownerTestSubscriptionAccess, canSubmitOwnerTest } = await import("../src/field-public.js"));
+});
 
 test("first inquiry trial stays unavailable until an owner has a public site and approved service", () => {
   assert.deepEqual(siteInquiryTestGuidance("org", null, false, 1, true),
@@ -27,4 +34,21 @@ test("owner test entitlement accepts only the current Field organization and aut
   assert.equal(siteTestAccessFromResponse(403, { product: "field", organizationId: "org", access: { canStartNew: true } }, "org"), null);
   assert.equal(siteTestAccessFromResponse(503, { product: "field", organizationId: "org", access: { canStartNew: true } }, "org"), null);
   assert.equal(siteTestAccessFromResponse(200, { product: "field", organizationId: "org", access: { canStartNew: false } }, "org"), false);
+});
+
+test("bookmarked owner test form requires both its site gate and current Field subscription", () => {
+  const gate = { siteRevision: 2, existingTest: null };
+  const allowed = { product: "field", organizationId: "org", access: { canStartNew: true } };
+  assert.equal(ownerTestSubscriptionAccess(200, allowed, "org"), true);
+  assert.equal(canSubmitOwnerTest(gate, true), true);
+  assert.equal(canSubmitOwnerTest(gate, false), false);
+  assert.equal(canSubmitOwnerTest(gate, null), false);
+  assert.equal(canSubmitOwnerTest(null, true), false);
+  assert.equal(canSubmitOwnerTest({ ...gate, existingTest: { id: "old", state: "needs_owner" } }, true), false);
+  assert.equal(ownerTestSubscriptionAccess(200, { ...allowed, access: { canStartNew: false } }, "org"), false);
+  assert.equal(ownerTestSubscriptionAccess(403, allowed, "org"), null);
+  assert.equal(ownerTestSubscriptionAccess(503, allowed, "org"), null);
+  assert.equal(ownerTestSubscriptionAccess(200, { ...allowed, product: "agent" }, "org"), null);
+  assert.equal(ownerTestSubscriptionAccess(200, { ...allowed, organizationId: "other" }, "org"), null);
+  assert.equal(ownerTestSubscriptionAccess(200, { ...allowed, access: {} }, "org"), null);
 });

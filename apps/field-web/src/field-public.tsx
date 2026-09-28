@@ -59,11 +59,29 @@ function SelectedInquiryPhotos({ photos }: { photos: File[] }) {
   </ul>;
 }
 
+export function ownerTestSubscriptionAccess(status: number, value: unknown, organizationId: string): boolean | null {
+  if (status !== 200 || !value || typeof value !== "object") return null;
+  const result = value as { product?: unknown; organizationId?: unknown; access?: { canStartNew?: unknown } };
+  return result.product === "field" && result.organizationId === organizationId
+    && typeof result.access?.canStartNew === "boolean" ? result.access.canStartNew : null;
+}
+export function canSubmitOwnerTest(gate: { existingTest: { id: string; state: string } | null } | null,
+  canStartNew: boolean | null): boolean {
+  return Boolean(gate && !gate.existingTest && canStartNew === true);
+}
+async function readOwnerTestAccess(organizationId: string): Promise<boolean | null> {
+  const result = await requestJson("/v1/subscription", "GET", undefined, undefined,
+    { "x-organization-id": organizationId });
+  return ownerTestSubscriptionAccess(result.status, result.data, organizationId);
+}
+
 export function PublicCatalogPage({ id }: { id: string }) {
   const [ownerTest, setOwnerTest] = useState<boolean | null>(null);
   const [testGate, setTestGate] = useState<{ siteRevision: number;
     existingTest: { id: string; state: string } | null } | null>(null);
   const [testGateFailed, setTestGateFailed] = useState(false);
+  const [testAccess, setTestAccess] = useState<"loading" | "allowed" | "ended" | "failed">("loading");
+  const [testAccessReload, setTestAccessReload] = useState(0);
   const [testStatus, setTestStatus] = useState("");
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [status, setStatus] = useState("승인된 사업 정보를 확인하고 있습니다.");
@@ -108,14 +126,17 @@ export function PublicCatalogPage({ id }: { id: string }) {
     window.history.replaceState(null, "", view === "booking" ? "#reservation" : "#inquiry");
   }
   useEffect(() => {
+    let active = true;
     const testMode = new URLSearchParams(window.location.search).get("ownerTest") === "1";
     setOwnerTest(testMode);
     setTestGate(null);
     setTestGateFailed(false);
+    setTestAccess("loading");
     setTestStatus("");
     if (testMode) {
       void requestJson("/v1/owner/site-inquiry-test", "GET", undefined, undefined,
         { "x-organization-id": id }).then(result => {
+        if (!active) return;
         if (result.status === 200) setTestGate(result.data as { siteRevision: number;
           existingTest: { id: string; state: string } | null });
         else {
@@ -125,7 +146,7 @@ export function PublicCatalogPage({ id }: { id: string }) {
               : result.status === 409 ? "사이트를 먼저 공개한 뒤 테스트해 주세요."
                 : `테스트 권한을 확인하지 못했습니다 (${result.status}). 다시 불러와 주세요.`);
         }
-      }).catch(() => {
+      }).catch(() => { if (!active) return;
         setTestGateFailed(true);
         setTestStatus("테스트 권한을 확인하지 못했습니다. 다시 불러와 주세요.");
       });
@@ -138,7 +159,8 @@ export function PublicCatalogPage({ id }: { id: string }) {
         const value = result.data as Catalog;
         setCatalog(value);
         setCatalogState("ready");
-        setServiceId(value.services[0]?.id ?? "");
+        setServiceId(current => testMode && value.services.some(service => service.id === current)
+          ? current : value.services[0]?.id ?? "");
         setBookingServiceId(value.services[0]?.id ?? "");
         setStatus("");
       } else if (result.status === 404) {
@@ -152,7 +174,17 @@ export function PublicCatalogPage({ id }: { id: string }) {
       setCatalogState("failed");
       setStatus("사업 정보를 불러오지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
     });
+    return () => { active = false; };
   }, [id, catalogReload]);
+  useEffect(() => {
+    if (ownerTest !== true) return;
+    let active = true;
+    setTestAccess("loading");
+    void readOwnerTestAccess(id).then(access => {
+      if (active) setTestAccess(access === null ? "failed" : access ? "allowed" : "ended");
+    }).catch(() => { if (active) setTestAccess("failed"); });
+    return () => { active = false; };
+  }, [id, ownerTest, catalogReload, testAccessReload]);
   useEffect(() => {
     if (ownerTest !== false || !catalog) return;
     const attempt = readPendingPublicSubmission(pendingScope) ?? pendingSubmission.current;
@@ -244,9 +276,29 @@ export function PublicCatalogPage({ id }: { id: string }) {
   }
   async function submitTest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!testGate || testGate.existingTest || busy) return;
-    setBusy(true); setTestStatus("테스트 문의를 내부 기록에 저장하고 있습니다.");
+    if (!testGate || !canSubmitOwnerTest(testGate, testAccess === "allowed" ? true : null) || busy) return;
+    setBusy(true); setTestStatus("Field 이용 상태를 다시 확인하고 있습니다.");
+    let accessChecked = false;
     try {
+      const access = await readOwnerTestAccess(id);
+      if (access !== true) {
+        setTestAccess(access === false ? "ended" : "failed");
+        const reason = access === false ? "현재 이용 상태에서는 새 테스트 문의를 만들 수 없습니다." : "Field 이용 상태를 확인하지 못했습니다.";
+        try {
+          const check = await requestJson("/v1/owner/site-inquiry-test", "GET", undefined, undefined,
+            { "x-organization-id": id });
+          if (check.status === 200) {
+            const latest = check.data as { siteRevision: number; existingTest: { id: string; state: string } | null };
+            setTestGate(latest);
+            setTestStatus(latest.existingTest
+              ? "이 공개 버전의 기존 테스트 문의를 확인했습니다. 문의함에서 기록을 확인해 주세요."
+              : `${reason} 이 공개 버전의 기존 테스트 기록은 확인되지 않았습니다. 입력 내용은 유지됩니다.`);
+          } else { setTestGateFailed(true); setTestStatus(`${reason} 이전 제출 결과도 확인하지 못했습니다. 입력 내용은 유지됩니다. 다시 확인해 주세요.`); }
+        } catch { setTestGateFailed(true); setTestStatus(`${reason} 이전 제출 결과도 확인하지 못했습니다. 입력 내용은 유지됩니다. 다시 확인해 주세요.`); }
+        return;
+      }
+      accessChecked = true;
+      setTestStatus("테스트 문의를 내부 기록에 저장하고 있습니다.");
       const result = await requestJson("/v1/owner/site-inquiry-test", "POST",
         { siteRevision: testGate.siteRevision, serviceId, name, message }, undefined,
         { "x-organization-id": id });
@@ -269,13 +321,17 @@ export function PublicCatalogPage({ id }: { id: string }) {
         setTestStatus(error.error === "site_revision_changed"
           ? "공개 사이트 버전이 바뀌었습니다. 다시 불러온 뒤 테스트해 주세요."
           : "이 공개 버전의 테스트 문의가 이미 있습니다. 문의함에서 확인해 주세요.");
-      } else if (result.status === 403)
+      } else if (result.status === 403) {
+        setTestAccess("ended");
         setTestStatus("사업자의 Field 체험이 종료되어 새 테스트 문의를 만들 수 없습니다.");
-      else if (result.status === 401 || result.status === 404) {
+      } else if (result.status === 401 || result.status === 404) {
         setTestGate(null); setTestGateFailed(true);
         setTestStatus("사업자 세션이나 조직 권한을 확인하지 못했습니다. 다시 로그인해 주세요.");
       } else setTestStatus(`테스트 문의를 저장하지 못했습니다 (${result.status}). 입력은 유지됩니다.`);
-    } catch { setTestStatus("테스트 접수 결과를 확인할 수 없습니다. 같은 입력으로 다시 제출하면 기존 기록을 확인합니다."); }
+    } catch {
+      if (accessChecked) setTestStatus("테스트 접수 결과를 확인할 수 없습니다. 같은 입력으로 다시 제출하면 기존 기록을 확인합니다.");
+      else { setTestAccess("failed"); setTestStatus("Field 이용 상태를 확인하지 못했습니다. 입력 내용은 유지됩니다. 다시 확인해 주세요."); }
+    }
     finally { setBusy(false); }
   }
   async function retryDirectPhotos() {
@@ -304,13 +360,16 @@ export function PublicCatalogPage({ id }: { id: string }) {
       {catalogState === "failed" && <button type="button" onClick={() => setCatalogReload(value => value + 1)}>사업 정보 다시 불러오기</button>}
       {ownerTest && testGateFailed && <p><button type="button" onClick={() => setCatalogReload(value => value + 1)}>테스트 권한 다시 확인</button> <a href="/workspace">사업 운영으로 이동</a></p>}
       {ownerTest && !testGate && !testGateFailed && <p role="status">사업자 테스트 권한을 확인하고 있습니다.</p>}
+      {ownerTest && testAccess === "loading" && <p role="status">Field 이용 상태를 확인하고 있습니다.</p>}
+      {ownerTest && testAccess === "ended" && <p role="status">현재 이용 상태에서는 새 테스트 문의를 만들 수 없습니다. <a href="/workspace/subscription">구독 상태 확인(추가)</a></p>}
+      {ownerTest && testAccess === "failed" && <p role="status">Field 이용 상태를 확인하지 못했습니다. 새 테스트 문의를 만들기 전에 다시 확인해 주세요. <button type="button" onClick={() => setTestAccessReload(value => value + 1)}>이용 상태 다시 확인(추가)</button></p>}
       {catalog && ownerTest !== null && <><div className="field-public-intake-grid">
         <aside className="special-panel field-public-summary" id="business-summary"><h2>{catalog.businessName}</h2><dl><div><dt>선택 서비스</dt><dd>{summaryService?.name ?? "선택 전"}</dd></div><div><dt>가격 안내</dt><dd>{summaryService?.priceAmount === null ? "가격 문의" : summaryService ? `${summaryService.priceAmount.toLocaleString("ko-KR")}원` : "선택 전"}</dd></div>{intakeView === "booking" && <div><dt>희망 시간</dt><dd>{bookingTimeSummary || "선택 전"}</dd></div>}<div><dt>활동 지역</dt><dd>{catalog.region || "미등록"}</dd></div><div><dt>운영시간</dt><dd>{catalog.openingHours || "미등록"}</dd></div></dl><p className="field-public-summary-note">상담과 예약 조건은 사업자가 직접 확인합니다. 예약 요청은 확정 일정이 아닙니다.</p><p className="field-public-summary-foot">외부 알림 공급사가 연결되지 않은 경우 발송 상태를 별도로 안내합니다. 접수 원본은 Field에서 관리합니다.</p></aside>
         <section className={`special-panel field-public-inquiry${receipt ? " field-success-card" : ""}`}>{!receipt && <h2>{ownerTest ? "문의 테스트 작성" : "문의 남기기"}</h2>}
           {ownerTest && <p>사업자만 제출할 수 있습니다. 연락처·고객 동의·예약 점유·외부 알림은 만들지 않습니다. 공개 버전마다 한 번 기록됩니다.</p>}
           {ownerTest && testGate?.existingTest ? <div className="customer-banner"><strong>이 공개 버전의 테스트 문의가 이미 있습니다.</strong><p>문의함에서 내부 기록과 답변을 확인해 주세요.</p><a href="/workspace">문의함에서 보기</a></div>
             : !ownerTest && receipt ? <FieldReceipt kind="inquiry" businessName={catalog.businessName} id={receipt.id} receiptKey={receipt.receiptKey} notice={status} busy={busy} />
-              : (!ownerTest || testGate) && <form className="form-fields" onSubmit={event => void (ownerTest ? submitTest(event) : submit(event))}>
+              : (!ownerTest || canSubmitOwnerTest(testGate, testAccess === "allowed" ? true : null)) && <form className="form-fields" onSubmit={event => void (ownerTest ? submitTest(event) : submit(event))}>
                 {!ownerTest && hasPending && <div className="customer-banner"><p>이전 제출 시도를 보관 중입니다. 같은 내용을 다시 입력하면 같은 문의로 재시도합니다. 다른 내용을 보내려면 기존 결과를 먼저 확인해 주세요.</p>
                   <button type="button" disabled={busy || recovering} onClick={() => setRecoveryRevision(value => value + 1)}>이전 문의 조회</button>
                   <button type="button" disabled={busy || recovering} onClick={() => {
