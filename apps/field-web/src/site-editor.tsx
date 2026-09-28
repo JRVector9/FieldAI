@@ -30,11 +30,16 @@ function resumedPosition(draft: SiteDraft, search: string): { step: Step; pageId
   };
 }
 export function sitePublishGuidance(state: { restricted: boolean; busy: boolean; dirty: boolean;
-  approved: boolean; revision: number; publishedRevision: number | null;
+  approved: boolean; canManage: boolean | null; canStartNew: boolean | null;
+  revision: number; publishedRevision: number | null;
   publishedCatalogRevision: number | null; approvedRevision: number }):
   { reason: string; href: string | null; label: string | null } | null {
   if (state.dirty) return { reason: "변경 내용을 먼저 서버에 저장해 주세요.", href: null, label: null };
   if (state.restricted) return { reason: "사이트 공개가 제한되어 있습니다.", href: "/workspace/moderation", label: "신고·검토 결과 보기" };
+  if (state.canManage === null) return { reason: "공개 권한을 확인하지 못했습니다. 구독·권한 상태를 확인해 주세요.", href: "/workspace/subscription", label: "구독·권한 상태 확인(추가)" };
+  if (!state.canManage) return { reason: "조직 소유자만 사이트를 공개할 수 있습니다.", href: "/workspace/subscription", label: "구독·권한 상태 확인(추가)" };
+  if (state.canStartNew === null) return { reason: "이용 상태를 확인하지 못했습니다. 구독 상태를 다시 확인해 주세요.", href: "/workspace/subscription", label: "구독 상태 확인(추가)" };
+  if (!state.canStartNew) return { reason: "현재 이용 상태에서는 새 사이트 버전을 공개할 수 없습니다.", href: "/workspace/subscription", label: "구독 상태 확인(추가)" };
   if (!state.approved) return { reason: "사업 정보를 먼저 승인해 주세요.", href: "/workspace?section=services&edit=business&returnTo=publish", label: "사업 정보 입력·승인 열기(추가)" };
   if (state.busy) return { reason: "진행 중인 작업이 끝나면 다시 확인해 주세요.", href: null, label: null };
   if (state.revision === 0) return { reason: "사이트 초안을 먼저 저장해 주세요.", href: null, label: null };
@@ -51,6 +56,12 @@ export function siteTestAccessFromSubscription(value: unknown, organizationId: s
 }
 export function siteTestAccessFromResponse(status: number, value: unknown, organizationId: string): boolean | null {
   return status === 200 ? siteTestAccessFromSubscription(value, organizationId) : null;
+}
+export function sitePublishPermissionFromSubscription(value: unknown, organizationId: string): boolean | null {
+  if (!value || typeof value !== "object") return null;
+  const result = value as { product?: unknown; organizationId?: unknown; canManage?: unknown };
+  return result.product === "field" && result.organizationId === organizationId && typeof result.canManage === "boolean"
+    ? result.canManage : null;
 }
 export function siteInquiryTestGuidance(organizationId: string, publishedRevision: number | null,
   restricted: boolean, approvedServiceCount: number, canStartNew: boolean | null): { href: string | null; reason: string | null } {
@@ -99,6 +110,7 @@ export function SiteEditor() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [approvedCatalog, setApprovedCatalog] = useState<Catalog | null>(null);
   const [testCanStartNew, setTestCanStartNew] = useState<boolean | null>(null);
+  const [publishCanManage, setPublishCanManage] = useState<boolean | null>(null);
   const [testAccessState, setTestAccessState] = useState<"loading" | "ready" | "failed">("loading");
   const testAccessRequest = useRef(0);
   const [noSite, setNoSite] = useState(false);
@@ -123,19 +135,20 @@ export function SiteEditor() {
   const [assets, setAssets] = useState<SiteAsset[]>([]);
   const [uploadingSectionId, setUploadingSectionId] = useState<string | null>(null);
   const selectedPageId = site?.pages.find(page => page.id === activePageId)?.id ?? site?.pages[0]?.id;
-  const publishGuidance = site && sitePublishGuidance({ restricted: visibilityRestricted, busy, dirty, approved: Boolean(approvedCatalog), revision: site.revision, publishedRevision, publishedCatalogRevision, approvedRevision: approvedCatalog?.revision ?? 0 });
+  const publishGuidance = site && sitePublishGuidance({ restricted: visibilityRestricted, busy, dirty, approved: Boolean(approvedCatalog), canManage: publishCanManage, canStartNew: testCanStartNew, revision: site.revision, publishedRevision, publishedCatalogRevision, approvedRevision: approvedCatalog?.revision ?? 0 });
   const inquiryTestGuidance = catalog && siteInquiryTestGuidance(catalog.organizationId, publishedRevision, visibilityRestricted, approvedCatalog?.services.length ?? 0, testCanStartNew);
   const canCheckTestAccess = publishedRevision !== null && !visibilityRestricted && (approvedCatalog?.services.length ?? 0) > 0;
 
   const loadTestAccess = useCallback(async (organizationId: string) => {
     const requestId = ++testAccessRequest.current;
-    setTestCanStartNew(null); setTestAccessState("loading");
+    setTestCanStartNew(null); setPublishCanManage(null); setTestAccessState("loading");
     try {
       const result = await requestJson("/v1/subscription", "GET", undefined, undefined,
         { "x-organization-id": organizationId });
       const access = siteTestAccessFromResponse(result.status, result.data, organizationId);
       if (requestId !== testAccessRequest.current) return null;
       setTestCanStartNew(access);
+      setPublishCanManage(result.status === 200 ? sitePublishPermissionFromSubscription(result.data, organizationId) : null);
       setTestAccessState(access === null ? "failed" : "ready");
       return access;
     } catch { if (requestId === testAccessRequest.current) setTestAccessState("failed"); return null; }
@@ -244,6 +257,7 @@ export function SiteEditor() {
   }, [aiJob?.status, aiJob?.errorCode]);
 
   async function startSite() {
+    if (publishCanManage !== true || testCanStartNew !== true) return;
     setBusy(true); setStatus("사이트 초안을 만들고 있습니다.");
     try {
       const result = await requestJson("/v1/sites", "POST");
@@ -388,7 +402,7 @@ export function SiteEditor() {
     finally { setBusy(false); }
   }
   async function publish() {
-    if (!site || dirty) return;
+    if (!site || dirty || publishCanManage !== true || testCanStartNew !== true) return;
     setBusy(true); setStatus("공개 버전을 만들고 있습니다.");
     try {
       const result = await requestJson("/v1/sites/releases", "POST", { expectedRevision: site.revision });
@@ -481,7 +495,7 @@ export function SiteEditor() {
   }
   const currentPage = site?.pages.find(page => page.id === activePageId) ?? site?.pages[0];
   return <SiteEditorFrame step={step} mobileView={mobileView} navigation={loadState === "ready" && site && !noSite ? <nav className="state-switch" aria-label="사이트 제작 단계">{steps.map((item, index) => <button key={item.id} type="button" aria-current={step === item.id ? "step" : undefined} onClick={() => setStep(item.id)}>{step === "pages" ? item.label : <><b aria-hidden="true">{index + 1}</b><span>{item.label.slice(2)}</span></>}</button>)}</nav> : undefined}><div className="feature-heading"><p className="eyebrow">STEP {String(steps.findIndex(item => item.id === step) + 1).padStart(2, "0")} / 05</p><h1>{step === "design" ? "어떤 모습으로 시작할까요?" : step === "business" ? "어떤 일을 하고 계신가요?" : step === "contact" ? "고객과 어떻게 연결할까요?" : step === "publish" ? "고객을 맞이할 준비가 됐어요." : "내 사이트 편집"}</h1><p>초안 저장, 내용 확인, 실제 공개를 순서대로 진행합니다.</p></div>{status && <p role="status" className="state-message">{status}</p>}{loadState === "loading" && <p role="status">사이트 상태를 불러오는 중입니다.</p>}{loadState === "failed" && <button type="button" disabled={busy} onClick={() => void load()}>다시 불러오기</button>}{loadState === "needs_setup" && <p><a href="/workspace">사업 운영에서 계정·조직 설정 열기</a></p>}
-    {loadState === "ready" && (noSite ? <section className="special-panel"><h2>빈 시작 화면</h2><p>사업 정보를 입력한 뒤 기본 주소와 사이트 초안을 만들 수 있습니다.</p><button type="button" disabled={busy} onClick={() => void startSite()}>사이트 시작하기</button></section> : site && <><p>기본 주소: <code>{site.slug}</code> · 사이트 저장본 {site.revision}번{dirty ? " · 미저장 변경" : ""} · {saveState === "saving" ? "서버 저장 중" : saveState === "conflict" ? "저장 충돌" : !online && dirty ? "오프라인 · 미저장" : saveState === "failed" ? "저장 실패" : dirty ? "자동 저장 대기" : "서버 저장 완료"} · 공개 {publishedRevision === null ? "전" : `${publishedRevision}번`}</p>
+    {loadState === "ready" && (noSite ? <section className="special-panel"><h2>빈 시작 화면</h2><p>사업 정보를 입력한 뒤 기본 주소와 사이트 초안을 만들 수 있습니다.</p><button type="button" disabled={busy || publishCanManage !== true || testCanStartNew !== true} onClick={() => void startSite()}>사이트 시작하기</button>{(publishCanManage !== true || testCanStartNew !== true) && <p>{publishCanManage === false ? "조직 소유자만 사이트를 시작할 수 있습니다." : testCanStartNew === false ? "현재 이용 상태에서는 새 사이트를 시작할 수 없습니다." : "권한·이용 상태를 확인하고 있습니다."} <a href="/workspace/subscription">구독·권한 상태 확인(추가)</a>{catalog && (publishCanManage === null || testCanStartNew === null) && <button type="button" onClick={() => void loadTestAccess(catalog.organizationId)}>권한·이용 상태 다시 확인(추가)</button>}</p>}</section> : site && <><p>기본 주소: <code>{site.slug}</code> · 사이트 저장본 {site.revision}번{dirty ? " · 미저장 변경" : ""} · {saveState === "saving" ? "서버 저장 중" : saveState === "conflict" ? "저장 충돌" : !online && dirty ? "오프라인 · 미저장" : saveState === "failed" ? "저장 실패" : dirty ? "자동 저장 대기" : "서버 저장 완료"} · 공개 {publishedRevision === null ? "전" : `${publishedRevision}번`}</p>
       {step === "business" && <section className="special-panel"><h2>1 사업 정보</h2><p>상호·서비스·가격·예약 방식은 사업 정보에서 관리합니다. 과거 디자인을 복구해도 현재 사업 정보는 유지됩니다.</p><p>현재 승인한 사업 정보: {approvedCatalog ? `${approvedCatalog.revision}번` : "없음"}</p><a href="/workspace?section=services&edit=business&returnTo=site" aria-disabled={dirty || busy} onClick={event => { if (dirty || busy) event.preventDefault(); }}>사업 정보 편집 열기</a>{(dirty || busy) && <p>사이트 변경 내용을 먼저 저장하고 저장 완료를 확인한 뒤 이동해 주세요.</p>}</section>}
       {step === "design" && <section className="special-panel"><h2>2 디자인 선택</h2><p>세 배치는 페이지 구성이 서로 다릅니다.</p><SiteTemplateCards template={site.template} businessName={catalog?.businessName ?? ""} onChange={template => change({ template })} /><div className="site-editor-design-controls"><label>강조 색상 <input type="color" value={site.palette} onChange={event => change({ palette: event.target.value })} /></label><SiteFontSelect font={site.font} onChange={font => change({ font })} /></div><div className="knowledge-source site-editor-ai"><h3>AI로 배치 제안받기</h3><p>AI는 승인된 사업 정보로 템플릿·색·페이지 구성을 제안합니다. 제안은 확인 후 초안에만 반영됩니다.</p><label>원하는 분위기와 구성<textarea value={aiPrompt} maxLength={1000} onChange={event => setAiPrompt(event.target.value)} placeholder="예: 따뜻한 분위기의 한 페이지 소개와 서비스 목록" /></label><button type="button" disabled={busy || dirty || !approvedCatalog || !aiPrompt.trim() || aiJob?.status === "queued" || aiJob?.status === "running" || aiJob?.status === "proposed"} onClick={() => void generateSite()}>AI 제안 생성</button>{dirty && <p>현재 변경을 먼저 저장한 뒤 생성해 주세요.</p>}{!approvedCatalog && <p>먼저 사업 정보를 승인해 주세요. 템플릿 편집은 계속할 수 있습니다.</p>}{aiJob && <div className="state-message" role="status"><strong>AI 작업: {aiJob.status === "queued" ? "대기" : aiJob.status === "running" ? "생성 중" : aiJob.status === "proposed" ? "제안 검토" : aiJob.status === "applied_to_draft" ? "초안 반영" : aiJob.status === "stale" ? "최신 초안과 충돌" : aiJob.status === "canceled" ? "취소" : "실패"}</strong>{aiJob.errorCode && <p>상태 코드: {aiJob.errorCode}</p>}{aiJob.inputTokens !== null && <p>모델 사용량: 입력 {aiJob.inputTokens}·출력 {aiJob.outputTokens} 토큰. 실제 비용은 공급사 정산 전입니다.</p>}{(["queued", "running", "proposed"] as const).includes(aiJob.status as "queued" | "running" | "proposed") && <button type="button" disabled={busy} onClick={() => void cancelGeneration()}>작업 취소</button>}{aiJob.status === "proposed" && aiJob.proposal && <><p>제안: {aiJob.proposal.template} · {aiJob.proposal.pages.length}개 페이지. 현재 초안은 아직 바뀌지 않았습니다.</p><SiteRenderer site={{ ...site, ...aiJob.proposal }} catalog={approvedCatalog ?? catalog!} preview /><button type="button" disabled={busy || dirty} onClick={() => void applyGeneration()}>검토한 제안을 초안에 반영</button></>}{(aiJob.status === "failed" || aiJob.status === "canceled" || aiJob.status === "stale") && <p>설명은 유지됩니다. 필요하면 새 작업을 만들거나 템플릿을 직접 편집하세요.</p>}</div>}</div></section>}
       {step === "pages" && <div className="editor-switch" role="group" aria-label="페이지 편집 화면"><button type="button" aria-pressed={mobileView === "edit"} onClick={() => setMobileView("edit")}>편집</button><button type="button" aria-pressed={mobileView === "preview"} onClick={() => setMobileView("preview")}>미리보기</button></div>}
@@ -493,8 +507,8 @@ export function SiteEditor() {
         <p>승인한 사업 정보: {approvedCatalog ? `${approvedCatalog.revision}번` : "없음"}</p>
         {approvedCatalog && publishedCatalogRevision !== null && approvedCatalog.revision > publishedCatalogRevision && <div className="state-message" role="status"><strong>공개 사이트의 사업 정보가 오래되었습니다.</strong><p>새로 승인한 사업 정보 {approvedCatalog.revision}번을 반영하려면 사이트 초안을 다시 저장하고 공개해 주세요.</p><button type="button" disabled={busy || dirty} onClick={() => void save()}>카탈로그 반영용 초안 저장</button></div>}
         {visibilityRestricted && <p role="status">사이트 공개가 제한되었습니다. 초안과 이전 공개 버전·기존 문의·예약은 유지됩니다. <a href="/workspace/moderation">신고·검토 결과와 이의 제출</a>을 확인해 주세요.</p>}
-        <button type="button" disabled={visibilityRestricted || busy || dirty || !approvedCatalog || site.revision === 0 || publishedRevision === site.revision} onClick={() => void publish()}>현재 초안 공개</button>
-        {publishGuidance && <p role="status">{publishGuidance.reason} {publishGuidance.href && <a href={publishGuidance.href} aria-disabled={dirty || busy} onClick={event => { if (dirty || busy) event.preventDefault(); }}>{publishGuidance.label}</a>}{!publishGuidance.href && (dirty || site.revision === 0 || (publishedRevision === site.revision && publishedCatalogRevision !== null && approvedCatalog && approvedCatalog.revision > publishedCatalogRevision)) && <button type="button" disabled={busy || saveState === "conflict"} onClick={() => void save()}>사이트 초안 저장하기(추가)</button>}</p>}
+        <button type="button" disabled={visibilityRestricted || publishCanManage !== true || testCanStartNew !== true || busy || dirty || !approvedCatalog || site.revision === 0 || publishedRevision === site.revision} onClick={() => void publish()}>현재 초안 공개</button>
+        {publishGuidance && <p role="status">{publishGuidance.reason} {publishGuidance.href && <a href={publishGuidance.href} aria-disabled={dirty || busy} onClick={event => { if (dirty || busy) event.preventDefault(); }}>{publishGuidance.label}</a>}{(publishCanManage === null || testCanStartNew === null) && <button type="button" onClick={() => void loadTestAccess(catalog!.organizationId)}>권한·이용 상태 다시 확인(추가)</button>}{!publishGuidance.href && (dirty || site.revision === 0 || (publishedRevision === site.revision && publishedCatalogRevision !== null && approvedCatalog && approvedCatalog.revision > publishedCatalogRevision)) && <button type="button" disabled={busy || saveState === "conflict"} onClick={() => void save()}>사이트 초안 저장하기(추가)</button>}</p>}
         {inquiryTestGuidance && <p>{inquiryTestGuidance.href ? <a href={inquiryTestGuidance.href} aria-label="첫 문의 미리 해보기(추가)" onClick={event => { event.preventDefault(); void openInquiryTest(inquiryTestGuidance.href!); }}>첫 문의 미리 해보기(추가)</a> : <button type="button" disabled>첫 문의 미리 해보기(추가)</button>} {canCheckTestAccess && testAccessState === "loading" ? "이용 상태를 확인하고 있습니다." : inquiryTestGuidance.reason ?? "현재 공개된 사이트로만 내부 테스트 문의를 남깁니다. 실제 고객 알림·실적·예약에는 포함되지 않습니다. 공개 버전마다 한 번만 기록됩니다."} {canCheckTestAccess && testAccessState === "failed" && <button type="button" onClick={() => void loadTestAccess(catalog!.organizationId)}>이용 상태 다시 확인(추가)</button>}{canCheckTestAccess && testAccessState === "ready" && testCanStartNew === false && <a href="/workspace/subscription">구독 상태 확인(추가)</a>}</p>}
         {publishedRevision !== null && siteOrigin && <section className="knowledge-source" role="region" aria-label={siteOrigin.endsWith(".localhost:3002") ? "사이트 개설 완료" : "사이트 공개본 확인"}>
           <h3>{siteOrigin.endsWith(".localhost:3002") ? "로컬 사이트 개설 완료" : "사이트 공개본 생성"}</h3>

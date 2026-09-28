@@ -6,9 +6,10 @@ let catalogApprovalIssue: typeof import("../src/field-workspace").catalogApprova
 let canReturnToSite: typeof import("../src/field-workspace").canReturnToSite;
 let firstUseAction: typeof import("../src/field-workspace").firstUseAction;
 let ownerPermissionFromSubscription: typeof import("../src/field-workspace").ownerPermissionFromSubscription;
+let ownerCanStartNewFromSubscription: typeof import("../src/field-workspace").ownerCanStartNewFromSubscription;
 let siteReturnStep: typeof import("../src/field-workspace").siteReturnStep;
 before(async () => {
-  ({ catalogApprovalIssue, canReturnToSite, firstUseAction, ownerPermissionFromSubscription, siteReturnStep } = await import("../src/field-workspace.js"));
+  ({ catalogApprovalIssue, canReturnToSite, firstUseAction, ownerPermissionFromSubscription, ownerCanStartNewFromSubscription, siteReturnStep } = await import("../src/field-workspace.js"));
 });
 
 const draft: DraftCatalog = {
@@ -43,9 +44,19 @@ test("first action follows saved business approval and site publication, not opt
   assert.deepEqual(firstUseAction({ ...state, releaseRevision: 1, siteDraftRevision: 1, sitePublishedRevision: 1, sitePublishedCatalogRevision: 0 }),
     { label: "홈페이지 확인·공개(추가)", href: "/workspace/site?step=publish" });
   assert.deepEqual(firstUseAction({ ...state, catalog: { ...draft, services: [] }, releaseRevision: 1 }),
-    { label: "홈페이지 확인·공개(추가)", href: "/workspace/site?step=publish" });
+    { label: "사업 정보 완성(추가)", href: "#owner-catalog" });
   assert.deepEqual(firstUseAction({ ...state, siteDraftRevision: null, releaseRevision: 1 }),
     { label: "홈페이지 만들기(추가)", href: "/workspace/site?step=business" });
+});
+
+test("first action checks older work before declaring the site ready", () => {
+  const state = { catalog: draft, canManage: true, releaseState: "ready" as const, releaseRevision: 1,
+    siteState: "ready" as const, siteDraftRevision: 1, sitePublishedRevision: 1,
+    sitePublishedCatalogRevision: 1, pendingInquiries: 0, pendingReservations: 0 };
+  assert.deepEqual(firstUseAction({ ...state, hasMoreInquiries: true }),
+    { label: "이전 문의 더 확인(추가)", href: "#owner-inquiries" });
+  assert.deepEqual(firstUseAction({ ...state, hasMoreReservations: true }),
+    { label: "이전 예약 더 확인(추가)", href: "#owner-inquiries" });
 });
 
 test("unknown approval or publication state never claims readiness", () => {
@@ -73,6 +84,21 @@ test("non-owners see permission-aware actions and only the own subscription can 
   assert.equal(ownerPermissionFromSubscription({ product: "field", organizationId: "other", canManage: true }, "org"), null);
 });
 
+test("ended Field access directs approval to subscription while completed work remains available", () => {
+  const state = { catalog: draft, canManage: true, canStartNew: false, releaseState: "ready" as const,
+    releaseRevision: null, siteState: "ready" as const, siteDraftRevision: 1,
+    sitePublishedRevision: null, sitePublishedCatalogRevision: null, pendingInquiries: 0, pendingReservations: 0 };
+  assert.deepEqual(firstUseAction(state), { label: "이용 상태 확인(추가)", href: "/workspace/subscription" });
+  assert.deepEqual(firstUseAction({ ...state, canStartNew: null }),
+    { label: "이용 상태 확인(추가)", href: "/workspace/subscription" });
+  assert.deepEqual(firstUseAction({ ...state, pendingInquiries: 1 }),
+    { label: "문의 확인(추가)", href: "#owner-inquiries" });
+  assert.match(catalogApprovalIssue(draft, false, "idle", "ready", null, true, false) ?? "", /이용 상태/);
+  assert.match(catalogApprovalIssue(draft, false, "idle", "ready", null, true, null) ?? "", /이용 상태/);
+  assert.equal(ownerCanStartNewFromSubscription({ product: "field", organizationId: "org", access: { canStartNew: false } }, "org"), false);
+  assert.equal(ownerCanStartNewFromSubscription({ product: "agent", organizationId: "org", access: { canStartNew: true } }, "org"), null);
+});
+
 test("return to site waits for the saved business revision to be approved", () => {
   assert.equal(canReturnToSite(false, "idle", "ready", 2, 1), false);
   assert.equal(canReturnToSite(true, "idle", "ready", 2, 2), false);
@@ -90,4 +116,7 @@ test("approval explains unsaved and missing required values before enabling appr
   assert.match(catalogApprovalIssue(draft, true, "idle", "ready", null) ?? "", /저장/);
   assert.equal(catalogApprovalIssue(draft, false, "idle", "ready", null), null);
   assert.match(catalogApprovalIssue(draft, false, "idle", "ready", 1) ?? "", /이미 승인/);
+  assert.match(catalogApprovalIssue({ ...draft, services: [] }, false, "idle", "ready", null) ?? "", /서비스/);
+  assert.match(catalogApprovalIssue(draft, false, "idle", "ready", null, false) ?? "", /소유자/);
+  assert.match(catalogApprovalIssue(draft, false, "idle", "ready", null, null) ?? "", /권한/);
 });

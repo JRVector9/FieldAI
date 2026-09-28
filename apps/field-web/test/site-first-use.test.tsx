@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sitePublishGuidance } from "../src/site-editor";
+import { sitePublishGuidance, sitePublishPermissionFromSubscription } from "../src/site-editor";
 
 const ready = { restricted: false, busy: false, dirty: false, approved: true,
+  canManage: true as boolean | null, canStartNew: true as boolean | null,
   revision: 1, publishedRevision: null as number | null, publishedCatalogRevision: null as number | null,
   approvedRevision: 1 };
 
@@ -21,9 +22,20 @@ test("publish guidance names a concrete repair path without calling a draft publ
   assert.match(sitePublishGuidance({ ...ready, publishedRevision: 1 })?.reason ?? "", /이미 공개/);
   assert.deepEqual(sitePublishGuidance({ ...ready, restricted: true }),
     { reason: "사이트 공개가 제한되어 있습니다.", href: "/workspace/moderation", label: "신고·검토 결과 보기" });
+  assert.match(sitePublishGuidance({ ...ready, canManage: false })?.reason ?? "", /소유자/);
+  assert.match(sitePublishGuidance({ ...ready, canManage: null })?.reason ?? "", /권한/);
+  assert.match(sitePublishGuidance({ ...ready, canStartNew: false })?.reason ?? "", /이용 상태/);
+  assert.match(sitePublishGuidance({ ...ready, canStartNew: null })?.reason ?? "", /이용 상태/);
 });
 
 test("a newly approved catalog requires a fresh site draft before republishing", () => {
   assert.deepEqual(sitePublishGuidance({ ...ready, publishedRevision: 1, publishedCatalogRevision: 1, approvedRevision: 2 }),
     { reason: "새로 승인한 사업 정보를 반영하려면 사이트 초안을 다시 저장해 주세요.", href: null, label: null });
+});
+
+test("site publish permission uses only the matching Field organization", () => {
+  assert.equal(sitePublishPermissionFromSubscription({ product: "field", organizationId: "org", canManage: true }, "org"), true);
+  assert.equal(sitePublishPermissionFromSubscription({ product: "field", organizationId: "org", canManage: false }, "org"), false);
+  assert.equal(sitePublishPermissionFromSubscription({ product: "agent", organizationId: "org", canManage: true }, "org"), null);
+  assert.equal(sitePublishPermissionFromSubscription({ product: "field", organizationId: "other", canManage: true }, "org"), null);
 });
