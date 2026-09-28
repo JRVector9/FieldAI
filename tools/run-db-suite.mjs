@@ -35,9 +35,9 @@ export function createSuiteSignalGuard() {
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
   return {
-    check() {
+    check(cause) {
       if (!signal) return;
-      const error = new Error(`DB suite interrupted by ${signal}`);
+      const error = new Error(`DB suite interrupted by ${signal}${cause ? ` while handling ${String(cause)}` : ''}`, { cause });
       error.interrupted = true;
       error.exitCode = signal === 'SIGINT' ? 130 : 143;
       throw error;
@@ -47,6 +47,12 @@ export function createSuiteSignalGuard() {
       process.off('SIGTERM', onSigterm);
     },
   };
+}
+
+export function finishSuite(signals, failure) {
+  signals.close();
+  signals.check(failure);
+  if (failure) throw failure;
 }
 
 export async function adminOperation(admin, label, operation, timeoutMs = 30000) {
@@ -192,6 +198,7 @@ async function runIsolatedSuite() {
   });
   const signals = createSuiteSignalGuard();
   let connected = false;
+  let failure;
   const failures = [];
   const prefix = product === 'agent' ? 'AP' : 'FIELD';
   try {
@@ -255,11 +262,13 @@ async function runIsolatedSuite() {
       }
       signals.check();
     }
+  } catch (error) {
+    failure = error;
   } finally {
     try { if (connected) await adminOperation(admin, 'admin disconnect', () => admin.end()); }
-    finally { signals.close(); }
+    catch (error) { failure ??= error; }
   }
-  signals.check();
+  finishSuite(signals, failure);
   if (failures.length) throw new Error(`${product}: ${failures.length}/${tests.length} database test files failed: ${failures.join(', ')}`);
 }
 

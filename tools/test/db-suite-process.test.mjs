@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
-import { adminOperation, assertSupportedPlatform, createSuiteSignalGuard, hasActiveGroup, run } from '../run-db-suite.mjs';
+import { adminOperation, assertSupportedPlatform, createSuiteSignalGuard, finishSuite, hasActiveGroup, run } from '../run-db-suite.mjs';
 
 const posixTest = process.platform === 'win32' ? test.skip : test;
 
@@ -26,6 +26,18 @@ test('stalled admin operation is bounded and disconnects before deferred interru
     assert.throws(() => guard.check(), error => error.exitCode === 143);
   } finally { guard.close(); }
 });
+
+for (const [signal, operation, exitCode] of [
+  ['SIGINT', 'create database', 130],
+  ['SIGTERM', 'drop database', 143],
+]) {
+  test(`${signal} retains its exit code when ${operation} fails during cleanup`, () => {
+    const guard = createSuiteSignalGuard();
+    process.emit(signal);
+    assert.throws(() => finishSuite(guard, new Error(`${operation} timed out`)), error =>
+      error.exitCode === exitCode && error.message.includes(`${operation} timed out`));
+  });
+}
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   test(`${signal} is deferred across suite cleanup and stops the next file`, async () => {
