@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { createSuiteEnv } from '../run-db-suite.mjs';
 
@@ -32,4 +34,9 @@ test('AP suite loads its own env before cloning, forces mock, and removes Field 
     for (const key of Object.keys(process.env)) if (!(key in previous)) delete process.env[key];
     Object.assign(process.env, previous);
   }
+});
+
+test('Field billing lifecycle fixture loads only its own product env file', () => {
+  const source = readFileSync(resolve('apps/field-api/test/billing-lifecycle.db.test.ts'), 'utf8');
+  assert.match(source, /process\.loadEnvFile\(resolve\('\.\.\/\.\.\/infra\/field\/\.env'\)\)/);
 });

@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readdirSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -23,16 +23,106 @@ export function createSuiteEnv(product) {
   return env;
 }
 
-function run(command, args, env, timeout) {
-  const result = spawnSync(command, args, { cwd: root, env, stdio: 'inherit', timeout });
-  if (result.error) throw result.error;
-  if (result.signal) throw new Error(`${command} terminated by ${result.signal}`);
-  if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} exited ${result.status}`);
+export function hasActiveGroup(output, pid) {
+  return output.split('\n').some(line => {
+    const [group, state] = line.trim().split(/\s+/);
+    return Number(group) === pid && state && !state.startsWith('Z');
+  });
 }
 
-function runSuite(test, env) {
-  run(process.execPath, [resolve(root, 'tools/run-migrations.mjs'), product], env, 120000);
-  run('pnpm', ['--filter', `@fieldai/${product}-api`, 'exec', 'tsx', '--test', '--test-timeout=180000', '--test-force-exit', test], env, 240000);
+function groupExists(pid) {
+  const result = spawnSync('ps', ['-A', '-o', 'pgid=,stat='], { encoding: 'utf8', timeout: 2000 });
+  if (result.error || result.status !== 0)
+    throw new Error(`cannot inspect child process group ${pid}`, { cause: result.error });
+  return hasActiveGroup(result.stdout, pid);
+}
+
+async function stopGroup(pid) {
+  for (const [signal, waitMs] of [['SIGTERM', 2000], ['SIGKILL', 2000]]) {
+    if (!groupExists(pid)) return;
+    try { process.kill(-pid, signal); }
+    catch (error) {
+      if (error.code === 'ESRCH') return;
+      throw error;
+    }
+    const deadline = Date.now() + waitMs;
+    while (groupExists(pid) && Date.now() < deadline)
+      await new Promise(resolveWait => setTimeout(resolveWait, 25));
+  }
+  if (groupExists(pid)) throw new Error(`child process group ${pid} did not terminate; preserving test database`);
+}
+
+export async function run(command, args, env, timeout) {
+  const child = spawn(command, args, { cwd: root, env, stdio: 'inherit', detached: true });
+  let timedOut = false;
+  let termination;
+  let interruptSignal;
+  let interruption;
+  const completed = new Promise((resolveResult, rejectResult) => {
+    child.once('error', rejectResult);
+    child.once('close', (status, signal) => resolveResult({ status, signal }));
+  });
+  let timer;
+  const timed = new Promise((resolveResult, rejectResult) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      termination = stopGroup(child.pid);
+      termination.then(() => resolveResult({ timedOut: true }), rejectResult);
+    }, timeout);
+  });
+  let onSigint;
+  let onSigterm;
+  const interrupted = new Promise((resolveResult, rejectResult) => {
+    const onInterrupt = signal => {
+      if (interruption) return;
+      interruptSignal = signal;
+      interruption = stopGroup(child.pid);
+      interruption.then(() => resolveResult({ interrupted: true }), rejectResult);
+    };
+    onSigint = () => onInterrupt('SIGINT');
+    onSigterm = () => onInterrupt('SIGTERM');
+    process.on('SIGINT', onSigint);
+    process.on('SIGTERM', onSigterm);
+  });
+  let result;
+  try {
+    try { result = await Promise.race([completed, timed, interrupted]); }
+    catch (error) {
+      try { if (child.pid && groupExists(child.pid)) error.preserveDatabase = true; }
+      catch { error.preserveDatabase = true; }
+      throw error;
+    }
+    finally { clearTimeout(timer); }
+    try {
+      if (termination) await termination;
+      if (interruption) await interruption;
+      else if (groupExists(child.pid)) {
+        await stopGroup(child.pid);
+        throw new Error(`${command} left child processes running`);
+      }
+    } catch (error) {
+      try { if (groupExists(child.pid)) error.preserveDatabase = true; }
+      catch { error.preserveDatabase = true; }
+      throw error;
+    }
+    if (interruptSignal || result.interrupted) {
+      const error = new Error(`${command} interrupted by ${interruptSignal}`);
+      error.interrupted = true;
+      error.exitCode = interruptSignal === 'SIGINT' ? 130 : 143;
+      throw error;
+    }
+    if (timedOut || result.timedOut) throw new Error(`${command} ${args.join(' ')} timed out after ${timeout}ms`);
+    if (result.signal) throw new Error(`${command} terminated by ${result.signal}`);
+    if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} exited ${result.status}`);
+  } finally {
+    process.off('SIGINT', onSigint);
+    process.off('SIGTERM', onSigterm);
+  }
+}
+
+async function runSuite(test, env) {
+  await run(process.execPath, [resolve(root, 'tools/run-migrations.mjs'), product], env, 120000);
+  await run('pnpm', ['--filter', `@fieldai/${product}-api`, 'exec', 'tsx', '--test', '--test-timeout=180000', '--test-force-exit', test], env, 240000);
 }
 
 async function runIsolatedSuite() {
@@ -61,6 +151,7 @@ async function runIsolatedSuite() {
       const database = `fieldai_${product}_test_${randomUUID().replaceAll('-', '')}`;
       const journalRoot = mkdtempSync(resolve(tmpdir(), `${product}-suite-journals-`));
       let created = false;
+      let preserveResources = false;
       try {
         const childEnv = { ...env };
         for (const kind of ['REVOCATION', 'RETENTION']) {
@@ -75,18 +166,24 @@ async function runIsolatedSuite() {
         testUrl.pathname = `/${database}`;
         childEnv[settings.key] = testUrl.toString();
         process.stdout.write(`${product}: ${test} in isolated database ${database}\n`);
-        try { runSuite(test, childEnv); }
+        try { await runSuite(test, childEnv); }
         catch (error) {
+          preserveResources = error.preserveDatabase === true;
+          if (preserveResources || error.interrupted) throw error;
           failures.push(test);
           process.stderr.write(`${product}: ${test} failed: ${String(error)}\n`);
         }
       } finally {
-        try {
-          if (created) {
-            await admin.query(`drop database "${database}" with (force)`);
-            process.stdout.write(`${product}: removed test database ${database}\n`);
-          }
-        } finally { rmSync(journalRoot, { recursive: true, force: true }); }
+        if (preserveResources) {
+          process.stderr.write(`${product}: child group still active; preserved ${database} and ${journalRoot} for safe recovery\n`);
+        } else {
+          try {
+            if (created) {
+              await admin.query(`drop database "${database}" with (force)`);
+              process.stdout.write(`${product}: removed test database ${database}\n`);
+            }
+          } finally { rmSync(journalRoot, { recursive: true, force: true }); }
+        }
       }
     }
   } finally {
@@ -100,6 +197,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     await runIsolatedSuite();
   } catch (error) {
     process.stderr.write(`${String(error)}\n`);
-    process.exitCode = 1;
+    process.exitCode = error.exitCode ?? 1;
   }
 }

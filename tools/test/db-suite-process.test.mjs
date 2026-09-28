@@ -1,0 +1,121 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+import { test } from 'node:test';
+import { hasActiveGroup, run } from '../run-db-suite.mjs';
+
+test('zombie-only process groups have no active child work', () => {
+  assert.equal(hasActiveGroup(' 42 Z\n 42 Z+\n', 42), false);
+  assert.equal(hasActiveGroup(' 42 Z\n 42 S\n', 42), true);
+  assert.equal(hasActiveGroup(' 41 S\n', 42), false);
+});
+
+test('an unknown process-group probe preserves its database', async () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'db-suite-probe-test-'));
+  const probe = resolve(directory, 'ps');
+  writeFileSync(probe, '#!/bin/sh\nexit 2\n');
+  chmodSync(probe, 0o755);
+  const previousPath = process.env.PATH;
+  try {
+    process.env.PATH = `${directory}:${previousPath}`;
+    await assert.rejects(run(process.execPath, ['-e', ''], process.env, 1000),
+    error => error.preserveDatabase === true && /cannot inspect child process group/.test(error.message));
+  } finally {
+    process.env.PATH = previousPath;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('timeout waits for the spawned test descendant to stop before returning', async () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'db-suite-process-test-'));
+  const started = resolve(directory, 'started');
+  const stopped = resolve(directory, 'stopped');
+  const descendant = `
+    const fs = require('node:fs');
+    fs.writeFileSync(process.env.STARTED, 'started');
+    process.on('SIGTERM', () => setTimeout(() => {
+      fs.writeFileSync(process.env.STOPPED, 'stopped');
+      process.exit(0);
+    }, 100));
+    setInterval(() => {}, 1000);
+  `;
+  const parent = `
+    const { spawn } = require('node:child_process');
+    spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: 'inherit' });
+    setInterval(() => {}, 1000);
+  `;
+  try {
+    await assert.rejects(run(process.execPath, ['-e', parent],
+      { ...process.env, STARTED: started, STOPPED: stopped }, 3000), /timed out/);
+    assert.equal(existsSync(started), true);
+    assert.equal(readFileSync(stopped, 'utf8'), 'stopped');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('timeout kills a descendant that ignores graceful termination', async () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'db-suite-force-test-'));
+  const started = resolve(directory, 'started');
+  const descendant = `
+    const fs = require('node:fs');
+    fs.writeFileSync(process.env.STARTED, String(process.pid));
+    process.on('SIGTERM', () => {});
+    setInterval(() => {}, 1000);
+  `;
+  const parent = `
+    const { spawn } = require('node:child_process');
+    spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: 'inherit' });
+    setInterval(() => {}, 1000);
+  `;
+  try {
+    await assert.rejects(run(process.execPath, ['-e', parent],
+      { ...process.env, STARTED: started }, 3000), /timed out/);
+    assert.equal(existsSync(started), true);
+    const pid = Number(readFileSync(started, 'utf8'));
+    const probe = spawnSync('ps', ['-A', '-o', 'pid=,stat='], { encoding: 'utf8' });
+    assert.equal(probe.status, 0);
+    const state = probe.stdout.split('\n').map(line => line.trim().split(/\s+/))
+      .find(([listedPid]) => Number(listedPid) === pid)?.[1];
+    assert.ok(!state || state.startsWith('Z'), `descendant is still active: ${state}`);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  test(`${signal} waits for the active child group and reports interruption`, async () => {
+    const directory = mkdtempSync(resolve(tmpdir(), 'db-suite-interrupt-test-'));
+    const started = resolve(directory, 'started');
+    const stopped = resolve(directory, 'stopped');
+    const descendant = `
+      const fs = require('node:fs');
+      fs.writeFileSync(process.env.STARTED, 'started');
+      process.on('SIGTERM', () => setTimeout(() => {
+        fs.writeFileSync(process.env.STOPPED, 'stopped');
+        process.exit(0);
+      }, 100));
+      setInterval(() => {}, 1000);
+    `;
+    const parent = `
+      const { spawn } = require('node:child_process');
+      spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], { stdio: 'inherit' });
+      setInterval(() => {}, 1000);
+    `;
+    try {
+      const running = run(process.execPath, ['-e', parent],
+        { ...process.env, STARTED: started, STOPPED: stopped }, 3000);
+      const deadline = Date.now() + 2000;
+      while (!existsSync(started) && Date.now() < deadline)
+        await new Promise(resolveWait => setTimeout(resolveWait, 10));
+      assert.equal(existsSync(started), true);
+      process.emit(signal);
+      await assert.rejects(running, /interrupted/);
+      assert.equal(readFileSync(stopped, 'utf8'), 'stopped');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}

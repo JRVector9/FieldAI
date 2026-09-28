@@ -11,7 +11,7 @@ import { runBillingChargeOnce } from '../src/billing-charge-execution.js';
 import { periodAt } from '../src/billing-period.js';
 import type { BillingCharge, BillingPayment } from '../src/toss-billing.js';
 
-process.loadEnvFile(resolve('../../infra/agent/.env'));
+process.loadEnvFile(resolve('../../infra/field/.env'));
 const sourceUrl=process.env.FIELD_DATABASE_URL!, isolatedDatabase=`fieldai_field_test_${randomUUID().replaceAll('-','')}`;
 let admin: Client | undefined, created=false;
 const fixtureDatabases=new Set<string>();
