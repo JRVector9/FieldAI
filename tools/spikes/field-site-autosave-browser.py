@@ -67,8 +67,9 @@ async def main():
             await page.get_by_role("button", name="다시 불러오기").click()
             await page.get_by_text("사이트 초안을 불러오지 못했습니다", exact=False).wait_for()
             await page.get_by_role("button", name="다시 불러오기").click()
-            await page.get_by_role("button", name="3 편집").wait_for()
-            await page.get_by_role("button", name="3 편집").click()
+            edit_step = page.get_by_role("navigation", name="사이트 제작 단계").get_by_role("button", name="편집")
+            await edit_step.wait_for()
+            await edit_step.click()
             heading = page.get_by_label("제목").first
             revision_line = page.locator("main p").filter(has_text="기본 주소:").first
             await heading.fill("첫 번째 자동 저장")

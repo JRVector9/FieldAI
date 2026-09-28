@@ -199,7 +199,7 @@ async def main():
 
             await owner.get_by_role("navigation", name="모바일 사업자 메뉴").get_by_role("link", name="내 사이트").click()
             await owner.get_by_role("button", name="사이트 시작하기").click()
-            await owner.get_by_role("button", name="3 편집").click()
+            await owner.get_by_role("navigation", name="사이트 제작 단계").get_by_role("button", name="편집").click()
             await owner.get_by_label("페이지 이름").fill("홈")
             await owner.get_by_role("button", name="페이지 추가").click()
             await owner.get_by_label("페이지 이름").fill("서비스 안내")
@@ -289,7 +289,7 @@ async def main():
             await owner.get_by_role("button", name="공개 주소 다시 확인").click()
             await expect(completion).to_be_visible()
 
-            await owner.get_by_role("button", name="3 편집").click()
+            await owner.get_by_role("navigation", name="사이트 제작 단계").get_by_role("button", name="편집").click()
             await owner.get_by_role("textbox", name="본문").first.fill("상담 후 일정을 정합니다. 공개 결과 재조회 검수.")
             await expect(revision).not_to_contain_text("미저장 변경", timeout=15000)
             draft_before_publish = await owner.request.get("http://127.0.0.1:3002/v1/sites/draft")
@@ -414,7 +414,7 @@ async def main():
             await expect(owner.get_by_text("아직 공개 버전이 없습니다.")).to_have_count(0)
             await owner.unroute("**/v1/sites/releases", history_load_route)
 
-            test_link = completion.get_by_role("link", name="고객처럼 첫 문의 테스트")
+            test_link = owner.get_by_role("link", name="첫 문의 미리 해보기(추가)")
             test_href = await test_link.get_attribute("href")
             assert test_href and test_href.startswith("/public/") and "ownerTest=1" in test_href
             denied_test = await guest.goto(f"http://127.0.0.1:3002{test_href}", wait_until="networkidle")
