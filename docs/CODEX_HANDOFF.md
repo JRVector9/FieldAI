@@ -1,4 +1,4 @@
-# CODEX 인수인계 — 2026-09-28
+# CODEX 인수인계 — 2026-09-29
 
 ## 사용자 지정 기준 시안 — 작업 재개 시 필수 확인
 
@@ -8,6 +8,32 @@
 - 원본에 있는 화면을 처음 구현할 때 해당 HTML/CSS를 직접 읽고 그대로 기준으로 사용한다. 이미 완료된 화면은 구체적 새 오류/요구 변경 없이 다시 작업하지 않는다. 제품별 API·권한·실제 상태는 v3.0 독립 제품 경계를 따른다.
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
+
+## Field 첫 사용 수리 사후 감사 — PR5/PR6 로컬 완료 (2026-09-29)
+
+- **Current objective / State:** 사용자가 PR1~PR4 수리 뒤 “또 놓친거 없는지” 재검토 요청. `3ca16ed`/clean main에서 TASKS 완료 원장·기존 인계·변경 diff/API 호출을 다시 대조했다. PR5/PR6의 발견5건은 로컬 구현/표적 검수 완료, R00.QA 전체 gate는 실패·미완료. 상세 재개 범위/QA07·09·10·17·70·71·76·79는 `TASKS.md` 상단과 `docs/technical/FIELD_FIRST_USE_AUDIT_FOLLOWUP_2026-09-29.md`에 코드 변경 전 기록했다.
+- **Completed work / Modified paths:** PR6 **1e290b9** `apps/field-api/src/inquiries.ts`·`test/site-inquiry-test.db.test.ts`, `apps/field-web/src/field-public.tsx`·`test/field-first-day.test.tsx`: 공개 제한 site의 직접 URL ownerTest 신규 GET/POST 409, 기존 기록 조회/동일 요청 replay 보존, 화면 이유 표시. PR5 **2bd2898** `apps/field-web/src/field-workspace.tsx`·`site-editor.tsx`, `test/field-first-use.test.tsx`·`site-first-use.test.tsx`: 서비스0개·100건 이후 cursor·owner/editor 권한·Field 체험 종료/조회 실패를 첫 사용 CTA와 승인/사이트 시작/공개 버튼에 반영. `TASKS.md`, 후속 기술 계획, `LOCAL_FUNCTIONAL_COVERAGE.md`, `DEVELOPMENT_REMAINING_AUDIT.md`, 본 인계는 같은 단계에 갱신. 원격 push/PR/배포 없음.
+- **Key design decisions / Contract/schema:** 기존 Field 빈 카탈로그 저장/승인 API 계약은 변경하지 않고 첫 사용 UI가 서비스 입력을 요구한다. owner 전용 버튼은 같은 Field 조직의 `/v1/subscription` 권한·`access.canStartNew`로 표시하며 서버 권한·체험 정책은 그대로 둔다. 공개 제한은 서버에서도 적용하고 ownerTest POST가 moderation의 site lock 뒤 읽도록 순서를 맞췄다. 이미 기록된 test는 제한 중에도 사업자가 조회·같은 요청 결과 확인 가능하다. AP/Field 계약·DB 경계, migration, v3 시안 CSS/배치 변경 없음.
+- **Tests actually run / Environment / Commit:** Mac local Node24.18.0/Field mock PG17. 첫 표적 웹 회귀는 4개 예상 실패, 체험 후속 2개 예상 실패를 확인한 뒤 최종 Field 웹 `pnpm --filter @fieldai/field-web test:unit` **92/92 pass**(`/private/tmp/fieldai-post-audit-web-unit-final.log`). ownerTest 격리 DB는 변경 전 공개 제한 GET200으로 실패(`/private/tmp/fieldai-post-audit-db-red.log`), 변경 후 독립 UUID DB **1/1 pass·DB 제거**(`node /private/tmp/fieldai-audit-target-db.mjs`) 및 전체 suite의 해당 파일1/1 pass. root `pnpm typecheck`·`pnpm lint`, `pnpm build:field`, `pnpm build:web:field` exit0(웹/타입/린트 `/private/tmp/fieldai-post-audit-*-final.log`), `git diff --check` exit0. 최종 `pnpm mock:run:field` session11499/log `/private/tmp/fieldai-post-audit-managed-final.log` 재기동 뒤 Field API ready200, 정확한 site design URL200, 비로그인 ownerTest401. 코드 commits 위2개.
+- **Failed approaches / Failures not hidden:** 두 번의 `pnpm test:db:field`에서 최초 red suite는 ownerTest 포함4파일, 서버 수정 후 최신 suite는 **31파일 실행/격리 DB31개 제거, 28파일 성공·3파일 실패, exit1**(`/private/tmp/fieldai-post-audit-db-green.log`). `ai-entitlement.db.test.ts`, `billing-lifecycle.db.test.ts`, `billing-refund.db.test.ts`의 환불 worker 결과가 `empty`/`blocked_integration`이고 refund test 1건은180초 timeout. 같은3파일이 PR6 변경 전 red suite에서도 실패했으나 원인 확정/수리는 하지 않았다. 이 최신 실패 때문에 과거156/156 결과를 현 검수 pass로 승계하지 않는다. `review` 스킬의 필수 gstack checklist 경로는 저장소/로컬에 없어 그 자동 절차는 실행 불가했고 diff/API 직접 검토로 대체했다. CUA는 현재 app inventory만 읽었고 로그인 UI 조작/모바일 시각 확인은 이번 턴 미실행이다.
+- **Remaining / Failure cases / Rollback:** R00.QA/F09 환불 실패 원인 측정과 전체 DB 재검수, 실제 가입→승인/공개→고객 문의/두 예약→사업자 처리 브라우저/실기기, 접근성, AP DB 제거 Field 독립성, 실 공급사·출시/최종 사용자 인수. 기존 user/site/업무 데이터·청구·발송·운영 삭제는 건드리지 않았다. PR6 회귀 시 신규 ownerTest만 차단한 commit `1e290b9`, PR5 UI commit `2bd2898`을 개별 revert할 수 있고 schema 복구는 필요 없다.
+
+### Exact commands for next agent — 최신 감사
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+sed -n '1,28p' TASKS.md
+sed -n '1,65p' docs/CODEX_HANDOFF.md
+git status --short
+git log -4 --oneline
+cat docs/technical/FIELD_FIRST_USE_AUDIT_FOLLOWUP_2026-09-29.md
+rg -n '^field: test/.* failed:|^field: test/site-inquiry-test|^Error: field:' /private/tmp/fieldai-post-audit-db-green.log
+sed -n '255,346p' /private/tmp/fieldai-post-audit-db-green.log
+pnpm --filter @fieldai/field-web test:unit
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+환불 원인 조사 시 별도 격리 DB에서 `billing-refund.db.test.ts`의 승인 직후 `next_attempt_at`, DB/Node 시각과 claim 대상/lock을 먼저 비교한다. 기존 `pnpm test:db:field` 재실행은 180초 timeout을 포함해 장시간 걸릴 수 있고 현 시점 exit1이다. 현재 managed Field 서버가 ready면 두 번째 launcher를 켜지 않는다.
 
 ## Field 첫 사용 수리 PR 단위 구현·로컬 통합 완료 — 2026-09-28
 

@@ -3,6 +3,8 @@
 Task ID / Product / Owner: R00.QA / R02.ACCEPTANCE · Field / Coordinator
 State: 첫 조사에서 기능 결함 2건 발견; 후속 PR1~PR4 구현 및 로컬 부분 검수 완료 (출시·최종 사용자 인수 아님)
 
+**최신 사후 감사(2026-09-29):** PR5 `2bd2898`·PR6 `1e290b9`에서 추가 경계5건을 수정했다. Field 웹92/92·표적 ownerTest 격리 DB1/1은 통과했으나 최신 전체 `pnpm test:db:field`는 청구·환불3파일 실패와 환불 테스트180초 timeout으로 exit1이다. 아래 PR1~PR4의156/156 pass는 해당 날짜의 이력이며 현 전체 gate pass가 아니다. 최신 범위·로그·미실행은 `FIELD_FIRST_USE_AUDIT_FOLLOWUP_2026-09-29.md`와 `CODEX_HANDOFF.md` 상단을 따른다.
+
 ## 목적과 고정 범위
 
 사용자 요청: 처음 서비스 페이지를 만들고 장사하는 자영업자에게 어려운 지점을 찾아 **개선 계획**을 세우고, 주요 기능이 실제 동작하는지 검사해 함께 보고한다. 기존 `reference/field_ui_prototype_v3.html`의 배치·색상·글자·메뉴·반응형은 고정한다. 추가 기능만 `(추가)`로 계획한다. AP/Field 제품·계정·DB·구독은 분리하고 Field 단독 문의·예약을 보존한다. 최초 조사 단계는 계획·QA 문서만 수정했다. 아래 후속 수리 단계에서 제품 코드를 PR 단위로 변경했다.

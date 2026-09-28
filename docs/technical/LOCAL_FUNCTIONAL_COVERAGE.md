@@ -1,5 +1,9 @@
 # 로컬 기능 검수 현황 — 2026-09-27
 
+## 최신 Field 첫 사용 사후 감사 — 2026-09-29
+
+PR5 `2bd2898`의 첫 사용 서비스/목록/권한/체험 안내와 PR6 `1e290b9`의 공개 제한 ownerTest 서버 차단을 구현했다. Field 웹92/92·표적 ownerTest 격리 DB1/1·root lint/typecheck·Field API/web build는 실제 exit0. 최종 `pnpm test:db:field`는 31파일 실행·임시 DB31 제거 중 **3파일 실패(exit1)**: AI 제공량의 전액 환불, billing lifecycle 환불, billing refund 파일이다. 환불 worker의 `empty`/`blocked_integration` 및 180초 test timeout 원인은 미확정이므로 최신 Field 전체 DB 검수를 통과로 표시하지 않는다. 이전156/156은 과거 시점 증거다. 상세 로그/남은 게이트는 `FIELD_FIRST_USE_AUDIT_FOLLOWUP_2026-09-29.md`와 `CODEX_HANDOFF.md` 최신 상단을 따른다.
+
 ## 사용자 신고 스타일 보완 — f1f4f0a (2026-09-28)
 
 F02.EDITOR/F04.BASIC-PUBLISH의 실제 디자인 단계에 CSS가 없다는 신고를 원본 v3 wizard와 대조했다. 사이트 wizard4단계·실제 상호 기반 template3개 카드·usage/subscription 버튼·booking 하단 카드/폼·catalog 승인 버튼을 scoped 보완했다. 기존52개[x]/7pending과 완료 API/DB/schema/공개 사이트/pages 레이아웃은 유지한다.

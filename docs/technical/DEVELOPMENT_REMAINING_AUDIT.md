@@ -1,5 +1,11 @@
 # 개발 종료까지 남은 범위 — 2026-09-26 1차 코드 대조
 
+## 최신 사후 감사·미해결 gate — 2026-09-29
+
+- 첫 사용 PR5 `2bd2898`·공개 제한 시험 문의 PR6 `1e290b9`의 내부 수정과 표적 검수는 완료됐다. 기존 완료52[x]를 다시 열어 전면 재작업하지 않는다. 고정 v3 시안·제품 경계·schema 변경 없음.
+- **현재 Field 전체 DB gate는 실패:** `pnpm test:db:field`가 31파일 모두 실행하고 격리 DB31개를 제거했지만 청구·환불 관련3파일이 실패했다. `billing-refund.db.test.ts` 1건은 180초 timeout. 변경 전 red suite에서도 같은3파일 실패, 원인은 미확정이다. R00.QA/F09.REFUND-DECLINE.DB 후속 조사에서 이 실패를 해결하고 전체 suite를 재검수한다. 과거156/156 pass는 이 최신 상태를 대체하지 않는다.
+- 사용자 최종 가입/서비스/공개/직접 문의·두 예약 실제 브라우저 동선, 모바일·접근성·AP 제거 Field 독립성, 실 공급사/운영 게이트는 그대로 미완료다. 정확한 로그·명령은 `FIELD_FIRST_USE_AUDIT_FOLLOWUP_2026-09-29.md`와 `CODEX_HANDOFF.md`를 따른다.
+
 ## 사용자 신고 디자인 누락 보완 — f1f4f0a (2026-09-28)
 
 - 기존 F02.EDITOR/F04.BASIC-PUBLISH·F09.TRIAL/F09.AI-ENTITLEMENT·F07.BOOKING·F01.CATALOG 완료 이력을 보존하고 구체적 native 버튼/단계 CSS 누락만 재개했다. scoped wizard/template/card/button/form 스타일 구현 완료, Field 웹76/76·type/lint/build 실제exit0, 최신 managed10995 반영.
