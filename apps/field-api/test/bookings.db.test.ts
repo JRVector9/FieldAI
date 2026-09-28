@@ -484,8 +484,13 @@ test('Field request and slot modes share one resource; only owner confirmation o
     assert.equal((await app.inject({ url: `/v1/reservations/${firstReservation.id}`, headers: { authorization: `Bearer ${firstReservation.receiptKey}` } })).statusCode, 200);
     assert.equal((await app.inject({ method: 'POST', url: `/v1/owner/reservations/${firstReservation.id}/confirm`, headers: { cookie: second.cookie }, payload: { expectedRevision: 0, expectedCatalogRevision: 1 } })).statusCode, 404);
     const confirmed = await app.inject({ method: 'POST', url: `/v1/owner/reservations/${firstReservation.id}/confirm`, headers: { cookie: first.cookie }, payload: { expectedRevision: 0, expectedCatalogRevision: 1 } });
-    assert.equal(confirmed.statusCode, 201);
+    assert.equal(confirmed.statusCode, 201, confirmed.body);
     assert.equal((confirmed.json() as { state: string }).state, 'confirmed');
+    const confirmationNotification = await pool.query<{ audience: string; state: string; delivery_owner_product: string }>(
+      `select n.audience,n.state,n.delivery_owner_product from field.notification_events n
+       join field.outbox o on o.id=n.outbox_id
+       where o.aggregate_id=$1 and o.event_type='field.reservation.confirmed'`, [firstReservation.id]);
+    assert.deepEqual(confirmationNotification.rows, [{ audience: 'customer', state: 'blocked_integration', delivery_owner_product: 'field' }]);
     const conflict = await app.inject({ method: 'POST', url: `/v1/owner/reservations/${secondReservation.id}/confirm`, headers: { cookie: first.cookie }, payload: { expectedRevision: 0, expectedCatalogRevision: 1 } });
     assert.equal(conflict.statusCode, 409);
     assert.equal((conflict.json() as { error: string }).error, 'time_conflict');
