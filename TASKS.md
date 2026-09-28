@@ -110,7 +110,7 @@
 - [x] **I03.SOURCE-SYNC-STATUS** Field PRD3.5:58/60. 실제 source상태와 현재snapshot 수신시각 `(추가)`·preview.10 nullable syncedAt·preview.9 missing호환/invalid502. **2362761**, 계약2/2·웹consumer2/2·own PG17 AP/Field 각1/1, review62400 clean .88, wholetype10588/lint45330·managed54544. 승인/재조회시각을 수신으로 대체하지 않음, 기존worker/승인/설치subset 보존. 전체호환/외부·최종인수는 제외. I03_SOURCE_SYNC_STATUS_EXECUTION_PLAN.md.
 - [x] **I06.AUTH-LIFECYCLE.UI** 기존 연결 기록에 실제 key상태 GET/명시closePOST `(추가)`·현재actor/session fence·서버ownpending UUID 복구·unknown동일UUID·정확한cancelled receipt 뒤에만 재확인 새UUID. **2362761**, consumer+API fence9/9·own PG17 route-key현재receipt1/1, review34899 clean .89(이전P2 .94/.91 보완), wholetype10588/lint45330·managed54544. 이전backend 원권한/잠금/worker/키보존 유지. 실운영복원·사용자최종인수는 I06부모에 남김. C03_FINAL_INTERNAL_UI_EXECUTION_PLAN.md.
 - [ ] **AUTH.LIVE / PROVIDERS.LIVE** 사용자가 후속으로 지정한 실메일/카카오/계정연결/번호변경/MFA·실LLM/PG/발송/DNS/TLS/운영저장소 연결·공급사 검수.
-- [ ] **R00.QA / R02.ACCEPTANCE** 추가 문서/역할 누락 대조·모든 적용QA evidence·사용자 최종 시안/동선/실기기·키보드/스크린리더/운영게이트.
+- [ ] **R00.QA / R02.ACCEPTANCE** 추가 문서/역할 누락 대조·모든 적용QA evidence·사용자 최종 시안/동선/실기기·키보드/스크린리더/운영게이트. **2026-09-28 Field 첫 사용자 조사·부분 검수(미완료):** `docs/technical/FIELD_FIRST_TIME_USABILITY_AND_FUNCTION_QA_2026-09-28.md`에 고정 디자인 내 개선 계획과 실제 검사 결과를 기록. 파일별 순차 Field DB 핵심16개 중14통과/예약 확정·체험 경계 문의 2실패, 전체 DB runner 환경·대기 문제는 선행 복구 대상. 계획/부분 검수를 전체 인수로 체크하지 않는다.
 
 **재개 기록 규칙:** `[x]`를 다시 열어야 하면 동일 ID 아래 `재개 사유 / 현재 증거 / 추가 범위 / 이전 완료 commit`을 먼저 남긴다. compaction·다른 에이전트·오래된 문서의 “남음”만으로 재개하지 않는다. 무관한 테스트를 반복하지 않는다. 상세 사용범위는 `AGENTS.md`6.1과 audit/현재 handoff를 따른다.
 
