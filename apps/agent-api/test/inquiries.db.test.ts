@@ -27,7 +27,7 @@ async function owner() {
   return { email, cookie: signedIn.headers.getSetCookie().map(value => value.split(';')[0]).join('; ') };
 }
 
-test('AP owner inquiry list raises recent activity across 103 tied intake timestamps and scopes cursors', async () => {
+test('AP owner reaches older work and notifications beyond the first 100 rows with scoped cursors', async () => {
   const first = await owner();
   const second = await owner();
   const app = createAgentApp(async () => undefined, auth.handler, base, undefined, {
@@ -74,6 +74,38 @@ test('AP owner inquiry list raises recent activity across 103 tied intake timest
       headers: { cookie: second.cookie } })).statusCode, 400);
     assert.equal((await app.inject({ url: '/v1/owner/inquiries?cursor=broken',
       headers: { cookie: first.cookie } })).statusCode, 400);
+    const hidden = secondBody.inquiries[0]!.id;
+    await pool.query("update ap.inquiries set state = 'waiting_customer' where organization_id = $1", [organizationId]);
+    await pool.query("update ap.inquiries set state = 'needs_owner' where id = $1", [hidden]);
+    const pendingPage = (await app.inject({ url: '/v1/owner/inquiries',
+      headers: { cookie: first.cookie } })).json() as {
+      inquiries: { id: string }[]; pendingCount: number; pendingPreview: { id: string }[];
+    };
+    assert.equal(pendingPage.inquiries.some(item => item.id === hidden), false);
+    assert.equal(pendingPage.pendingCount, 1);
+    assert.deepEqual(pendingPage.pendingPreview.map(item => item.id), [hidden]);
+    await pool.query(`insert into ap.outbox (id, organization_id, event_type, aggregate_id, payload)
+      select gen_random_uuid(), $1, 'ap.inquiry.created', i.id, '{}'::jsonb
+      from ap.inquiries i where i.organization_id = $1`, [organizationId]);
+    await pool.query(`insert into ap.notification_events
+      (id, organization_id, outbox_id, inquiry_id, source_message_id, audience, channel, state, created_at)
+      select gen_random_uuid(), $1, o.id, o.aggregate_id::uuid, null, 'owner', 'in_app', 'available',
+        '2026-09-26 12:34:56.123456+00'::timestamptz
+      from ap.outbox o where o.organization_id = $1 and o.event_type = 'ap.inquiry.created'`, [organizationId]);
+    const notificationPage1 = (await app.inject({ url: '/v1/owner/notifications',
+      headers: { cookie: first.cookie } })).json() as {
+      notifications: { id: string }[]; nextCursor: string | null; unreadCount: number;
+    };
+    assert.equal(notificationPage1.notifications.length, 100);
+    assert.equal(notificationPage1.unreadCount, 103);
+    assert.ok(notificationPage1.nextCursor);
+    const notificationPage2 = (await app.inject({ url: `/v1/owner/notifications?cursor=${encodeURIComponent(notificationPage1.nextCursor!)}`,
+      headers: { cookie: first.cookie } })).json() as typeof notificationPage1;
+    assert.equal(notificationPage2.notifications.length, 3);
+    assert.equal(notificationPage2.nextCursor, null);
+    assert.equal(new Set([...notificationPage1.notifications, ...notificationPage2.notifications].map(item => item.id)).size, 103);
+    assert.equal((await app.inject({ url: `/v1/owner/notifications?cursor=${encodeURIComponent(notificationPage1.nextCursor!)}`,
+      headers: { cookie: second.cookie } })).statusCode, 400);
   } finally { await app.close(); }
 });
 

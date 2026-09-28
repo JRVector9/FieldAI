@@ -34,6 +34,7 @@ type Inquiry = {
 };
 type InboxItem = { id: string; state: string; customer_name: string; service_snapshot: { name?: string } | null;
   created_at: string; updated_at: string; source_kind: string; has_ai_history: boolean };
+type TodayInquiry = Pick<InboxItem, 'id' | 'state' | 'customer_name' | 'service_snapshot' | 'source_kind'>;
 const inquirySourceLabel = (kind: string) => kind === 'link' ? '상담 링크'
   : kind === 'owned_embed' ? '외부 사이트 위젯'
     : kind === 'placement_embed' ? '제휴 매체' : '직접 문의';
@@ -92,6 +93,8 @@ export function AgentWorkspace() {
   const editSequence = useRef(0);
   const saveInFlight = useRef(false);
   const [inbox, setInbox] = useState<InboxItem[]>([]);
+  const [pendingInquiryCount, setPendingInquiryCount] = useState(0);
+  const [todayPreview, setTodayPreview] = useState<TodayInquiry[]>([]);
   const [inboxNextCursor, setInboxNextCursor] = useState<string | null>(null);
   const [inboxLoadState, setInboxLoadState] = useState<"loading" | "ready" | "failed">("loading");
   const [inboxLoadingMore, setInboxLoadingMore] = useState(false);
@@ -106,6 +109,10 @@ export function AgentWorkspace() {
   const inboxSearchRef = useRef<HTMLInputElement>(null);
   const inboxRequestSequence = useRef(0);
   const [notifications, setNotifications] = useState<OwnerNotification[]>([]);
+  const [notificationNextCursor, setNotificationNextCursor] = useState<string | null>(null);
+  const [notificationLoadingMore, setNotificationLoadingMore] = useState(false);
+  const [notificationPageError, setNotificationPageError] = useState(false);
+  const notificationRequestSequence = useRef(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationLoadState, setNotificationLoadState] = useState<"loading" | "ready" | "failed">("loading");
   const [selected, setSelected] = useState<Inquiry | null>(null);
@@ -123,13 +130,16 @@ export function AgentWorkspace() {
       const result = await jsonRequest(`/v1/owner/inquiries${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
       if (sequence !== inboxRequestSequence.current) return;
       if (result.status !== 200) throw new Error(`inquiry_list_${result.status}`);
-      const value = result.data as { inquiries: InboxItem[]; nextCursor: string | null };
+      const value = result.data as { inquiries: InboxItem[]; nextCursor: string | null;
+        pendingCount: number; pendingPreview: TodayInquiry[] };
       if (cursor) setInbox(current => {
         const ids = new Set(current.map(item => item.id));
         return [...current, ...value.inquiries.filter(item => !ids.has(item.id))];
       });
       else setInbox(value.inquiries);
       setInboxNextCursor(value.nextCursor);
+      setPendingInquiryCount(value.pendingCount);
+      setTodayPreview(value.pendingPreview);
       setInboxLoadState("ready");
       setInboxPageError(false);
     } catch {
@@ -142,19 +152,29 @@ export function AgentWorkspace() {
     if (inboxDetailOpen && window.matchMedia('(max-width: 760px)').matches) inboxBackRef.current?.focus();
   }, [inboxDetailOpen, selectedInboxId]);
 
-  const loadNotifications = useCallback(async () => {
-    setNotificationLoadState("loading");
+  const loadNotifications = useCallback(async (cursor?: string) => {
+    const sequence = ++notificationRequestSequence.current;
+    if (cursor) { setNotificationLoadingMore(true); setNotificationPageError(false); }
+    else setNotificationLoadState("loading");
     try {
-      const result = await jsonRequest('/v1/owner/notifications');
+      const result = await jsonRequest(`/v1/owner/notifications${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+      if (sequence !== notificationRequestSequence.current) return;
       if (result.status !== 200) throw new Error(`notification_list_${result.status}`);
-      const value = result.data as { notifications: OwnerNotification[]; unreadCount: number };
-      setNotifications(value.notifications);
+      const value = result.data as { notifications: OwnerNotification[]; unreadCount: number; nextCursor: string | null };
+      if (cursor) setNotifications(current => {
+        const ids = new Set(current.map(item => item.id));
+        return [...current, ...value.notifications.filter(item => !ids.has(item.id))];
+      });
+      else setNotifications(value.notifications);
+      setNotificationNextCursor(value.nextCursor);
       setUnreadCount(value.unreadCount);
       setNotificationLoadState("ready");
+      setNotificationPageError(false);
     } catch {
-      setNotificationLoadState("failed");
-      setStatus('AP 처리 알림을 불러오지 못했습니다.');
-    }
+      if (sequence !== notificationRequestSequence.current) return;
+      if (cursor) setNotificationPageError(true);
+      else { setNotificationLoadState("failed"); setStatus('AP 처리 알림을 불러오지 못했습니다.'); }
+    } finally { if (sequence === notificationRequestSequence.current) setNotificationLoadingMore(false); }
   }, []);
 
   const loadDraft = useCallback(async () => {
@@ -507,8 +527,7 @@ export function AgentWorkspace() {
     ownerMainRef.current?.scrollTo({ top: 0 });
     if (section === "today") void Promise.allSettled([loadInbox(), loadNotifications()]);
   }
-  const pendingInquiryCount = inbox.filter(item => item.state === "needs_owner").length;
-  const todayTasks = inboxLoadState === "ready" ? inbox.filter(item => item.state === "needs_owner").slice(0, 6) : [];
+  const todayTasks = inboxLoadState === "ready" ? todayPreview : [];
   const todayRecordsFailed = inboxLoadState === "failed" || notificationLoadState === "failed";
   const todayRecordsReady = inboxLoadState === "ready" && notificationLoadState === "ready";
   const filteredInbox = inbox.filter(item => {
@@ -524,7 +543,7 @@ export function AgentWorkspace() {
   return <div className={phase === "draft" ? "agent-owner-shell" : "site-shell"}>
     {phase === "draft" && draft ? <><aside className="agent-owner-sidebar"><div className="agent-owner-side-brand"><a href="/"><Brand product="Agent Platform" /></a><span>관리실</span></div><div className="agent-owner-tenant"><span aria-hidden="true">{draft.businessName.trim().slice(0, 1) || "사"}</span><div><strong>{draft.businessName.trim() || "새 사업체"}</strong><small>Agent Platform 사업자</small></div></div><nav aria-label="AP 사업자 관리실">{([['today', '⌂', '오늘', '#agent-today'], ['inbox', '▤', '문의함', '#agent-inquiries'], ['ai', '✧', '내 사업 AI', '/workspace/ai'], ['knowledge', '◫', '승인 정보', '#agent-knowledge'], ['deployments', '◎', '공유·설치', '/workspace/deployments'], ['campaigns', '▦', '홍보 카드', '/workspace/campaigns'], ['notifications', '♧', '알림', '#agent-notifications'], ['integrations', '⇄', 'Field 연결', '/workspace/integrations'], ['settings', '⚙', '설정·구독', '/workspace/subscription'], ['more', '⋯', '더보기', '#agent-more']] as const).map(([key, icon, label, href]) => <a key={key} href={href} className={activeSection === key ? "active" : ""} onClick={event => { if (href.startsWith("#")) { event.preventDefault(); showOwnerSection(key); } }}><span aria-hidden="true">{icon}</span>{label}{key === "notifications" && unreadCount > 0 && <b>{unreadCount}</b>}</a>)}</nav><div className="agent-owner-side-foot"><p>AI와 고객 대화 원본은 AP에서 관리합니다. Field 연결은 선택입니다.</p><a href="/preview/owner/knowledge">화면 검토본 보기 ↗</a></div></aside><header className="agent-owner-topbar"><div><span>{draft.businessName.trim() || "새 사업체"}</span><span aria-hidden="true">›</span><strong>{activeSection === "today" ? "오늘" : activeSection === "knowledge" ? "승인 정보" : activeSection === "inbox" ? "문의함" : activeSection === "notifications" ? "알림" : "관리실"}</strong></div><nav aria-label="빠른 이동"><a href="#agent-notifications" onClick={event => { event.preventDefault(); showOwnerSection("notifications"); }}>알림 {unreadCount > 0 ? unreadCount : ""}</a></nav></header></> : <header className="site-header"><a href="/"><Brand product="Agent Platform" /></a><nav aria-label="작업 메뉴"><a href="/workspace/integrations">Field 연결</a><a href="/preview/owner/knowledge">화면 검토본</a></nav></header>}
     <main ref={ownerMainRef} data-section={phase === "draft" ? activeSection : undefined} className={phase === "draft" ? "agent-owner-main" : "feature-section"}>{phase !== "draft" && <div className="feature-heading"><p className="eyebrow">Agent Platform · 로컬 작업 환경</p><h1>사업 정보 관리</h1><p>저장한 초안과 고객에게 공개할 승인 버전을 구분합니다.</p></div>}
-      {phase === "draft" && draft && <section className="agent-owner-today" id="agent-today"><div className="agent-owner-page-heading"><div><h1>내 사업의 오늘</h1><p>AI 상담과 고객 문의에서 지금 확인할 일을 모았습니다.</p></div><a href="/workspace/ai">내 사업 AI 관리</a></div><div className="agent-owner-stats"><article><span>답변할 문의</span><strong>{inboxLoadState === "failed" ? "—" : inboxLoadState === "loading" ? "…" : `${pendingInquiryCount}${inboxNextCursor ? "+" : ""}`}</strong><small>{inboxLoadState === "failed" ? "문의 목록 조회 실패" : inboxLoadState === "loading" ? "문의 목록 확인 중" : inboxNextCursor ? "불러온 AP 원본 대화 기준" : "AP 원본 대화"}</small></article><article><span>처리 알림</span><strong>{notificationLoadState === "failed" ? "—" : notificationLoadState === "loading" ? "…" : unreadCount}</strong><small>{notificationLoadState === "failed" ? "알림 목록 조회 실패" : notificationLoadState === "loading" ? "알림 목록 확인 중" : "새 문의·고객 질문"}</small></article><article><span>승인 정보</span><strong>{releaseRevision === null ? "초안" : `v${releaseRevision}`}</strong><small>{releaseRevision === null ? "공개 전" : "AP 승인본"}</small></article><article><span>서비스</span><strong>{draft.services.length}</strong><small>직접 등록</small></article></div>{todayRecordsFailed && <div className="agent-owner-today-recovery" role="alert"><p>업무 현황 일부를 확인하지 못했습니다. 실패한 목록을 다시 조회해 주세요.</p>{inboxLoadState === "failed" && <button type="button" onClick={() => void loadInbox()}>문의 현황 다시 확인</button>}{notificationLoadState === "failed" && <button type="button" onClick={() => void loadNotifications()}>처리 알림 다시 확인</button>}</div>}<div className="agent-owner-dashboard"><section><div className="agent-owner-card-head"><h2>지금 확인할 일</h2><a href="#agent-inquiries" onClick={event => { event.preventDefault(); showOwnerSection("inbox"); }}>문의함 →</a></div>{todayTasks.length ? <ul className="agent-owner-today-task-list">{todayTasks.map(item => <li key={item.id}>
+      {phase === "draft" && draft && <section className="agent-owner-today" id="agent-today"><div className="agent-owner-page-heading"><div><h1>내 사업의 오늘</h1><p>AI 상담과 고객 문의에서 지금 확인할 일을 모았습니다.</p></div><a href="/workspace/ai">내 사업 AI 관리</a></div><div className="agent-owner-stats"><article><span>답변할 문의</span><strong>{inboxLoadState === "failed" ? "—" : inboxLoadState === "loading" ? "…" : pendingInquiryCount}</strong><small>{inboxLoadState === "failed" ? "문의 목록 조회 실패" : inboxLoadState === "loading" ? "문의 목록 확인 중" : "AP 원본 대화 전체 기준"}</small></article><article><span>처리 알림</span><strong>{notificationLoadState === "failed" ? "—" : notificationLoadState === "loading" ? "…" : unreadCount}</strong><small>{notificationLoadState === "failed" ? "알림 목록 조회 실패" : notificationLoadState === "loading" ? "알림 목록 확인 중" : "새 문의·고객 질문"}</small></article><article><span>승인 정보</span><strong>{releaseRevision === null ? "초안" : `v${releaseRevision}`}</strong><small>{releaseRevision === null ? "공개 전" : "AP 승인본"}</small></article><article><span>서비스</span><strong>{draft.services.length}</strong><small>직접 등록</small></article></div>{todayRecordsFailed && <div className="agent-owner-today-recovery" role="alert"><p>업무 현황 일부를 확인하지 못했습니다. 실패한 목록을 다시 조회해 주세요.</p>{inboxLoadState === "failed" && <button type="button" onClick={() => void loadInbox()}>문의 현황 다시 확인</button>}{notificationLoadState === "failed" && <button type="button" onClick={() => void loadNotifications()}>처리 알림 다시 확인</button>}</div>}<div className="agent-owner-dashboard"><section><div className="agent-owner-card-head"><h2>지금 확인할 일</h2><a href="#agent-inquiries" onClick={event => { event.preventDefault(); showOwnerSection("inbox"); }}>문의함 →</a></div>{todayTasks.length ? <ul className="agent-owner-today-task-list">{todayTasks.map(item => <li key={item.id}>
         <span className="agent-owner-today-avatar" aria-hidden="true">{item.customer_name.trim().slice(0, 1)}</span>
         <span className="agent-owner-today-task-content"><strong>{item.customer_name} · {item.service_snapshot?.name ?? "일반 문의"}</strong><span>고객 문의를 확인해 주세요.</span><span className="agent-owner-today-task-tags"><em>새 문의</em><small>{inquirySourceLabel(item.source_kind)}</small></span></span>
         <button type="button" aria-label={`${item.customer_name} · ${item.service_snapshot?.name ?? "일반 문의"} 확인`} onClick={() => { showOwnerSection("inbox"); setInboxFilter("all"); setInboxQuery(""); void selectInquiry(item.id); }}>확인</button>
@@ -565,6 +584,7 @@ export function AgentWorkspace() {
       </div>}
       {phase === "draft" && draft && activeSection === "notifications" && <section id="agent-notifications"><AgentNotificationSettings key={draft.organizationId} organizationId={draft.organizationId}>
         <div className="panel-heading"><p>읽지 않음 {notificationLoadState === "ready" ? `${unreadCount}건` : "확인 중"}</p><button type="button" onClick={() => void loadNotifications()}>알림 새로고침</button></div>{notificationLoadState === "loading" && notifications.length === 0 && <p role="status">처리 알림을 확인하는 중입니다.</p>}{notificationLoadState === "failed" && <div className="agent-owner-today-recovery" role="alert"><p>처리 알림을 확인하지 못했습니다. 기존 알림을 0건으로 판단하지 않습니다.</p><button type="button" onClick={() => void loadNotifications()}>처리 알림 다시 확인</button></div>}{notificationLoadState === "ready" && notifications.length === 0 && <p>처리할 새 알림이 없습니다.</p>}{notifications.length > 0 && <ul>{notifications.map(item => <li key={item.id}><button type="button" onClick={() => void openNotification(item)}>{notificationLabel(item.eventType)} · {item.readAt ? '읽음' : '새 알림'}</button></li>)}</ul>}
+        {notificationNextCursor && notificationLoadState === "ready" && <div className="agent-inbox-page"><button type="button" disabled={notificationLoadingMore} onClick={() => void loadNotifications(notificationNextCursor)}>{notificationLoadingMore ? "이전 알림 확인 중…" : "이전 알림 더 보기 (추가)"}</button>{notificationPageError && <p role="alert">이전 알림을 불러오지 못했습니다. 같은 버튼으로 다시 시도해 주세요.</p>}</div>}
       </AgentNotificationSettings></section>}
       {phase === "draft" && <section id="agent-inquiries" aria-label="AP 직접 문의함">
         <div className="agent-inbox-heading"><div><h1>문의함</h1><p>고객과의 대화, 필요한 답변까지 한곳에서.</p></div><button type="button" onClick={() => { void loadInbox(); void loadNotifications(); }}>새로고침</button></div>

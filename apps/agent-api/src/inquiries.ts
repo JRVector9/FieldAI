@@ -8,14 +8,14 @@ import { consumePublicSubmission } from './public-submission-limit.js';
 import { rejectExpiredTrial } from './trial-access.js';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-function decodeOwnerInquiryCursor(value: unknown, userId: string): { timestamp: string; id: string } | null {
+function decodeOwnerCursor(value: unknown, userId: string, kind: 'owner_inquiry' | 'owner_notification'): { timestamp: string; id: string } | null {
   if (typeof value !== 'string' || value.length > 256 || !/^[A-Za-z0-9_-]+$/.test(value)) return null;
   try {
     const parsed: unknown = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
     const cursor = parsed as Record<string, unknown>;
     const timestamp = cursor.timestamp;
-    if (cursor.userId !== userId || cursor.kind !== 'owner_inquiry'
+    if (cursor.userId !== userId || cursor.kind !== kind
       || typeof cursor.id !== 'string' || !uuidPattern.test(cursor.id)
       || typeof timestamp !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(timestamp))
       return null;
@@ -24,8 +24,8 @@ function decodeOwnerInquiryCursor(value: unknown, userId: string): { timestamp: 
       ? { timestamp, id: cursor.id } : null;
   } catch { return null; }
 }
-function encodeOwnerInquiryCursor(userId: string, timestamp: string, id: string) {
-  return Buffer.from(JSON.stringify({ userId, kind: 'owner_inquiry', timestamp, id })).toString('base64url');
+function encodeOwnerCursor(userId: string, kind: 'owner_inquiry' | 'owner_notification', timestamp: string, id: string) {
+  return Buffer.from(JSON.stringify({ userId, kind, timestamp, id })).toString('base64url');
 }
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -306,7 +306,7 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
     const userId = await ownerUser(request, reply, runtime);
     if (!userId) return reply;
     const rawCursor = request.query.cursor;
-    const cursor = rawCursor === undefined ? null : decodeOwnerInquiryCursor(rawCursor, userId);
+    const cursor = rawCursor === undefined ? null : decodeOwnerCursor(rawCursor, userId, 'owner_inquiry');
     if (rawCursor !== undefined && !cursor) return reply.code(400).send({ error: 'invalid_inquiry_cursor' });
     const result = await runtime.pool.query<{
       id: string; state: string; customer_name: string; service_snapshot: unknown; created_at: string; updated_at: string;
@@ -326,38 +326,64 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
       cursor ? [userId, cursor.timestamp, cursor.id] : [userId],
     );
     const page = result.rows.slice(0, 100);
+    const pending = await runtime.pool.query<{
+      id: string; customer_name: string; service_snapshot: unknown; source_kind: string; pending_count: string;
+    }>(
+      `select i.id, i.customer_name, i.service_snapshot, coalesce(d.kind, 'direct') as source_kind,
+         count(*) over()::text as pending_count
+       from ap.inquiries i join ap.memberships m on m.organization_id = i.organization_id
+       left join ap.deployments d on d.id = i.deployment_id and d.organization_id = i.organization_id
+       where m.user_id = $1 and m.role in ('owner', 'editor') and i.consent_at is not null
+         and i.mode = 'human' and i.state = 'needs_owner'
+       order by i.updated_at desc, i.id desc limit 6`, [userId],
+    );
     return { inquiries: page.map(item => ({ id: item.id, state: item.state,
       customer_name: item.customer_name, service_snapshot: item.service_snapshot,
       created_at: item.created_at, updated_at: item.updated_at,
       source_kind: item.source_kind, has_ai_history: item.has_ai_history })),
       nextCursor: result.rows.length > 100
-        ? encodeOwnerInquiryCursor(userId, page[page.length - 1]!.cursor_timestamp, page[page.length - 1]!.id)
-        : null };
+        ? encodeOwnerCursor(userId, 'owner_inquiry', page[page.length - 1]!.cursor_timestamp, page[page.length - 1]!.id)
+        : null,
+      pendingCount: Number(pending.rows[0]?.pending_count ?? 0),
+      pendingPreview: pending.rows.map(item => ({ id: item.id, customer_name: item.customer_name,
+        service_snapshot: item.service_snapshot, source_kind: item.source_kind, state: 'needs_owner' })) };
   });
 
-  app.get('/v1/owner/notifications', async (request, reply) => {
+  app.get<{ Querystring: { cursor?: string } }>('/v1/owner/notifications', async (request, reply) => {
+    reply.header('Cache-Control', 'no-store');
     const userId = await ownerUser(request, reply, runtime);
     if (!userId) return reply;
+    const rawCursor = request.query.cursor;
+    const cursor = rawCursor === undefined ? null : decodeOwnerCursor(rawCursor, userId, 'owner_notification');
+    if (rawCursor !== undefined && !cursor) return reply.code(400).send({ error: 'invalid_notification_cursor' });
     const result = await runtime.pool.query<{
-      id: string; inquiry_id: string | null; moderation_report_id: string | null; event_type: string; created_at: string; read_at: string | null;
+      id: string; inquiry_id: string | null; moderation_report_id: string | null; event_type: string;
+      created_at: string; cursor_timestamp: string; read_at: string | null;
     }>(
-      `select n.id, n.inquiry_id, n.moderation_report_id, o.event_type, n.created_at, r.read_at
+      `select n.id, n.inquiry_id, n.moderation_report_id, o.event_type, n.created_at, r.read_at,
+         to_char(n.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as cursor_timestamp
        from ap.notification_events n
        join ap.outbox o on o.id = n.outbox_id
        join ap.memberships m on m.organization_id = n.organization_id
        left join ap.notification_reads r on r.notification_id = n.id and r.user_id = $1
        where m.user_id = $1 and m.role in ('owner', 'editor') and n.audience = 'owner' and n.state = 'available'
-       order by n.created_at desc, n.id desc limit 100`, [userId]);
+         ${cursor ? 'and (n.created_at, n.id) < ($2::timestamptz, $3::uuid)' : ''}
+       order by n.created_at desc, n.id desc limit 101`,
+      cursor ? [userId, cursor.timestamp, cursor.id] : [userId]);
     const count = await runtime.pool.query<{ unread_count: string }>(
       `select count(*)::text as unread_count from ap.notification_events n
        join ap.memberships m on m.organization_id = n.organization_id
        left join ap.notification_reads r on r.notification_id = n.id and r.user_id = $1
        where m.user_id = $1 and m.role in ('owner', 'editor') and n.audience = 'owner' and n.state = 'available'
          and r.notification_id is null`, [userId]);
-    return { notifications: result.rows.map(row => ({ id: row.id, inquiryId: row.inquiry_id,
+    const page = result.rows.slice(0, 100);
+    return { notifications: page.map(row => ({ id: row.id, inquiryId: row.inquiry_id,
       targetKind: row.moderation_report_id ? 'moderation_report' : 'inquiry', reportId: row.moderation_report_id,
       eventType: row.event_type, createdAt: row.created_at, readAt: row.read_at })),
-    unreadCount: Number(count.rows[0]?.unread_count ?? 0) };
+      nextCursor: result.rows.length > 100
+        ? encodeOwnerCursor(userId, 'owner_notification', page[page.length - 1]!.cursor_timestamp, page[page.length - 1]!.id)
+        : null,
+      unreadCount: Number(count.rows[0]?.unread_count ?? 0) };
   });
 
   app.post<{ Params: { id: string } }>('/v1/owner/notifications/:id/read', async (request, reply) => {
