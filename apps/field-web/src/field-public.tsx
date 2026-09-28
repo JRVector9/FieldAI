@@ -21,6 +21,7 @@ const randomSubmissionKey = () => btoa(String.fromCharCode(...crypto.getRandomVa
   .replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 const maxInquiryPhotos = 5;
 const maxInquiryPhotoBytes = 8 * 1024 * 1024;
+type OwnerTestGate = { siteRevision: number; existingTest: { id: string; state: string } | null };
 function selectedInquiryPhotos(files: FileList | null) {
   const selected = Array.from(files ?? []);
   if (selected.length > maxInquiryPhotos) return { selected: [], error: "사진은 최대 5장까지 선택할 수 있습니다." };
@@ -69,6 +70,33 @@ export function canSubmitOwnerTest(gate: { existingTest: { id: string; state: st
   canStartNew: boolean | null): boolean {
   return Boolean(gate && !gate.existingTest && canStartNew === true);
 }
+export function canShowOwnerTestForm(gate: OwnerTestGate | null): boolean {
+  return Boolean(gate && !gate.existingTest);
+}
+function ownerTestGateFromResponse(status: number, value: unknown, organizationId: string): OwnerTestGate | null {
+  if (status !== 200 || !value || typeof value !== "object") return null;
+  const result = value as { organizationId?: unknown; siteRevision?: unknown; existingTest?: unknown };
+  const existing = result.existingTest;
+  if (result.organizationId !== organizationId || !Number.isSafeInteger(result.siteRevision)
+    || (result.siteRevision as number) < 1 || !(existing === null || (existing && typeof existing === "object"
+      && typeof (existing as { id?: unknown }).id === "string"
+      && typeof (existing as { state?: unknown }).state === "string"))) return null;
+  return { siteRevision: result.siteRevision as number,
+    existingTest: existing as OwnerTestGate["existingTest"] };
+}
+export async function checkOwnerTestBeforeSubmit(organizationId: string,
+  readAccess: () => Promise<boolean | null>,
+  readGate: () => Promise<{ status: number; data: unknown }>): Promise<{
+    access: boolean | null; gate: OwnerTestGate | null; gateFailed: boolean }> {
+  let access: boolean | null;
+  try { access = await readAccess(); } catch { access = null; }
+  if (access === true) return { access, gate: null, gateFailed: false };
+  try {
+    const result = await readGate();
+    const gate = ownerTestGateFromResponse(result.status, result.data, organizationId);
+    return { access, gate, gateFailed: gate === null };
+  } catch { return { access, gate: null, gateFailed: true }; }
+}
 async function readOwnerTestAccess(organizationId: string): Promise<boolean | null> {
   const result = await requestJson("/v1/subscription", "GET", undefined, undefined,
     { "x-organization-id": organizationId });
@@ -77,8 +105,7 @@ async function readOwnerTestAccess(organizationId: string): Promise<boolean | nu
 
 export function PublicCatalogPage({ id }: { id: string }) {
   const [ownerTest, setOwnerTest] = useState<boolean | null>(null);
-  const [testGate, setTestGate] = useState<{ siteRevision: number;
-    existingTest: { id: string; state: string } | null } | null>(null);
+  const [testGate, setTestGate] = useState<OwnerTestGate | null>(null);
   const [testGateFailed, setTestGateFailed] = useState(false);
   const [testAccess, setTestAccess] = useState<"loading" | "allowed" | "ended" | "failed">("loading");
   const [testAccessReload, setTestAccessReload] = useState(0);
@@ -280,21 +307,21 @@ export function PublicCatalogPage({ id }: { id: string }) {
     setBusy(true); setTestStatus("Field 이용 상태를 다시 확인하고 있습니다.");
     let accessChecked = false;
     try {
-      const access = await readOwnerTestAccess(id);
-      if (access !== true) {
-        setTestAccess(access === false ? "ended" : "failed");
-        const reason = access === false ? "현재 이용 상태에서는 새 테스트 문의를 만들 수 없습니다." : "Field 이용 상태를 확인하지 못했습니다.";
-        try {
-          const check = await requestJson("/v1/owner/site-inquiry-test", "GET", undefined, undefined,
-            { "x-organization-id": id });
-          if (check.status === 200) {
-            const latest = check.data as { siteRevision: number; existingTest: { id: string; state: string } | null };
-            setTestGate(latest);
-            setTestStatus(latest.existingTest
-              ? "이 공개 버전의 기존 테스트 문의를 확인했습니다. 문의함에서 기록을 확인해 주세요."
-              : `${reason} 이 공개 버전의 기존 테스트 기록은 확인되지 않았습니다. 입력 내용은 유지됩니다.`);
-          } else { setTestGateFailed(true); setTestStatus(`${reason} 이전 제출 결과도 확인하지 못했습니다. 입력 내용은 유지됩니다. 다시 확인해 주세요.`); }
-        } catch { setTestGateFailed(true); setTestStatus(`${reason} 이전 제출 결과도 확인하지 못했습니다. 입력 내용은 유지됩니다. 다시 확인해 주세요.`); }
+      const checked = await checkOwnerTestBeforeSubmit(id, () => readOwnerTestAccess(id),
+        () => requestJson("/v1/owner/site-inquiry-test", "GET", undefined, undefined,
+          { "x-organization-id": id }));
+      if (checked.access !== true) {
+        setTestAccess(checked.access === false ? "ended" : "failed");
+        const reason = checked.access === false ? "현재 이용 상태에서는 새 테스트 문의를 만들 수 없습니다." : "Field 이용 상태를 확인하지 못했습니다.";
+        if (checked.gate) {
+          setTestGate(checked.gate);
+          setTestStatus(checked.gate.existingTest
+            ? "이 공개 버전의 기존 테스트 문의를 확인했습니다. 문의함에서 기록을 확인해 주세요."
+            : `${reason} 이 공개 버전의 기존 테스트 기록은 확인되지 않았습니다. 입력 내용은 유지됩니다.`);
+        } else {
+          setTestGateFailed(checked.gateFailed);
+          setTestStatus(`${reason} 이전 제출 결과도 확인하지 못했습니다. 입력 내용은 유지됩니다. 다시 확인해 주세요.`);
+        }
         return;
       }
       accessChecked = true;
@@ -361,7 +388,7 @@ export function PublicCatalogPage({ id }: { id: string }) {
       {ownerTest && testGateFailed && <p><button type="button" onClick={() => setCatalogReload(value => value + 1)}>테스트 권한 다시 확인</button> <a href="/workspace">사업 운영으로 이동</a></p>}
       {ownerTest && !testGate && !testGateFailed && <p role="status">사업자 테스트 권한을 확인하고 있습니다.</p>}
       {ownerTest && testAccess === "loading" && <p role="status">Field 이용 상태를 확인하고 있습니다.</p>}
-      {ownerTest && testAccess === "ended" && <p role="status">현재 이용 상태에서는 새 테스트 문의를 만들 수 없습니다. <a href="/workspace/subscription">구독 상태 확인(추가)</a></p>}
+      {ownerTest && testAccess === "ended" && <p role="status">현재 이용 상태에서는 새 테스트 문의를 만들 수 없습니다. <button type="button" onClick={() => setTestAccessReload(value => value + 1)}>이용 상태 다시 확인(추가)</button> <a href="/workspace/subscription">구독 상태 확인(추가)</a></p>}
       {ownerTest && testAccess === "failed" && <p role="status">Field 이용 상태를 확인하지 못했습니다. 새 테스트 문의를 만들기 전에 다시 확인해 주세요. <button type="button" onClick={() => setTestAccessReload(value => value + 1)}>이용 상태 다시 확인(추가)</button></p>}
       {catalog && ownerTest !== null && <><div className="field-public-intake-grid">
         <aside className="special-panel field-public-summary" id="business-summary"><h2>{catalog.businessName}</h2><dl><div><dt>선택 서비스</dt><dd>{summaryService?.name ?? "선택 전"}</dd></div><div><dt>가격 안내</dt><dd>{summaryService?.priceAmount === null ? "가격 문의" : summaryService ? `${summaryService.priceAmount.toLocaleString("ko-KR")}원` : "선택 전"}</dd></div>{intakeView === "booking" && <div><dt>희망 시간</dt><dd>{bookingTimeSummary || "선택 전"}</dd></div>}<div><dt>활동 지역</dt><dd>{catalog.region || "미등록"}</dd></div><div><dt>운영시간</dt><dd>{catalog.openingHours || "미등록"}</dd></div></dl><p className="field-public-summary-note">상담과 예약 조건은 사업자가 직접 확인합니다. 예약 요청은 확정 일정이 아닙니다.</p><p className="field-public-summary-foot">외부 알림 공급사가 연결되지 않은 경우 발송 상태를 별도로 안내합니다. 접수 원본은 Field에서 관리합니다.</p></aside>
@@ -369,7 +396,7 @@ export function PublicCatalogPage({ id }: { id: string }) {
           {ownerTest && <p>사업자만 제출할 수 있습니다. 연락처·고객 동의·예약 점유·외부 알림은 만들지 않습니다. 공개 버전마다 한 번 기록됩니다.</p>}
           {ownerTest && testGate?.existingTest ? <div className="customer-banner"><strong>이 공개 버전의 테스트 문의가 이미 있습니다.</strong><p>문의함에서 내부 기록과 답변을 확인해 주세요.</p><a href="/workspace">문의함에서 보기</a></div>
             : !ownerTest && receipt ? <FieldReceipt kind="inquiry" businessName={catalog.businessName} id={receipt.id} receiptKey={receipt.receiptKey} notice={status} busy={busy} />
-              : (!ownerTest || canSubmitOwnerTest(testGate, testAccess === "allowed" ? true : null)) && <form className="form-fields" onSubmit={event => void (ownerTest ? submitTest(event) : submit(event))}>
+              : (!ownerTest || canShowOwnerTestForm(testGate)) && <form className="form-fields" onSubmit={event => void (ownerTest ? submitTest(event) : submit(event))}>
                 {!ownerTest && hasPending && <div className="customer-banner"><p>이전 제출 시도를 보관 중입니다. 같은 내용을 다시 입력하면 같은 문의로 재시도합니다. 다른 내용을 보내려면 기존 결과를 먼저 확인해 주세요.</p>
                   <button type="button" disabled={busy || recovering} onClick={() => setRecoveryRevision(value => value + 1)}>이전 문의 조회</button>
                   <button type="button" disabled={busy || recovering} onClick={() => {
@@ -389,7 +416,7 @@ export function PublicCatalogPage({ id }: { id: string }) {
                 {!ownerTest && <SelectedInquiryPhotos photos={photos} />}
                 {!ownerTest && <FieldRequestFallback value={fallback} onChange={setFallback} />}
                 {!ownerTest && <label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} required /> 문의 처리에 필요한 연락처 저장에 동의합니다.</label>}
-                <button type="submit" disabled={busy || recovering || !serviceId}>{ownerTest ? "테스트 문의 제출" : "문의 제출"}</button>
+                <button type="submit" disabled={busy || recovering || !serviceId || (ownerTest && !canSubmitOwnerTest(testGate, testAccess === "allowed" ? true : null))}>{ownerTest ? "테스트 문의 제출" : "문의 제출"}</button>
                 <p>{ownerTest ? "이 입력은 테스트 원장에만 저장됩니다. 실제 고객 문의를 보려면 공개 고객 주소를 사용하세요." : "회원가입 없이 접수합니다. 번호 소유를 확인한 상태로 표시하지 않습니다."}</p>
               </form>}
         </section>

@@ -5,8 +5,26 @@ import { siteInquiryTestGuidance, siteTestAccessFromResponse, siteTestAccessFrom
 require.extensions[".css"] = () => {};
 let ownerTestSubscriptionAccess: typeof import("../src/field-public").ownerTestSubscriptionAccess;
 let canSubmitOwnerTest: typeof import("../src/field-public").canSubmitOwnerTest;
+let canShowOwnerTestForm: typeof import("../src/field-public").canShowOwnerTestForm;
+let checkOwnerTestBeforeSubmit: typeof import("../src/field-public").checkOwnerTestBeforeSubmit;
 before(async () => {
-  ({ ownerTestSubscriptionAccess, canSubmitOwnerTest } = await import("../src/field-public.js"));
+  ({ ownerTestSubscriptionAccess, canSubmitOwnerTest, canShowOwnerTestForm, checkOwnerTestBeforeSubmit } = await import("../src/field-public.js"));
+});
+
+test("unknown earlier test submit reconciles the site record even when subscription lookup fails", async () => {
+  let gateReads = 0;
+  const existingTest = { id: "saved", state: "needs_owner" };
+  const checked = await checkOwnerTestBeforeSubmit("org",
+    async () => { throw new Error("subscription unavailable"); },
+    async () => { gateReads += 1; return { status: 200, data: { organizationId: "org", siteRevision: 2, existingTest } }; });
+  assert.equal(gateReads, 1);
+  assert.deepEqual(checked, { access: null, gate: { siteRevision: 2, existingTest }, gateFailed: false });
+  const mismatched = await checkOwnerTestBeforeSubmit("org", async () => false,
+    async () => ({ status: 200, data: { organizationId: "other", siteRevision: 2, existingTest } }));
+  assert.deepEqual(mismatched, { access: false, gate: null, gateFailed: true });
+  const allowed = await checkOwnerTestBeforeSubmit("org", async () => true,
+    async () => { throw new Error("gate must not be read before a new POST"); });
+  assert.deepEqual(allowed, { access: true, gate: null, gateFailed: false });
 });
 
 test("first inquiry trial stays unavailable until an owner has a public site and approved service", () => {
@@ -43,6 +61,8 @@ test("bookmarked owner test form requires both its site gate and current Field s
   assert.equal(canSubmitOwnerTest(gate, true), true);
   assert.equal(canSubmitOwnerTest(gate, false), false);
   assert.equal(canSubmitOwnerTest(gate, null), false);
+  assert.equal(canShowOwnerTestForm(gate), true);
+  assert.equal(canShowOwnerTestForm(null), false);
   assert.equal(canSubmitOwnerTest(null, true), false);
   assert.equal(canSubmitOwnerTest({ ...gate, existingTest: { id: "old", state: "needs_owner" } }, true), false);
   assert.equal(ownerTestSubscriptionAccess(200, { ...allowed, access: { canStartNew: false } }, "org"), false);
