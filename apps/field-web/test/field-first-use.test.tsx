@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { DraftCatalog } from "../src/field-api";
 require.extensions[".css"] = () => {};
-const { catalogApprovalIssue, canReturnToSite, firstUseAction } = require("../src/field-workspace") as typeof import("../src/field-workspace");
+const { catalogApprovalIssue, canReturnToSite, firstUseAction, siteReturnStep } = require("../src/field-workspace") as typeof import("../src/field-workspace");
 
 const draft: DraftCatalog = {
   organizationId: "org", revision: 1, businessName: "가게", industry: "", introduction: "",
@@ -25,6 +25,10 @@ test("first action follows saved business approval and site publication, not opt
     { label: "문의 확인(추가)", href: "#owner-inquiries" });
   assert.deepEqual(firstUseAction({ ...state, catalog: { ...draft, businessName: "" }, sitePublishedRevision: 1, sitePublishedCatalogRevision: 1, pendingInquiries: 1 }),
     { label: "문의 확인(추가)", href: "#owner-inquiries" });
+  assert.deepEqual(firstUseAction({ ...state, releaseRevision: null, sitePublishedRevision: null, pendingInquiries: 1 }),
+    { label: "문의 확인(추가)", href: "#owner-inquiries" });
+  assert.deepEqual(firstUseAction({ ...state, siteDraftRevision: null, sitePublishedRevision: null, pendingReservations: 1 }),
+    { label: "예약 요청 확인(추가)", href: "#owner-reservations" });
   assert.deepEqual(firstUseAction({ ...state, releaseRevision: 1, siteDraftRevision: 2, sitePublishedRevision: 1, sitePublishedCatalogRevision: 1, pendingReservations: 1 }),
     { label: "예약 요청 확인(추가)", href: "#owner-reservations" });
   assert.deepEqual(firstUseAction({ ...state, releaseRevision: 1, siteDraftRevision: 2, sitePublishedRevision: 1 }),
@@ -33,6 +37,8 @@ test("first action follows saved business approval and site publication, not opt
     { label: "홈페이지 확인·공개(추가)", href: "/workspace/site?step=publish" });
   assert.deepEqual(firstUseAction({ ...state, catalog: { ...draft, services: [] }, releaseRevision: 1 }),
     { label: "홈페이지 확인·공개(추가)", href: "/workspace/site?step=publish" });
+  assert.deepEqual(firstUseAction({ ...state, siteDraftRevision: null, releaseRevision: 1 }),
+    { label: "홈페이지 만들기(추가)", href: "/workspace/site?step=business" });
 });
 
 test("unknown approval or publication state never claims readiness", () => {
@@ -47,6 +53,12 @@ test("return to site waits for the saved business revision to be approved", () =
   assert.equal(canReturnToSite(false, "idle", "ready", 2, 1), false);
   assert.equal(canReturnToSite(true, "idle", "ready", 2, 2), false);
   assert.equal(canReturnToSite(false, "idle", "ready", 2, 2), true);
+});
+
+test("site return retains the step that sent the owner to business editing", () => {
+  assert.equal(siteReturnStep("?returnTo=site"), "business");
+  assert.equal(siteReturnStep("?returnTo=publish"), "publish");
+  assert.equal(siteReturnStep("?returnTo=elsewhere"), null);
 });
 
 test("approval explains unsaved and missing required values before enabling approval", () => {

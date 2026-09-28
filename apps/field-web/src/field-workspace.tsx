@@ -95,21 +95,24 @@ export function canReturnToSite(dirty: boolean, saveState: "idle" | "saving" | "
   releaseState: "loading" | "ready" | "failed", draftRevision: number, releaseRevision: number | null) {
   return !dirty && saveState === "idle" && releaseState === "ready" && releaseRevision === draftRevision;
 }
+export function siteReturnStep(search: string): "business" | "publish" | null {
+  const value = new URLSearchParams(search).get("returnTo");
+  return value === "publish" ? "publish" : value === "site" || value === "business" ? "business" : null;
+}
 export function firstUseAction(state: { catalog: DraftCatalog; dirty?: boolean;
   releaseState: "loading" | "ready" | "failed"; releaseRevision: number | null;
   siteState: "loading" | "ready" | "failed" | "restricted"; siteDraftRevision: number | null; sitePublishedRevision: number | null; sitePublishedCatalogRevision: number | null;
   pendingInquiries: number; pendingReservations: number }): { label: string; href: string } {
-  if (state.siteState === "ready" && state.sitePublishedRevision !== null) {
-    if (state.pendingInquiries > 0) return { label: "문의 확인(추가)", href: "#owner-inquiries" };
-    if (state.pendingReservations > 0) return { label: "예약 요청 확인(추가)", href: "#owner-reservations" };
-  }
+  if (state.pendingInquiries > 0) return { label: "문의 확인(추가)", href: "#owner-inquiries" };
+  if (state.pendingReservations > 0) return { label: "예약 요청 확인(추가)", href: "#owner-reservations" };
   if (state.releaseState !== "ready") return { label: "사업 정보 상태 확인(추가)", href: "#owner-catalog" };
   if (state.dirty || !validCatalogDraft(state.catalog))
     return { label: "사업 정보 완성(추가)", href: "/workspace?section=services&edit=business" };
   if (state.releaseRevision !== state.catalog.revision)
     return { label: "사업 정보 승인(추가)", href: "/workspace?section=services&edit=business" };
   if (state.siteState === "restricted") return { label: "홈페이지 공개 제한 확인(추가)", href: "/workspace/moderation" };
-  if (state.siteState !== "ready" || state.siteDraftRevision === null) return { label: "홈페이지 상태 확인(추가)", href: "/workspace/site?step=publish" };
+  if (state.siteState !== "ready") return { label: "홈페이지 상태 확인(추가)", href: "/workspace/site?step=publish" };
+  if (state.siteDraftRevision === null) return { label: "홈페이지 만들기(추가)", href: "/workspace/site?step=business" };
   if (state.sitePublishedRevision !== state.siteDraftRevision || (state.sitePublishedRevision !== null && (state.sitePublishedCatalogRevision === null || state.releaseRevision! > state.sitePublishedCatalogRevision))) return { label: "홈페이지 확인·공개(추가)", href: "/workspace/site?step=publish" };
   if (state.pendingInquiries > 0) return { label: "문의 확인(추가)", href: "#owner-inquiries" };
   if (state.pendingReservations > 0) return { label: "예약 요청 확인(추가)", href: "#owner-reservations" };
@@ -147,7 +150,7 @@ export function FieldWorkspace() {
   const [sitePublicUrl, setSitePublicUrl] = useState<string | null>(null);
   const [servicesEditorOpen, setServicesEditorOpen] = useState(false);
   const [businessDeepLink, setBusinessDeepLink] = useState(false);
-  const [returnToSite, setReturnToSite] = useState(false);
+  const [returnToSiteStep, setReturnToSiteStep] = useState<"business" | "publish" | null>(null);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [catalogSaveState, setCatalogSaveState] = useState<"idle" | "saving" | "failed" | "conflict">("idle");
@@ -517,7 +520,7 @@ export function FieldWorkspace() {
       const params = new URLSearchParams(window.location.search);
       if (params.get("section") === "services") setActiveOwnerSection("services");
       if (params.get("edit") === "business") { setServicesEditorOpen(true); setBusinessDeepLink(true); }
-      setReturnToSite(params.get("returnTo") === "site");
+      setReturnToSiteStep(siteReturnStep(window.location.search));
       await Promise.allSettled([loadCatalogRelease(value.organizationId), loadSitePublication(), loadTodayCalendar(),
         loadInbox(), loadExternalInquiries(value.organizationId), loadNotifications(), loadAiInstallation()]);
     } else if (result.status === 404) { setStatus(""); setPhase("organization"); }
@@ -1023,7 +1026,7 @@ export function FieldWorkspace() {
       {phase === "catalog" && catalog && <><section className="field-owner-services" id="owner-services"><div className="field-owner-services-heading"><div><h1>서비스</h1><p>사이트와 예약 요청에 사용할 서비스를 관리합니다. AP 상담 정보는 별도 승인 후 반영됩니다.</p></div><button type="button" disabled={catalog.services.length >= 100} onClick={addService}>＋ 서비스 추가</button></div>
         {catalog.services.length === 0 ? <div className="field-owner-services-empty"><h2>등록된 서비스가 없습니다.</h2><p>서비스를 추가해 고객에게 보여 줄 내용과 예약 방식을 입력해 주세요.</p></div> : <div className="field-owner-service-cards">{catalog.services.map(service => <article key={service.id} className="field-owner-service-card"><div className="field-owner-service-icon" aria-hidden="true">◫</div><span className="field-owner-service-state">{catalogReleaseState === "failed" ? "승인 상태 확인 불가" : catalogReleaseState === "loading" ? "승인 상태 확인 중" : releaseRevision === null ? "승인 전 초안" : releaseRevision === catalog.revision && !dirty ? "승인본과 일치" : "미승인 변경"}</span><h2>{service.name.trim() || "서비스 이름 입력 필요"}</h2><p>{service.description.trim() || "서비스 설명을 입력해 주세요."}</p><div className="field-owner-service-facts"><span>{service.durationMinutes > 0 ? `${service.durationMinutes}분` : "소요 시간 입력 필요"}</span><span>{(service.bookingMode === "inherit" ? catalog.defaultBookingMode : service.bookingMode) === "slot" ? "시간표 선택형" : "희망시간 제출형"}</span></div><strong className="field-owner-service-price">{service.priceAmount === null ? "가격 미정" : `${service.priceAmount.toLocaleString("ko-KR")}원`}</strong><button type="button" onClick={() => openServiceEditor(service.id)}>수정·승인 관리</button></article>)}</div>}
         <div className="field-owner-services-foot"><p>서비스 변경은 초안에 저장된 뒤 승인해야 고객 화면에 반영됩니다. 기존 확정 예약의 조건은 유지됩니다.</p><div><button type="button" onClick={() => openServiceEditor()}>사업 정보·공개 관리</button><button type="button" onClick={openBookingPolicy}>영업시간·예약 정책 설정</button></div></div>{catalog.services.length >= 100 && <p>서비스는 최대 100개까지 등록할 수 있습니다.</p>}</section>
-      <div className={`special-grid field-owner-catalog-editor${servicesEditorOpen ? " is-open" : ""}`} id="owner-catalog"><section className="special-panel"><div className="panel-heading"><h2>사업 정보 초안</h2><span>저장본 {catalog.revision}번{dirty ? " · 미저장" : ""} · {catalogSaveState === "saving" ? "서버 저장 중" : catalogSaveState === "conflict" ? "저장 충돌" : !online && dirty ? "오프라인 · 미저장" : catalogSaveState === "failed" ? "저장 실패" : dirty ? "자동 저장 대기" : !validCatalogDraft(catalog) ? "서버 저장 완료 · 승인 전 필수 정보" : "서버 저장 완료"}</span></div>{returnToSite && <p><a href="/workspace/site?step=business" aria-disabled={!canReturnToSite(dirty, catalogSaveState, catalogReleaseState, catalog.revision, releaseRevision)} onClick={event => { if (!canReturnToSite(dirty, catalogSaveState, catalogReleaseState, catalog.revision, releaseRevision)) event.preventDefault(); }}>사이트 제작으로 돌아가기(추가)</a>{!canReturnToSite(dirty, catalogSaveState, catalogReleaseState, catalog.revision, releaseRevision) && " · 사업 정보를 저장하고 현재 초안을 승인한 뒤 돌아갈 수 있습니다."}</p>}{catalogStatus && <p role="status" className="state-message">{catalogStatus}</p>}<form className="form-fields" onSubmit={event => void save(event)}>
+      <div className={`special-grid field-owner-catalog-editor${servicesEditorOpen ? " is-open" : ""}`} id="owner-catalog"><section className="special-panel"><div className="panel-heading"><h2>사업 정보 초안</h2><span>저장본 {catalog.revision}번{dirty ? " · 미저장" : ""} · {catalogSaveState === "saving" ? "서버 저장 중" : catalogSaveState === "conflict" ? "저장 충돌" : !online && dirty ? "오프라인 · 미저장" : catalogSaveState === "failed" ? "저장 실패" : dirty ? "자동 저장 대기" : !validCatalogDraft(catalog) ? "서버 저장 완료 · 승인 전 필수 정보" : "서버 저장 완료"}</span></div>{returnToSiteStep && <p><a href={`/workspace/site?step=${returnToSiteStep}`}  aria-disabled={!canReturnToSite(dirty, catalogSaveState, catalogReleaseState, catalog.revision, releaseRevision)} onClick={event => { if (!canReturnToSite(dirty, catalogSaveState, catalogReleaseState, catalog.revision, releaseRevision)) event.preventDefault(); }}>사이트 제작으로 돌아가기(추가)</a>{!canReturnToSite(dirty, catalogSaveState, catalogReleaseState, catalog.revision, releaseRevision) && " · 사업 정보를 저장하고 현재 초안을 승인한 뒤 돌아갈 수 있습니다."}</p>}{catalogStatus && <p role="status" className="state-message">{catalogStatus}</p>}<form className="form-fields" onSubmit={event => void save(event)}>
         <label>상호<input required maxLength={160} value={catalog.businessName} onChange={event => change({ businessName: event.target.value })} /></label>
         <label>업종<input list="field-business-industries" maxLength={160} placeholder="선택하거나 직접 입력" value={catalog.industry ?? ""} onChange={event => change({ industry: event.target.value })} /></label>
         <datalist id="field-business-industries">{["출장·홈케어", "출장 세차", "레슨·교육", "사진·촬영", "미용·뷰티", "상담·컨설팅", "기타 서비스"].map(industry => <option key={industry} value={industry} />)}</datalist>
