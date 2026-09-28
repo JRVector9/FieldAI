@@ -9,6 +9,7 @@ import { PrivateInquiryPhoto } from "./private-inquiry-photo";
 
 type Draft = {
   organizationId: string;
+  role: 'owner' | 'editor' | 'viewer' | null;
   revision: number;
   releaseRevision?: number | null;
   releaseDraftRevision?: number | null;
@@ -309,6 +310,14 @@ export function AgentWorkspace() {
     setBusy(true); setSaveState("saving");
     setStatus("지식 초안을 서버에 저장하고 있습니다.");
     try {
+      const permission = await jsonRequest('/v1/knowledge/draft');
+      const role = permission.status === 200 ? (permission.data as Draft).role : null;
+      setDraft(current => current ? { ...current, role } : current);
+      if (role !== 'owner' && role !== 'editor') {
+        setSaveState('failed');
+        setStatus('현재 계정에는 사업 정보 편집 권한이 없습니다. 입력은 화면에 남아 있습니다.');
+        return;
+      }
       const result = await jsonRequest("/v1/knowledge/draft", "PUT", {
         expectedRevision: snapshot.revision,
         businessName: snapshot.businessName,
@@ -336,7 +345,8 @@ export function AgentWorkspace() {
       }
       if (saved) {
         const hasNewerEdits = editSequence.current !== sequence;
-        setDraft(current => current ? hasNewerEdits ? { ...current, revision: saved.revision } : saved : current);
+        setDraft(current => current ? hasNewerEdits ? { ...current, revision: saved.revision }
+          : { ...saved, role: current.role } : current);
         setDirty(hasNewerEdits);
         setConflictDraft(null); setSaveState("idle");
         setStatus(hasNewerEdits
@@ -382,10 +392,17 @@ export function AgentWorkspace() {
   }
 
   async function approve() {
-    if (!draft || dirty || !completeDraft(draft) || saveState !== "idle") return;
+    if (!draft || draft.role !== 'owner' || dirty || !completeDraft(draft) || saveState !== "idle") return;
     setBusy(true);
     setStatus("승인 중입니다.");
     try {
+      const permission = await jsonRequest('/v1/knowledge/draft');
+      const role = permission.status === 200 ? (permission.data as Draft).role : null;
+      setDraft(current => current ? { ...current, role } : current);
+      if (role !== 'owner') {
+        setStatus('현재 계정에는 지식 공개 승인 권한이 없습니다.');
+        return;
+      }
       const result = await jsonRequest("/v1/knowledge/releases", "POST", { expectedRevision: draft.revision });
       if (result.status === 201 || result.status === 200) {
         const release = result.data as { revision: number };
@@ -393,7 +410,10 @@ export function AgentWorkspace() {
         setApprovedDraftRevision(draft.revision);
         setStatus(`지식 공개 버전 ${release.revision}번이 승인되었습니다.`);
       } else if (result.status === 409) setStatus("초안이 미완성이거나 버전이 달라 승인하지 못했습니다. 내용을 확인해 주세요.");
-      else setStatus(`승인에 실패했습니다 (${result.status}).`);
+      else if (result.status === 404) {
+        setDraft(current => current ? { ...current, role: null } : current);
+        setStatus('승인 권한이 변경됐습니다. 현재 계정 권한을 다시 확인해 주세요.');
+      } else setStatus(`승인에 실패했습니다 (${result.status}).`);
     } catch { setStatus("승인 요청이 전달되지 않았습니다."); }
     finally { setBusy(false); }
   }
@@ -528,6 +548,8 @@ export function AgentWorkspace() {
     if (section === "today") void Promise.allSettled([loadInbox(), loadNotifications()]);
   }
   const todayTasks = inboxLoadState === "ready" ? todayPreview : [];
+  const canEditKnowledge = draft?.role === 'owner' || draft?.role === 'editor';
+  const canApproveKnowledge = draft?.role === 'owner';
   const todayRecordsFailed = inboxLoadState === "failed" || notificationLoadState === "failed";
   const todayRecordsReady = inboxLoadState === "ready" && notificationLoadState === "ready";
   const filteredInbox = inbox.filter(item => {
@@ -556,31 +578,32 @@ export function AgentWorkspace() {
         <div className="agent-owner-knowledge-heading"><h1>승인 정보</h1><p>사업 정보 초안을 저장하고 고객에게 공개할 내용을 명시적으로 승인합니다.</p></div>
         <section className="special-panel">
           <div className="panel-heading"><h2>사업 정보 초안</h2><span>서버 revision {draft.revision}{dirty ? " · 미저장 변경" : ""} · {saveState === "saving" ? "서버 저장 중" : saveState === "conflict" ? "저장 충돌" : !online && dirty ? "오프라인 · 미저장" : saveState === "failed" ? "저장 실패" : dirty ? "자동 저장 대기" : !completeDraft(draft) ? "서버 저장 완료 · 승인 전 필수 정보" : "서버 저장 완료"}</span></div>
+          {!canEditKnowledge && <p role="status">현재 권한은 조회 전용입니다. 사업 정보 편집은 소유자·편집자만 할 수 있습니다. (추가)</p>}
           <form noValidate onSubmit={event => void saveDraft(event)} className="form-fields">
-            <label>상호<input required maxLength={160} value={draft.businessName} onChange={event => change({ businessName: event.target.value })} /></label>
-            <label>사업 소개<textarea aria-label="사업 소개" maxLength={5000} value={draft.introduction} onChange={event => change({ introduction: event.target.value })} /></label>
-            <label>활동 지역<input maxLength={500} value={draft.region ?? ""} onChange={event => change({ region: event.target.value })} placeholder="예: 서울 강남구·서초구" /></label>
-            <label>영업시간<textarea aria-label="영업시간" maxLength={1000} value={draft.openingHours ?? ""} onChange={event => change({ openingHours: event.target.value })} placeholder="확인된 운영 요일·시간·휴무를 입력해 주세요." /></label>
+            <label>상호<input required maxLength={160} disabled={!canEditKnowledge} value={draft.businessName} onChange={event => change({ businessName: event.target.value })} /></label>
+            <label>사업 소개<textarea aria-label="사업 소개" maxLength={5000} disabled={!canEditKnowledge} value={draft.introduction} onChange={event => change({ introduction: event.target.value })} /></label>
+            <label>활동 지역<input maxLength={500} disabled={!canEditKnowledge} value={draft.region ?? ""} onChange={event => change({ region: event.target.value })} placeholder="예: 서울 강남구·서초구" /></label>
+            <label>영업시간<textarea aria-label="영업시간" maxLength={1000} disabled={!canEditKnowledge} value={draft.openingHours ?? ""} onChange={event => change({ openingHours: event.target.value })} placeholder="확인된 운영 요일·시간·휴무를 입력해 주세요." /></label>
             <p>지역·영업시간은 선택 정보입니다. 등록하지 않은 값은 AI가 추정하지 않으며 승인 전 변경은 고객에게 보이지 않습니다.</p>
             <h3>서비스</h3>
             {draft.services.map((service, index) => <div key={index} className="knowledge-source">
-              <label>서비스 이름<input required maxLength={160} value={service.name} onChange={event => updateService(index, { name: event.target.value })} /></label>
-              <label>서비스 설명<textarea aria-label="서비스 설명" maxLength={2000} value={service.description} onChange={event => updateService(index, { description: event.target.value })} /></label>
-              <button type="button" onClick={() => change({ services: draft.services.filter((_, position) => position !== index) })}>서비스 삭제</button>
+              <label>서비스 이름<input required maxLength={160} disabled={!canEditKnowledge} value={service.name} onChange={event => updateService(index, { name: event.target.value })} /></label>
+              <label>서비스 설명<textarea aria-label="서비스 설명" maxLength={2000} disabled={!canEditKnowledge} value={service.description} onChange={event => updateService(index, { description: event.target.value })} /></label>
+              <button type="button" disabled={!canEditKnowledge} onClick={() => change({ services: draft.services.filter((_, position) => position !== index) })}>서비스 삭제</button>
             </div>)}
-            <button type="button" disabled={draft.services.length >= 50} onClick={() => change({ services: [...draft.services, { name: "", description: "" }] })}>서비스 추가</button>
+            <button type="button" disabled={!canEditKnowledge || draft.services.length >= 50} onClick={() => change({ services: [...draft.services, { name: "", description: "" }] })}>서비스 추가</button>
             <h3>자주 묻는 질문</h3>
             {draft.faqs.map((faq, index) => <div key={index} className="knowledge-source">
-              <label>질문<input required maxLength={500} value={faq.question} onChange={event => updateFaq(index, { question: event.target.value })} /></label>
-              <label>확인된 답변<textarea aria-label="확인된 답변" required maxLength={3000} value={faq.answer} onChange={event => updateFaq(index, { answer: event.target.value })} /></label>
-              <button type="button" onClick={() => change({ faqs: draft.faqs.filter((_, position) => position !== index) })}>질문 삭제</button>
+              <label>질문<input required maxLength={500} disabled={!canEditKnowledge} value={faq.question} onChange={event => updateFaq(index, { question: event.target.value })} /></label>
+              <label>확인된 답변<textarea aria-label="확인된 답변" required maxLength={3000} disabled={!canEditKnowledge} value={faq.answer} onChange={event => updateFaq(index, { answer: event.target.value })} /></label>
+              <button type="button" disabled={!canEditKnowledge} onClick={() => change({ faqs: draft.faqs.filter((_, position) => position !== index) })}>질문 삭제</button>
             </div>)}
-            <button type="button" disabled={draft.faqs.length >= 100} onClick={() => change({ faqs: [...draft.faqs, { question: "", answer: "" }] })}>질문 추가</button>
-            <button type="submit" disabled={busy || saveState === "saving" || saveState === "conflict"}>초안 저장</button>
+            <button type="button" disabled={!canEditKnowledge || draft.faqs.length >= 100} onClick={() => change({ faqs: [...draft.faqs, { question: "", answer: "" }] })}>질문 추가</button>
+            <button type="submit" disabled={!canEditKnowledge || busy || saveState === "saving" || saveState === "conflict"}>초안 저장</button>
           </form>
           {saveState === "conflict" && conflictDraft && <div className="knowledge-source" role="region" aria-label="지식 초안 저장 충돌"><h3>지식 초안 저장 충돌</h3><p>서버 {conflictDraft.revision}번과 현재 화면의 미저장 입력을 비교해 주세요. 고객 공개 정보는 바뀌지 않았습니다.</p><details><summary>서버에 저장된 초안 보기</summary><p><strong>상호:</strong> {conflictDraft.businessName}</p><p><strong>사업 소개:</strong> {conflictDraft.introduction}</p><p><strong>활동 지역:</strong> {conflictDraft.region || "미등록"}</p><p><strong>영업시간:</strong> {conflictDraft.openingHours || "미등록"}</p><ul>{conflictDraft.services.map((service, index) => <li key={index}>서비스: {service.name} · {service.description}</li>)}{conflictDraft.faqs.map((faq, index) => <li key={`faq-${index}`}>질문: {faq.question} · {faq.answer}</li>)}</ul></details><div className="preview-action"><button type="button" disabled={busy || !online} onClick={() => void resolveConflict(true)}>내 입력으로 다시 저장</button><button type="button" disabled={busy || !online} onClick={() => void resolveConflict(false)}>서버 초안 사용</button></div><p>내 입력을 선택하면 서버 변경을 대체합니다. 현재 입력은 위 편집 칸에서 확인할 수 있습니다.</p></div>}
         </section>
-        <aside className="special-panel"><h2>공개 상태</h2><p>현재 승인 버전: {releaseRevision === null ? "없음" : `${releaseRevision}번`}</p><p>미저장 변경과 미승인 초안은 고객에게 보이지 않습니다.</p><button type="button" disabled={busy || dirty || saveState !== "idle" || !completeDraft(draft) || draft.revision === 0 || draft.revision === approvedDraftRevision} onClick={() => void approve()}>현재 초안 승인</button>{!completeDraft(draft) && <p>상호·서비스 이름·질문과 확인된 답변을 완성해야 승인할 수 있습니다.</p>}{dirty && <p>변경 내용을 먼저 저장해 주세요.</p>}{releaseRevision !== null && <p><a href={`/public/${draft.organizationId}`}>고객 직접 문의 화면 열기</a></p>}<p><a href="/workspace/ai">AI 설정·답변 테스트 열기</a></p><p><a href="/workspace/deployments">상담 링크·사이트 위젯 관리</a></p><p><a href="/workspace/campaigns">홍보 카드 관리</a></p><p><a href="/workspace/usage">실제 사용량 보기</a></p><p><a href="/workspace/subscription">구독·데이터 관리</a></p><p>AI 응대는 별도 활성화 단계가 필요합니다. 이 승인만으로 AI가 고객에게 답변하지 않습니다.</p></aside>
+        <aside className="special-panel"><h2>공개 상태</h2><p>현재 승인 버전: {releaseRevision === null ? "없음" : `${releaseRevision}번`}</p><p>미저장 변경과 미승인 초안은 고객에게 보이지 않습니다.</p><button type="button" disabled={!canApproveKnowledge || busy || dirty || saveState !== "idle" || !completeDraft(draft) || draft.revision === 0 || draft.revision === approvedDraftRevision} onClick={() => void approve()}>현재 초안 승인</button>{!canApproveKnowledge && <p role="status">지식 공개 승인은 소유자만 할 수 있습니다. (추가)</p>}{!completeDraft(draft) && <p>상호·서비스 이름·질문과 확인된 답변을 완성해야 승인할 수 있습니다.</p>}{dirty && <p>변경 내용을 먼저 저장해 주세요.</p>}{releaseRevision !== null && <p><a href={`/public/${draft.organizationId}`}>고객 직접 문의 화면 열기</a></p>}<p><a href="/workspace/ai">AI 설정·답변 테스트 열기</a></p><p><a href="/workspace/deployments">상담 링크·사이트 위젯 관리</a></p><p><a href="/workspace/campaigns">홍보 카드 관리</a></p><p><a href="/workspace/usage">실제 사용량 보기</a></p><p><a href="/workspace/subscription">구독·데이터 관리</a></p><p>AI 응대는 별도 활성화 단계가 필요합니다. 이 승인만으로 AI가 고객에게 답변하지 않습니다.</p></aside>
       </div>}
       {phase === "draft" && draft && activeSection === "notifications" && <section id="agent-notifications"><AgentNotificationSettings key={draft.organizationId} organizationId={draft.organizationId}>
         <div className="panel-heading"><p>읽지 않음 {notificationLoadState === "ready" ? `${unreadCount}건` : "확인 중"}</p><button type="button" onClick={() => void loadNotifications()}>알림 새로고침</button></div>{notificationLoadState === "loading" && notifications.length === 0 && <p role="status">처리 알림을 확인하는 중입니다.</p>}{notificationLoadState === "failed" && <div className="agent-owner-today-recovery" role="alert"><p>처리 알림을 확인하지 못했습니다. 기존 알림을 0건으로 판단하지 않습니다.</p><button type="button" onClick={() => void loadNotifications()}>처리 알림 다시 확인</button></div>}{notificationLoadState === "ready" && notifications.length === 0 && <p>처리할 새 알림이 없습니다.</p>}{notifications.length > 0 && <ul>{notifications.map(item => <li key={item.id}><button type="button" onClick={() => void openNotification(item)}>{notificationLabel(item.eventType)} · {item.readAt ? '읽음' : '새 알림'}</button></li>)}</ul>}

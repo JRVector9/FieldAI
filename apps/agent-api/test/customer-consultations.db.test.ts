@@ -16,6 +16,53 @@ const { auth, authPool } = await import('../src/auth.js');
 const pool = new Pool({ connectionString: process.env.AP_DATABASE_URL });
 after(async () => { await Promise.all([pool.end(), authPool.end()]); });
 const base = 'http://127.0.0.1:4311';
+test('AP link submission uses approved service index when two names match', async () => {
+  const email = `consult-index-${randomUUID()}@example.invalid`;
+  const password = `${randomBytes(16).toString('base64url')}A1!`;
+  const authPost = (path: string) => auth.handler(new Request(`${base}/api/auth${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: base },
+    body: JSON.stringify({ email, password, name: 'Synthetic owner' }),
+  }));
+  assert.equal((await authPost('/sign-up/email')).status, 200);
+  const signedIn = await authPost('/sign-in/email');
+  const ownerCookie = signedIn.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+  const app = createAgentApp(async () => undefined, auth.handler, base, undefined, {
+    pool, resolveUserId: async (headers: IncomingHttpHeaders) =>
+      (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+  });
+  try {
+    const organization = await app.inject({ method: 'POST', url: '/v1/organizations',
+      headers: { cookie: ownerCookie }, payload: { name: '동명 상담 서비스' } });
+    assert.equal(organization.statusCode, 201);
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/knowledge/draft',
+      headers: { cookie: ownerCookie }, payload: { expectedRevision: 0, businessName: '동명 상담 서비스',
+        introduction: '', services: [{ name: '상담', description: '방문' },
+          { name: '상담', description: '전화' }], faqs: [] } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/knowledge/releases',
+      headers: { cookie: ownerCookie }, payload: { expectedRevision: 1 } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/agents/draft', headers: { cookie: ownerCookie },
+      payload: { expectedRevision: 0, name: '상담 AI', tone: 'clear', guideScope: '', handoffText: '담당자가 답변합니다.' } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/agents/releases', headers: { cookie: ownerCookie },
+      payload: { expectedRevision: 1, expectedKnowledgeRevision: 1 } })).statusCode, 201);
+    const deployment = await app.inject({ method: 'POST', url: '/v1/deployments',
+      headers: { cookie: ownerCookie }, payload: { kind: 'link' } });
+    assert.equal(deployment.statusCode, 201);
+    assert.equal((await app.inject({ method: 'POST', url: `/v1/deployments/${deployment.json().id}/activate`,
+      headers: { cookie: ownerCookie } })).statusCode, 200);
+    const engagement = await app.inject({ method: 'POST',
+      url: `/v1/public/deployments/${deployment.json().publicId}/engagements` });
+    assert.equal(engagement.statusCode, 201);
+    const cookie = engagement.headers['set-cookie']?.toString().split(';')[0];
+    const body = { serviceName: '상담', serviceIndex: 1, knowledgeRevision: 1,
+      name: '고객', phone: '010-1111-2222', message: '전화 상담', consent: true };
+    const submitted = await app.inject({ method: 'POST', url: `/v1/conversations/${engagement.json().id}/submissions`,
+      headers: { cookie }, payload: body });
+    assert.equal(submitted.statusCode, 201, submitted.body);
+    const snapshot = await pool.query<{ service_snapshot: { description: string } }>(
+      'select service_snapshot from ap.inquiries where id = $1', [engagement.json().id]);
+    assert.equal(snapshot.rows[0]?.service_snapshot.description, '전화');
+  } finally { await app.close(); }
+});
 function seal(value: string, key: Buffer) {
   const iv = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', key, iv);

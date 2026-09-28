@@ -26,6 +26,17 @@ type Knowledge = {
   services: { name: string; description: string }[];
   faqs: { question: string; answer: string }[];
 };
+export function ServiceSelect({ services, selectedIndex, onSelect }: {
+  services: Knowledge['services']; selectedIndex: number | null; onSelect: (index: number | null) => void;
+}) {
+  return <label>서비스<select value={selectedIndex === null ? '' : String(selectedIndex)}
+    onChange={event => onSelect(event.target.value === '' ? null : Number(event.target.value))}>
+    <option value="">일반 문의</option>
+    {services.map((service, index) => <option key={index} value={index}>{service.name}
+      {services.some((item, position) => position !== index && item.name === service.name)
+        ? ` · ${service.description.slice(0, 60) || `${index + 1}번째`}` : ''}</option>)}
+  </select></label>;
+}
 type Inquiry = {
   retention?:WorkRetention;
   id: string;
@@ -128,7 +139,7 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
   const [status, setStatus] = useState("승인된 사업 정보를 확인하고 있습니다.");
   const [knowledgeLoadState, setKnowledgeLoadState] = useState<"loading" | "ready" | "missing" | "failed">("loading");
   const [knowledgeReload, setKnowledgeReload] = useState(0);
-  const [serviceName, setServiceName] = useState(initialServiceName);
+  const [serviceIndex, setServiceIndex] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState([initialMessage, initialConditions && `희망 조건: ${initialConditions}`]
@@ -222,11 +233,18 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
   }
   useEffect(() => {
     setKnowledge(null);
+    setServiceIndex(null);
     setKnowledgeLoadState("loading");
     setStatus("승인된 사업 정보를 확인하고 있습니다.");
     void requestJson(`/v1/public/organizations/${id}`).then(result => {
       if (result.status === 200) {
-        setKnowledge(result.data as Knowledge);
+        const approved = result.data as Knowledge;
+        setKnowledge(approved);
+        if (initialServiceName) {
+          const matches = approved.services.map((service, index) => service.name === initialServiceName ? index : -1)
+            .filter(index => index >= 0);
+          setServiceIndex(matches.length === 1 ? matches[0]! : null);
+        }
         setKnowledgeLoadState("ready");
         setStatus("");
       } else if (result.status === 404) {
@@ -517,7 +535,9 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
       const path = stored?.path ?? (currentEngagement ? `/v1/conversations/${currentEngagement.id}/submissions`
         : `/v1/public/organizations/${id}/inquiries`);
       const destination = stored?.destination ?? (selectedDestination === 'field' ? 'field' : undefined);
-      const payload = { serviceName: serviceName || undefined, name, phone, message, consent,
+      const selectedService = serviceIndex === null ? null : knowledge?.services[serviceIndex];
+      const payload = { serviceName: selectedService?.name, name, phone, message, consent,
+        ...(selectedService ? { serviceIndex: serviceIndex!, knowledgeRevision: knowledge!.revision } : {}),
         ...(destination === 'field' ? { destination } : {}) };
       const digest = await publicSubmissionFingerprint({ path, payload });
       const fingerprint = digest ?? JSON.stringify({ path, payload });
@@ -591,7 +611,7 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
     {publicId && <section className="special-panel agent-public-chat"><div className="agent-public-chat-top"><span>사업자 AI 안내</span><span>{knowledge?.businessName ?? "사업 정보 확인 중"}</span></div><div className="agent-public-chat-body"><div className="agent-public-intro"><span className="agent-public-symbol" aria-hidden="true">✦</span><div><strong>{knowledge?.businessName ?? "사업자 AI 상담"}</strong><small>{knowledge?.services[0]?.name ?? "승인된 사업 정보 안내"}</small></div></div><h1>궁금한 점을 바로 물어보세요.</h1><p>{knowledge?.introduction || "승인된 사업 정보를 바탕으로 안내합니다."}</p>{businessDetails}{engagement?.messages.length ? <ol className="agent-public-messages" aria-label="AI 상담 대화">{engagement.messages.map(item => <li key={item.id} className={item.actor === "assistant" ? "agent-public-message-ai" : "agent-public-message-customer"}><strong>{item.actor === "assistant" ? "AI 안내" : "나"}</strong><p>{item.body}</p></li>)}</ol> : null}{knowledge?.faqs.length ? <div className="agent-public-quick" aria-label="빠른 질문">{knowledge.faqs.slice(0, 3).map(faq => <button key={faq.question} type="button" disabled={Boolean(engagement?.retention?.workPurgedAt) || deploymentRestricted || !!receipt || aiBusy || aiRecoveryBusy || !!unlistedAiAnswer} onClick={() => { setAiQuestion(faq.question); void askAi(undefined, faq.question); }}>{faq.question}</button>)}</div> : null}{pendingAiAttempt && !unlistedAiAnswer && <div className="customer-banner"><p>이전 AI 질문 결과를 보관 중입니다. 같은 질문을 다시 보내면 동일 실행을 조회합니다. 다른 질문 전에 결과를 확인해 주세요.</p><button type="button" disabled={aiRecoveryBusy || aiBusy} onClick={() => void recoverAiAttempt(pendingAiAttempt)}>AI 요청 상태 다시 확인</button></div>}{unlistedAiAnswer && <div className="customer-banner"><strong>서버가 수락한 AI 답변</strong><p>{unlistedAiAnswer.answer || "확인된 답변이 없습니다. 담당자에게 문의해 주세요."}</p><p>대화 목록을 읽지 못했습니다. 새 질문을 보내기 전에 원본 대화를 다시 확인해 주세요.</p><button type="button" disabled={aiTranscriptBusy} onClick={() => void retryAiTranscript()}>AI 대화 다시 불러오기</button></div>}</div><div className="agent-public-chat-actions"><form className="form-fields agent-public-composer" onSubmit={event => void askAi(event)}><label>질문<textarea disabled={Boolean(engagement?.retention?.workPurgedAt)} required maxLength={1000} rows={1} placeholder="궁금한 내용을 물어보세요" value={aiQuestion} onChange={event => setAiQuestion(event.target.value)} /></label><button type="submit" disabled={Boolean(engagement?.retention?.workPurgedAt) || deploymentRestricted || aiBusy || aiRecoveryBusy || !knowledge || !!receipt || !!unlistedAiAnswer}>AI에 질문 <span aria-hidden="true">→</span></button>{!knowledge && <p>{knowledgeLoadState === "loading" ? "승인된 사업 정보를 불러오는 동안 질문할 수 없습니다." : knowledgeLoadState === "missing" ? "공개된 사업 정보가 없어 질문할 수 없습니다." : "사업 정보를 다시 불러온 뒤 질문할 수 있습니다."}</p>}</form>{aiStatus && <p role="status" className="state-message">{aiStatus}</p>}<a className="agent-public-human-link" href="#human-inquiry">사장님께 문의하기 <span aria-hidden="true">→</span></a></div><p className="agent-public-chat-bottom">AI 답변은 안내이며 예약 확정이 아닙니다. 연락처는 다음 접수 화면에서만 받습니다.</p></section>}
     {previousReceipt && <section className="special-panel" aria-label="이전 문의 확인"><h2>이전 문의 확인</h2><p>새 상담과 별도로 기존 접수번호·처리 이력을 확인할 수 있습니다.</p><a href={`/inquiry/${previousReceipt.id}`}>이전 문의 열기</a><div className="customer-banner"><p>기존 접수 확인키</p><code>{previousReceipt.receiptKey}</code></div></section>}
     {publicId && <p className="agent-public-privacy">일반 질문은 연락처 없이 이용합니다. 실제 문의·예약 요청 때만 이름과 연락처를 남깁니다.</p>}
-    <div className={publicId ? "special-grid agent-public-detail-grid" : "special-grid"}><section className="special-panel agent-public-facts"><h2>승인된 안내</h2>{knowledge ? <><h3>서비스</h3>{knowledge.services.length ? <ul>{knowledge.services.map(service => <li key={service.name}><strong>{service.name}</strong><p>{service.description}</p></li>)}</ul> : <p>등록된 서비스가 없습니다.</p>}<h3>자주 묻는 질문</h3>{knowledge.faqs.length ? <dl>{knowledge.faqs.map(faq => <div key={faq.question}><dt>{faq.question}</dt><dd>{faq.answer}</dd></div>)}</dl> : <p>등록된 질문이 없습니다.</p>}</> : <p>{knowledgeLoadState === "loading" ? "사업 정보를 불러오는 중입니다." : knowledgeLoadState === "missing" ? "공개된 사업 정보가 없습니다." : "사업 정보를 확인하지 못했습니다. 위에서 다시 불러와 주세요."}</p>}<p>확인되지 않은 내용은 사람에게 문의할 수 있습니다.</p></section><section id="human-inquiry" className="special-panel agent-public-human"><h2>{receipt?.state === 'external_ready' ? 'Field 요청 준비' : '사람에게 문의'}</h2>{receipt ? <div className="customer-banner"><strong>접수 확인키</strong><p>이 키는 AP 대화 원문을 다시 열 때 필요합니다. 전화번호나 알림 링크만으로 열 수 없습니다.</p><code>{receipt.receiptKey}</code><p><a href={`/inquiry/${receipt.id}`}>후속 대화 열기</a></p>{receipt.state === 'external_ready' && <p>Field에 전달되지 않았다면 후속 대화에서 사람에게 직접 문의할 수 있습니다.</p>}</div> : engagement?.retention?.workPurgedAt ? <p>기존 대화의 접수가 종료되었습니다. 위에서 새 상담을 시작해 주세요.</p> : <form className="form-fields" onSubmit={event => void submit(event)}>
+    <div className={publicId ? "special-grid agent-public-detail-grid" : "special-grid"}><section className="special-panel agent-public-facts"><h2>승인된 안내</h2>{knowledge ? <><h3>서비스</h3>{knowledge.services.length ? <ul>{knowledge.services.map((service, index) => <li key={index}><strong>{service.name}</strong><p>{service.description}</p></li>)}</ul> : <p>등록된 서비스가 없습니다.</p>}<h3>자주 묻는 질문</h3>{knowledge.faqs.length ? <dl>{knowledge.faqs.map(faq => <div key={faq.question}><dt>{faq.question}</dt><dd>{faq.answer}</dd></div>)}</dl> : <p>등록된 질문이 없습니다.</p>}</> : <p>{knowledgeLoadState === "loading" ? "사업 정보를 불러오는 중입니다." : knowledgeLoadState === "missing" ? "공개된 사업 정보가 없습니다." : "사업 정보를 확인하지 못했습니다. 위에서 다시 불러와 주세요."}</p>}<p>확인되지 않은 내용은 사람에게 문의할 수 있습니다.</p></section><section id="human-inquiry" className="special-panel agent-public-human"><h2>{receipt?.state === 'external_ready' ? 'Field 요청 준비' : '사람에게 문의'}</h2>{receipt ? <div className="customer-banner"><strong>접수 확인키</strong><p>이 키는 AP 대화 원문을 다시 열 때 필요합니다. 전화번호나 알림 링크만으로 열 수 없습니다.</p><code>{receipt.receiptKey}</code><p><a href={`/inquiry/${receipt.id}`}>후속 대화 열기</a></p>{receipt.state === 'external_ready' && <p>Field에 전달되지 않았다면 후속 대화에서 사람에게 직접 문의할 수 있습니다.</p>}</div> : engagement?.retention?.workPurgedAt ? <p>기존 대화의 접수가 종료되었습니다. 위에서 새 상담을 시작해 주세요.</p> : <form className="form-fields" onSubmit={event => void submit(event)}>
       {hasPending && <div className="customer-banner"><p>이전 제출 시도를 보관 중입니다. 같은 내용을 다시 입력하면 같은 문의로 재시도합니다. 다른 내용을 보내려면 기존 결과를 먼저 확인해 주세요.</p>
         <button type="button" disabled={busy || recovering} onClick={() => setRecoveryRevision(value => value + 1)}>이전 문의 조회</button>
         <button type="button" disabled={busy || recovering} onClick={() => {
@@ -612,7 +632,7 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
         {fieldReadiness !== "ready" && <button type="button"
           disabled={busy || fieldReadiness === "checking"}
           onClick={() => setFieldReadinessRevision(value => value + 1)}>Field 연결 다시 확인</button>}</div>}
-      <label>서비스<select value={serviceName} onChange={event => setServiceName(event.target.value)}><option value="">일반 문의</option>{knowledge?.services.map(service => <option key={service.name} value={service.name}>{service.name}</option>)}</select></label>
+      <ServiceSelect services={knowledge?.services ?? []} selectedIndex={serviceIndex} onSelect={setServiceIndex} />
       <label>이름<input required maxLength={80} value={name} onChange={event => setName(event.target.value)} /></label>
       <label>연락처<input required type="tel" maxLength={30} value={phone} onChange={event => setPhone(event.target.value)} /></label>
       <label>문의 내용<textarea required maxLength={5000} value={message} onChange={event => updateHumanMessage(event.target.value)} /></label>

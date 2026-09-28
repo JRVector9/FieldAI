@@ -6,7 +6,7 @@ import { confirmedConnectorFacts, guardedConnectorAnswer } from './connector-fac
 import { inspectFieldFacts } from './field-connector.js';
 import { consumeFieldPreflight } from './field-preflight-limit.js';
 import type { BusinessRuntime } from './business.js';
-import { recordInquiryEvent } from './inquiries.js';
+import { approvedService, recordInquiryEvent } from './inquiries.js';
 import { consumePublicSubmission } from './public-submission-limit.js';
 import { submissionAttempt } from './submission-attempt.js';
 import { activePlacement } from './placements.js';
@@ -589,7 +589,10 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
         || (body?.destination !== undefined && body.destination !== 'field'))
       return reply.code(400).send({ error: 'invalid_submission' });
     const attempt = submissionAttempt(request.headers, { name, phone, message,
-      serviceName: serviceName ?? null, ...(destination === 'field' ? { destination } : {}) });
+      serviceName: serviceName ?? null,
+      ...(body?.serviceIndex !== undefined ? { serviceIndex: body.serviceIndex } : {}),
+      ...(body?.knowledgeRevision !== undefined ? { knowledgeRevision: body.knowledgeRevision } : {}),
+      ...(destination === 'field' ? { destination } : {}) });
     if (attempt === null) return reply.code(400).send({ error: 'invalid_submission_key' });
     const replay = async () => {
       if (!attempt) return null;
@@ -637,10 +640,13 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
       if (await rejectExpiredTrial(reply, client, row.organization_id)) {
         await client.query('rollback'); return reply;
       }
-      const knowledge = await client.query<{ content: Knowledge }>(
-        'select content from ap.knowledge_releases where id = $1', [row.knowledge_release_id]);
-      const service = serviceName ? knowledge.rows[0]?.content.services.find(item => item.name === serviceName) : null;
-      if (serviceName && !service) { await client.query('rollback'); return reply.code(400).send({ error: 'service_not_found' }); }
+      const knowledge = await client.query<{ revision: number; content: Knowledge }>(
+        'select revision, content from ap.knowledge_releases where id = $1', [row.knowledge_release_id]);
+      const selection = approvedService(knowledge.rows[0]!.content.services, knowledge.rows[0]!.revision,
+        serviceName, body?.serviceIndex, body?.knowledgeRevision);
+      if ('error' in selection) { await client.query('rollback');
+        return reply.code(selection.error === 'knowledge_stale' ? 409 : 400).send({ error: selection.error }); }
+      const service = selection.service;
       if (destination === 'field' && !(await fieldRequestCandidates(runtime, client, row.id, true))
         .some(candidate => candidate.connection_id === readyConnectionId)) {
         await client.query('rollback');

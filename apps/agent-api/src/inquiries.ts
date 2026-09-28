@@ -34,6 +34,25 @@ function object(value: unknown): Record<string, unknown> | null {
 function text(value: unknown, max: number): string | null {
   return typeof value === 'string' && value.trim().length > 0 && value.length <= max ? value.trim() : null;
 }
+export function approvedService(services: { name: string; description: string }[], releaseRevision: number,
+  serviceName: unknown, serviceIndex: unknown, knowledgeRevision: unknown):
+  { service: { name: string; description: string } | null } | { error: string } {
+  if (serviceIndex !== undefined || knowledgeRevision !== undefined) {
+    if (!Number.isInteger(serviceIndex) || typeof serviceIndex !== 'number' || serviceIndex < 0
+      || !Number.isInteger(knowledgeRevision) || typeof knowledgeRevision !== 'number' || knowledgeRevision < 1)
+      return { error: 'invalid_service_selection' };
+    if (knowledgeRevision !== releaseRevision) return { error: 'knowledge_stale' };
+    const service = services[serviceIndex];
+    if (!service) return { error: 'service_not_found' };
+    if (serviceName && serviceName !== service.name) return { error: 'service_mismatch' };
+    return { service };
+  }
+  if (!serviceName) return { service: null };
+  const matches = services.filter(item => item.name === serviceName);
+  if (!matches.length) return { error: 'service_not_found' };
+  if (matches.length > 1) return { error: 'service_ambiguous' };
+  return { service: matches[0]! };
+}
 function keyHash(value: string) { return createHash('sha256').update(value).digest('hex'); }
 function visitorKey(request: FastifyRequest) {
   const header = request.headers.authorization;
@@ -148,7 +167,9 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
       return reply.code(400).send({ error: 'invalid_inquiry' });
     }
     const attempt = submissionAttempt(request.headers, { name: name.trim(), phone: phone.trim(),
-      message: message.trim(), serviceName: serviceName ?? null });
+      message: message.trim(), serviceName: serviceName ?? null,
+      ...(body?.serviceIndex !== undefined ? { serviceIndex: body.serviceIndex } : {}),
+      ...(body?.knowledgeRevision !== undefined ? { knowledgeRevision: body.knowledgeRevision } : {}) });
     if (attempt === null) return reply.code(400).send({ error: 'invalid_submission_key' });
     const replay = async () => {
       if (!attempt) return null;
@@ -173,8 +194,11 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
       [request.params.id],
     );
     if (!release.rows[0]) return reply.code(404).send({ error: 'organization_not_found' });
-    const service = serviceName ? release.rows[0].content.services.find(item => item.name === serviceName) : null;
-    if (serviceName && !service) return reply.code(400).send({ error: 'service_not_found' });
+    const selection = approvedService(release.rows[0].content.services, release.rows[0].revision,
+      serviceName, body?.serviceIndex, body?.knowledgeRevision);
+    if ('error' in selection) return reply.code(selection.error === 'knowledge_stale' ? 409 : 400)
+      .send({ error: selection.error });
+    const service = selection.service;
     const id = randomUUID();
     const key = attempt?.receiptKey ?? randomBytes(32).toString('base64url');
     const client = await runtime.pool.connect();

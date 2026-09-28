@@ -144,6 +144,9 @@ export function registerBusinessRoutes(app: FastifyInstance, runtime: BusinessRu
     if (!userId) return reply;
     const organizationId = await organizationFor(request, reply, runtime, userId, 'read');
     if (!organizationId) return reply;
+    const membership = await runtime.pool.query<{ role: 'owner' | 'editor' | 'viewer' }>(
+      'select role from ap.memberships where organization_id = $1 and user_id = $2', [organizationId, userId]);
+    if (!membership.rows[0]) return reply.code(404).send({ error: 'organization_not_found' });
     const draft = await runtime.pool.query<{ revision: number; content: Content }>(
       'select revision, content from ap.knowledge_drafts where organization_id = $1', [organizationId],
     );
@@ -154,7 +157,7 @@ export function registerBusinessRoutes(app: FastifyInstance, runtime: BusinessRu
     return { organizationId, revision: draft.rows[0]!.revision, ...draft.rows[0]!.content,
       region: draft.rows[0]!.content.region ?? '', openingHours: draft.rows[0]!.content.openingHours ?? '',
       releaseRevision: release.rows[0]?.revision ?? null,
-      releaseDraftRevision: release.rows[0]?.draft_revision ?? null };
+      releaseDraftRevision: release.rows[0]?.draft_revision ?? null, role: membership.rows[0].role };
   });
 
   const saveDraft = async (request: FastifyRequest, reply: FastifyReply, partial: boolean) => {

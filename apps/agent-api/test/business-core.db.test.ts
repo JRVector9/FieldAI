@@ -115,6 +115,7 @@ test('AP owner approves a native draft; another owner cannot edit it; public see
     assert.equal(nextDraft.statusCode, 200);
     assert.equal((nextDraft.json() as { revision: number }).revision, 2);
     const ownerVersion = await app.inject({ url: '/v1/knowledge/draft', headers: { cookie: owner.cookie } });
+    assert.equal(ownerVersion.json().role, 'owner');
     assert.equal(ownerVersion.json().releaseRevision, 1);
     assert.equal(ownerVersion.json().releaseDraftRevision, 1);
     const stillPublic = await app.inject({ url: `/v1/public/organizations/${organizationId}` });
@@ -132,6 +133,7 @@ test('AP owner approves a native draft; another owner cannot edit it; public see
     );
     const editorCanRead = await app.inject({ url: '/v1/knowledge/draft', headers: { cookie: other.cookie, 'x-organization-id': organizationId } });
     assert.equal(editorCanRead.statusCode, 200);
+    assert.equal(editorCanRead.json().role, 'editor');
     const editorCannotApprove = await app.inject({ method: 'POST', url: '/v1/knowledge/releases', headers: { cookie: other.cookie, 'x-organization-id': organizationId }, payload: { expectedRevision: 2 } });
     assert.equal(editorCannotApprove.statusCode, 404);
     const editorPatch = await app.inject({ method: 'PATCH', url: '/v1/knowledge/draft', headers: { cookie: other.cookie, 'x-organization-id': organizationId }, payload: { expectedRevision: 2, introduction: '편집자가 보완한 초안' } });
@@ -147,6 +149,14 @@ test('AP owner approves a native draft; another owner cannot edit it; public see
     }
     const stalePatch = await app.inject({ method: 'PATCH', url: '/v1/knowledge/draft', headers: { cookie: other.cookie, 'x-organization-id': organizationId }, payload: { expectedRevision: 2, introduction: '오래된 수정' } });
     assert.equal(stalePatch.statusCode, 409);
+    await pool.query("update ap.memberships set role = 'viewer' where organization_id = $1 and user_id = (select id from \"user\" where email = $2)",
+      [organizationId, other.email]);
+    const viewerCanRead = await app.inject({ url: '/v1/knowledge/draft', headers: { cookie: other.cookie, 'x-organization-id': organizationId } });
+    assert.equal(viewerCanRead.statusCode, 200);
+    assert.equal(viewerCanRead.json().role, 'viewer');
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/knowledge/draft',
+      headers: { cookie: other.cookie, 'x-organization-id': organizationId },
+      payload: { ...draft, expectedRevision: 3 } })).statusCode, 404);
   } finally {
     await app.close();
     await pool.query('DELETE FROM ap.organizations WHERE owner_user_id = (SELECT id FROM "user" WHERE email = $1)', [owner.email]).catch(() => undefined);

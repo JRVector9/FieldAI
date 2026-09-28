@@ -492,3 +492,43 @@ test('AP accepts a guest request, separates private notes, and preserves ordered
     await authPool.query('DELETE FROM "user" WHERE email = ANY($1::text[])', [[first.email, second.email]]);
   }
 });
+
+test('AP direct inquiry retains the selected approved service when names collide', async () => {
+  const first = await owner();
+  const app = createAgentApp(async () => undefined, auth.handler, base, undefined, {
+    pool, resolveUserId: async (headers: IncomingHttpHeaders) =>
+      (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+  });
+  try {
+    const created = await app.inject({ method: 'POST', url: '/v1/organizations',
+      headers: { cookie: first.cookie }, payload: { name: '동명 서비스 검수' } });
+    assert.equal(created.statusCode, 201);
+    const organizationId = created.json().id as string;
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/knowledge/draft',
+      headers: { cookie: first.cookie }, payload: { expectedRevision: 0, businessName: '동명 서비스 검수',
+        introduction: '', services: [{ name: '상담', description: '방문' },
+          { name: '상담', description: '전화' }], faqs: [] } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/knowledge/releases',
+      headers: { cookie: first.cookie }, payload: { expectedRevision: 1 } })).statusCode, 201);
+    const path = `/v1/public/organizations/${organizationId}/inquiries`;
+    const body = { name: '고객', phone: '010-1111-2222', message: '전화 상담 문의', consent: true,
+      serviceName: '상담', serviceIndex: 1, knowledgeRevision: 1 };
+    const selected = await app.inject({ method: 'POST', url: path, payload: body });
+    assert.equal(selected.statusCode, 201, selected.body);
+    const snapshot = await pool.query<{ service_snapshot: { name: string; description: string } }>(
+      'select service_snapshot from ap.inquiries where id = $1', [selected.json().id]);
+    assert.equal(snapshot.rows[0]?.service_snapshot.description, '전화');
+    const ambiguous = await app.inject({ method: 'POST', url: path,
+      payload: { ...body, serviceIndex: undefined, knowledgeRevision: undefined } });
+    assert.equal(ambiguous.statusCode, 400);
+    assert.equal(ambiguous.json().error, 'service_ambiguous');
+    const stale = await app.inject({ method: 'POST', url: path,
+      payload: { ...body, knowledgeRevision: 2 } });
+    assert.equal(stale.statusCode, 409);
+    assert.equal(stale.json().error, 'knowledge_stale');
+    const mismatch = await app.inject({ method: 'POST', url: path,
+      payload: { ...body, serviceName: '다른 서비스' } });
+    assert.equal(mismatch.statusCode, 400);
+    assert.equal(mismatch.json().error, 'service_mismatch');
+  } finally { await app.close(); }
+});
