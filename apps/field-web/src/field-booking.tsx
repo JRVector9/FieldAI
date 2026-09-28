@@ -12,6 +12,7 @@ import { FieldReceivedWorkRecord } from "./FieldReceivedWorkRecord";
 import { ReceiptRotationPanel } from "./receipt-rotation";
 import { PrivateReservationPhoto } from "./private-reservation-photo";
 import { FieldReceipt } from "./field-receipt";
+import { ownerReservationDeliveryNotice, reservationMessageNotificationLabel } from "./booking-notification-state";
 import { FieldRetentionNotice } from "./FieldRetentionNotice";
 import { consumeReceiptHandoff } from "./receipt-handoff";
 import { messageSubmissionFingerprint } from "./pending-message-submission";
@@ -545,9 +546,10 @@ export function OwnerBookingPanel({ organizationId, releaseRevision, releaseStat
       if (fresh.status !== 200) return;
       const value = fresh.data as Reservation;
       if (selectedReservationId.current === attempt.reservationId) setSelected(value);
-      if (!value.messages?.some(message => message.id === attempt.messageId)) return;
+      const savedMessage = value.messages?.find(message => message.id === attempt.messageId);
+      if (!savedMessage) return;
       setPendingOwnerMessage(null); setOwnerMessageText("");
-      setOwnerMessageStatus("답변이 Field 대화에 저장됐습니다. 고객은 확인키로 읽을 수 있습니다. 외부 알림은 연동 전입니다.");
+      setOwnerMessageStatus(`답변이 Field 대화에 저장됐습니다. 고객은 확인키로 읽을 수 있습니다. ${reservationMessageNotificationLabel(savedMessage.notificationState)}`);
     } catch { /* 결과 미상: 같은 ID로 재시도한다. */ }
     finally { setOwnerMessageBusy(false); }
   }
@@ -655,9 +657,9 @@ export function OwnerBookingPanel({ organizationId, releaseRevision, releaseStat
         ...(selected.state === "requested" && selected.bookingMode === "request" ? { startAt: new Date(confirmAt).toISOString() } : {}),
       });
       acknowledged = true;
-      if (result.status === 201) { applyOwnerReservation(result.data as Reservation); setStatus(selected.source === "external_ap"
+      if (result.status === 201) { const changed = result.data as Reservation & { delivery?: string }; applyOwnerReservation(changed); setStatus(selected.source === "external_ap"
         ? "예약이 확정되어 달력을 점유했습니다. AP 전달·고객 알림 상태는 아래에서 확인해 주세요."
-        : "예약이 확정되어 달력을 점유했습니다. 고객 외부 알림은 공급사 미연결로 발송되지 않았습니다."); await load(); await selectReservation(selected.id); }
+        : `예약이 확정되어 달력을 점유했습니다. ${ownerReservationDeliveryNotice(changed.delivery)}`); await load(); await selectReservation(selected.id); }
       else if (result.status === 409) setStatus(`확정하지 못했습니다: ${(result.data as { error?: string }).error ?? "시간 또는 버전 충돌"}. 최신 카탈로그와 달력을 확인해 주세요.`);
       else setStatus(`확정하지 못했습니다 (${result.status}).`);
     } catch {
@@ -679,9 +681,9 @@ export function OwnerBookingPanel({ organizationId, releaseRevision, releaseStat
         startAt,
       });
       acknowledged = true;
-      if (result.status === 201) { applyOwnerReservation(result.data as Reservation); setStatus(selected.source === "external_ap"
+      if (result.status === 201) { const changed = result.data as Reservation & { delivery?: string }; applyOwnerReservation(changed); setStatus(selected.source === "external_ap"
         ? "새 시간 제안이 저장됐습니다. AP 전달 상태를 아래에서 확인해 주세요. 고객 수락 뒤에도 최종 확정이 필요합니다."
-        : "새 시간 제안이 저장되었습니다. 고객 외부 알림은 공급사 미연결로 발송되지 않았으며, 수락 뒤에도 사업자 최종 확정이 필요합니다."); await load(); await selectReservation(selected.id); }
+        : `새 시간 제안이 저장되었습니다. ${ownerReservationDeliveryNotice(changed.delivery)} 고객 수락 뒤에도 사업자 최종 확정이 필요합니다.`); await load(); await selectReservation(selected.id); }
       else setStatus(`시간 제안에 실패했습니다 (${result.status}): ${(result.data as { error?: string }).error ?? ""}`);
     } catch {
       if (acknowledged) setStatus("시간 제안 응답은 받았지만 최신 목록을 읽지 못했습니다. 예약을 다시 열어 확인해 주세요.");
@@ -700,11 +702,11 @@ export function OwnerBookingPanel({ organizationId, releaseRevision, releaseStat
         expectedRevision: selected.revision, reason: actionReason,
       });
       acknowledged = true;
-      if (result.status === 200) { applyOwnerReservation(result.data as Reservation); setStatus(selected.source === "owner_manual"
+      if (result.status === 200) { const changed = result.data as Reservation & { delivery?: string }; applyOwnerReservation(changed); setStatus(selected.source === "owner_manual"
         ? "전화 예약이 취소되고 점유가 해제되었습니다. 고객 자동 알림은 대상이 아닙니다."
         : selected.source === "external_ap"
           ? "예약이 취소되고 점유가 해제됐습니다. AP 전달·고객 알림 상태는 아래에서 확인해 주세요."
-        : "예약이 취소되고 점유가 해제되었습니다. 고객 외부 알림은 공급사 미연결로 발송되지 않았습니다."); await load(); await selectReservation(selected.id); }
+        : `예약이 취소되고 점유가 해제되었습니다. ${ownerReservationDeliveryNotice(changed.delivery)}`); await load(); await selectReservation(selected.id); }
       else setStatus(`취소에 실패했습니다 (${result.status}).`);
     } catch {
       if (acknowledged) setStatus("취소 응답은 받았지만 최신 목록을 읽지 못했습니다. 예약을 다시 열어 확인해 주세요.");
@@ -730,9 +732,7 @@ export function OwnerBookingPanel({ organizationId, releaseRevision, releaseStat
         applyOwnerReservation(changed);
         setStatus(selected.source === "external_ap"
           ? `예약 상태를 ${stateLabel(changed.state)}으로 기록했습니다. AP 전달·고객 알림 상태는 아래에서 확인해 주세요.`
-          : `예약 상태를 ${stateLabel(changed.state)}으로 기록했습니다. ${changed.delivery === "pending"
-            ? "고객 외부 알림은 공급사 미연결로 발송되지 않았습니다."
-            : "이 처리에는 고객 자동 알림이 없습니다."}`);
+          : `예약 상태를 ${stateLabel(changed.state)}으로 기록했습니다. ${ownerReservationDeliveryNotice(changed.delivery)}`);
         await load(); await selectReservation(selected.id);
       } else setStatus(`상태 처리에 실패했습니다 (${result.status}): ${(result.data as { error?: string }).error ?? ""}`);
     } catch {
@@ -858,10 +858,10 @@ export function OwnerBookingPanel({ organizationId, releaseRevision, releaseStat
         {selected.proposalStartAt && <p>제안 시간: {formatTime(selected.proposalStartAt, selected.timezone)} {selected.proposalAcceptedAt ? "· 고객 수락" : "· 고객 확인 전"}</p>}
         {selected.confirmedStartAt && <p>{["canceled", "completed", "no_show"].includes(selected.state) ? "기존 확정 시간" : "현재 확정 시간"}: {formatTime(selected.confirmedStartAt, selected.timezone)}</p>}
         {selected.events && <details><summary>예약 처리 기록 {selected.events.length}건</summary><ol>{selected.events.map(event => <li key={event.revision}>{formatTime(event.occurredAt, selected.timezone)} · {event.actorType === "owner" ? "사업자" : "고객"} · {stateLabel(event.nextState)}{typeof event.detail.reason === "string" ? ` · ${event.detail.reason}` : ""}</li>)}</ol></details>}
-        {selected.source === "public" && <section className="field-owner-reservation-thread" aria-label="예약 후속 대화"><h4>고객과 예약 대화</h4>{selected.messages?.length ? <ol>{selected.messages.map(message => <li key={message.id} className={message.sender}><strong>{message.sender === "owner" ? "나 · 사업자" : "고객"}</strong><p>{message.body}</p><small>{formatTime(message.createdAt, selected.timezone)}{message.sender === "owner" ? " · Field 열람 가능 · 외부 알림 연동 전" : ""}</small></li>)}</ol> : <p>아직 추가 메시지가 없습니다.</p>}
+        {selected.source === "public" && <section className="field-owner-reservation-thread" aria-label="예약 후속 대화"><h4>고객과 예약 대화</h4>{selected.messages?.length ? <ol>{selected.messages.map(message => <li key={message.id} className={message.sender}><strong>{message.sender === "owner" ? "나 · 사업자" : "고객"}</strong><p>{message.body}</p><small>{formatTime(message.createdAt, selected.timezone)}{message.sender === "owner" ? ` · ${reservationMessageNotificationLabel(message.notificationState)}` : ""}</small></li>)}</ol> : <p>아직 추가 메시지가 없습니다.</p>}
           {pendingOwnerMessage && pendingOwnerMessage.reservationId !== selected.id && <p role="alert">다른 예약의 답변 결과가 확인되지 않았습니다. 해당 예약을 다시 열어 확인해 주세요.</p>}
           {ownerMessageStatus && <p role="status" className="state-message">{ownerMessageStatus}</p>}
-          <form onSubmit={event => void sendOwnerReservationMessage(event)}><label>고객에게 답변<textarea required maxLength={5000} value={pendingOwnerMessage?.reservationId === selected.id ? pendingOwnerMessage.body : ownerMessageText} readOnly={pendingOwnerMessage?.reservationId === selected.id} onChange={event => setOwnerMessageText(event.target.value)} placeholder="예약에 관한 답변을 입력하세요" /></label><button type="submit" disabled={ownerMessageBusy || busy || (!pendingOwnerMessage && !ownerMessageText.trim()) || Boolean(pendingOwnerMessage && pendingOwnerMessage.reservationId !== selected.id)}>{pendingOwnerMessage?.reservationId === selected.id ? "답변 결과 확인·재시도" : "Field 대화에 답변 저장"}</button></form><p>답변은 이 예약 확인키로 읽을 수 있습니다. 고객 문자·카카오 알림은 공급사 연결 전까지 발송되지 않습니다.</p>
+          <form onSubmit={event => void sendOwnerReservationMessage(event)}><label>고객에게 답변<textarea required maxLength={5000} value={pendingOwnerMessage?.reservationId === selected.id ? pendingOwnerMessage.body : ownerMessageText} readOnly={pendingOwnerMessage?.reservationId === selected.id} onChange={event => setOwnerMessageText(event.target.value)} placeholder="예약에 관한 답변을 입력하세요" /></label><button type="submit" disabled={ownerMessageBusy || busy || (!pendingOwnerMessage && !ownerMessageText.trim()) || Boolean(pendingOwnerMessage && pendingOwnerMessage.reservationId !== selected.id)}>{pendingOwnerMessage?.reservationId === selected.id ? "답변 결과 확인·재시도" : "Field 대화에 답변 저장"}</button></form><p>답변은 이 예약 확인키로 읽을 수 있습니다. 문자·카카오 알림은 위 메시지별 상태와 관리실 알림 이력에서 확인해 주세요.</p>
         </section>}
         {selected.source === "external_ap" && <section aria-label="AP 연결 예약 사건 상태"><div className="panel-heading"><h4>AP 전달·처리 상태</h4><button type="button" disabled={deliveryLoading} onClick={() => { void loadEventDeliveries(selected.id); void loadManualContacts(selected.id); void loadOwnerNotificationRoute(selected.id); }}>상태 새로고침</button></div>
           <p>Field 예약 처리와 AP 수신, AP 고객 알림은 각각 다른 상태입니다. AP 수신 응답만으로 고객 발송·열람을 확인할 수 없습니다.</p>
