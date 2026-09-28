@@ -71,7 +71,8 @@ async function confirmed(db:PoolClient,p:BillingPayment|null,r:RefundPayment,pay
  return candidate;
 }
 export async function runBillingRefundOnce(input:{pool:Pool;billing?:BillingContext;now?:Date}):Promise<string>{
- const began=Date.now(),now=input.now??new Date(began),clock=()=>new Date(now.getTime()+Date.now()-began);
+ const began=Date.now(),now=input.now??(await input.pool.query<{now:Date}>('select clock_timestamp() as now')).rows[0]!.now,
+  clock=()=>new Date(now.getTime()+Date.now()-began);
  const claimed=await claim(input.pool,input.billing,now);if(typeof claimed==='string')return claimed;
  const {token,context,paymentKey}=claimed;let row=claimed.row,payment:BillingPayment|null=null,code='refund_provider_result_unknown';
  const gate=await input.pool.connect(),gateKey=`field-refund-send:${row.transaction_id}`;let reusable=true;
