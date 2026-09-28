@@ -1,11 +1,11 @@
 # Field 첫 사용 경험 개선 계획·기능 검수 — 2026-09-28
 
 Task ID / Product / Owner: R00.QA / R02.ACCEPTANCE · Field / Coordinator
-State: 개선 계획 수립·부분 검수 완료, 기능 결함 2건 발견 (개선 구현·출시 인수 아님)
+State: 첫 조사에서 기능 결함 2건 발견; 후속 PR1~PR4 구현 및 로컬 부분 검수 완료 (출시·최종 사용자 인수 아님)
 
 ## 목적과 고정 범위
 
-사용자 요청: 처음 서비스 페이지를 만들고 장사하는 자영업자에게 어려운 지점을 찾아 **개선 계획**을 세우고, 주요 기능이 실제 동작하는지 검사해 함께 보고한다. 기존 `reference/field_ui_prototype_v3.html`의 배치·색상·글자·메뉴·반응형은 고정한다. 추가 기능만 `(추가)`로 계획한다. AP/Field 제품·계정·DB·구독은 분리하고 Field 단독 문의·예약을 보존한다. 계획·QA 문서만 수정하며 제품 코드/API/DB/schema/운영 데이터는 수정하지 않는다.
+사용자 요청: 처음 서비스 페이지를 만들고 장사하는 자영업자에게 어려운 지점을 찾아 **개선 계획**을 세우고, 주요 기능이 실제 동작하는지 검사해 함께 보고한다. 기존 `reference/field_ui_prototype_v3.html`의 배치·색상·글자·메뉴·반응형은 고정한다. 추가 기능만 `(추가)`로 계획한다. AP/Field 제품·계정·DB·구독은 분리하고 Field 단독 문의·예약을 보존한다. 최초 조사 단계는 계획·QA 문서만 수정했다. 아래 후속 수리 단계에서 제품 코드를 PR 단위로 변경했다.
 
 ## 조사 경로와 적용 기준
 
@@ -59,3 +59,16 @@ State: 개선 계획 수립·부분 검수 완료, 기능 결함 2건 발견 (�
 | 핵심 기능 파일별 독립 검사 | 별도 임시 mock DB를 만들고 마이그레이션 후 `FIELD_PROFILE=mock`에서 `business-core`, `sites`, `bookings`, `subscription`, `site-generation`, `site-inquiry-test` 파일을 **순차** 실행했다. 스크립트 `/private/tmp/fieldai-first-use-targeted.mjs`, 로그 `/private/tmp/fieldai-first-use-targeted.log`; 종료 시 임시 DB 제거. | **16개 중 14 pass, 2 fail, 0 skip.** 사업 정보 승인/비공개 초안/비회원 문의 5/5, 사이트 공개·사진 2/2, 사이트 제작 AI 2/2, 내부 테스트 문의 1/1. 예약 3/4: 시간표 방식 접수·중복 접수는 검수됐으나 사업자 확정이 500(기대 201)으로 희망시간 방식의 후속 단계는 도달하지 못했다. 구독/체험 1/2: 초기 문의는 201이며, 체험 만료 후 기존 예약의 사업자 확정이 500 `42702 detail ambiguous`(기대 201). 기능 전체 정상 판정 불가. |
 
 실 공급사 메일/카카오/LLM/PG/DNS/TLS, 고객 발송·결제, 운영 환경, 모든 역할·실기기·320px·키보드/스크린리더는 이 검수에서 실행하지 않았다. 기존 DB 테스트의 개별 통과 사례(승인 카탈로그, 직접 문의/예약, 사이트 공개)는 전체 suite 실패를 덮지 않는다.
+
+## 후속 PR 수리 및 재검수 — 2026-09-28
+
+위 표는 **수정 전** 재현 기록으로 보존한다. PR 경계·소유 파일·리뷰 보완은 `FIELD_FIRST_USE_REPAIR_PR_PLAN_2026-09-28.md`와 `TASKS.md` 상단에 기록했다. 아래 결과는 로컬 mock/Node 24.18.0/Field 자체 PG17 기준이며 실제 공급사나 운영 승인 결과가 아니다.
+
+| PR | 구현된 변화와 근거 | 실제 재검수 및 남은 한계 |
+| --- | --- | --- |
+| PR1 예약 확정 500 | `25b4681`: 적용된 migration68은 보존하고 새 migration74에서 예약 알림 trigger의 `detail` 변수 충돌을 제거했다. 예약 확정 알림 원장 assertion을 추가했다. | 독립 UUID DB의 핵심 16/16 통과(`/private/tmp/fieldai-pr1-integrated-targeted.log`), Field 전체 DB 재검사에도 두 500이 재발하지 않았다. 실제 외부 알림 발송은 검수하지 않았다. |
+| PR2 Field DB suite | `e2f4681`·`decdcea`·`b1ceb9b`·`88442d9`·`42d05ae`: Field 자체 `.env`/mock profile, 파일별 UUID DB·원장, 하위 프로세스 종료 확인, 신호/관리 작업 제한과 결과 미상 보존을 구현했다. | 종료 코드 수정 후 통합 `pnpm test:db:field` 31파일·156/156 pass·fail/cancel0·임시 DB31/31 제거(`/private/tmp/fieldai-final-after-signal-field-db.log`). 최종 opt-in 자식 runner/실제 PG 장애 주입을 포함한 집중 검사 17/17·skip0(`/private/tmp/fieldai-final2-db-runner-integration.log`): CREATE commit 뒤 SIGTERM 143·DB/원장 보존, DROP commit 뒤 SIGINT 130·DB 제거/원장 보존, 둘 다 다음 파일 미시작. AP 전체 suite는 127/134로 실패했고 7건 모두 기존 단일 파일 실행에서도 재현됐다; Field 수리의 통과로 AP gate를 주장하지 않는다. |
+| PR3 첫 사용 | `b64d768`·`0828257`·`0d37515`·`d0e21cb`·`9ac50eb`: `오늘`의 실제 Field 업무 우선 행동, 사업 정보 폼 직접 이동/제작 복귀, 저장·승인·공개 차이 및 불가 이유, 역할·미저장 입력 보존. | 최종 Field 웹 88/88(`/private/tmp/fieldai-final2-field-web-unit.log`), lint exit0. Chrome에서 정확한 제작 URL의 현재 저장본/직접 링크는 보았으나 이용자와 같은 Chrome 창을 공유해 링크 클릭 이후 종단 검수는 중단했다. |
+| PR4 첫 문의·첫 영업 | `8213126`·`82c8d06`·`bfac06d`·`ff44dcd`: 기존 내부 `ownerTest`를 첫 문의 시험에 연결하고 종료/조회 실패 시 링크·직접 URL 제출을 막는다. 제출 직전 이용 상태 재확인, 구독 조회 장애와 독립적인 이전 기록 조회, 입력 폼 보존/재확인, 문의/예약 순서·알림 안내를 더했다. | 최종 Field 웹 88/88, 전체 Field DB의 기존 시험 문의 원장 검사 포함. 실제 시험 문의를 기존 운영 초안에 제출하거나 고객 메시지·알림을 보내지 않았다. |
+
+통합 `pnpm lint`, `pnpm typecheck`, `pnpm build:web:field`는 최종 UI 반영 후 exit0(`/private/tmp/fieldai-final2-*.log`). API 빌드는 후속 UI 전 exit0(`/private/tmp/fieldai-final-build-field.log`). `pnpm test:unit` 전체는 AP 웹의 기존 CSS import 테스트 1건으로 exit1(별도 변경 전 worktree에서도 재현, `/private/tmp/fieldai-ap-web-baseline-unit.log`); Field 웹은 88/88이다. 최종 UI를 다시 빌드·mock 재기동한 `/private/tmp/fieldai-final2-mock-field.log`에서 Field API ready200, 정확한 사이트 제작 URL200, 비로그인 사업/사이트 초안401, 미공개 사이트404, AP API4311 연결 실패를 확인했다. AP DB 컨테이너는 존재하므로 엄격한 Field 독립성 게이트는 미실행이다. 실제 신규 계정→입력/승인/공개→문의/두 예약 방식→사업자 처리, 모바일/접근성/실 공급사/운영 출시는 후속 인수 범위로 둔다.

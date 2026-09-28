@@ -17,4 +17,21 @@ Task IDs: F07.BOOKING/F09.TRIAL/F06.INQUIRY, C02.LOCAL/R00.QA, F02.EDITOR/F04.BA
 
 PR2 최종 직접 리뷰 추가 범위: test child 실행 중뿐 아니라 임시 DB 생성·제거 구간의 SIGINT/SIGTERM도 suite 범위에서 지연 처리해 cleanup 또는 보존을 끝낸 뒤 nonzero로 종료한다. Mac 로컬 우선의 POSIX 그룹 제어가 지원되지 않는 플랫폼에는 명확한 unsupported 진단을 제공하거나 동등한 안전한 분기를 구현한다. 실제 인터럽트 회귀와 일시 DB/원장 정리 수를 다시 확인한다.
 
+PR2 `b1ceb9b` 재리뷰 후속 범위: CREATE/DROP 관리 작업 대기 중 SIGINT/SIGTERM이 들어오고 해당 작업이 timeout/실패하면 임시 DB와 원장을 보존하면서도 종료 코드는 인터럽트 130/143이어야 한다. 오류 경로에서 신호 상태를 확인하는 최소 수정과 그 경로를 직접 재현하는 `tools/test/db-suite-process.test.mjs` 회귀만 추가한다. 실패를 통과로 바꾸거나 결과 미상 DB를 지우지 않는다.
+
+PR2 `e5ceaba` 재리뷰의 검수 보강: `finishSuite()` 직접 호출 테스트만으로는 runner의 admin CREATE/DROP 실패·신호 겹침을 자동 검증하지 못한다. 에이전트가 수동 실행한 실제 PostgreSQL 지연 주입 143/130·DB/원장 보존·다음 파일 미시작을, 자식 runner 경로를 실행하는 재현 가능 테스트로 보존한다. 이 보강은 PR2 테스트 소유 범위에 한정한다.
+
 PR4 직접 URL 추가 범위: 제작기의 시험 링크가 종료 체험을 막아도 이미 열린 `/public/:id?ownerTest=1` 폼은 ownerTest GET 200만으로 활성화되는 것이 재리뷰에서 확인됐다. 기존 Field 공개 화면의 ownerTest 사전 검사에 같은 조직의 실제 `subscription.access.canStartNew`를 결합하고, 조회 실패·만료 시 폼을 비활성화하며 사유/재시도만 표시한다. 고객 일반 문의 폼이나 서버 POST 보호 계약은 유지한다.
+
+PR4 `476fc78` 최종 직접 리뷰 후속 범위: 직전 ownerTest POST의 응답 미상 상태에서는 다음 구독 조회 실패와 무관하게 기존 기록 GET 대조를 수행한다. 제출 시점 이용 종료/조회 실패가 발생해도 작성값과 폼은 같은 화면에 유지하고 제출만 비활성화하며, 이용 상태 재확인 조작을 제공한다. 비동기 순서를 검사하는 웹 회귀를 추가하고 일반 고객 접수·서버 계약은 그대로 둔다.
+
+## 통합 결과 — 2026-09-28
+
+| 단위 | main 구현 commit | 자체 소유 범위의 검수 |
+| --- | --- | --- |
+| PR1 | `25b4681` | 독립 UUID DB 핵심16/16, 예약 알림 원장/Field 전체 DB 통과; Coordinator 직접 리뷰 OK. |
+| PR2 | `e2f4681`·`decdcea`·`b1ceb9b`·`88442d9`·`42d05ae` | Field 전체 DB31파일/156 pass/임시 DB31 제거, 실제 PG child-runner 장애 주입 포함 opt-in17/17; 반복 리뷰에서 발견된 종료/검수 결함 보완. |
+| PR3 | `b64d768`·`0828257`·`0d37515`·`d0e21cb`·`9ac50eb` | Field 웹 최종88/88, lint/typecheck/build pass; 미저장·role/권한 직접 리뷰 수정. |
+| PR4 | `8213126`·`82c8d06`·`bfac06d`·`ff44dcd` | Field 웹 최종88/88, 최종 직접 리뷰의 결과 미상/폼 보존 결함 수정; 자체 재리뷰 지적 없음. |
+
+각 단위는 에이전트별 독립 worktree에서 작성한 commit을 Coordinator가 파일 충돌 없이 main에 순차 반영했다. 원격 GitHub PR·배포·실 공급사 작업은 수행하지 않았다. R00.QA/R02.ACCEPTANCE의 사용자 종단 인수와 엄격한 Field 독립성 게이트는 미완료이며 정확한 테스트/한계는 첫 사용 QA 문서와 `docs/CODEX_HANDOFF.md` 상단을 따른다.
