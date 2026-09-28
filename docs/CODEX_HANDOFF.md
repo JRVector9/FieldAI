@@ -9,6 +9,16 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
+## Field 첫 사용 수리 PR 조정 중 — 2026-09-28 현재 진행
+
+- **Current objective:** 기존 Field 첫 사용자 조사에서 재현한 예약 확정 500 두 건, DB 전체 실행기의 환경/종료 결함, 사업 정보→승인→사이트 공개 및 첫 문의 시험 동선을 PR1~PR4로 분리해 수정·독립 리뷰·통합한다. 기준 범위는 `docs/technical/FIELD_FIRST_USE_REPAIR_PR_PLAN_2026-09-28.md`; 기존 52개 완료 체크와 고정 v3 시안을 유지한다.
+- **Completed work / Modified files:** PR1 `25b4681` 통합: `apps/field-api/migrations/000074_notification_delivery_source_payload.sql`, `apps/field-api/test/bookings.db.test.ts`. 적용된 migration68을 변경하지 않고 새 migration74에서 알림 트리거의 `detail` 변수/열 충돌을 제거했다. 계획·재현 정정은 `TASKS.md`, `docs/technical/FIELD_FIRST_TIME_USABILITY_AND_FUNCTION_QA_2026-09-28.md`, `docs/technical/FIELD_FIRST_USE_REPAIR_PR_PLAN_2026-09-28.md`, 이 인계에 기록했다. PR2 DB 실행기, PR3 첫 사용, PR4 첫 문의 시험은 별도 worktree에서 진행 중이며 아직 main 통합 전이다.
+- **Key decisions:** PR1/PR2는 API와 실행기 별도 브랜치, PR3/PR4는 같은 웹 파일 소유자가 순차 커밋한다. 첫 문의 시험은 기존 Field 내부 시험 API만 연결하고 고객 발송·실적·실예약에서 분리한다. 제품 사이 DB/로그인/계약 변경 없음. 실제 사용자 초안은 읽기 전용 브라우저 관찰만 한다.
+- **Tests actually run:** PR1 독립 Codex CLI read-only review `CONCLUSION: OK`; 통합 main의 mock UUID 임시 DB 핵심 6파일 **16/16 pass**, `/private/tmp/fieldai-pr1-integrated-targeted.log`, exit0·임시 DB 제거. PR1 branch에서 Field 알림22/22·예약1/1·unit25/25·typecheck/build/lint pass(에이전트 실행). PR2 초기 브랜치에서는 Field 전체31파일 **154/156 pass**, 두 PR1 예약 확정 실패만 남음; AP 전체34파일 **127/134 pass**, 기존 단일 파일 방식에서도 같은 7건 재현. PR2 직접 리뷰가 아래 종료/환경 문제를 발견해 보완 중이다. PR3 첫 커밋 `e327fa6`에서 웹 unit82/82·typecheck/build pass(에이전트 실행), 직접 리뷰의 동선 지적 4건 보완 중이다. PR4는 아직 미통합이다.
+- **Failed approaches / current review findings:** 이전 보고의 '문의 접수 500'은 오류 식별이 잘못됐다. 초기 문의는 201이고 두 500은 모두 owner 예약 확정의 PG42702다. PR2 초기안은 outer timeout에서 pnpm만 죽이고 하위 test가 살아 있을 수 있었고 Field billing 테스트가 AP `.env`를 읽었다. PR3 초기안은 미공개 상태 고객 대기 업무 우선순위, 미저장+미승인 상태의 해결 안내, 공개 단계 복귀 URL, 초안 없는 상태의 행동 이름을 보완해야 한다. AP 전체 suite 7건은 이번 runner 변경 전에도 재현되며 별도 미해결이다.
+- **Remaining work:** PR2 재작업·PR3 수정·PR4를 각 독립 리뷰 후 순서대로 main에 반영; 통합 `pnpm test:db:field`, 웹 unit/typecheck/build, lint/API build/실제 Chrome 읽기 전용 동선 확인; TASKS/QA 보고와 이 인계 최종 갱신. 실 공급사·전체 출시/인수 게이트는 미완료다.
+- **Exact next commands:** `git status --short`; `git log -5 --oneline`; `cat docs/technical/FIELD_FIRST_USE_REPAIR_PR_PLAN_2026-09-28.md`; `git -C /private/tmp/fieldai-pr2-db-suite log -2 --oneline`; `git -C /private/tmp/fieldai-pr3-first-use log -3 --oneline`; `node --env-file=infra/field/.env /private/tmp/fieldai-first-use-targeted.mjs` (검사 시 임시 UUID DB 생성·제거); 통합 후 `pnpm test:db:field`.
+
 ## Field 첫 사용자 경험 개선 계획·기능 검수 — 사용자 요청 (2026-09-28)
 
 - **Current objective / State:** 자영업자 첫 사용의 Field 동선을 관찰해 고정 v3 디자인 안의 개선 계획을 세우고 실제 기능을 검수한다. R00.QA/R02.ACCEPTANCE의 부분 조사·검수이며 전체 기능/최종 인수 완료가 아니다. 시작 checkout `c3b314f`/clean. 계획·QA 원문은 `docs/technical/FIELD_FIRST_TIME_USABILITY_AND_FUNCTION_QA_2026-09-28.md`.
