@@ -84,6 +84,11 @@ test('AP owner reaches older work and notifications beyond the first 100 rows wi
     assert.equal(pendingPage.inquiries.some(item => item.id === hidden), false);
     assert.equal(pendingPage.pendingCount, 1);
     assert.deepEqual(pendingPage.pendingPreview.map(item => item.id), [hidden]);
+    const olderDetail = await app.inject({ url: `/v1/owner/inquiries/${hidden}`,
+      headers: { cookie: first.cookie } });
+    assert.equal(olderDetail.statusCode, 200);
+    assert.equal((olderDetail.json() as { id: string; state: string }).id, hidden);
+    assert.equal((olderDetail.json() as { id: string; state: string }).state, 'needs_owner');
     await pool.query(`insert into ap.outbox (id, organization_id, event_type, aggregate_id, payload)
       select gen_random_uuid(), $1, 'ap.inquiry.created', i.id, '{}'::jsonb
       from ap.inquiries i where i.organization_id = $1`, [organizationId]);
@@ -104,6 +109,17 @@ test('AP owner reaches older work and notifications beyond the first 100 rows wi
     assert.equal(notificationPage2.notifications.length, 3);
     assert.equal(notificationPage2.nextCursor, null);
     assert.equal(new Set([...notificationPage1.notifications, ...notificationPage2.notifications].map(item => item.id)).size, 103);
+    const olderNotificationId = notificationPage2.notifications[0]!.id;
+    const opened = await app.inject({ method: 'POST', url: `/v1/owner/notifications/${olderNotificationId}/read`,
+      headers: { cookie: first.cookie } });
+    assert.equal(opened.statusCode, 200);
+    const afterRead = (await app.inject({ url: '/v1/owner/notifications',
+      headers: { cookie: first.cookie } })).json() as typeof notificationPage1;
+    assert.equal(afterRead.unreadCount, 102);
+    assert.equal(afterRead.notifications.length, 100);
+    const olderAfterRead = (await app.inject({ url: `/v1/owner/notifications?cursor=${encodeURIComponent(afterRead.nextCursor!)}`,
+      headers: { cookie: first.cookie } })).json() as { notifications: { id: string; readAt: string | null }[] };
+    assert.ok(olderAfterRead.notifications.find(item => item.id === olderNotificationId)?.readAt);
     assert.equal((await app.inject({ url: `/v1/owner/notifications?cursor=${encodeURIComponent(notificationPage1.nextCursor!)}`,
       headers: { cookie: second.cookie } })).statusCode, 400);
   } finally { await app.close(); }
