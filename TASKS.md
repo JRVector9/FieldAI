@@ -2,6 +2,8 @@
 
 ## 완료 체크 — 재작업 방지 기준 (2026-09-27)
 
+**첫 사용 수리 재개(2026-09-28, 기존 52[x] 유지):** `docs/technical/FIELD_FIRST_TIME_USABILITY_AND_FUNCTION_QA_2026-09-28.md`의 실제 격리 DB 재현에서 F07.BOOKING 사업자 확정 500(`bookings.db.test.ts:487`), F09.TRIAL/F06.INQUIRY 체험 경계 초기 문의 500/PG42702 `detail` 모호성(`subscription.db.test.ts:168`)을 확인했다. C02.LOCAL/R00.QA의 `test:db:field`는 env 복사 순서·mock profile 누락과 장시간 대기로 전체 검수 게이트가 실패한다. Field 첫 사용 화면에서 F02.EDITOR/F04.BASIC-PUBLISH/F01.CATALOG의 제작1단계 사업 정보 링크가 입력 폼이 아닌 `/workspace`로 이동하고, 미공개 `오늘`의 최우선 행동이 선택적 AP 연결이며 공개 버튼의 비활성 이유/해결 경로가 없다. 새 사용자 요구에 따라 이 **추가 결함·동선 범위만** PR1~PR4로 재개한다. 기존 완료 이력과 서버 저장/승인/공개·API/원장은 보존한다. 파일 소유·선행관계·요구/QA07·09·10·17·25~34·50·80·검수 명령은 `docs/technical/FIELD_FIRST_USE_REPAIR_PR_PLAN_2026-09-28.md`에 기록했다. 실제 해결/검수 전에는 완료 체크를 추가하지 않는다.
+
 **F02.EDITOR / F04.BASIC-PUBLISH 디자인 누락 재개(2026-09-28):** 사용자가 실제 `/workspace/site?step=design&page=7336e361-ef86-489b-ae30-7d3b7043fd96` 화면의 디자인 누락을 신고했다. 실제 Chrome에서 design/contact/publish의 시스템 기본 버튼을 확인했다. 현재 `.state-switch`와 `.deployment-options` 공통 CSS는 a/div만 꾸미며 실제 editor는 button을 사용하고, 전용 스타일은 pages 단계에만 있다. 기존 완료[x]/commit2362761과 API·자동저장·공개 이력은 유지한다. 추가 범위는 고정 시안의 wizard 단계 레이아웃/실제 상호를 사용하는 3개 템플릿 카드/폼·비활성 상태 스타일, 다른 Field 화면에서 확인된 같은 누락만이다. 기존 pages 편집기·공개 사이트 디자인은 재설계하지 않는다. 범위·QA·검수 명령은 `docs/technical/F02_EDITOR_DESIGN_REPAIR_EXECUTION_PLAN.md`에 기록한다. 상태: in_progress, 사용자 최종 인수/실 공급사 게이트는 별도다.
 
 **사용자 필수 지침: 완료된 작업을 체크하고, 후속 에이전트가 같은 작업을 다시 하지 않도록 유지한다.** 이 섹션이 현재 세부 완료의 기준 원장이다. `[x]`는 아래에 적힌 **내부/로컬 범위** 완료이며 전체 부모 Task·운영 출시·사용자 최종 시안 인수 완료가 아니다. 기억 부재로 재작업하지 않는다.
