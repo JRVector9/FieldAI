@@ -9,6 +9,8 @@ import { createAgentApp } from '../src/app.js';
 
 process.loadEnvFile(resolve('../../infra/agent/.env'));
 process.env.AP_PROFILE = 'mock';
+if (!/^\/fieldai_agent_(?:test|target)_[a-f0-9]+$/.test(new URL(process.env.AP_DATABASE_URL ?? '').pathname))
+  throw new Error('AP deployment test requires an isolated database for retained AI usage');
 const { auth, authPool } = await import('../src/auth.js');
 const pool = new Pool({ connectionString: process.env.AP_DATABASE_URL });
 after(async () => { await Promise.all([pool.end(), authPool.end()]); });
@@ -236,7 +238,5 @@ test('AP link and owned widget require approved AI, tenant ownership and verifie
     assert.equal((await app.inject({ url: `/sdk/v1.js?deployment=${publicId}` })).statusCode, 404);
   } finally {
     await app.close();
-    await pool.query('delete from ap.organizations where owner_user_id = (select id from "user" where email = $1)', [first.email]).catch(() => undefined);
-    await authPool.query('delete from "user" where email = any($1::text[])', [[first.email, second.email]]);
   }
 });

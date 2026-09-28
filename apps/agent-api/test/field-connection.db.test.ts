@@ -11,6 +11,8 @@ import { deliverFieldConnectionRevokeOnce } from '../src/field-connection-revoke
 
 process.loadEnvFile(resolve('../../infra/agent/.env'));
 process.env.AP_PROFILE = 'mock';
+if (!/^\/fieldai_agent_(?:test|target)_[a-f0-9]+$/.test(new URL(process.env.AP_DATABASE_URL ?? '').pathname))
+  throw new Error('AP connection test requires an isolated database for retained AI usage');
 const { auth, authPool } = await import('../src/auth.js');
 const pool = new Pool({ connectionString: process.env.AP_DATABASE_URL });
 after(async () => { await Promise.all([pool.end(), authPool.end()]); });
@@ -813,8 +815,5 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
     assert.equal(await deliverFieldConnectionRevokeOnce(pool, runtime.fieldConnector), 'empty');
   } finally {
     await Promise.all([app.close(), standalone.close()]);
-    await pool.query('delete from ap.field_facts_event_inbox where connection_id = $1', [fieldConnectionId]);
-    await pool.query('delete from ap.organizations where id = $1', [apOrganizationId]);
-    await pool.query('delete from "user" where email = any($1::text[])', [[owner.email, outsider.email]]);
   }
 });

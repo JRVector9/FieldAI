@@ -9,6 +9,8 @@ import { recordFieldReservationEvent } from '../src/field-actions.js';
 
 process.loadEnvFile(resolve('../../infra/agent/.env'));
 process.env.AP_PROFILE = 'mock';
+if (!/^\/fieldai_agent_(?:test|target)_[a-f0-9]+$/.test(new URL(process.env.AP_DATABASE_URL ?? '').pathname))
+  throw new Error('AP distribution test requires an isolated database for retained AI usage');
 const { auth, authPool } = await import('../src/auth.js');
 const pool = new Pool({ connectionString: process.env.AP_DATABASE_URL });
 after(async () => { await Promise.all([pool.end(), authPool.end()]); });
@@ -378,8 +380,5 @@ test('approved placement installs on exact publisher origin and hands a direct i
     assert.doesNotMatch(after.body, /010-2222-3333|010-3333-4444|안전한 화면에서 문의|AI 답변 뒤 사람/);
   } finally {
     await Promise.all([app.close(), withModel.close()]);
-    if (organizationId) await pool.query('delete from ap.organizations where id = $1', [organizationId]);
-    if (publisherId) await pool.query('delete from ap.publishers where id = $1', [publisherId]);
-    await authPool.query('delete from "user" where email = any($1::text[])', [[business.email, media.email, outsider.email]]);
   }
 });

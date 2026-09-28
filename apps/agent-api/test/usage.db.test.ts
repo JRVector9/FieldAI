@@ -49,12 +49,20 @@ test('AP usage stays in its organization and separates customer AI from owner te
     for (const [kind, input, output, inquiryId] of [
       ['owner_test', 20, 5, null], ['customer_message', 100, 35, inquiry],
     ] as const) {
+      const runId = randomUUID();
       await db.query(`insert into ap.ai_runs
         (id,organization_id,agent_release_id,knowledge_release_id,kind,question,status,
-         provider_response_id,input_tokens,output_tokens,inquiry_id,inquiry_revision)
-        values ($1,$2,$3,$4,$5,'question','completed',$6,$7,$8,$9,$10)`,
-      [randomUUID(), firstOrg, agent, knowledge, kind, randomUUID(), input, output,
+         provider_response_id,provider_model,input_tokens,output_tokens,inquiry_id,inquiry_revision)
+        values ($1,$2,$3,$4,$5,'question','completed',$6,'synthetic-usage',$7,$8,$9,$10)`,
+      [runId, firstOrg, agent, knowledge, kind, randomUUID(), input, output,
         inquiryId, inquiryId ? 0 : null]);
+      await db.query(`insert into ap.ai_usage_ledger
+        (run_id,organization_id,lane,state,provider_model)
+        values ($1,$2,$3,'reserved','synthetic-usage')`, [runId, firstOrg, kind]);
+      await db.query("update ap.ai_usage_ledger set state='dispatched',dispatched_at=now() where run_id=$1", [runId]);
+      await db.query(`update ap.ai_usage_ledger
+        set state='consumed',response_hash=$2,input_tokens=$3,output_tokens=$4,settled_at=now()
+        where run_id=$1`, [runId, '0'.repeat(64), input, output]);
     }
     await db.query(`insert into ap.ai_runs
       (id,organization_id,agent_release_id,knowledge_release_id,kind,question,status,error_code)

@@ -6,6 +6,8 @@ import { Pool } from 'pg';
 import { createAgentApp } from '../src/app.js';
 
 process.loadEnvFile(resolve('../../infra/agent/.env'));
+if (!/^\/fieldai_agent_(?:test|target)_[a-f0-9]+$/.test(new URL(process.env.AP_DATABASE_URL ?? '').pathname))
+  throw new Error('AP moderation test requires an isolated database for retained AI usage');
 const pool = new Pool({ connectionString: process.env.AP_DATABASE_URL });
 
 test('AP reports restrict only the reported deployment and require approved timed access for review and appeal', async () => {
@@ -211,8 +213,6 @@ test('AP reports restrict only the reported deployment and require approved time
   } finally {
     unblock?.(); process.env.AP_PROFILE = previous;
     await app.close();
-    await pool.query('delete from ap.organizations where owner_user_id=any($1::text[])', [users]);
-    await pool.query('delete from "user" where id=any($1::text[])', [users]);
     await pool.end();
   }
 });
