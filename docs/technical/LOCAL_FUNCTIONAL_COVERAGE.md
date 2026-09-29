@@ -1,5 +1,13 @@
 # 로컬 기능 검수 현황 — 2026-09-27
 
+## 최신 AP·Field 재감사 보완 검수 — 2026-09-29
+
+재감사 7건의 내부 구현을 PR 단위로 통합했다. AP는 오래된 미처리 문의/알림, 역할별 지식 편집·승인, 동명 서비스 snapshot을 고쳤다. Field는 희망시간 첫 예약, 시간표형 공개 준비 검증, 예약 ACK·고객 알림 상태 문구를 고쳤다. 제품별 E2E runner는 자기 제품만 준비 여부를 확인한다. 환불 DB/Node 시각 차이와 AP 불변 ledger fixture/계약 격리도 수리했다. 최신 코드 HEAD `fb07f42`이며 추가 브라우저/통합 장애/독립성 검수 실행기도 실제 화면·격리 조건에 맞췄다.
+
+- Mac local own PG17: AP 전체 DB34파일136/136·DB34개 제거, Field 전체 DB31파일157/157·DB31개 제거. `pnpm test:unit`: AP API20/20, Field API25/25, AP web55/55, Field web98/98, tools35 pass/2 platform skip. `pnpm test:contracts`: 정적3/3 및 AP3/Field2 격리 DB 파일, DB5개 제거. runner process13/13, E2E 선행조건5/5, lint/typecheck·양 API/web build exit0.
+- **Field 전체 브라우저 E2E 7/7 pass** (`/private/tmp/fieldai-field-e2e-all-final3-20260929.log`): AP 미기동 상태에서 첫 가입→사이트 공개→문의·두 예약, 자동 저장, 관리자 권한, 신고·지원 접근, 보존 흐름을 실제 Chromium으로 실행했다. **AP E2E 8/8**, **매체 연동 2/2**도 통과했다(`/private/tmp/fieldai-ap-e2e-final-20260929.log`, `/private/tmp/fieldai-distribution-e2e-20260929.log`). `pnpm test:integration:faults` 정적3/3·AP3/Field2 격리 DB·HTTP1/1 pass; `pnpm test:security` 최초 Field AI 제공량 DB 연결 종료로 exit1 후 같은 파일 단독 및 전체 재실행 exit0(`/private/tmp/fieldai-security-rerun-20260929.log`). 상대 제품 서비스·DB container/port를 실제 중지한 `pnpm test:independence:field`와 `:agent`도 각 own 사업자/고객 Chromium 1/1 포함 exit0(`/private/tmp/fieldai-independence-field-20260929.log`, `/private/tmp/fieldai-independence-agent-20260929.log`). 두 mock 환경을 이후 ready 상태로 복구했다.
+- 기존 아래 “최신 Field 첫 사용 사후 감사”의 환불 전체 DB 실패는 **이 보완 전의 이력**이다. 현재 전체 Field DB는 157/157 pass다. 실 모델·결제·고객 발송·도메인/운영·접근성·사용자 최종 인수는 여전히 미완료다.
+
 ## 최신 Field 첫 사용 사후 감사 — 2026-09-29
 
 PR5 `2bd2898`의 첫 사용 서비스/목록/권한/체험 안내와 PR6 `1e290b9`의 공개 제한 ownerTest 서버 차단을 구현했다. Field 웹92/92·표적 ownerTest 격리 DB1/1·root lint/typecheck·Field API/web build는 실제 exit0. 최종 `pnpm test:db:field`는 31파일 실행·임시 DB31 제거 중 **3파일 실패(exit1)**: AI 제공량의 전액 환불, billing lifecycle 환불, billing refund 파일이다. 환불 worker의 `empty`/`blocked_integration` 및 180초 test timeout 원인은 미확정이므로 최신 Field 전체 DB 검수를 통과로 표시하지 않는다. 이전156/156은 과거 시점 증거다. 상세 로그/남은 게이트는 `FIELD_FIRST_USE_AUDIT_FOLLOWUP_2026-09-29.md`와 `CODEX_HANDOFF.md` 최신 상단을 따른다.

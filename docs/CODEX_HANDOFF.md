@@ -9,6 +9,36 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
+## 최신 AP·Field 누락 기능 구현 및 게이트 수리 — 2026-09-29
+
+- **Current objective / state:** 사용자의 “누락된 기능들 다다시 구현해” 지시로 `docs/technical/AP_FIELD_FUNCTION_REAUDIT_2026-09-29.md`의 AP 4건, Field 2건, 제품별 E2E runner 1건을 PR 단위 격리 worktree에서 병렬 구현하고 Coordinator가 순서대로 `main`에 통합했다. 기준은 `f199687`, 최신 코드 HEAD는 `fb07f42`다. AP/Field·매체 브라우저, 계약·장애·보안 mock gate, 상대 제품 서비스/DB가 실제 없는 양방향 독립성 검수까지 통과했다. `TASKS.md` 상단의 각 세부 ID 완료/남은 검수 범위를 우선 읽는다.
+- **Completed work / modified files:** AP `inquiries.ts`/`workspace.tsx`의 101번째 이후 미처리 문의 전체 집계·preview와 알림 cursor, `business.ts`/`workspace.tsx`의 현재 owner/editor/viewer 권한, `inquiries.ts`/`customer-consultations.ts`/`agent-public.tsx`의 공개본 revision+service index로 동명 서비스 snapshot을 보존했다. AP/Field 환불 worker의 기본 claim 시각을 각 자체 DB clock에 맞췄다. Field `bookings.ts`는 희망시간 예약 첫 접수를 정책 없이 허용하고, `sites.ts`/`site-editor.tsx`는 시간표형 서비스의 실제 신청 가능 슬롯을 공개 전에 검사하며 예약 정책 경로를 안내한다. `field-booking.tsx`/`booking-notification-state.ts`는 예약 ACK와 공급사 발송 상태를 구분한다. `tools/run-e2e.mjs`는 자기 제품만 사전 확인한다. `tools/run-db-suite.mjs`/`package.json`은 계약 DB 검수를 UUID DB+분리 저널로 실행한다. AP DB fixtures 7개·moderation 경합 probe와 CSS import test 경계를 수리했다. 후속 `tools/spikes/agent-admin-browser.py`는 현재 청구 관리 heading을 검사하고, `tools/run-integration-faults.mjs`는 표적 DB를 격리 실행하며, `tools/run-independence.mjs`는 선택한 Playwright Python을 child에 전달한다. 적용/신규 migration·제품 간 내부 import·고정 Field 디자인 CSS 변경 없음.
+- **Key design decisions:** AP/Field 각자의 원본·DB·로그인·큐·secret 분리는 유지했다. Field 희망시간 요청은 시간 점유가 아니므로 기본 Asia/Seoul로 접수할 수 있지만 시간표형은 실제 정책/향후 슬롯이 있어야 공개한다. 예약 `pending`을 미발송 또는 성공으로 단정하지 않는다. AP 과거 name-only 서비스 선택은 유일할 때만 허용하고 동명은 명시 선택을 요구한다. 테스트의 불변 AI 사용량 원장은 개별 삭제하지 않고 격리 DB 종료로 정리한다. `test:contracts`가 공유 mock의 오래된 OAuth 원장 불일치에 의존하지 않도록 했다.
+- **Tests actually run / environment / commits:** Mac local Node24.18.0, own PG17 mock. `pnpm test:db:agent` **34파일136/136 pass, 임시 DB34/34 제거** (`/private/tmp/fieldai-ap-db-integrated-20260929.log`); `pnpm test:db:field` **31파일157/157 pass, 임시 DB31/31 제거** (`/private/tmp/fieldai-field-db-integrated-20260929.log`). `pnpm test:unit` AP API20/20, Field API25/25, AP web55/55, Field web98/98, tools35 pass/2 platform skip (`/private/tmp/fieldai-unit-integrated-20260929.log`). `pnpm test:contracts` 정적3/3+격리 AP3파일/Field2파일 exit0·DB5/5 제거; runner process13/13; E2E prerequisite5/5; 독립 runner2/2; `pnpm lint`, `pnpm typecheck`, 양 API/web build exit0. 실제 Chromium `pnpm test:e2e:field` **7/7** (AP 서비스 미기동), `pnpm test:e2e:agent` **8/8**, `pnpm test:e2e:distribution` **2/2** (`/private/tmp/fieldai-field-e2e-all-final3-20260929.log`, `/private/tmp/fieldai-ap-e2e-final-20260929.log`, `/private/tmp/fieldai-distribution-e2e-20260929.log`). `pnpm test:integration:faults` 정적3/3·AP3/Field2 격리 DB·두 제품 HTTP1/1 exit0(`/private/tmp/fieldai-integration-faults-final-20260929.log`). `pnpm test:security` 최초 Field AI 사용량 마이그레이션 테스트의 DB 연결 종료 1건으로 exit1, 해당 파일 격리 재실행 exit0, **전체 재실행 exit0**(`/private/tmp/fieldai-security-rerun-20260929.log`). 실제 상대 제품 서비스·DB container/port가 없는 상태에서 `pnpm test:independence:field`와 `pnpm test:independence:agent` 각각 exit0·사업자/고객 브라우저 1/1 (`/private/tmp/fieldai-independence-field-20260929.log`, `/private/tmp/fieldai-independence-agent-20260929.log`). 핵심 코드 commits `dc461a9`, `932ee10`, `7886c2e`, `716fadf`, `94168bb`, `5b90ef5`, `80cfeb0`, `3f06668`, `7be6abd`, `03d48ca`, `a4caf4d`, `2e016c4`, `052d23b`, 브라우저/게이트 후속 `f8f42cb`/`613e131`/`5e94756`/`066f0b3`/`fb07f42`. 테스트 후 두 mock을 다시 기동해 AP4311/Field4321 ready200, 웹3001/3002 제공 중이다(`/private/tmp/fieldai-ap-managed-after-independence-20260929.log`, `/private/tmp/fieldai-field-managed-after-independence-20260929.log`).
+- **Failed approaches / material limits:** 최초 Field DB 환불 3파일 실패는 DB clock이 Node보다 약31ms 앞선 원인을 측정하고 고쳤다. AP DB baseline10/34 실패는 같은 clock·불변 ledger fixture·경합 probe SQL 식별 오류로 분리 수리했다. 기존 공유 mock 직접 `test:contracts`는 Field OAuth journal continuity 오류로 실패했으며 실제 shared 원장/저널은 복구/삭제하지 않고 격리 runner로 검수했다. Field E2E 최초 Python 경로에는 Playwright가 없어 새 임시 venv에 설치했다. 실행 중인 Next 서버에 웹 build를 덮어쓴 뒤 옛 청크 요청이 실패해 관리형 Field 서버를 정상 재기동했다. 브라우저 E2E의 단계 접근성 이름·첫 문의 링크·관리자 구독 heading이 현재 UI와 달라 검증 스크립트를 보완했다. Field 관리자 E2E에 남은 AP 웹 호출은 Field-only 모드에서만 분리하고 보안/직접 검수의 교차 제품 401 단언은 유지했다. 첫 보안 전체 검수의 Field `ai-entitlement.db.test.ts` 연결 종료는 단독·전체 재실행에서 재현되지 않아 flake 가능성만 기록하며 원인을 확정하지 않았다.
+- **Remaining work / failure cases / rollback:** `TASKS.md`의 부모 R00.QA/R02.ACCEPTANCE 및 실 공급사·운영 장애/복구·실기기/키보드/스크린리더·사용자 최종 시안 인수는 남는다. 공급사 미연결 상태는 `blocked_integration`이며 실제 고객 발송/카드 청구/운영 삭제/배포는 하지 않았다. 구현은 각 제품 별도 commit이며 신규 schema migration은 없어 schema rollback은 없다. 공유 mock OAuth DB receipt/journal 과거 불일치는 원장을 임의 수정하지 않아 보존 상태다.
+
+### Exact commands for next agent — 최신 누락 구현
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+sed -n '1,20p' TASKS.md
+sed -n '1,50p' docs/CODEX_HANDOFF.md
+git status --short --branch
+git log -15 --oneline
+tail -20 /private/tmp/fieldai-field-e2e-all-final3-20260929.log
+tail -20 /private/tmp/fieldai-ap-e2e-final-20260929.log
+tail -20 /private/tmp/fieldai-distribution-e2e-20260929.log
+tail -20 /private/tmp/fieldai-integration-faults-final-20260929.log
+tail -20 /private/tmp/fieldai-security-rerun-20260929.log
+tail -12 /private/tmp/fieldai-independence-field-20260929.log
+tail -12 /private/tmp/fieldai-independence-agent-20260929.log
+curl -fsS http://127.0.0.1:4311/health/ready
+curl -fsS http://127.0.0.1:4321/health/ready
+```
+
+위 전체 DB/브라우저/독립성 명령은 이미 통과했으므로 코드 변경/새 실패가 없으면 반복하지 않는다. 이후 실제 검수가 필요하면 `AP_BROWSER_PYTHON=/private/tmp/fieldai-e2e-venv-20260929/bin/python pnpm test:e2e:agent`, `FIELD_BROWSER_PYTHON=/private/tmp/fieldai-e2e-venv-20260929/bin/python pnpm test:e2e:field`를 사용하고, 독립성 명령은 반드시 상대 제품 서비스·DB container를 먼저 중지한 뒤 실행한다. 현재 관리형 두 제품은 최신 mock으로 재기동했으며 로그는 위 테스트 섹션에 있다. 기록되지 않은 결과를 pass로 승계하지 않는다.
+
 ## AP·Field 기능 재감사 — 읽기 전용 (2026-09-29)
 
 - **Current objective / state:** 사용자의 “한번더 기능 구현한 것 검토해 놓친것 있는지 field, ap 둘다” 요청에 따라 `main` `f199687` clean 기준으로 AP·Field·연동을 병렬 읽기 전용 검토했다. 새 기능 구현이나 완료 체크는 하지 않았다. 상세 증거·우선순위·충돌 없는 PR 순서는 `docs/technical/AP_FIELD_FUNCTION_REAUDIT_2026-09-29.md`, 기준 원장은 `TASKS.md` 상단이다.
