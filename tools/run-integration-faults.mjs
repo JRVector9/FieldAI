@@ -60,10 +60,8 @@ try {
     ['agent', ['field-actions.db.test.ts', 'field-connection.db.test.ts', 'integrator.db.test.ts']],
     ['field', ['ap-connection.db.test.ts', 'integrator.db.test.ts']],
   ]) {
-    run(`${product} migrations`, process.execPath, ['tools/run-migrations.mjs', product]);
-    run(`${product} provider/consumer fault assertions`, 'pnpm',
-      ['--filter', `@fieldai/${product}-api`, 'exec', 'tsx', '--test',
-        ...files.map(name => `test/${name}`)]);
+    run(`${product} provider/consumer fault assertions`, process.execPath,
+      ['tools/run-db-suite.mjs', product, ...files.map(name => `test/${name}`)]);
   }
   run('two-product HTTP and worker delivery', process.execPath,
     ['--test', 'tools/spikes/ap-field-connection-http.test.mjs'],
