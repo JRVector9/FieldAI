@@ -7,7 +7,8 @@ import { parseEnv } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const systemNames = ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'USER', 'SHELL', 'TERM', 'CI'];
+const systemNames = ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'USER', 'SHELL', 'TERM', 'CI',
+  'AP_BROWSER_PYTHON', 'FIELD_BROWSER_PYTHON'];
 const systemEnv = Object.fromEntries(systemNames.filter(key => process.env[key] !== undefined)
   .map(key => [key, process.env[key]]));
 const settings = {
