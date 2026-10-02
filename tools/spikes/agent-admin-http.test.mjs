@@ -16,7 +16,7 @@ assert.equal(database.pathname, '/fieldai_agent_mock');
 
 test('AP admin route opens an aggregate overview only for a separate AP operator', async () => {
   const ready = await fetch('http://127.0.0.1:4311/health/ready');
-  assert.deepEqual(await ready.json(), { product: 'agent', status: 'ready' });
+  assert.deepEqual(await ready.json(), { product: 'agent', status: 'ready', integrations: { email: 'mock' } });
   const accounts = Array.from({ length: 2 }, () => ({
     email: `ap-admin-browser-${randomUUID()}@example.invalid`,
     password: `${randomBytes(18).toString('base64url')}A1!`,

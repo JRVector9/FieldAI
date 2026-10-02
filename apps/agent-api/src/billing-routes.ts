@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
-// Non-mock administration stays blocked until real admin MFA is connected (QA157).
+// 관리자 접근은 retentionAdminFor → requireAdmin(비mock은 관리자 2단계 인증 세션 필수, QA157)을 따른다.
 import { retentionAdminFor as adminFor } from './retention-routes.js';
 import { billingSnapshot, planView, type BillingPlan } from './billing.js';
 

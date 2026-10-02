@@ -16,7 +16,7 @@ assert.equal(database.pathname, '/fieldai_field_mock');
 
 test('Field admin route opens an aggregate overview only for a separate Field operator', async () => {
   const ready = await fetch('http://127.0.0.1:4321/health/ready');
-  assert.deepEqual(await ready.json(), { product: 'field', status: 'ready' });
+  assert.deepEqual(await ready.json(), { product: 'field', status: 'ready', integrations: { email: 'mock' } });
   const accounts = Array.from({ length: 2 }, () => ({
     email: `field-admin-browser-${randomUUID()}@example.invalid`,
     password: `${randomBytes(18).toString('base64url')}A1!`,

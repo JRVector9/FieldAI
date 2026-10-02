@@ -59,7 +59,7 @@ test('Field admin overview requires its own role and blocks non-mock access with
       `select count(*)::text as count from field.admin_access_audit where actor_user_id=$1 and resource='overview'`,
       [userId])).rows[0]?.count, '1');
     process.env.FIELD_PROFILE = 'sandbox';
-    assert.deepEqual((await call()).json(), { error: 'blocked_integration' });
+    assert.deepEqual((await call()).json(), { error: 'mfa_required' });
     assert.equal((await db.query<{ count: string }>(
       'select count(*)::text as count from field.admin_access_audit where actor_user_id=$1',
       [userId])).rows[0]?.count, '1');

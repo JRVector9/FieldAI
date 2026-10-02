@@ -20,3 +20,6 @@ infra/agent/revocation-journal/
 
 # Local QA workbook includes test account passwords.
 docs/Field_QA_테스트_2026-09-27.xlsx
+
+# 운영 env 예시는 추적한다(실제 .env.live는 위 .env.* 규칙으로 무시).
+!infra/*/.env.live.example

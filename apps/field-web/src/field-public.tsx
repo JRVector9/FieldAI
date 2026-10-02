@@ -11,6 +11,7 @@ import { consumeReceiptHandoff } from "./receipt-handoff";
 import { PrivateInquiryPhoto } from "./private-inquiry-photo";
 import { ReceiptRotationPanel } from "./receipt-rotation";
 import { FieldCustomerNotificationConsent } from "./field-customer-notification-consent";
+import { LegalFooter, PrivacyNotice } from "./legal";
 import { inquiryDeliveryLabel } from "./field-notification-label";
 import { clearPendingPublicSubmission, publicSubmissionFingerprint, readPendingPublicSubmission,
   writePendingPublicSubmission, type PendingPublicSubmission } from "./pending-public-submission";
@@ -420,7 +421,8 @@ export function PublicCatalogPage({ id }: { id: string }) {
                 }} /><small>{photos.length > 0 ? `${photos.length}장 선택됨 · 본문 저장 후 비공개 첨부` : "눌러서 사진을 선택하세요. 본문 저장 후 비공개 첨부합니다."}</small></label>}
                 {!ownerTest && <SelectedInquiryPhotos photos={photos} />}
                 {!ownerTest && <FieldRequestFallback value={fallback} onChange={setFallback} />}
-                {!ownerTest && <label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} required /> 문의 처리에 필요한 연락처 저장에 동의합니다.</label>}
+                {!ownerTest && <PrivacyNotice kind="inquiry" />}
+                {!ownerTest && <label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} required /> 문의 처리에 필요한 연락처 저장에 동의합니다. 위 개인정보 수집·이용 안내를 확인했습니다. (필수)</label>}
                 <button type="submit" disabled={busy || recovering || !serviceId || (ownerTest && !canSubmitOwnerTest(testGate, testAccess === "allowed" ? true : null))}>{ownerTest ? "테스트 문의 제출" : "문의 제출"}</button>
                 <p>{ownerTest ? "이 입력은 테스트 원장에만 저장됩니다. 실제 고객 문의를 보려면 공개 고객 주소를 사용하세요." : "회원가입 없이 접수합니다. 번호 소유를 확인한 상태로 표시하지 않습니다."}</p>
               </form>}
@@ -429,6 +431,7 @@ export function PublicCatalogPage({ id }: { id: string }) {
       </div></>}
       {receipt && photos.length > 0 && ownerTest === false && <section className="special-panel field-public-photo-retry"><p>문의 본문은 저장됐습니다. 남은 사진 {photos.length}장의 첨부를 같은 문의에서 다시 시도할 수 있습니다.</p><SelectedInquiryPhotos photos={photos} /><button type="button" disabled={busy} onClick={() => void retryDirectPhotos()}>남은 사진 첨부 재시도</button></section>}
     </main>
+    <footer className="legal-page-footer legal-public-footer"><LegalFooter /></footer>
   </div>;
 }
 

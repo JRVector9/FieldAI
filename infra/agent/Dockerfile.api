@@ -1,0 +1,90 @@
+# syntax=docker/dockerfile:1
+# AP API·worker 런타임 이미지 (빌드 문맥: 저장소 루트)
+#   docker build -f infra/agent/Dockerfile.api -t fieldai-agent-api .
+#   docker build -f infra/agent/Dockerfile.api --target migrate -t fieldai-agent-migrate .
+# 빌드 단계에도 Field 소스·매니페스트를 복사하지 않는다(B01). worker는 같은 이미지를 다른 command로 실행한다.
+ARG NODE_IMAGE=node:24-bookworm-slim
+
+FROM ${NODE_IMAGE} AS base
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    CI=true
+WORKDIR /repo
+# pnpm 버전은 루트 package.json의 packageManager 한 곳에서만 고정한다.
+COPY package.json ./
+RUN corepack enable && corepack install
+
+# lockfile만으로 의존성을 store에 받아 둔다. lockfile이 바뀌지 않으면 이 층은 캐시된다.
+FROM base AS fetch
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm fetch --frozen-lockfile --store-dir /pnpm/store
+
+FROM fetch AS build
+COPY tsconfig.base.json ./
+COPY apps/agent-api/package.json apps/agent-api/
+# 루트(tsc·@types) + AP API만 설치한다. 네트워크 없이 store에서만 설치한다.
+RUN pnpm install --frozen-lockfile --offline --store-dir /pnpm/store \
+      --filter fieldai-products --filter @fieldai/agent-api
+COPY apps/agent-api apps/agent-api
+RUN pnpm --filter @fieldai/agent-api build
+# 운영 의존성만 담은 독립 디렉터리(/out). inject-workspace-packages는 이 명령에만 켠다:
+# pnpm 10 deploy가 공유 lockfile을 그대로 써서 오프라인으로 설치하려면 필요하다(--legacy는 재해석·네트워크 필요).
+RUN pnpm --config.inject-workspace-packages=true --filter @fieldai/agent-api deploy --prod --offline --store-dir /pnpm/store /out
+
+# migration 전용 의존성: 루트 devDependency인 node-pg-migrate와 그 전이 의존성만 lockfile 해석 그대로 복사한다.
+# 루트 importer 전체(eslint·typescript·auth CLI 등)를 넣으면 이미지가 1GB를 넘으므로 필요한 .pnpm 항목만 고른다.
+FROM build AS migrate-deps
+RUN node --input-type=module <<'JS'
+import { cpSync, mkdirSync, readdirSync, realpathSync, symlinkSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+const store = '/repo/node_modules/.pnpm';
+const out = '/migrate/node_modules';
+const seen = new Set();
+// 패키지 실제 경로의 .pnpm/<id>를 기록하고, 같은 node_modules에 링크된 의존성을 따라간다.
+function visit(packageDir) {
+  const id = relative(store, packageDir).split(sep)[0];
+  if (seen.has(id)) return;
+  seen.add(id);
+  const siblings = join(store, id, 'node_modules');
+  for (const entry of readdirSync(siblings)) {
+    if (entry.startsWith('.')) continue;
+    const names = entry.startsWith('@') ? readdirSync(join(siblings, entry)).map(name => `${entry}/${name}`) : [entry];
+    for (const name of names) visit(realpathSync(join(siblings, name)));
+  }
+}
+const entry = realpathSync('/repo/node_modules/node-pg-migrate');
+visit(entry);
+for (const id of seen) cpSync(join(store, id), join(out, '.pnpm', id), { recursive: true, verbatimSymlinks: true });
+mkdirSync(out, { recursive: true });
+symlinkSync(join('.pnpm', relative(store, entry)), join(out, 'node-pg-migrate'));
+process.stdout.write(`migration dependencies: ${seen.size} packages\n`);
+JS
+
+# 일회성 migration 이미지: node tools/run-migrations.mjs agent
+FROM ${NODE_IMAGE} AS migrate
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=migrate-deps /migrate/node_modules ./node_modules
+COPY tools/run-migrations.mjs tools/
+COPY apps/agent-api/migrations apps/agent-api/migrations
+# run-migrations.mjs는 infra/agent/.env를 항상 읽는다. 빈 파일을 두고 실제 값은 컨테이너 환경변수로 준다.
+RUN mkdir -p infra/agent && : > infra/agent/.env
+USER node
+CMD ["node", "tools/run-migrations.mjs", "agent"]
+
+# 기본 대상: API 서버. NODE_ENV=production이므로 AP_PROFILE=live가 아니면 앱이 부팅을 거부한다.
+FROM ${NODE_IMAGE} AS runtime
+ENV NODE_ENV=production \
+    AP_HOST=0.0.0.0 \
+    AP_PORT=4311
+WORKDIR /app
+# 서명 저널(revocation/retention)은 볼륨으로 붙인다. 빈 볼륨이 node 소유로 초기화되도록 미리 만든다.
+RUN mkdir -p /var/lib/fieldai/agent/revocation-journal /var/lib/fieldai/agent/retention-journal \
+    && chown -R node:node /var/lib/fieldai && chmod -R 700 /var/lib/fieldai/agent
+COPY --from=build --chown=node:node /out/package.json ./package.json
+COPY --from=build --chown=node:node /out/node_modules ./node_modules
+COPY --from=build --chown=node:node /repo/apps/agent-api/dist ./dist
+USER node
+EXPOSE 4311
+CMD ["node", "dist/server.js"]

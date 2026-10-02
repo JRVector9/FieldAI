@@ -9,6 +9,8 @@ import { AgentCustomerSupport } from './AgentCustomerSupport';
 import { AgentRetentionAdmin } from './AgentRetentionAdmin';
 import { BillingAdmin } from './billing-admin';
 import './billing-admin.css';
+import { signInOutcome } from './auth-flow';
+import { TwoFactorChallenge } from './agent-auth-pages';
 
 type Overview = {
   product: "agent";
@@ -48,7 +50,7 @@ async function request(path: string, method = "GET", body?: unknown) {
 }
 
 export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSection }) {
-  const [phase, setPhase] = useState<"loading" | "auth" | "forbidden" | "blocked" | "failed" | "ready">("loading");
+  const [phase, setPhase] = useState<"loading" | "auth" | "totp" | "forbidden" | "mfa" | "failed" | "ready">("loading");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,10 +62,8 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
     try {
       const result = await request("/v1/admin/overview");
       if (result.status === 401) { setPhase("auth"); return; }
+      if (result.status === 403 && (result.data as { error?: string }).error === "mfa_required") { setPhase("mfa"); return; }
       if (result.status === 403) { setPhase("forbidden"); return; }
-      if (result.status === 503 && (result.data as { error?: string }).error === "blocked_integration") {
-        setPhase("blocked"); return;
-      }
       if (result.status !== 200) throw new Error(`조회 실패 (${result.status})`);
       const value = result.data as Overview;
       if (value.product !== "agent" || !value.counts || !Array.isArray(value.recentIncidents)
@@ -81,8 +81,11 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
     event.preventDefault(); setBusy(true); setStatus("");
     try {
       const result = await request("/api/auth/sign-in/email", "POST", { email, password });
-      if (result.status !== 200) { setStatus(`로그인하지 못했습니다 (${result.status}).`); return; }
+      const outcome = signInOutcome(result.status, result.data);
+      if (outcome === "email_not_verified") { setStatus("이메일 주소 확인이 필요합니다. 가입 확인 메일의 링크를 먼저 열어 주세요."); return; }
+      if (outcome !== "signed_in" && outcome !== "two_factor") { setStatus(`로그인하지 못했습니다 (${result.status}).`); return; }
       setPassword("");
+      if (outcome === "two_factor") { setPhase("totp"); return; }
       await load();
     } catch { setStatus("인증 서버에 연결하지 못했습니다. 다시 시도해 주세요."); }
     finally { setBusy(false); }
@@ -118,7 +121,7 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
     notifications: "실제 발송 공급사가 연결되지 않아 고객 알림은 미연결 상태입니다. 결과 미상 사건을 임의 재발송하지 않습니다.",
     "ai-deployments": "AI·지식 승인과 배포 활성화는 실제 모델 응답 성공과 구별됩니다.",
     billing: "실결제 공급사와 승인된 AP 가격·청구 원장이 미연결입니다. 체험을 유료 결제로 표시하지 않습니다.",
-    audit: "신고 상세와 고객정보는 각각 승인된 범위에서만 열람합니다. 운영 추가 인증은 미연결입니다.",
+    audit: "신고 상세와 고객정보는 각각 승인된 범위에서만 열람합니다. 운영 환경 관리자 화면은 2단계 인증을 마친 세션에서만 열립니다.",
   };
   return <div className="site-shell"><header className="site-header"><a href="/"><Brand product="Agent Platform" /></a>
     <nav aria-label="제품 이동"><a href="/workspace">AP 사업자 작업실</a></nav></header>
@@ -127,7 +130,7 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
         {sections.map(item => <a key={item.id} href={item.id === "operations" ? "/admin" : `/admin/${item.id}`}
           aria-current={section === item.id ? "page" : undefined}>
           {item.title.replace("AP ", "")}</a>)}
-      </nav><p>고객 원문·연락처는 기본 화면에 표시하지 않습니다.</p></aside>
+      </nav><a href="/admin/mfa">관리자 2단계 인증 설정 (추가)</a><p>고객 원문·연락처는 기본 화면에 표시하지 않습니다.</p></aside>
     <main className="feature-section agent-admin-main"><div className="feature-heading"><p className="eyebrow">Agent Platform · 제품 관리자</p>
       <h1>{current.title}</h1><p>{current.description} 기본 화면에는 고객 원문과 연락처를 표시하지 않습니다.</p></div>
       {status && <p role="status" className="state-message">{status}</p>}
@@ -138,7 +141,10 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
           <button type="submit" disabled={busy}>AP 관리자 로그인</button></form></section>}
       {phase === "forbidden" && <section className="special-panel"><h2>관리자 권한 없음</h2><p>이 AP 계정에는 AP 관리자 권한이 없습니다. 사업자·매체 권한만으로 운영 상태를 열 수 없습니다.</p>
         <button type="button" disabled={busy} onClick={() => void signOut()}>다른 AP 계정으로 로그인</button></section>}
-      {phase === "blocked" && <section className="special-panel"><h2>관리자 추가 인증 미연결</h2><p>관리자 추가 인증과 운영 승인이 연결되기 전에는 운영 상태 접근을 차단합니다.</p></section>}
+      {phase === "totp" && <TwoFactorChallenge onVerified={load} onCancel={() => setPhase("auth")} />}
+      {phase === "mfa" && <section className="special-panel"><h2>2단계 인증 필요</h2><p>운영 환경의 AP 관리자 화면은 인증 앱(TOTP) 2단계 인증을 마친 로그인 세션에서만 열립니다. 2단계 인증을 아직 켜지 않았다면 설정을 마친 뒤, 이미 켰다면 로그아웃 후 다시 로그인해 인증 코드를 입력해 주세요.</p>
+        <a href="/admin/mfa">관리자 2단계 인증 설정 (추가) →</a>
+        <button type="button" disabled={busy} onClick={() => void signOut()}>로그아웃 후 다시 로그인</button></section>}
       {phase === "failed" && <button type="button" disabled={busy} onClick={() => void load()}>운영 상태 다시 불러오기</button>}
       {phase === "ready" && overview && <>{section === "billing" ? <><BillingAdmin /><button className="agent-admin-signout" type="button" disabled={busy} onClick={() => void signOut()}>AP 관리자 로그아웃</button></> : <section className="agent-admin-summary"><div className="agent-admin-summary-head"><div><h2>{section === "operations" ? "오늘의 운영 현황" : current.title}</h2><p>AP 관리자 · {overview.role} · 조회 시각 {new Date(overview.snapshotAt).toLocaleString("ko-KR")}</p></div><button type="button" disabled={busy} onClick={() => void load()}>새로고침</button></div>
         <div className="agent-admin-stats">{cards.map(([label, count]) => <article key={label}><h3>{label}</h3><strong>{count}</strong><span>건</span></article>)}</div>
@@ -167,6 +173,6 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
       <a href="/admin/ai-deployments" aria-current={section === "ai-deployments" ? "page" : undefined}>AI</a>
       <a href="/admin/notifications" aria-current={section === "notifications" ? "page" : undefined}>발송</a>
       <a href="/admin/audit" aria-current={section === "audit" ? "page" : undefined}>감사</a>
-      <details><summary>더보기</summary><div><a href="/admin/organizations" aria-current={section === "organizations" ? "page" : undefined}>조직</a><a href="/admin/billing" aria-current={section === "billing" ? "page" : undefined}>구독</a></div></details>
+      <details><summary>더보기</summary><div><a href="/admin/organizations" aria-current={section === "organizations" ? "page" : undefined}>조직</a><a href="/admin/billing" aria-current={section === "billing" ? "page" : undefined}>구독</a><a href="/admin/mfa">2단계 인증 (추가)</a></div></details>
     </nav></div></div>;
 }

@@ -47,7 +47,7 @@ try {
     await delay(100);
   }
   assert.equal(response?.status, 200, `${product} server did not become ready`);
-  assert.deepEqual(await response.json(), { product, status: 'ready' });
+  assert.deepEqual(await response.json(), { product, status: 'ready', integrations: { email: 'mock' } });
   process.stdout.write(`${product} API ready with only its own DB and auth settings in the child environment\n`);
 } finally {
   child.kill('SIGTERM');

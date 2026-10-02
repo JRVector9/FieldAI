@@ -183,7 +183,7 @@ test('Field retention uses approved immutable periods and real closure, with nat
     assert.equal(new Set(seen).size, seen.length);
     for (const id of pagedIds) assert.ok(seen.includes(id), 'microsecond ordered work must not be skipped');
     process.env.FIELD_PROFILE = 'sandbox';
-    assert.equal((await app.inject({ url: '/v1/admin/retention/policies', headers: headers(approver) })).statusCode, 503);
+    assert.deepEqual((await app.inject({ url: '/v1/admin/retention/policies', headers: headers(approver) })).json(), { error: 'mfa_required' });
   } finally {
     process.env.FIELD_PROFILE = previous; await app.close();
     await pool.query('delete from field.organizations where owner_user_id=any($1::text[])', [users]);

@@ -11,6 +11,7 @@ import type { ApConnectorConfig } from './ap-connector.js';
 import { rejectExpiredTrial } from './trial-access.js';
 import { bookingScheduleReady } from './bookings.js';
 import type { FieldRevocationJournal } from './revocation-journal.js';
+import type { EmailDeliveryState } from './email-provider.js';
 
 export type FieldBusinessRuntime = {
   notification?: NotificationContext;
@@ -26,6 +27,8 @@ export type FieldBusinessRuntime = {
   apConnector?: ApConnectorConfig;
   revocationJournal?: Pick<FieldRevocationJournal, 'append'>;
   oauthLifecycleGuard?: () => Promise<void>;
+  // 인증 메일 발송 환경 상태(readiness 세부 정보·웹 안내용). 미설정이면 노출하지 않는다.
+  emailDeliveryState?: () => EmailDeliveryState;
 };
 
 type Service = {

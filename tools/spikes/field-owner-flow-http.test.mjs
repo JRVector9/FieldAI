@@ -16,7 +16,7 @@ assert.equal(database.pathname, '/fieldai_field_mock');
 
 test('Field owner publishes a site and handles guest inquiry and both booking modes', async () => {
   const ready = await fetch('http://127.0.0.1:4321/health/ready');
-  assert.deepEqual(await ready.json(), { product: 'field', status: 'ready' });
+  assert.deepEqual(await ready.json(), { product: 'field', status: 'ready', integrations: { email: 'mock' } });
   const workspace = await fetch('http://127.0.0.1:3002/workspace');
   assert.equal(workspace.status, 200);
   const email = `field-owner-flow-${randomUUID()}@example.invalid`;

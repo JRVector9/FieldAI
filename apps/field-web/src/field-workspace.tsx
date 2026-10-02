@@ -14,6 +14,8 @@ import { OwnerReservationInboxThread } from "./field-owner-reservation-inbox";
 import { PrivateInquiryPhoto } from "./private-inquiry-photo";
 import { ExternalRequestPhotos } from "./external-request-photos";
 import { inquiryDeliveryLabel } from "./field-notification-label";
+import { signInOutcome } from "./auth-flow";
+import { TwoFactorChallenge, VerificationEmailNotice } from "./field-auth-pages";
 
 type Phase = "loading" | "failed" | "auth" | "organization" | "catalog";
 type OwnerNotification = { id: string; organizationId: string; targetId: string;
@@ -169,6 +171,9 @@ export function FieldWorkspace() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [authMode, setAuthMode] = useState<"sign-up" | "sign-in">("sign-up");
+  // 비mock 가입 확인 대기 이메일과 2단계 인증 확인 대기 상태
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
+  const [twoFactorPending, setTwoFactorPending] = useState(false);
   const [activeOwnerSection, setActiveOwnerSection] = useState("today");
   const [todayTaskFilter, setTodayTaskFilter] = useState<"all" | "messages" | "bookings">("all");
   const ownerMainRef = useRef<HTMLElement>(null);
@@ -622,12 +627,16 @@ export function FieldWorkspace() {
 
   async function authenticate(event: FormEvent<HTMLFormElement>, mode: "sign-in" | "sign-up") {
     event.preventDefault();
-    setBusy(true); setStatus("");
+    setBusy(true); setStatus(""); setVerificationEmail(null);
     try {
       const result = await requestJson(`/api/auth/${mode}/email`, "POST", mode === "sign-up" ? { email, password, name } : { email, password });
+      const outcome = mode === "sign-in" ? signInOutcome(result.status, result.data) : null;
+      if (outcome === "email_not_verified") { setVerificationEmail(email); return; }
+      if (outcome === "two_factor") { setTwoFactorPending(true); return; }
       if (result.status !== 200) { setStatus(`계정 처리에 실패했습니다 (${result.status}).`); return; }
       if (mode === "sign-up") {
         const signedIn = await requestJson("/api/auth/sign-in/email", "POST", { email, password });
+        if (signInOutcome(signedIn.status, signedIn.data) === "email_not_verified") { setVerificationEmail(email); return; }
         if (signedIn.status !== 200) { setStatus("가입되었습니다. 이메일 확인 후 로그인해 주세요."); return; }
       }
       await loadCatalog();
@@ -1028,13 +1037,15 @@ export function FieldWorkspace() {
     <main className="field-auth-layout"><section className="field-auth-story"><p className="field-home-kicker">YOUR BUSINESS, YOUR SPACE</p><h1>내 사업의 첫 화면을<br />직접 만들어보세요.</h1><p>개발 지식 없이도 괜찮아요.<br />사업 정보만 준비하면 시작할 수 있어요.</p><ul><li>나만의 사이트와 주소</li><li>AI와 함께 만드는 소개</li><li>고객 문의·예약을 한곳에서</li></ul></section>
       <section className="field-auth-form"><h2>{authMode === "sign-up" ? "내 사업의 새로운 시작." : "내 관리실로 돌아오기."}</h2><p>{authMode === "sign-up" ? "계정을 만들고 홈페이지 개설을 시작하세요." : "Field 계정으로 사업과 예약을 이어서 관리하세요."}</p>
         <button className="field-auth-kakao" type="button" disabled>카카오로 시작하기</button><p className="field-auth-unavailable">카카오 인증은 외부 연동 후 사용할 수 있습니다.</p><div className="field-auth-divider">또는 이메일로</div>
-        <form className="form-fields" onSubmit={event => void authenticate(event, authMode)}>
+        {twoFactorPending ? <TwoFactorChallenge onVerified={async () => { setTwoFactorPending(false); await loadCatalog(); }} onCancel={() => setTwoFactorPending(false)} /> : <form className="form-fields" onSubmit={event => void authenticate(event, authMode)}>
           {authMode === "sign-up" && <label>이름<input required autoComplete="name" placeholder="어떻게 불러드릴까요?" value={name} onChange={event => setName(event.target.value)} /></label>}
           <label>이메일<input type="email" required autoComplete="email" placeholder="name@example.com" value={email} onChange={event => setEmail(event.target.value)} /></label>
           <label>비밀번호<input type="password" required minLength={8} autoComplete={authMode === "sign-up" ? "new-password" : "current-password"} value={password} onChange={event => setPassword(event.target.value)} /></label>
           <button type="submit" disabled={busy}>{authMode === "sign-up" ? "내 홈페이지 시작하기" : "로그인"}</button>
-        </form>
+        </form>}
         {status && <p role="status" className="state-message">{status}</p>}
+        {verificationEmail && <VerificationEmailNotice key={verificationEmail} email={verificationEmail} />}
+        {authMode === "sign-in" && !twoFactorPending && <a className="field-auth-switch" href="/forgot-password">비밀번호 찾기 (추가)</a>}
         <button className="field-auth-switch" type="button" onClick={() => setAuthMode(authMode === "sign-in" ? "sign-up" : "sign-in")}>{authMode === "sign-up" ? "이미 Field 계정이 있나요? 로그인" : "처음이신가요? 무료로 시작"} →</button>
         <p className="field-auth-footnote">로컬 환경에서는 이메일로 바로 시작합니다. 실제 인증 공급사는 기능 테스트 과정에서 연결합니다.</p>
       </section>

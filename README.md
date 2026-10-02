@@ -129,3 +129,16 @@ FIELD_PROFILE=mock node --env-file=infra/field/.env apps/field-api/dist/worker.j
 - 연결 장애 회귀: 전체 `pnpm mock:run`의 AP·Field API/웹과 연결 worker가 실행 중일 때 `pnpm test:integration:faults`를 사용한다. 양쪽 mock PostgreSQL 17·Field Valkey를 정확한 로컬 포트에서 확인한 후 계약 정적 검사, 제품별 DB fault, 양방향 실제 HTTP를 실행한다. 운영 서버 중단·키 회전·구버전 호환 및 출시 승인은 별도다.
 
 로컬 mock 가입은 메일 발송 없이 로그인할 수 있다. `NODE_ENV=production`의 mock API는 부팅을 거부한다. 실제 메일/카카오 인증, AP 고객 AI의 실모델 품질·실도메인 위젯 검수, Field 자체 도메인·제작 AI의 실모델 검수, 실제 알림·결제·운영 배포는 아직 미완료다. 두 AI 어댑터는 일반 로컬 서버에서 가짜 답변을 만들지 않고 각각 공급사 설정을 요구한다. AP 문의의 사업자 내부 알림은 관리실에서 볼 수 있으나 카카오/푸시·고객 문자는 `blocked_integration`이며, Field 문의·예약 외부 알림도 공급사 연결 전 `blocked_integration`이다. 고객은 별도 확인키로 AP 답변을 직접 조회한다. Field 예약/직접 문의·후속 대화와 AP 문의·후속 메시지 화면은 응답 분실 후 같은 입력으로 다시 제출하면 기존 원본을 복구한다. 새로고침을 가로지르는 접수 복구, 확인키 분실 지원, 실운영 프록시·공급사·복구 및 정식 QA는 남아 있다.
+
+## 운영 배포 산출물
+
+제품별 운영 이미지·compose·edge·CI 파일은 `infra/agent/`, `infra/field/`, `infra/edge/Caddyfile.example`, `.github/workflows/ci.yml`에 있다. 목록과 결정은 `docs/04_SECURITY_OPERATIONS_RELEASE.md` 5.1.1과 `docs/adr/0003-deployment-artifacts.md`를 따른다. 각 제품은 `infra/<product>/.env.live.example`을 저장소 밖 secret으로 채워 `infra/<product>/.env.live`(git 무시)로 두고 다음처럼 따로 배포한다.
+
+```bash
+docker compose -p fieldai-agent --env-file infra/agent/.env.live -f infra/agent/compose.live.yaml build
+docker compose -p fieldai-agent --env-file infra/agent/.env.live -f infra/agent/compose.live.yaml up -d --wait
+docker compose -p fieldai-field --env-file infra/field/.env.live -f infra/field/compose.live.yaml build
+docker compose -p fieldai-field --env-file infra/field/.env.live -f infra/field/compose.live.yaml up -d --wait
+```
+
+공급사 자격증명이 있어야 부팅되는 worker는 `--profile retention`, `--profile site-ai`(Field), `--profile ap-connector`(Field)로 따로 켠다. 실제 도메인·TLS·레지스트리 push·운영 서버 검수는 아직 수행하지 않았다.

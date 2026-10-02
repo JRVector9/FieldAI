@@ -1,4 +1,4 @@
-# CODEX 인수인계 — 2026-10-02
+# CODEX 인수인계 — 2026-10-03
 
 ## 사용자 지정 기준 시안 — 작업 재개 시 필수 확인
 
@@ -8,6 +8,14 @@
 - 원본에 있는 화면을 처음 구현할 때 해당 HTML/CSS를 직접 읽고 그대로 기준으로 사용한다. 이미 완료된 화면은 구체적 새 오류/요구 변경 없이 다시 작업하지 않는다. 제품별 API·권한·실제 상태는 v3.0 독립 제품 경계를 따른다.
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
+
+## 운영 코드 공백 구현(2단계) — 2026-10-03
+
+- **Current objective / state:** 리뷰 잔여 결함 14건(1단계, `a745058`)에 이어 운영(non-mock) 환경을 막던 코드 공백을 구현했다: live 웹 빌드, 이메일 확인·재설정, 관리자 2FA, 운영 체험 정책, 템플릿 자동 구성, 약관·처리방침·고지, Dockerfile/compose.live/Caddy/CI. 상세·결정 필요 사항은 `docs/technical/review_2026-10-02/01_SUMMARY.md` §8·§9.
+- **Key design decisions:** 메일·체험·관리자 기능은 env/정책이 없으면 blocked_integration 유지(가짜 성공 없음). 2FA로 열린 세션만 관리자 허용(`session.twoFactorVerified`). 체험 행은 모든 프로필에서 인정하되 시작은 정책 env가 있어야 한다. 템플릿은 승인 카탈로그 값만 복사하고 AI가 숫자/후기를 만들지 않는다. 배포는 제품별 이미지·compose로 B01/B02 유지.
+- **New env:** `AP_SMTP_URL`/`AP_MAIL_FROM`/`FIELD_SMTP_URL`/`FIELD_MAIL_FROM`, `*_TRIAL_CONSENT_VERSION`/`*_TRIAL_DAYS`, `*_TRUST_PROXY`, `FIELD_PUBLIC_SUBMISSION_IP_LIMIT`/`FIELD_PUBLIC_MESSAGE_IP_LIMIT`, `NEXT_PUBLIC_LEGAL_*`, Field live 웹 필수 `FIELD_SITE_BASE_DOMAIN`+`NEXT_PUBLIC_FIELD_WEB_ORIGIN`. 전체 목록은 `infra/*/.env.live.example`.
+- **Tests actually run:** `01_SUMMARY.md` §9 검수 표. 실 SMTP/TLS/레지스트리/운영 기동/CI 실제 실행은 미검증.
+- **Remaining work:** §9 "결정 필요"(소개 중복, API 이미지의 next 포함, live OAuth baseline CLI, 자체 도메인 on-demand TLS, connect 로그인 2FA, outbox 보존), HEIC, 계정·조직 삭제, logger/PII redaction, lifecycle 저널 전체 스캔, 사진 삭제 경로, 사용자 결정 3건(숨김 사이트 신규 접수, `(추가)` 표식, trustProxy 배포 조건 문서화).
 
 ## 전체 검토·결함 수정·서비스화 갭 정리 — 2026-10-02
 

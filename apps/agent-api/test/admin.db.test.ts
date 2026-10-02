@@ -75,7 +75,7 @@ test('AP admin overview requires its own role and blocks non-mock access without
     assert.equal(audit.rows[0]?.count, '1');
     process.env.AP_PROFILE = 'sandbox';
     assert.deepEqual((await app.inject({ url: '/v1/admin/overview', headers: { cookie } })).json(),
-      { error: 'blocked_integration' });
+      { error: 'mfa_required' });
     assert.equal((await pool.query<{ count: string }>(
       'select count(*)::text as count from ap.admin_access_audit where actor_user_id = $1',
       [actor])).rows[0]?.count, '1');

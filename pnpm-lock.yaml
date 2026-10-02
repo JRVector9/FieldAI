@@ -50,6 +50,9 @@ importers:
       fastify:
         specifier: 5.12.5
         version: 5.12.5
+      nodemailer:
+        specifier: 10.0.13
+        version: 10.0.13
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -115,6 +118,9 @@ importers:
       iovalkey:
         specifier: 0.4.0
         version: 0.4.0
+      nodemailer:
+        specifier: 10.0.13
+        version: 10.0.13
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -137,6 +143,9 @@ importers:
       next:
         specifier: 16.3.6
         version: 16.3.6(@babel/core@7.29.7)(@types/node@26.6.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      qrcode:
+        specifier: 1.5.4
+        version: 1.5.4
       react:
         specifier: 19.3.0
         version: 19.3.0
@@ -144,6 +153,9 @@ importers:
         specifier: 19.3.0
         version: 19.3.0(react@19.3.0)
     devDependencies:
+      '@types/qrcode':
+        specifier: 1.5.6
+        version: 1.5.6
       '@types/react':
         specifier: 19.3.0
         version: 19.3.0
@@ -1799,6 +1811,10 @@ packages:
   node-releases@2.0.57:
     resolution: {integrity: sha512-kQK9LGGFiHtrWiNhZtA7Qbw17AQz+dmsEKODRIVTXA9+e5MS/2gZEBhYJt13GrAz5/IOZKddH/0Z3TP/Zgo+yw==}
     engines: {node: '>=18'}
+
+  nodemailer@10.0.13:
+    resolution: {integrity: sha512-SzG86OlvcW/NNhUFC6uROMwRTL4n7MswfQqC/T8mhkmnY1YVa23zUEMYi4ijSeXSl9GLz9ZeTJDUatEDuY5FeQ==}
+    engines: {node: '>=20.0.0'}
 
   on-exit-leak-free@2.1.2:
     resolution: {integrity: sha512-0eJJY6hXLGf1udHwfNftBqH+g73EU4B504nZeKpz1sYRKafAghwxEJunB2O7rDZkL4PGfsMVnTXZ2EjibbqcsA==}
@@ -3926,6 +3942,8 @@ snapshots:
       '@types/pg': 8.23.1
 
   node-releases@2.0.57: {}
+
+  nodemailer@10.0.13: {}
 
   on-exit-leak-free@2.1.2: {}
 

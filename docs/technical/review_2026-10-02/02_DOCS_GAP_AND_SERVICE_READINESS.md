@@ -12,6 +12,23 @@
 
 ---
 
+## 2026-10-03 갱신 — 이 문서의 1-A 항목 처리 상태
+
+| 1-A # | 항목 | 상태 |
+|---|---|---|
+| 1 | 웹 live 빌드 | 구현(`01_SUMMARY.md` §9) |
+| 2 | 인증 메일·비밀번호 재설정 | 구현. SMTP 미설정 시 blocked_integration |
+| 3 | 체험 mock 전용 | 구현. `*_TRIAL_CONSENT_VERSION`/`*_TRIAL_DAYS` 정책 승인 전 blocked_integration |
+| 4 | 관리자 MFA | 구현(TOTP+백업코드, 2FA 세션 판별) |
+| 5 | 배포 산출물 | 구현(Dockerfile/compose.live/Caddy/CI). 실 TLS·레지스트리·운영 기동은 미검증 |
+| 6 | 템플릿 빈 사이트 | 구현(승인 카탈로그로 섹션 구성) |
+| 7 | HEIC | 미처리 |
+| 8 | 계정·조직 삭제 | 미처리 |
+| 9 | 고객 폼 개인정보 고지 | 구현 |
+| 10 | trustedOrigins/trustProxy/logger | trustedOrigins·trustProxy 구현, logger 미처리 |
+
+아래 본문은 2026-10-02 조사 당시 기준이다.
+
 ## 결론 요약
 
 1. **내부 테스트는 매우 두껍지만, 운영 프로필(sandbox/live)에서는 가입부터 진행되지 않습니다.**

@@ -6,6 +6,8 @@ const sitePage = /^\/site\/([^/]+)(?:\/[^/]+)?\/?$/;
 const publicPage = /^\/public\/([^/]+)\/?$/;
 const receiptPage = /^\/(?:inquiry|reservation)\/[^/]+\/?$/;
 const notFound = () => new Response("Not Found", { status: 404 });
+// 설계 시안(/preview)은 고정 예시 데이터라 live 플랫폼 Host에서 노출하지 않는다. mock·sandbox는 기존처럼 허용한다.
+const previewBlocked = (path: string) => process.env.APP_PROFILE === "live" && (path === "/preview" || path.startsWith("/preview/"));
 const unavailable = () => new Response("사업장 정보를 확인하지 못했습니다. 잠시 뒤 새로고침해 주세요.", {
   status: 503,
   headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
@@ -16,7 +18,7 @@ export async function proxy(request: NextRequest) {
   const host = (request.headers.get("host") ?? "").toLowerCase();
   const suffix = domain ? `.${domain.toLowerCase()}` : "";
   if (!suffix || !host.endsWith(suffix)) {
-    if (platformHost(host)) return NextResponse.next();
+    if (platformHost(host)) return previewBlocked(request.nextUrl.pathname) ? notFound() : NextResponse.next();
     try {
       const mapping = await customHostMapping(host);
       if (!mapping) return notFound();

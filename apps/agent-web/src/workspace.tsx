@@ -6,6 +6,8 @@ import { AgentNotificationSettings } from "./agent-notification-settings";
 import { AgentRetentionNotice } from './AgentRetentionNotice';
 import type { WorkRetention } from './agent-retention';
 import { PrivateInquiryPhoto } from "./private-inquiry-photo";
+import { signInOutcome } from "./auth-flow";
+import { TwoFactorChallenge, VerificationEmailNotice } from "./agent-auth-pages";
 
 type Draft = {
   organizationId: string;
@@ -79,6 +81,9 @@ export function AgentWorkspace() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [authMode, setAuthMode] = useState<"sign-up" | "sign-in">("sign-up");
+  // 비mock 가입 확인 대기 이메일과 2단계 인증 확인 대기 상태
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
+  const [twoFactorPending, setTwoFactorPending] = useState(false);
   const [activeSection, setActiveSection] = useState("today");
   const ownerMainRef = useRef<HTMLElement>(null);
   const [organizationName, setOrganizationName] = useState("");
@@ -249,15 +254,20 @@ export function AgentWorkspace() {
     event.preventDefault();
     setBusy(true);
     setStatus("");
+    setVerificationEmail(null);
     try {
       const result = await jsonRequest(`/api/auth/${mode}/email`, "POST", mode === "sign-up"
         ? { email, password, name } : { email, password });
+      const outcome = mode === "sign-in" ? signInOutcome(result.status, result.data) : null;
+      if (outcome === "email_not_verified") { setVerificationEmail(email); return; }
+      if (outcome === "two_factor") { setTwoFactorPending(true); return; }
       if (result.status !== 200) {
         setStatus(`계정 처리에 실패했습니다 (${result.status}). 입력 정보와 인증 상태를 확인해 주세요.`);
         return;
       }
       if (mode === "sign-up") {
         const signedIn = await jsonRequest("/api/auth/sign-in/email", "POST", { email, password });
+        if (signInOutcome(signedIn.status, signedIn.data) === "email_not_verified") { setVerificationEmail(email); return; }
         if (signedIn.status !== 200) {
           setStatus("가입되었습니다. 이메일 확인 후 로그인해 주세요.");
           return;
@@ -564,7 +574,7 @@ export function AgentWorkspace() {
     return !query || `${item.customer_name} ${item.service_snapshot?.name ?? ""} ${inquiryStateLabel(item.state)} ${inquirySourceLabel(item.source_kind)}`
       .toLocaleLowerCase().includes(query);
   });
-  if (phase === "auth") return <div className="agent-auth-shell"><header className="agent-home-header"><div className="agent-home-wrap agent-home-nav"><a href="/"><Brand product="Agent Platform" /></a><nav aria-label="서비스 탐색"><a href="/">서비스 소개</a><a href="/publisher">제휴 매체</a><a href={process.env.NEXT_PUBLIC_FIELD_WEB_URL ?? "http://127.0.0.1:3002"}>홈페이지 제작</a></nav><div className="agent-home-nav-actions"><button type="button" onClick={() => setAuthMode(authMode === "sign-in" ? "sign-up" : "sign-in")}>{authMode === "sign-in" ? "무료로 시작" : "로그인"}</button></div></div></header><main className="agent-auth-layout"><section className="agent-auth-story"><p className="agent-home-kicker">YOUR BUSINESS AGENT</p><h1>내 사업을 아는 AI를<br />직접 준비해 보세요.</h1><p>홈페이지를 바꾸지 않아도 괜찮아요.<br />승인한 정보로 상담을 시작할 수 있어요.</p><ul><li>서비스와 자주 묻는 질문 직접 승인</li><li>상담 링크와 기존 사이트 설치</li><li>고객 문의를 AP에서 이어받기</li></ul></section><section className="agent-auth-form"><h2>{authMode === "sign-up" ? "내 사업 AI의 새로운 시작." : "내 상담 관리실로 돌아오기."}</h2><p>{authMode === "sign-up" ? "AP 계정을 만들고 사업자 AI를 준비하세요." : "AP 계정으로 상담과 고객 문의를 이어서 관리하세요."}</p><button className="agent-auth-kakao" type="button" disabled>카카오로 시작하기</button><p className="agent-auth-unavailable">카카오 인증은 외부 연동 후 사용할 수 있습니다.</p><div className="agent-auth-divider">또는 이메일로</div><form className="form-fields" onSubmit={event => void authenticate(event, authMode)}>{authMode === "sign-up" && <label>이름<input required autoComplete="name" placeholder="어떻게 불러드릴까요?" value={name} onChange={event => setName(event.target.value)} /></label>}<label>이메일<input type="email" required autoComplete="email" placeholder="name@example.com" value={email} onChange={event => setEmail(event.target.value)} /></label><label>비밀번호<input type="password" required minLength={8} autoComplete={authMode === "sign-up" ? "new-password" : "current-password"} value={password} onChange={event => setPassword(event.target.value)} /></label><button type="submit" disabled={busy}>{authMode === "sign-up" ? "내 AI 시작하기" : "로그인"}</button></form>{status && <p role="status" className="state-message">{status}</p>}<button className="agent-auth-switch" type="button" onClick={() => setAuthMode(authMode === "sign-in" ? "sign-up" : "sign-in")}>{authMode === "sign-up" ? "이미 AP 계정이 있나요? 로그인" : "처음이신가요? 무료로 시작"} →</button><p className="agent-auth-footnote">로컬 환경에서는 이메일로 바로 시작합니다. 운영 인증 공급사는 기능 테스트 과정에서 연결합니다.</p></section></main></div>;
+  if (phase === "auth") return <div className="agent-auth-shell"><header className="agent-home-header"><div className="agent-home-wrap agent-home-nav"><a href="/"><Brand product="Agent Platform" /></a><nav aria-label="서비스 탐색"><a href="/">서비스 소개</a><a href="/publisher">제휴 매체</a><a href={process.env.NEXT_PUBLIC_FIELD_WEB_URL ?? "http://127.0.0.1:3002"}>홈페이지 제작</a></nav><div className="agent-home-nav-actions"><button type="button" onClick={() => setAuthMode(authMode === "sign-in" ? "sign-up" : "sign-in")}>{authMode === "sign-in" ? "무료로 시작" : "로그인"}</button></div></div></header><main className="agent-auth-layout"><section className="agent-auth-story"><p className="agent-home-kicker">YOUR BUSINESS AGENT</p><h1>내 사업을 아는 AI를<br />직접 준비해 보세요.</h1><p>홈페이지를 바꾸지 않아도 괜찮아요.<br />승인한 정보로 상담을 시작할 수 있어요.</p><ul><li>서비스와 자주 묻는 질문 직접 승인</li><li>상담 링크와 기존 사이트 설치</li><li>고객 문의를 AP에서 이어받기</li></ul></section><section className="agent-auth-form"><h2>{authMode === "sign-up" ? "내 사업 AI의 새로운 시작." : "내 상담 관리실로 돌아오기."}</h2><p>{authMode === "sign-up" ? "AP 계정을 만들고 사업자 AI를 준비하세요." : "AP 계정으로 상담과 고객 문의를 이어서 관리하세요."}</p><button className="agent-auth-kakao" type="button" disabled>카카오로 시작하기</button><p className="agent-auth-unavailable">카카오 인증은 외부 연동 후 사용할 수 있습니다.</p><div className="agent-auth-divider">또는 이메일로</div>{twoFactorPending ? <TwoFactorChallenge onVerified={async () => { setTwoFactorPending(false); await loadDraft(); }} onCancel={() => setTwoFactorPending(false)} /> : <form className="form-fields" onSubmit={event => void authenticate(event, authMode)}>{authMode === "sign-up" && <label>이름<input required autoComplete="name" placeholder="어떻게 불러드릴까요?" value={name} onChange={event => setName(event.target.value)} /></label>}<label>이메일<input type="email" required autoComplete="email" placeholder="name@example.com" value={email} onChange={event => setEmail(event.target.value)} /></label><label>비밀번호<input type="password" required minLength={8} autoComplete={authMode === "sign-up" ? "new-password" : "current-password"} value={password} onChange={event => setPassword(event.target.value)} /></label><button type="submit" disabled={busy}>{authMode === "sign-up" ? "내 AI 시작하기" : "로그인"}</button></form>}{status && <p role="status" className="state-message">{status}</p>}{verificationEmail && <VerificationEmailNotice key={verificationEmail} email={verificationEmail} />}{authMode === "sign-in" && !twoFactorPending && <a className="agent-auth-switch" href="/forgot-password">비밀번호 찾기 (추가)</a>}<button className="agent-auth-switch" type="button" onClick={() => setAuthMode(authMode === "sign-in" ? "sign-up" : "sign-in")}>{authMode === "sign-up" ? "이미 AP 계정이 있나요? 로그인" : "처음이신가요? 무료로 시작"} →</button><p className="agent-auth-footnote">로컬 환경에서는 이메일로 바로 시작합니다. 운영 인증 공급사는 기능 테스트 과정에서 연결합니다.</p></section></main></div>;
   if (phase === "organization") return <div className="agent-start-shell"><header className="agent-home-header"><div className="agent-home-wrap agent-home-nav"><a href="/"><Brand product="Agent Platform" /></a><button className="agent-start-logout" type="button" disabled={busy || Boolean(organizationName.trim())} onClick={() => void signOut()}>로그아웃</button></div></header><main className="agent-start-main"><p className="agent-home-kicker">LET’S BEGIN</p><h1>사장님, 반가워요.<br />어떻게 시작할까요?</h1><p className="agent-start-lead">사업 정보를 직접 승인한 뒤 상담 AI를 공유할 수 있어요.</p><div className="agent-start-choices"><section><span aria-hidden="true">✧</span><h2>내 사업 AI만 만들기</h2><p>기존 홈페이지를 그대로 두고, 상담 링크와 외부 위젯으로 고객을 만나세요.</p><h3>첫 조직 만들기</h3><form onSubmit={event => void createOrganization(event)} className="form-fields"><label>상호<input required maxLength={160} value={organizationName} onChange={event => setOrganizationName(event.target.value)} placeholder="사업체 이름" /></label><button type="submit" disabled={busy}>조직 만들기 →</button></form></section><section><span aria-hidden="true">◎</span><h2>홈페이지도 함께 만들기</h2><p>사이트 제작과 예약·문의 운영은 Field에서 시작해 주세요. Field는 별도 계정으로 운영됩니다.</p><a href={process.env.NEXT_PUBLIC_FIELD_WEB_URL ?? "http://127.0.0.1:3002"}>Field에서 홈페이지 만들기 →</a></section></div>{status && <p role="status" className="state-message">{status}</p>}<p className="agent-start-note">가입·사업 정보 승인·AI 활성화는 각각 별도 단계입니다. 예시 문의를 계정에 넣지 않습니다.</p></main></div>;
 
   return <div className={phase === "draft" ? "agent-owner-shell" : "site-shell"}>

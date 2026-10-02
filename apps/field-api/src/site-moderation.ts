@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { PoolClient } from 'pg';
 import type { FieldBusinessRuntime } from './business.js';
+import { requireAdmin } from './admin-auth.js';
 import { organizationFor, userFor } from './sites.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -19,15 +20,7 @@ type Report = { id: string; organization_id: string; site_id: string; revision: 
   category: string; created_at: Date; updated_at: Date; description: string; public_snapshot: unknown };
 
 async function adminFor(request: FastifyRequest, reply: FastifyReply, runtime: FieldBusinessRuntime, edit = false) {
-  if (process.env.FIELD_PROFILE !== 'mock') { fail(reply, 503, 'blocked_integration'); return null; }
-  const user = await userFor(request, reply, runtime);
-  if (!user) return null;
-  const membership = (await runtime.pool.query<{ role: string }>(
-    'select role from field.platform_admin_memberships where user_id=$1', [user])).rows[0];
-  if (!membership || (edit && membership.role !== 'operator')) {
-    fail(reply, 403, 'admin_membership_required'); return null;
-  }
-  return user;
+  return (await requireAdmin(request, reply, runtime, edit ? { role: 'operator' } : {}))?.userId ?? null;
 }
 async function allowedAccess(db: PoolClient, request: FastifyRequest, reportId: string, user: string) {
   const id = request.headers['x-support-access-id'];

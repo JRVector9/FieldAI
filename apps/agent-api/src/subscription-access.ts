@@ -19,10 +19,11 @@ export async function subscriptionAccess(db:Pool|PoolClient,organizationId:strin
   }
   const trial=(await db.query('select ends_at from ap.trial_subscriptions where organization_id=$1',[organizationId])).rows[0];
   const mock=process.env.AP_PROFILE==='mock';
-  if(mock&&trial&&trial.ends_at.getTime()>clock.getTime())return {mode:'trial' as const,canStartNew:true,endsAt:trial.ends_at,graceEndsAt:null};
+  // 체험 행은 프로필과 무관하게 행 자체의 ends_at으로 판단한다(행은 승인된 정책으로만 생성된다).
+  if(trial&&trial.ends_at.getTime()>clock.getTime())return {mode:'trial' as const,canStartNew:true,endsAt:trial.ends_at,graceEndsAt:null};
   // 카드 없는 mock 체험 미시작의 기존 로컬 동작을 보존한다.
   const history=(await db.query('select 1 from ap.paid_subscriptions where organization_id=$1 and anchor_at is not null limit 1',[organizationId])).rowCount;
   if(mock&&!trial&&!paid&&!history)return {mode:'mock_unconfigured' as const,canStartNew:true,endsAt:null,graceEndsAt:null};
   return {mode:'cleanup_only' as const,canStartNew:false,endsAt:paid?.ends_at??null,graceEndsAt:null,
-    reason:mock&&trial?'trial_ended':'paid_subscription_required'};
+    reason:trial?'trial_ended':'paid_subscription_required'};
 }

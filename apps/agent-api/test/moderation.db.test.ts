@@ -209,7 +209,7 @@ test('AP reports restrict only the reported deployment and require approved time
     await pool.query('delete from ap.platform_admin_memberships where user_id=$1', [approver]);
     assert.equal((await app.inject({ url: `/v1/admin/reports/${secondId}`, headers: headers(operator, undefined, secondAccess) })).statusCode, 403);
     process.env.AP_PROFILE = 'sandbox';
-    assert.equal((await app.inject({ url: '/v1/admin/reports', headers: headers(operator) })).json().error, 'blocked_integration');
+    assert.equal((await app.inject({ url: '/v1/admin/reports', headers: headers(operator) })).json().error, 'mfa_required');
   } finally {
     unblock?.(); process.env.AP_PROFILE = previous;
     await app.close();

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
+import { requireAdmin } from './admin-auth.js';
 
 type AdminCounts = {
   organizations: string;
@@ -24,14 +25,9 @@ type AdminIncident = {
 
 export function registerFieldAdminRoutes(app: FastifyInstance, runtime: FieldBusinessRuntime) {
   app.get('/v1/admin/overview', async (request, reply) => {
-    if (process.env.FIELD_PROFILE !== 'mock')
-      return reply.code(503).send({ error: 'blocked_integration' });
-    const userId = await runtime.resolveUserId(request.headers);
-    if (!userId) return reply.code(401).send({ error: 'authentication_required' });
-    const member = await runtime.pool.query<{ role: 'operator' | 'auditor' }>(
-      'select role from field.platform_admin_memberships where user_id = $1', [userId],
-    );
-    if (!member.rows[0]) return reply.code(403).send({ error: 'admin_membership_required' });
+    const admin = await requireAdmin(request, reply, runtime);
+    if (!admin) return reply;
+    const { userId } = admin;
     const result = await runtime.pool.query<AdminCounts>(`
       select
         (select count(*)::text from field.organizations) as "organizations",
@@ -71,7 +67,7 @@ export function registerFieldAdminRoutes(app: FastifyInstance, runtime: FieldBus
       actorUserId: string; resource: string; accessedAt: Date;
     }>(`select actor_user_id as "actorUserId", resource, accessed_at as "accessedAt"
       from field.admin_access_audit order by id desc limit 20`);
-    return { product: 'field', actorUserId: userId, role: member.rows[0].role, snapshotAt: new Date().toISOString(),
+    return { product: 'field', actorUserId: userId, role: admin.role, snapshotAt: new Date().toISOString(),
       counts: { ...result.rows[0], adminReads: adminReads.rows[0]?.count ?? '0' },
       recentIncidents: incidents.rows, recentAdminAccesses: accesses.rows };
   });

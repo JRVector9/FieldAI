@@ -211,7 +211,7 @@ test('Field support grants bind each original work kind and approved scope, pres
     for (const [kind, receipt] of [['inquiries', inquiry], ['reservations', reservation]])
       assert.equal((await app.inject({ url: `/v1/${kind}/${receipt.id}`, headers: { authorization: `Bearer ${receipt.receiptKey}` } })).statusCode, 200);
     process.env.FIELD_PROFILE = 'sandbox';
-    assert.equal((await app.inject({ url: '/v1/admin/support-access', headers: headers(approver) })).json().error, 'blocked_integration');
+    assert.equal((await app.inject({ url: '/v1/admin/support-access', headers: headers(approver) })).json().error, 'mfa_required');
   } finally {
     unblock?.(); process.env.FIELD_PROFILE = previous;
     await app.close();

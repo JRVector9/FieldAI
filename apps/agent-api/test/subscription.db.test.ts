@@ -179,3 +179,82 @@ test('AP expired mock trial rejects new intake while preserving accepted inquiry
     else process.env.AP_PROFILE = previousProfile;
   }
 });
+
+test('AP configured trial policy opens non-mock trials only with the approved consent version and days', async () => {
+  const live = new Pool({ connectionString: process.env.AP_DATABASE_URL });
+  const db = await live.connect();
+  const keys = ['AP_PROFILE', 'AP_TRIAL_CONSENT_VERSION', 'AP_TRIAL_DAYS'] as const;
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  process.env.AP_PROFILE = 'mock';
+  const owner = randomUUID(), org = randomUUID();
+  const app = createAgentApp(async () => undefined, undefined, undefined, undefined,
+    { pool: db as unknown as Pool, resolveUserId: async headers => user(headers) });
+  const call = (method: 'GET' | 'POST', path: string, body?: object) =>
+    app.inject({ method, url: path, headers: { 'x-test-user': owner, 'x-organization-id': org }, payload: body });
+  try {
+    await db.query('begin');
+    await db.query('insert into "user"("id","name","email","emailVerified") values ($1,$2,$3,false)',
+      [owner, owner, `${owner}@example.invalid`]);
+    await db.query('insert into ap.organizations(id,owner_user_id,name) values ($1,$2,$3)', [org, owner, 'Policy Org']);
+    await db.query("insert into ap.memberships(organization_id,user_id,role) values ($1,$2,'owner')", [org, owner]);
+    // 정책 env가 없으면 sandbox에서도 체험을 열지 않는다(blocked_integration).
+    process.env.AP_PROFILE = 'sandbox';
+    delete process.env.AP_TRIAL_CONSENT_VERSION;
+    delete process.env.AP_TRIAL_DAYS;
+    const blocked = (await call('GET', '/v1/subscription')).json();
+    assert.deepEqual(blocked.policy, { consentVersion: null, days: null, source: 'unavailable' });
+    assert.equal(blocked.state, 'unavailable');
+    assert.equal(blocked.access.canStartNew, false);
+    assert.equal(blocked.access.reason, 'paid_subscription_required');
+    const unset = await call('POST', '/v1/subscription/trial', { consentVersion: 'ap-trial-2026-10', termsAccepted: true });
+    assert.equal(unset.statusCode, 503);
+    assert.equal(unset.json().error, 'trial_policy_not_approved');
+    process.env.AP_TRIAL_CONSENT_VERSION = 'ap-trial-2026-10';
+    for (const days of ['0', '91', '7.5', 'abc']) {
+      process.env.AP_TRIAL_DAYS = days;
+      assert.equal((await call('GET', '/v1/subscription')).json().policy.source, 'unavailable', days);
+      assert.equal((await call('POST', '/v1/subscription/trial', { consentVersion: 'ap-trial-2026-10', termsAccepted: true })).statusCode, 503, days);
+    }
+    process.env.AP_TRIAL_DAYS = '30';
+    const before = (await call('GET', '/v1/subscription')).json();
+    assert.deepEqual(before.policy, { consentVersion: 'ap-trial-2026-10', days: 30, source: 'configured' });
+    assert.equal(before.mode, 'trial');
+    assert.equal(before.state, 'not_started');
+    assert.equal((await call('POST', '/v1/subscription/trial', { consentVersion: 'mock-trial-v1', termsAccepted: true })).statusCode, 400);
+    assert.equal((await call('POST', '/v1/subscription/trial', { consentVersion: 'ap-trial-2026-10', termsAccepted: false })).statusCode, 400);
+    assert.equal((await call('POST', '/v1/subscription/trial', { consentVersion: 'ap-trial-2026-10' })).statusCode, 400);
+    assert.equal((await db.query('select count(*)::int as n from ap.trial_subscriptions where organization_id=$1', [org])).rows[0].n, 0);
+    const started = await call('POST', '/v1/subscription/trial', { consentVersion: 'ap-trial-2026-10', termsAccepted: true });
+    assert.equal(started.statusCode, 201, started.body);
+    assert.equal(started.json().state, 'trialing');
+    assert.equal(started.json().trial.consentVersion, 'ap-trial-2026-10');
+    const stored = (await db.query(`select consent_version, ends_at = now() + interval '30 days' as exact
+      from ap.trial_subscriptions where organization_id=$1`, [org])).rows[0];
+    assert.deepEqual(stored, { consent_version: 'ap-trial-2026-10', exact: true });
+    assert.equal(Date.parse(started.json().trial.endsAt) - Date.parse(started.json().trial.startedAt), 30 * 86_400_000);
+    const current = (await call('GET', '/v1/subscription')).json();
+    assert.equal(current.access.mode, 'trial');
+    assert.equal(current.access.canStartNew, true);
+    const cancelled = await call('POST', '/v1/subscription/cancel');
+    assert.equal(cancelled.statusCode, 200);
+    assert.ok(cancelled.json().trial.cancelRequestedAt);
+    await db.query("update ap.trial_subscriptions set started_at=now()-interval '31 days', ends_at=now()-interval '1 day' where organization_id=$1", [org]);
+    const ended = (await call('GET', '/v1/subscription')).json();
+    assert.equal(ended.state, 'trial_ended');
+    assert.equal(ended.access.canStartNew, false);
+    assert.equal(ended.access.reason, 'trial_ended');
+    // 정책 env를 내리면 체험 행 표시는 유지하되 새 시작·종료 예약은 다시 닫힌다.
+    delete process.env.AP_TRIAL_DAYS;
+    assert.equal((await call('GET', '/v1/subscription')).json().trial.consentVersion, 'ap-trial-2026-10');
+    assert.equal((await call('POST', '/v1/subscription/cancel')).statusCode, 503);
+  } finally {
+    await db.query('rollback');
+    db.release();
+    await app.close();
+    await live.end();
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+});

@@ -1,0 +1,66 @@
+# syntax=docker/dockerfile:1
+# Field 웹(Next) 런타임 이미지 (빌드 문맥: 저장소 루트)
+#   docker build -f infra/field/Dockerfile.web -t fieldai-field-web .
+# 운영 이미지는 APP_PROFILE=live(기본값)로 빌드한다. live 빌드·기동에는 FIELD_SITE_BASE_DOMAIN과
+# NEXT_PUBLIC_FIELD_WEB_ORIGIN이 반드시 있어야 한다(next.config.ts가 없으면 거부).
+# 법적 고지(NEXT_PUBLIC_LEGAL_*)와 제품 간 이동 링크는 빌드 시 인라인되므로 --build-arg로 넘긴다.
+# next.config.ts에 output: "standalone"이 없어 일반 `next start` 이미지로 만든다(standalone이면 더 작아진다).
+ARG NODE_IMAGE=node:24-bookworm-slim
+
+FROM ${NODE_IMAGE} AS base
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    CI=true \
+    NEXT_TELEMETRY_DISABLED=1
+WORKDIR /repo
+# pnpm 버전은 루트 package.json의 packageManager 한 곳에서만 고정한다.
+COPY package.json ./
+RUN corepack enable && corepack install
+
+FROM base AS fetch
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm fetch --frozen-lockfile --store-dir /pnpm/store
+
+FROM fetch AS build
+COPY tsconfig.base.json ./
+COPY packages/ui/package.json packages/ui/
+COPY apps/field-web/package.json apps/field-web/
+RUN pnpm install --frozen-lockfile --offline --store-dir /pnpm/store \
+      --filter fieldai-products --filter @fieldai/field-web...
+COPY packages/ui packages/ui
+COPY apps/field-web apps/field-web
+# rewrites 대상과 NEXT_PUBLIC_* 값은 next build 시점에 결과물에 고정된다. ARG는 RUN 환경변수로 전달된다.
+# 설치 층 캐시가 깨지지 않도록 설치 뒤에 선언한다.
+# NEXT_PUBLIC_* 는 기본값 없이 선언해 미지정 시 앱 내부 기본값을 쓰게 한다(빈 문자열 고정 방지).
+ARG APP_PROFILE=live
+ARG FIELD_API_BASE_URL=http://api:4321
+ARG NEXT_PUBLIC_AGENT_WEB_URL
+ARG NEXT_PUBLIC_FIELD_WEB_ORIGIN
+ARG FIELD_SITE_BASE_DOMAIN
+ARG NEXT_PUBLIC_LEGAL_BUSINESS_NAME
+ARG NEXT_PUBLIC_LEGAL_REPRESENTATIVE
+ARG NEXT_PUBLIC_LEGAL_REGISTRATION_NUMBER
+ARG NEXT_PUBLIC_LEGAL_MAIL_ORDER_NUMBER
+ARG NEXT_PUBLIC_LEGAL_ADDRESS
+ARG NEXT_PUBLIC_LEGAL_CONTACT_EMAIL
+ARG NEXT_PUBLIC_LEGAL_PRIVACY_OFFICER
+RUN pnpm --filter @fieldai/field-web build && rm -rf apps/field-web/.next/cache
+# 운영 의존성만 담은 독립 디렉터리(/out). inject-workspace-packages는 이 명령에만 켠다:
+# pnpm 10 deploy가 공유 lockfile을 그대로 써서 오프라인으로 설치하려면 필요하다(--legacy는 재해석·네트워크 필요).
+RUN pnpm --config.inject-workspace-packages=true --filter @fieldai/field-web deploy --prod --offline --store-dir /pnpm/store /out
+
+FROM ${NODE_IMAGE} AS runtime
+ARG APP_PROFILE=live
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    APP_PROFILE=${APP_PROFILE}
+WORKDIR /app
+COPY --from=build --chown=node:node /out/package.json ./package.json
+COPY --from=build --chown=node:node /out/node_modules ./node_modules
+COPY --from=build --chown=node:node /repo/apps/field-web/next.config.ts ./next.config.ts
+COPY --from=build --chown=node:node /repo/apps/field-web/public ./public
+COPY --from=build --chown=node:node /repo/apps/field-web/.next ./.next
+USER node
+EXPOSE 3002
+CMD ["node", "node_modules/next/dist/bin/next", "start", "-H", "0.0.0.0", "-p", "3002"]

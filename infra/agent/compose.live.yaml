@@ -1,0 +1,162 @@
+# AP(Agent Platform) 운영 실행 정의 — AP 단독. Field 서비스·DB·환경변수·비밀값을 참조하지 않는다(B01).
+#
+# 사용(저장소 루트에서):
+#   docker compose -p fieldai-agent --env-file infra/agent/.env.live -f infra/agent/compose.live.yaml build
+#   docker compose -p fieldai-agent --env-file infra/agent/.env.live -f infra/agent/compose.live.yaml up -d --wait
+# --env-file은 아래 ${...} 치환용이고, 앱 컨테이너는 AP_ENV_FILE(기본 .env.live)을 env_file로 읽는다.
+# 기동 순서: db(healthy) → migrate(1회 성공) → api(/health/ready) → web, worker.
+# 기본 worker는 공급사 자격증명이 없으면 blocked_integration 상태로 대기한다.
+# 아래 profile worker는 자격증명이 없으면 부팅을 거부하므로 준비된 뒤 명시적으로 켠다.
+#   retention: AP_INQUIRY_S3_*(비공개 문의 사진 저장소)와 보존 저널 키 필요 → --profile retention
+# 고객 문의 사진은 live에서 S3 호환 저장소만 사용한다. AP_INQUIRY_MEDIA_DIRECTORY는 mock 전용이라 볼륨을 두지 않는다.
+
+name: fieldai-agent
+
+x-app-environment: &app-environment
+  NODE_ENV: production
+  AP_PROFILE: live
+  AP_HOST: 0.0.0.0
+  AP_PORT: '4311'
+  AP_DATABASE_URL: ${AP_DATABASE_URL:-postgresql://fieldai_agent:${AP_DB_PASSWORD:?AP_DB_PASSWORD is required}@db:5432/fieldai_agent}
+  # edge(Caddy)와 web 컨테이너가 이 고정 서브넷에서 접속하므로 그 대역의 X-Forwarded-For만 신뢰한다.
+  AP_TRUST_PROXY: ${AP_TRUST_PROXY:-${AP_NETWORK_SUBNET:-172.31.11.0/24}}
+  AP_REVOCATION_JOURNAL_DIRECTORY: /var/lib/fieldai/agent/revocation-journal
+  AP_RETENTION_JOURNAL_DIRECTORY: /var/lib/fieldai/agent/retention-journal
+
+# api와 모든 worker가 공유하는 설정. 이미지는 api와 같고 command만 다르다.
+x-app: &app
+  image: ${AP_API_IMAGE:-fieldai-agent-api:local}
+  env_file:
+    - ${AP_ENV_FILE:-.env.live}
+  environment: *app-environment
+  volumes:
+    - revocation_journal:/var/lib/fieldai/agent/revocation-journal
+    - retention_journal:/var/lib/fieldai/agent/retention-journal
+  depends_on:
+    db:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+  init: true
+  restart: unless-stopped
+  networks: [agent_live]
+
+services:
+  db:
+    image: postgres:17.11
+    environment:
+      POSTGRES_DB: fieldai_agent
+      POSTGRES_USER: fieldai_agent
+      POSTGRES_PASSWORD: ${AP_DB_PASSWORD:?AP_DB_PASSWORD is required}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fieldai_agent -d fieldai_agent']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    networks: [agent_live]
+
+  # 일회성 migration. 앱 비밀값 없이 DB 주소만 받는다.
+  migrate:
+    image: ${AP_MIGRATE_IMAGE:-fieldai-agent-migrate:local}
+    build:
+      context: ../..
+      dockerfile: infra/agent/Dockerfile.api
+      target: migrate
+    environment:
+      AP_DATABASE_URL: ${AP_DATABASE_URL:-postgresql://fieldai_agent:${AP_DB_PASSWORD:?AP_DB_PASSWORD is required}@db:5432/fieldai_agent}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+    networks: [agent_live]
+
+  api:
+    <<: *app
+    build:
+      context: ../..
+      dockerfile: infra/agent/Dockerfile.api
+    command: ['node', 'dist/server.js']
+    ports:
+      - 127.0.0.1:${AP_API_PORT:-4311}:4311
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:4311/health/ready').then(async r=>{const b=await r.json();process.exit(r.status===200&&b.product==='agent'&&b.status==='ready'?0:1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  web:
+    image: ${AP_WEB_IMAGE:-fieldai-agent-web:local}
+    build:
+      context: ../..
+      dockerfile: infra/agent/Dockerfile.web
+      # rewrites·NEXT_PUBLIC_* 는 빌드 시 고정된다. 값이 없는 항목은 인자를 넘기지 않는다.
+      args:
+        - APP_PROFILE=live
+        - AP_API_BASE_URL=http://api:4311
+        - NEXT_PUBLIC_FIELD_WEB_URL
+        - NEXT_PUBLIC_LEGAL_BUSINESS_NAME
+        - NEXT_PUBLIC_LEGAL_REPRESENTATIVE
+        - NEXT_PUBLIC_LEGAL_REGISTRATION_NUMBER
+        - NEXT_PUBLIC_LEGAL_MAIL_ORDER_NUMBER
+        - NEXT_PUBLIC_LEGAL_ADDRESS
+        - NEXT_PUBLIC_LEGAL_CONTACT_EMAIL
+        - NEXT_PUBLIC_LEGAL_PRIVACY_OFFICER
+    # web에는 API 비밀값을 주지 않는다.
+    environment:
+      APP_PROFILE: live
+      AP_API_BASE_URL: http://api:4311
+    ports:
+      - 127.0.0.1:${AP_WEB_PORT:-3001}:3001
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3001/').then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    init: true
+    restart: unless-stopped
+    networks: [agent_live]
+
+  billing-authorization-worker:
+    <<: *app
+    command: ['node', 'dist/billing-authorization-worker.js']
+
+  billing-charge-worker:
+    <<: *app
+    command: ['node', 'dist/billing-charge-worker.js']
+
+  billing-refund-worker:
+    <<: *app
+    command: ['node', 'dist/billing-refund-worker.js']
+
+  notification-worker:
+    <<: *app
+    command: ['node', 'dist/notification-delivery-worker.js']
+
+  # Field 연결 사건 inbox 처리. 연결이 없으면 할 일 없이 대기한다(Field 서버를 요구하지 않음).
+  field-event-worker:
+    <<: *app
+    command: ['node', 'dist/field-event-worker.js']
+
+  retention-worker:
+    <<: *app
+    command: ['node', 'dist/retention-purge-worker.js']
+    profiles: [retention]
+
+volumes:
+  db_data:
+  revocation_journal:
+  retention_journal:
+
+networks:
+  agent_live:
+    ipam:
+      config:
+        - subnet: ${AP_NETWORK_SUBNET:-172.31.11.0/24}

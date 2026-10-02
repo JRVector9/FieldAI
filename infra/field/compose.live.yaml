@@ -1,0 +1,205 @@
+# Field 운영 실행 정의 — Field 단독. AP 서비스·DB·환경변수·비밀값을 참조하지 않는다(B02).
+#
+# 사용(저장소 루트에서):
+#   docker compose -p fieldai-field --env-file infra/field/.env.live -f infra/field/compose.live.yaml build
+#   docker compose -p fieldai-field --env-file infra/field/.env.live -f infra/field/compose.live.yaml up -d --wait
+# --env-file은 아래 ${...} 치환용이고, 앱 컨테이너는 FIELD_ENV_FILE(기본 .env.live)을 env_file로 읽는다.
+# 기동 순서: db(healthy)·queue(healthy) → migrate(1회 성공) → api(/health/ready) → web, worker.
+# 기본 worker는 공급사 자격증명이 없으면 blocked_integration 상태로 대기한다.
+# 아래 profile worker는 자격증명이 없으면 부팅을 거부하므로 준비된 뒤 명시적으로 켠다.
+#   site-ai:      FIELD_OPENAI_API_KEY·FIELD_OPENAI_MODEL 필요 → --profile site-ai
+#   ap-connector: FIELD_AP_* (AP 공개 OAuth client) 필요 → --profile ap-connector (AP 없이도 Field는 정상 운영)
+#   retention:    FIELD_INQUIRY_S3_*·FIELD_S3_*와 보존 저널 키 필요 → --profile retention
+# 사이트·문의 사진은 live에서 S3 호환 저장소만 사용한다. *_MEDIA_DIRECTORY는 mock 전용이라 볼륨을 두지 않는다.
+
+name: fieldai-field
+
+x-app-environment: &app-environment
+  NODE_ENV: production
+  FIELD_PROFILE: live
+  FIELD_HOST: 0.0.0.0
+  FIELD_PORT: '4321'
+  FIELD_DATABASE_URL: ${FIELD_DATABASE_URL:-postgresql://fieldai_field:${FIELD_DB_PASSWORD:?FIELD_DB_PASSWORD is required}@db:5432/fieldai_field}
+  FIELD_VALKEY_URL: ${FIELD_VALKEY_URL:-valkey://:${FIELD_VALKEY_PASSWORD:?FIELD_VALKEY_PASSWORD is required}@queue:6379/0}
+  # edge(Caddy)와 web 컨테이너가 이 고정 서브넷에서 접속하므로 그 대역의 X-Forwarded-For만 신뢰한다.
+  FIELD_TRUST_PROXY: ${FIELD_TRUST_PROXY:-${FIELD_NETWORK_SUBNET:-172.31.12.0/24}}
+  FIELD_REVOCATION_JOURNAL_DIRECTORY: /var/lib/fieldai/field/revocation-journal
+  FIELD_RETENTION_JOURNAL_DIRECTORY: /var/lib/fieldai/field/retention-journal
+
+# api와 모든 worker가 공유하는 설정. 이미지는 api와 같고 command만 다르다.
+x-app: &app
+  image: ${FIELD_API_IMAGE:-fieldai-field-api:local}
+  env_file:
+    - ${FIELD_ENV_FILE:-.env.live}
+  environment: *app-environment
+  volumes:
+    - revocation_journal:/var/lib/fieldai/field/revocation-journal
+    - retention_journal:/var/lib/fieldai/field/retention-journal
+  depends_on:
+    db:
+      condition: service_healthy
+    queue:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+  init: true
+  restart: unless-stopped
+  networks: [field_live]
+
+services:
+  db:
+    image: postgres:17.11
+    environment:
+      POSTGRES_DB: fieldai_field
+      POSTGRES_USER: fieldai_field
+      POSTGRES_PASSWORD: ${FIELD_DB_PASSWORD:?FIELD_DB_PASSWORD is required}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U fieldai_field -d fieldai_field']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    networks: [field_live]
+
+  # Field 전용 Valkey(사이트 제작 작업 큐). AP와 인스턴스를 공유하지 않는다.
+  queue:
+    image: valkey/valkey:8.1.10-alpine
+    command: ['valkey-server', '--requirepass', '${FIELD_VALKEY_PASSWORD:?FIELD_VALKEY_PASSWORD is required}', '--appendonly', 'yes']
+    environment:
+      REDISCLI_AUTH: ${FIELD_VALKEY_PASSWORD:?FIELD_VALKEY_PASSWORD is required}
+    volumes:
+      - queue_data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'valkey-cli ping | grep -q PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    networks: [field_live]
+
+  # 일회성 migration. 앱 비밀값 없이 DB 주소만 받는다.
+  migrate:
+    image: ${FIELD_MIGRATE_IMAGE:-fieldai-field-migrate:local}
+    build:
+      context: ../..
+      dockerfile: infra/field/Dockerfile.api
+      target: migrate
+    environment:
+      FIELD_DATABASE_URL: ${FIELD_DATABASE_URL:-postgresql://fieldai_field:${FIELD_DB_PASSWORD:?FIELD_DB_PASSWORD is required}@db:5432/fieldai_field}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+    networks: [field_live]
+
+  api:
+    <<: *app
+    build:
+      context: ../..
+      dockerfile: infra/field/Dockerfile.api
+    command: ['node', 'dist/server.js']
+    ports:
+      - 127.0.0.1:${FIELD_API_PORT:-4321}:4321
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:4321/health/ready').then(async r=>{const b=await r.json();process.exit(r.status===200&&b.product==='field'&&b.status==='ready'?0:1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  web:
+    image: ${FIELD_WEB_IMAGE:-fieldai-field-web:local}
+    build:
+      context: ../..
+      dockerfile: infra/field/Dockerfile.web
+      # rewrites·NEXT_PUBLIC_* 는 빌드 시 고정된다. 값이 없는 항목은 인자를 넘기지 않는다.
+      args:
+        - APP_PROFILE=live
+        - FIELD_API_BASE_URL=http://api:4321
+        - FIELD_SITE_BASE_DOMAIN
+        - NEXT_PUBLIC_FIELD_WEB_ORIGIN
+        - NEXT_PUBLIC_AGENT_WEB_URL
+        - NEXT_PUBLIC_LEGAL_BUSINESS_NAME
+        - NEXT_PUBLIC_LEGAL_REPRESENTATIVE
+        - NEXT_PUBLIC_LEGAL_REGISTRATION_NUMBER
+        - NEXT_PUBLIC_LEGAL_MAIL_ORDER_NUMBER
+        - NEXT_PUBLIC_LEGAL_ADDRESS
+        - NEXT_PUBLIC_LEGAL_CONTACT_EMAIL
+        - NEXT_PUBLIC_LEGAL_PRIVACY_OFFICER
+    # web에는 API 비밀값을 주지 않는다. 테넌트 Host 판별에 필요한 공개 값만 넘긴다.
+    environment:
+      APP_PROFILE: live
+      FIELD_API_BASE_URL: http://api:4321
+      FIELD_SITE_BASE_DOMAIN: ${FIELD_SITE_BASE_DOMAIN:?FIELD_SITE_BASE_DOMAIN is required}
+      FIELD_PUBLIC_WEB_ORIGIN: ${FIELD_PUBLIC_WEB_ORIGIN:?FIELD_PUBLIC_WEB_ORIGIN is required}
+      NEXT_PUBLIC_FIELD_WEB_ORIGIN: ${NEXT_PUBLIC_FIELD_WEB_ORIGIN:?NEXT_PUBLIC_FIELD_WEB_ORIGIN is required}
+    ports:
+      - 127.0.0.1:${FIELD_WEB_PORT:-3002}:3002
+    depends_on:
+      api:
+        condition: service_healthy
+    # 플랫폼 Host가 아니면 404이므로 FIELD_PUBLIC_WEB_ORIGIN의 Host로 확인한다.
+    healthcheck:
+      test: ['CMD', 'node', '-e', "const host=new URL(process.env.FIELD_PUBLIC_WEB_ORIGIN).host;require('node:http').get({host:'127.0.0.1',port:3002,path:'/',headers:{host}},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    init: true
+    restart: unless-stopped
+    networks: [field_live]
+
+  billing-authorization-worker:
+    <<: *app
+    command: ['node', 'dist/billing-authorization-worker.js']
+
+  billing-charge-worker:
+    <<: *app
+    command: ['node', 'dist/billing-charge-worker.js']
+
+  billing-refund-worker:
+    <<: *app
+    command: ['node', 'dist/billing-refund-worker.js']
+
+  notification-worker:
+    <<: *app
+    command: ['node', 'dist/notification-delivery-worker.js']
+
+  custom-domain-worker:
+    <<: *app
+    command: ['node', 'dist/custom-domain-worker.js']
+
+  route-key-worker:
+    <<: *app
+    command: ['node', 'dist/ap-route-key-worker.js']
+
+  # 사이트 제작 AI worker(worker.ts). Valkey 큐와 모델 자격증명이 필요하다.
+  site-ai-worker:
+    <<: *app
+    command: ['node', 'dist/worker.js']
+    profiles: [site-ai]
+
+  # AP 연결 사건 전달. AP 공개 API만 호출하며 AP 내부 DB·큐를 사용하지 않는다.
+  ap-event-worker:
+    <<: *app
+    command: ['node', 'dist/ap-event-worker.js']
+    profiles: [ap-connector]
+
+  retention-worker:
+    <<: *app
+    command: ['node', 'dist/retention-purge-worker.js']
+    profiles: [retention]
+
+volumes:
+  db_data:
+  queue_data:
+  revocation_journal:
+  retention_journal:
+
+networks:
+  field_live:
+    ipam:
+      config:
+        - subnet: ${FIELD_NETWORK_SUBNET:-172.31.12.0/24}

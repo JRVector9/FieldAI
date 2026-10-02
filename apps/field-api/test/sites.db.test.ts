@@ -380,3 +380,81 @@ test('Field saves a draft near the content limit and keeps the photo cap under c
     await authPool.query('DELETE FROM "user" WHERE email = $1', [account.email]);
   }
 });
+
+test('Field template start fills the first draft only from the approved catalog, else keeps a single hero', async () => {
+  const withCatalog = await owner();
+  const withoutCatalog = await owner();
+  const app = createFieldApp(async () => undefined, auth.handler, base, {
+    pool,
+    resolveUserId: async (headers: IncomingHttpHeaders) =>
+      (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+  });
+  type Draft = { template: string; palette: string; pages: { slug: string; title: string;
+    sections: { kind: string; heading: string; body: string }[] }[] };
+  try {
+    // 승인 카탈로그 없음: 기존처럼 조직 이름 hero 하나만 만든다.
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/organizations', headers: { cookie: withoutCatalog.cookie },
+      payload: { name: 'Field 빈 시작 상호' } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft', headers: { cookie: withoutCatalog.cookie },
+      payload: { expectedRevision: 0, businessName: '승인 전 상호', introduction: '승인 전 소개', region: '', openingHours: '',
+        contactPhone: '', services: [] } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/sites', headers: { cookie: withoutCatalog.cookie } })).statusCode, 201);
+    const empty = (await app.inject({ url: '/v1/sites/draft', headers: { cookie: withoutCatalog.cookie } })).json() as Draft;
+    assert.equal(empty.pages.length, 1);
+    assert.deepEqual(empty.pages[0]!.sections.map(({ kind, heading, body }) => ({ kind, heading, body })),
+      [{ kind: 'hero', heading: 'Field 빈 시작 상호', body: '' }]);
+
+    // 승인 카탈로그 있음: 승인값만 복사한 홈 섹션으로 시작하고, 공개는 사용자가 따로 한다.
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/organizations', headers: { cookie: withCatalog.cookie },
+      payload: { name: '조직 표시 이름' } })).statusCode, 201);
+    const catalog = { expectedRevision: 0, businessName: '승인 상호 청소', industry: '청소', introduction: '사업자가 직접 쓴 소개',
+      region: '서울 마포구', openingHours: '평일 9시-18시', contactPhone: '010-2222-3333',
+      services: [
+        { id: randomUUID(), name: '입주 청소', description: '빈 집 청소', bookingMode: 'request', durationMinutes: 120, priceAmount: null },
+        { id: randomUUID(), name: '에어컨 청소', description: '분해 세척', bookingMode: 'request', durationMinutes: 60, priceAmount: 70000 },
+      ],
+      faqs: [{ question: '주말 가능?', answer: '문의 후 확정합니다.' }] };
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft', headers: { cookie: withCatalog.cookie },
+      payload: catalog })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases', headers: { cookie: withCatalog.cookie },
+      payload: { expectedRevision: 1 } })).statusCode, 201);
+    const created = await app.inject({ method: 'POST', url: '/v1/sites', headers: { cookie: withCatalog.cookie } });
+    assert.equal(created.statusCode, 201);
+    const { slug } = created.json() as { slug: string };
+    const draft = (await app.inject({ url: '/v1/sites/draft', headers: { cookie: withCatalog.cookie } })).json() as Draft & { revision: number };
+    assert.equal(draft.revision, 0);
+    assert.equal(draft.template, 'essential');
+    assert.equal(draft.palette, '#264653');
+    assert.deepEqual(draft.pages.map(page => [page.slug, page.title]), [['home', '홈']]);
+    assert.deepEqual(draft.pages[0]!.sections.map(({ kind, heading, body }) => ({ kind, heading, body })), [
+      { kind: 'hero', heading: '승인 상호 청소', body: '사업자가 직접 쓴 소개' },
+      { kind: 'text', heading: '소개', body: '사업자가 직접 쓴 소개' },
+      { kind: 'service_list', heading: '서비스', body: '' },
+      { kind: 'faq', heading: '자주 묻는 질문', body: '' },
+      { kind: 'text', heading: '서비스 지역', body: '서울 마포구' },
+      { kind: 'text', heading: '운영 시간', body: '평일 9시-18시' },
+      { kind: 'text', heading: '연락 방법', body: '010-2222-3333' },
+    ]);
+    // 자동 공개는 없다.
+    assert.equal((await app.inject({ url: `/v1/public/sites/${slug}` })).statusCode, 404);
+    // 생성 초안은 편집기 저장 검증(parseContent)과 공개 절차를 그대로 통과하고, 서비스 목록은 승인 카탈로그에서 렌더된다.
+    const saved = await app.inject({ method: 'PUT', url: '/v1/sites/draft', headers: { cookie: withCatalog.cookie },
+      payload: { expectedRevision: 0, template: draft.template, palette: draft.palette, pages: draft.pages } });
+    assert.equal(saved.statusCode, 200, saved.body);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/sites/releases', headers: { cookie: withCatalog.cookie },
+      payload: { expectedRevision: 1 } })).statusCode, 201);
+    const published = (await app.inject({ url: `/v1/public/sites/${slug}` })).json() as {
+      catalog: { services: { name: string }[] }; pages: Draft['pages'] };
+    assert.deepEqual(published.catalog.services.map(service => service.name), ['입주 청소', '에어컨 청소']);
+    assert.ok(published.pages[0]!.sections.some(section => section.kind === 'service_list'));
+    // 승인 카탈로그에 없는 숫자·자격·후기 문구를 만들지 않는다.
+    const approvedText = new Set(['', '승인 상호 청소', '사업자가 직접 쓴 소개', '서울 마포구', '평일 9시-18시', '010-2222-3333',
+      '소개', '서비스', '자주 묻는 질문', '서비스 지역', '운영 시간', '연락 방법']);
+    for (const section of draft.pages[0]!.sections) {
+      assert.ok(approvedText.has(section.heading), section.heading);
+      assert.ok(approvedText.has(section.body), section.body);
+    }
+  } finally {
+    await app.close();
+  }
+});

@@ -65,7 +65,7 @@ test('AP retention uses separately approved native periods, real closure and per
     assert.equal((await post(`/v1/admin/retention/policies/${policy}/retire`,{reason:'합성 보존 정책의 신규 사용을 중단합니다.'})).statusCode,200);
     assert.equal((await preview()).json().items[0].reason,'policy_not_approved');
     process.env.AP_PROFILE='sandbox';
-    assert.equal((await app.inject({url:'/v1/admin/retention/policies',headers:headers()})).statusCode,503);
+    const denied=await app.inject({url:'/v1/admin/retention/policies',headers:headers()});assert.equal(denied.statusCode,403);assert.equal(denied.json().error,'mfa_required');
     process.env.AP_PROFILE='mock';
   } finally {
     await app.close();

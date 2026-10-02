@@ -4,7 +4,8 @@ import { billingContextFromEnvironment } from './billing-context.js';
 import { Pool } from 'pg';
 import { fromNodeHeaders } from 'better-auth/node';
 import { createFieldApp } from './app.js';
-import { auth, authPool } from './auth.js';
+import { auth, authEmail, authPool } from './auth.js';
+import { emailDeliveryState } from './email-provider.js';
 import { createFieldOpenAIProvider } from './field-openai.js';
 import { FieldSiteQueue } from './site-queue.js';
 import { createFieldSiteMediaStore } from './site-media.js';
@@ -38,6 +39,7 @@ const runtime = {
   siteMedia: createFieldSiteMediaStore(),
   inquiryMedia: createFieldInquiryMediaStore(),
   apConnector: apConnectorFromEnvironment(),
+  emailDeliveryState: () => emailDeliveryState(authEmail.provider),
 };
 const app = createFieldApp(
   async () => { await pool.query('SELECT 1'); },

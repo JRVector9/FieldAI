@@ -1,4 +1,5 @@
 import { Brand } from "@fieldai/ui";
+import { LegalFooter } from "./legal";
 
 const agentHome = process.env.NEXT_PUBLIC_AGENT_WEB_URL ?? "http://localhost:3001";
 
@@ -14,10 +15,12 @@ function Icon({ kind }: { kind: "sparkle" | "globe" | "link" | "document" | "cha
 }
 
 export function FieldHome() {
+  // live에서는 /preview 시안이 404이므로 둘러보기 링크를 노출하지 않는다.
+  const preview = process.env.APP_PROFILE !== "live";
   return <div className="field-home">
     <header className="field-home-header"><div className="field-home-wrap field-home-nav">
       <a href="/" aria-label="Field 홈"><Brand product="Field" /></a>
-      <nav aria-label="서비스 탐색"><a href="#how-it-works">서비스 소개</a><a href={agentHome}>사업자 AI</a><a href="/preview/owner/start">화면 둘러보기</a></nav>
+      <nav aria-label="서비스 탐색"><a href="#how-it-works">서비스 소개</a><a href={agentHome}>사업자 AI</a>{preview && <a href="/preview/owner/start">화면 둘러보기</a>}</nav>
       <div className="field-home-nav-actions"><a href="/workspace?mode=login">로그인</a><a className="field-home-dark-button" href="/workspace">무료로 시작</a></div>
     </div></header>
     <main className="field-home-wrap">
@@ -37,7 +40,7 @@ export function FieldHome() {
           <p className="field-home-orbit-flow">고객 대화 <span aria-hidden="true">→</span> 출처별 문의함 <span aria-hidden="true">→</span> 예약·운영</p>
         </div>
       </section>
-      <div className="field-home-next"><p>사업 정보를 직접 입력해 사이트를 만들고, 고객 화면과 업무 흐름을 확인할 수 있습니다.</p><div><a className="field-home-dark-button" href="/workspace">내 관리실 열기</a><a className="field-home-outline-button" href="/preview/owner/start">화면 둘러보기</a></div></div>
+      <div className="field-home-next"><p>사업 정보를 직접 입력해 사이트를 만들고, 고객 화면과 업무 흐름을 확인할 수 있습니다.</p><div><a className="field-home-dark-button" href="/workspace">내 관리실 열기</a>{preview && <a className="field-home-outline-button" href="/preview/owner/start">화면 둘러보기</a>}</div></div>
       <section className="field-home-section" id="how-it-works"><div className="field-home-section-heading"><h2>홈페이지에서 시작해,<br />실제 업무까지.</h2><p>사이트 제작과 직접 문의·예약을 Field에서 운영하고, AI 상담은 필요할 때 별도로 연결합니다.</p></div><div className="field-home-feature-grid">
         <article><Icon kind="globe" /><h3>스스로 만드는 내 사이트</h3><p>사업 정보를 입력하고 템플릿·제작 AI로 만드세요. 공개는 직접 확인한 뒤에만 이루어집니다.</p></article>
         <article><Icon kind="sparkle" /><h3>필요할 때 연결하는 AI</h3><p>별도 AI 서비스가 승인된 정보를 바탕으로 안내하고, 동의한 문의를 전달합니다.</p></article>
@@ -50,5 +53,6 @@ export function FieldHome() {
       </div></section>
     </main>
     <footer className="field-home-footer field-home-wrap"><span>field · Field 독립 사이트 제작과 예약 운영</span><a href={agentHome}>별도 AI 서비스 보기 ↗</a></footer>
+    <footer className="field-home-wrap legal-page-footer"><LegalFooter /></footer>
   </div>;
 }

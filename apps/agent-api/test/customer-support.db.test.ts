@@ -139,7 +139,7 @@ test('AP support access binds approved scopes to an inquiry and expires or revok
     assert.deepEqual((await pool.query('select * from ap.inquiries where id=$1', [inquiry.id])).rows[0], snapshot);
     assert.equal((await app.inject({ url: `/v1/inquiries/${inquiry.id}`, headers: { authorization: `Bearer ${inquiry.receiptKey}` } })).statusCode, 200);
     process.env.AP_PROFILE = 'sandbox';
-    assert.equal((await app.inject({ url: '/v1/admin/support-access', headers: headers(operator) })).json().error, 'blocked_integration');
+    assert.equal((await app.inject({ url: '/v1/admin/support-access', headers: headers(operator) })).json().error, 'mfa_required');
   } finally {
     unblock?.(); process.env.AP_PROFILE = previous;
     await app.close();

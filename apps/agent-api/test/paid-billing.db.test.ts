@@ -59,8 +59,8 @@ test('AP owns approved immutable price versions, period constraints and blocked 
     process.env.AP_PROFILE = 'live';
     assert.equal((await call('GET', '/v1/subscription/plans')).json().plans.length, 0);
     process.env.AP_PROFILE = 'sandbox';
-    assert.equal((await call('GET', '/v1/admin/billing/plans', operator)).statusCode, 503);
-    assert.equal((await call('POST', '/v1/admin/billing/plans', operator, body)).statusCode, 503);
+    assert.deepEqual((await call('GET', '/v1/admin/billing/plans', operator)).json(), { error: 'mfa_required' });
+    assert.deepEqual((await call('POST', '/v1/admin/billing/plans', operator, body)).json(), { error: 'mfa_required' });
     process.env.AP_PROFILE = 'mock';
     // Only this isolated fixture seeds a pending ledger. It does not simulate a payment.
     const sub = randomUUID(), consent = randomUUID(), period = randomUUID();

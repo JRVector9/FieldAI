@@ -142,3 +142,40 @@ AP P2/P3·Field 중간/낮음 항목 전체는 `03_AP_CODE_REVIEW.md`, `04_FIELD
 | T1 | Field `ai-entitlement.db.test.ts` 14건이 DB 컨테이너 시계가 Node보다 느릴 때 403 | fixture 승인 시각을 1초 전으로(제품 코드 변경 없음) |
 
 검수(2026-10-03, 동일 환경): lint/typecheck/unit 35/build 4종/`test:db:agent` 146/146/`test:db:field` 164/164/contracts/`e2e:agent` 9/9/`e2e:field` 7/7/`e2e:distribution` 2/2/`integration:faults` 9/9/`security` 313/313 모두 exit 0. 바뀐 기대값: AP·Field 환불 테스트(전액 환불 후 active→ended), Field custom-domain 3건(유예 경과 시각 설정 추가). 남긴 것: lifecycle 저널 요청마다 전체 스캔(P2-6, 추정 0.5~1일), 사진 삭제 경로, `.well-known/ap-site-verification` 라우트의 Host 소문자화.
+
+## 9. 2단계 — 운영(non-mock) 코드 공백 구현 — 2026-10-03
+
+§5의 착수 순서 1~7을 구현했다. 실 공급사 연결·실 TLS·레지스트리·운영 서버 기동은 여전히 별도다.
+
+| 항목 | 구현 | 주요 파일 | 환경변수 |
+|---|---|---|---|
+| 웹 live 빌드 | `next.config.ts`의 live throw 제거. live에서는 `/preview*`만 proxy가 404. 홈의 시안 링크는 live에서 숨김 | `apps/*-web/next.config.ts`, `apps/*-web/src/proxy.ts`, `*-home.tsx` | Field live 필수: `FIELD_SITE_BASE_DOMAIN`, `NEXT_PUBLIC_FIELD_WEB_ORIGIN` |
+| 이메일 확인·비밀번호 재설정 | 제품별 `email-provider.ts`(mock=outbox 기록, sandbox/live=SMTP, live는 `smtps:`만). better-auth `sendVerificationEmail`/`sendResetPassword` 연결, `trustedOrigins`에 웹 origin. outbox에 저장 시 토큰 `[redacted]`. 웹: `/verify-email`, `/forgot-password`, `/reset-password`, "확인 메일 다시 보내기 (추가)", "비밀번호 찾기 (추가)" | `apps/*-api/src/{auth,email-provider}.ts`, migration AP 000084 / Field 000076, `apps/*-web/src/*-auth-pages.tsx` | `AP_SMTP_URL`, `AP_MAIL_FROM`, `FIELD_SMTP_URL`, `FIELD_MAIL_FROM` (미설정 시 blocked_integration, `/health/ready`의 `integrations.email`) |
+| 관리자 2단계 인증 | better-auth `twoFactor`(TOTP+백업코드). `requireAdmin` 공통 게이트: 세션→관리자 멤버십→non-mock은 2FA 사용+2FA로 열린 세션(`session.twoFactorVerified`). 기존 "mock 외 503" 게이트 전부 교체. 웹 "/admin/mfa" 등록 화면 "(추가)", 로그인 TOTP 입력 | `apps/*-api/src/admin-auth.ts`, `admin*.ts`, `retention-routes.ts`, `customer-support.ts`, `*-moderation.ts`, `apps/*-web/src/*AdminMfa.tsx` | 없음 |
+| 운영 체험 정책 | sandbox/live에서 `*_TRIAL_CONSENT_VERSION`+`*_TRIAL_DAYS`(1–90)가 있으면 체험 시작 허용, 동의 버전 일치 필수. 체험 행은 모든 프로필에서 인정. GET `/v1/subscription`에 `policy{consentVersion,days,source}` 추가, 웹은 하드코딩 제거 | `apps/*-api/src/{subscription,subscription-access,trial-access}.ts`, `*-subscription.tsx` | `AP_TRIAL_CONSENT_VERSION`, `AP_TRIAL_DAYS`, `FIELD_TRIAL_*` |
+| 템플릿 시작 시 실제 사이트 | `POST /v1/sites`가 승인 카탈로그로 hero·소개·서비스·(FAQ)·지역·운영시간·연락 섹션을 결정형 `layoutToSite`로 채움. 카탈로그 없으면 기존 단일 hero. 자동 공개 없음 | `apps/field-api/src/{sites,site-generation}.ts` | 없음 |
+| 약관·처리방침·고지 | `/terms`, `/privacy`(양 앱). 운영자 정보는 env, 미설정 시 "운영자 정보 미설정" 표시. 보존기간은 코드 근거만(정책 테이블 → "정책 확정 전"). 공개 고객 폼 3곳에 "개인정보 수집·이용 안내 (추가)" | `apps/*-web/src/legal.tsx`, `app/{terms,privacy}`, `field-public.tsx`, `field-booking.tsx`, `agent-public.tsx` | `NEXT_PUBLIC_LEGAL_*` 7종 |
+| 배포 산출물 | 제품별 `Dockerfile.api`(worker 동일 이미지, `--target migrate`)·`Dockerfile.web`, `compose.live.yaml`(db→migrate→api→web/worker, 자격증명 필요 worker는 profile), `.env.live.example`, `infra/edge/Caddyfile.example`, `.github/workflows/ci.yml`(lint/typecheck/unit/DB suite 양쪽/계약/빌드/이미지), ADR 0003 | `infra/`, `.github/`, `.dockerignore`, `docs/04` 5.1.1 | 예시 파일 참조 |
+
+**결정 필요 / 남은 공백**
+- 템플릿 초안에서 소개 문구가 hero 본문과 '소개' 섹션에 두 번 나온다(`layoutToSite` 기존 동작). 한 곳으로 줄일지 결정.
+- API 이미지에 better-auth의 선택 peer로 `next`가 포함된다(약 285MB). lockfile/peer 규칙 변경 필요.
+- live에서 공개 OAuth 연결 baseline을 만드는 `oauth-lifecycle-cli`가 mock 전용이라 live 공개 OAuth 연결은 blocked_integration.
+- 사업자 자체 도메인 TLS(Caddy on-demand `ask`)는 Field API에 `?domain=` 형식 endpoint가 없어 초안만.
+- OAuth 연결 로그인 화면(`agent-connect.tsx`)은 2FA 확인 미처리. email_outbox의 주소 보존·삭제 정책 없음. 실 SMTP 미시험.
+- nodemailer 10.0.13(MIT-0, 2026-09-30 배포)은 공급망 검토 권장.
+
+검수(2026-10-03, Mac local mock, Node 24.18.0, PG17 격리 DB, Playwright venv):
+
+| 명령 | exit | 결과 |
+|---|---|---|
+| `lint` / `typecheck` / `test:unit` | 0 | tools 35, agent-api 27, field-api 36, agent-web 71, field-web 117 |
+| `build:agent` / `build:field` / `build:web:agent` / `build:web:field` | 0 | live 프로필 빌드는 B1 보고대로 별도 확인(Field live는 두 env 필수) |
+| `test:db:agent` | 0 | 35파일 150/150 (migration 000084 포함) |
+| `test:db:field` | 0 | 32파일 169/169 (migration 000076 포함) |
+| `test:contracts`, `test:integration:faults` | 0 | 9/9 |
+| `test:e2e:agent` / `field` / `distribution` | 0 | 9/9, 7/7, 2/2 |
+| `test:security` | 0 | 322/322 |
+| Docker 이미지 6개 빌드, 임시 PG로 migrate+live API `/health/ready` 200, compose config, actionlint | 0 | B4 보고. live compose `up`·실 TLS·레지스트리·amd64·GitHub Actions 실제 실행은 미검증 |
+
+첫 실행에서 E2E 3종·보안 1건이 `/health/ready` 본문 deepStrictEqual(`integrations.email` 추가)로 실패해 spike 6곳의 기대값을 `integrations: { email: 'mock' }`로 갱신한 뒤 재실행했다.

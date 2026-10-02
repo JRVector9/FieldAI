@@ -1,0 +1,76 @@
+# Edge(TLS 종료) 예시 — Caddy 2. AP와 Field upstream을 섞지 않는다.
+#
+# 전제
+# - 각 제품 compose(infra/<product>/compose.live.yaml)가 api/web을 호스트 127.0.0.1에만 노출한다.
+#   AP: web 127.0.0.1:3001, api 127.0.0.1:4311 / Field: web 127.0.0.1:3002, api 127.0.0.1:4321
+# - Caddy는 같은 호스트에서 실행한다(패키지 설치 또는 network_mode: host 컨테이너).
+#   AP와 Field를 서로 다른 서버에 배포하면 각 서버의 Caddyfile에는 자기 제품 블록만 남긴다.
+# - 호스트 이름은 환경변수로 넣는다(Caddy가 기동 시 {$VAR}를 치환).
+#   ACME_EMAIL, AP_WEB_HOST, AP_API_HOST, FIELD_WEB_HOST, FIELD_API_HOST, FIELD_SITE_BASE_DOMAIN
+#
+# X-Forwarded-For
+# - 앱은 *_TRUST_PROXY 대역(기본: 각 compose 네트워크 대역)에서 온 XFF만 신뢰해 고객 IP를 구한다.
+#   공개 접수 IP 한도가 이 값에 의존하므로 edge는 반드시 XFF를 실제 접속 IP로 다시 써야 한다.
+# - Caddy reverse_proxy 기본 동작: trusted_proxies가 비어 있으면 클라이언트가 보낸 X-Forwarded-For를
+#   버리고 실제 접속 IP로 새로 설정한다(X-Forwarded-Proto/Host도 설정). 그래서 header_up을 따로 두지 않는다.
+#   Caddy 앞에 CDN/로드밸런서가 있으면 전역 servers { trusted_proxies static <대역> }에 그 대역만 넣는다.
+#   임의 대역(0.0.0.0/0)을 신뢰하면 고객이 XFF를 위조해 IP 한도를 우회할 수 있다.
+# - Host 헤더는 그대로 전달한다(Field web이 Host로 플랫폼/테넌트 사이트를 구분).
+#
+# 와일드카드 테넌트 도메인(*.{$FIELD_SITE_BASE_DOMAIN})
+# - 와일드카드 인증서는 ACME DNS-01 챌린지만 가능하다. DNS 공급사 모듈을 포함해 Caddy를 빌드해야 한다.
+#   예: xcaddy build --with github.com/caddy-dns/cloudflare
+#   아래 `dns cloudflare` 줄을 실제 DNS 공급사 모듈·토큰 환경변수로 바꾼다. 기본 Caddy 바이너리로는 이 파일이 로드되지 않는다.
+# - DNS에는 *.{$FIELD_SITE_BASE_DOMAIN} → 이 서버 A/AAAA 레코드가 필요하다.
+
+{
+	email {$ACME_EMAIL}
+}
+
+# ───────────── AP(Agent Platform) ─────────────
+{$AP_WEB_HOST} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3001
+}
+
+# 외부 사이트 SDK·위젯·공개 API·OAuth issuer
+{$AP_API_HOST} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:4311
+}
+
+# ───────────── Field ─────────────
+{$FIELD_WEB_HOST} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3002
+}
+
+{$FIELD_API_HOST} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:4321
+}
+
+# 테넌트 기본 사이트 주소 field-<id>.{$FIELD_SITE_BASE_DOMAIN} → Field web(Host로 사이트 판별)
+*.{$FIELD_SITE_BASE_DOMAIN} {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3002
+}
+
+# 사업자 자체 도메인(미구성): Caddy on-demand TLS는 `ask` URL에 ?domain=<host>로 허용 여부를 물어야 한다.
+# 현재 Field API에는 그 형식의 허용 확인 endpoint가 없으므로(경로형 /v1/public/site-hosts/<host>만 존재)
+# 임의 도메인 인증서 발급을 막기 위해 아래 블록을 켜지 않는다. endpoint가 생기면 다음 형태로 추가한다.
+#
+# {
+# 	on_demand_tls {
+# 		ask http://127.0.0.1:4321/<허용 확인 endpoint>
+# 	}
+# }
+# https:// {
+# 	tls {
+# 		on_demand
+# 	}
+# 	reverse_proxy 127.0.0.1:3002
+# }

@@ -1,0 +1,25 @@
+# 이미지 빌드 문맥은 허용 목록 방식으로 제한한다.
+# 비밀값(infra/*/.env*), mock 저널·미디어, 문서·시안·node_modules가 빌드 문맥에 들어가지 않게 한다.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!apps/agent-api
+!apps/agent-web
+!apps/field-api
+!apps/field-web
+!packages/ui
+!tools/run-migrations.mjs
+
+# 허용한 경로 안에서도 다시 제외한다.
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+**/.DS_Store
+**/.env
+**/.env.*
+apps/*/test
+apps/field-api/infra

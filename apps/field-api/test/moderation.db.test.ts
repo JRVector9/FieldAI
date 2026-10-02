@@ -163,7 +163,7 @@ test('Field reports require approved timed support access and preserve independe
     await pool.query('delete from field.platform_admin_memberships where user_id = $1', [approver]);
     assert.equal((await app.inject({ url: reportsPath, headers: headers(operator, undefined, secondAccess) })).statusCode, 403);
     process.env.FIELD_PROFILE = 'sandbox';
-    assert.equal((await app.inject({ url: '/v1/admin/reports', headers: headers(operator) })).json().error, 'blocked_integration');
+    assert.equal((await app.inject({ url: '/v1/admin/reports', headers: headers(operator) })).json().error, 'mfa_required');
     process.env.FIELD_PROFILE = 'mock';
     for (let i = 0; i < 3; i++) assert.equal((await submit(reportBody, randomUUID())).statusCode, 201);
     assert.equal((await submit(reportBody, randomUUID())).statusCode, 429);

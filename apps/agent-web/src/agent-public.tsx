@@ -1,6 +1,7 @@
 "use client";
 
 import { AgentCustomerNotificationConsent } from "./agent-customer-notification-consent";
+import { LegalFooter, PrivacyNotice } from "./legal";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
@@ -642,7 +643,8 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
       <label>연락처<input required type="tel" maxLength={30} value={phone} onChange={event => setPhone(event.target.value)} /></label>
       <label>문의 내용<textarea required maxLength={5000} value={message} onChange={event => updateHumanMessage(event.target.value)} /></label>
       <div className="agent-public-photo"><label className="inquiry-photo-label">문의 사진 (선택, 최대 8MB)<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label><p>사진은 AP 대화 원본을 저장한 뒤 비공개로 첨부합니다. AI 분석에 사용하지 않습니다. Field로 보내려면 별도로 선택하고 동의해야 합니다.</p></div>
-      <label><input type="checkbox" required checked={consent} onChange={event => setConsent(event.target.checked)} /> AP 대화와 요청 준비에 필요한 연락처 저장에 동의합니다.</label>
+      <PrivacyNotice />
+      <label><input type="checkbox" required checked={consent} onChange={event => setConsent(event.target.checked)} /> AP 대화와 요청 준비에 필요한 연락처 저장에 동의합니다. 위 개인정보 수집·이용 안내를 확인했습니다. (필수)</label>
       <button type="submit" value="human" disabled={busy || recovering || !knowledge || Boolean(engagement?.retention?.workPurgedAt)}>사람 문의 제출</button>
       {publicId && engagement && <><button type="submit" value="field" disabled={busy || recovering || !knowledge || Boolean(engagement?.retention?.workPurgedAt) || fieldReadiness !== "ready"}>Field 요청 준비</button><p>요청 준비만으로 Field에 전달되지 않습니다. 현재 서비스·가격·시간과 수신 사업자를 확인한 뒤 별도로 동의해야 합니다.</p></>}
       {!knowledge && <p>승인된 사업 정보를 불러온 뒤 문의를 접수할 수 있습니다.</p>}
@@ -654,7 +656,7 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
       initialSummary={receipt.state === 'external_ready' ? message : ''}
       externalReady={receipt.state === 'external_ready'} />}
     {publicId && knowledgeLoadState === 'ready' && <footer><AgentDeploymentReport publicId={publicId} /></footer>}
-  </main></div>;
+  </main><footer className="legal-page-footer legal-public-footer"><LegalFooter /></footer></div>;
 }
 
 export function InquiryPage({ id }: { id: string }) {

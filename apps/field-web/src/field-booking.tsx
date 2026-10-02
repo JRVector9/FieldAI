@@ -1,6 +1,7 @@
 "use client";
 
 import { FieldCustomerNotificationConsent } from "./field-customer-notification-consent";
+import { PrivacyNotice } from "./legal";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
@@ -332,7 +333,8 @@ export function PublicBookingPanel({ catalog, onServiceChange, onTimeChange, onR
         }} /><small>{photos.length > 0 ? `${photos.length}장 선택됨 · 예약 저장 후 비공개 첨부` : "눌러서 사진을 선택하세요. 예약 저장 후 비공개 첨부합니다."}</small></label>
         <SelectedBookingPhotos photos={photos} />
         <FieldRequestFallback value={fallback} onChange={setFallback} />
-        <label><input required type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /> 예약 처리에 필요한 연락처 저장에 동의합니다.</label>
+        <PrivacyNotice kind="reservation" />
+        <label><input required type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /> 예약 처리에 필요한 연락처 저장에 동의합니다. 위 개인정보 수집·이용 안내를 확인했습니다. (필수)</label>
         <button type="submit" disabled={busy || recovering || !service || (service.bookingMode === "slot" && (availabilityState !== "ready" || !startAt))}>예약 요청 제출</button>
         <p>회원가입 없이 접수합니다. 연락처 소유 확인이나 예약 확정을 뜻하지 않습니다.</p>
       </form>}

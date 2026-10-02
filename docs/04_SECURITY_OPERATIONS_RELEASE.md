@@ -35,6 +35,21 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 
 각 제품 web/worker는 자기 DB와 인프라만 필요하다. 미연결 상대 URL/토큰은 optional이며 상대 healthcheck 때문에 자기 서비스 readiness를 실패시키지 않는다. 연동 상태는 별도 degraded 지표다. 공통 provider 장애를 제품 상호 의존 장애로 혼동하지 않는다.
 
+### 5.1.1 배포 산출물
+
+현재 저장소의 제품별 배포 산출물은 다음과 같다. 결정 근거와 미검수 범위는 `docs/adr/0003-deployment-artifacts.md`를 따른다.
+
+| 파일 | 내용 |
+|---|---|
+| `infra/agent/Dockerfile.api`, `infra/field/Dockerfile.api` | 제품별 API·worker 이미지(`pnpm deploy --prod`), `--target migrate` 일회성 migration 이미지 |
+| `infra/agent/Dockerfile.web`, `infra/field/Dockerfile.web` | 제품별 Next 웹 이미지(`APP_PROFILE=live` 기본, `NEXT_PUBLIC_*`·rewrite 대상은 빌드 인자) |
+| `infra/agent/compose.live.yaml`, `infra/field/compose.live.yaml` | 제품 단독 live 실행(자기 PostgreSQL 17, Field는 Valkey 추가, migrate→api→web·worker) |
+| `infra/agent/.env.live.example`, `infra/field/.env.live.example` | 제품별 환경변수 목록(부팅 필수/`blocked_integration`/정책 구분). 실제 `.env.live`는 git 무시 |
+| `infra/edge/Caddyfile.example` | TLS 종료·제품별 upstream 분리·X-Forwarded-For 재작성·Field 와일드카드(DNS-01) |
+| `.github/workflows/ci.yml` | lint·typecheck·unit, 제품별 DB job, 계약 검사, 이미지 빌드(push 없음) |
+
+production 이미지는 `NODE_ENV=production`이며 `AP_PROFILE`/`FIELD_PROFILE`이 `live`가 아니면 부팅하지 않는다. 각 compose는 상대 제품의 서비스·DB·환경변수를 참조하지 않는다. E2E·보안·독립성·장애 주입 검사, 실제 TLS·레지스트리 push·운영 서버 검수는 이 산출물로 통과 처리하지 않는다.
+
 ## 5.2 agent용 런타임 의존 금지선
 
 AP Core CI는 Field 디렉터리와 환경변수를 제외하고 build/migrate/test할 수 있어야 한다. Field Core CI는 AP domain/db를 제외하고 동일 검사를 수행한다. public client 생성물을 읽는 것은 가능하지만 상대 앱 실행이나 마이그레이션이 필수가 되어서는 안 된다.

@@ -3,7 +3,8 @@ import { billingContextFromEnvironment } from './billing-context.js';
 import { Pool } from 'pg';
 import { fromNodeHeaders } from 'better-auth/node';
 import { createAgentApp } from './app.js';
-import { auth, authPool } from './auth.js';
+import { auth, authEmail, authPool } from './auth.js';
+import { emailDeliveryState } from './email-provider.js';
 import { createOpenAIProvider } from './openai.js';
 import { createAgentInquiryMediaStore } from './inquiry-media.js';
 import { agentRevocationJournalFromEnvironment } from './revocation-journal.js';
@@ -38,6 +39,7 @@ const app = createAgentApp(
     modelProvider: createOpenAIProvider(),
     inquiryMedia: createAgentInquiryMediaStore(),
     fieldConnector: fieldConnectorFromEnvironment(),
+    emailDeliveryState: () => emailDeliveryState(authEmail.provider),
   },
 );
 app.addHook('onClose', async () => { revocationJournal?.close(); });

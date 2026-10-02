@@ -120,10 +120,17 @@ export function createAgentApp(
       },
     });
   }
+  if (businessRuntime?.emailDeliveryState) {
+    const emailDeliveryState = businessRuntime.emailDeliveryState;
+    // 웹 인증 화면이 메일 미연결을 정직하게 안내하도록 상태만 공개한다(계정 존재 여부와 무관).
+    app.get('/v1/auth/email-delivery', async () => ({ product: 'agent', state: emailDeliveryState() }));
+  }
   app.get('/health/ready', async (_request, reply) => {
     try {
       await probe();
-      return { product: 'agent', status: 'ready' };
+      // 메일 미연결은 치명 장애가 아니므로 ready를 유지하고 세부 정보로만 알린다.
+      const email = businessRuntime?.emailDeliveryState?.();
+      return { product: 'agent', status: 'ready', ...(email ? { integrations: { email } } : {}) };
     } catch {
       return reply.code(503).send({ product: 'agent', status: 'unavailable' });
     }

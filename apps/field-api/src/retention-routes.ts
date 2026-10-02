@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { PoolClient } from 'pg';
 import type { FieldBusinessRuntime } from './business.js';
+import { requireAdmin } from './admin-auth.js';
 import { previewRetention, RETENTION_TABLES, type RetentionKind, type RetentionPolicy } from './work-retention.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -22,15 +23,10 @@ const holdView = (h: Hold) => ({ id: h.id, organizationId: h.organization_id, ta
   createdAt: h.created_at, releasedBy: h.released_by, releasedAt: h.released_at, state: h.released_at ? 'released' : 'active' });
 export async function retentionAdminFor(request: FastifyRequest, reply: FastifyReply, runtime: FieldBusinessRuntime, edit = true) {
   reply.headers({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' });
-  if (process.env.FIELD_PROFILE !== 'mock') { fail(reply, 503, 'blocked_integration'); return null; }
   if (request.method !== 'GET' && request.headers.origin !== undefined && ![
     process.env.FIELD_PUBLIC_WEB_ORIGIN ?? 'http://localhost:3002', 'http://localhost:3002', 'http://127.0.0.1:3002',
   ].includes(request.headers.origin)) { fail(reply, 403, 'origin_denied'); return null; }
-  const user = await runtime.resolveUserId(request.headers);
-  if (!user) { fail(reply, 401, 'authentication_required'); return null; }
-  const role = (await runtime.pool.query<{ role: string }>('select role from field.platform_admin_memberships where user_id=$1', [user])).rows[0]?.role;
-  if (!role || edit && role !== 'operator') { fail(reply, 403, 'admin_membership_required'); return null; }
-  return user;
+  return (await requireAdmin(request, reply, runtime, edit ? { role: 'operator' } : {}))?.userId ?? null;
 }
 const adminFor = retentionAdminFor;
 async function audit(db: PoolClient, user: string, action: string, reason: string, fields: {

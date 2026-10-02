@@ -8,6 +8,7 @@ import type { AgentModelProvider } from './openai.js';
 import type { AgentInquiryMediaStore } from './inquiry-media.js';
 import type { FieldConnectorConfig } from './field-connector.js';
 import type { AgentRevocationJournal } from './revocation-journal.js';
+import type { EmailDeliveryState } from './email-provider.js';
 import { rejectExpiredTrial } from './trial-access.js';
 
 export type BusinessRuntime = {
@@ -24,6 +25,8 @@ export type BusinessRuntime = {
   verifyDomain?: (host: string, proof: string) => Promise<boolean>;
   inquiryMedia?: AgentInquiryMediaStore;
   fieldConnector?: FieldConnectorConfig;
+  // 인증 메일 발송 환경 상태(readiness 세부 정보·웹 안내용). 미설정이면 노출하지 않는다.
+  emailDeliveryState?: () => EmailDeliveryState;
 };
 
 type Service = { name: string; description: string };

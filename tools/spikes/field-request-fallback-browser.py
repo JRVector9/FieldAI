@@ -169,7 +169,7 @@ async def main():
             await form.get_by_label("이름", exact=True).fill("새 직접 문의 고객")
             await form.get_by_label("연락처", exact=True).fill("01012345678")
             await form.get_by_label("문의 내용", exact=True).fill("직접 새로 작성한 문의")
-            await form.get_by_label("문의 처리에 필요한 연락처 저장에 동의합니다.", exact=True).check()
+            await form.get_by_label("문의 처리에 필요한 연락처 저장에 동의합니다. 위 개인정보 수집·이용 안내를 확인했습니다. (필수)", exact=True).check()
             await assert_width(guest)
             assert await form.locator(".field-request-fallback").evaluate(
                 "el => [...el.querySelectorAll('summary,p,label,input:not([type=checkbox])')].every(item => parseFloat(getComputedStyle(item).fontSize) >= 14)")
@@ -206,7 +206,7 @@ async def main():
                 await form.get_by_label("AP 이용 후 새 요청으로 제출합니다.", exact=True).check()
                 if index == 0:
                     await form.get_by_label("기존 AP 요청 ID (선택)", exact=True).fill(action_id)
-                await form.get_by_label("예약 처리에 필요한 연락처 저장에 동의합니다.", exact=True).check()
+                await form.get_by_label("예약 처리에 필요한 연락처 저장에 동의합니다. 위 개인정보 수집·이용 안내를 확인했습니다. (필수)", exact=True).check()
                 await assert_width(guest)
                 async with guest.expect_response(lambda response: response.request.method == "POST"
                                                   and response.url.endswith(f"/{org}/reservations")) as info:

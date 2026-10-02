@@ -51,13 +51,26 @@ export function layoutToSite(plan: unknown, catalog: SiteGenerationCatalog): Sit
         : section === 'region' ? { kind: 'text' as const, heading: '서비스 지역', body: catalog.region }
         : section === 'hours' ? { kind: 'text' as const, heading: '운영 시간', body: catalog.openingHours }
         : { kind: 'text' as const, heading: '연락 방법', body: catalog.contactPhone };
-      if (content.body || section === 'services') sections.push({ id: randomUUID(), ...content });
+      // hero 제목은 필수 승인값인 상호이므로 소개가 비어 있어도 유지한다.
+      if (content.body || section === 'services' || section === 'hero') sections.push({ id: randomUUID(), ...content });
     }
     if (!sections.length) return null;
     pages.push({ id: randomUUID(), slug: kind, title: kind === 'home' ? '홈' : kind === 'about' ? '소개' : kind === 'services' ? '서비스' : '연락', sections });
   }
   if (!seen.has('home')) return null;
   return parseContent({ template: value.template, palette: value.palette, pages });
+}
+
+// 템플릿 시작 초안: 승인 카탈로그 값만 복사해 편집기 기본 템플릿·색으로 홈 섹션을 채운다.
+// 서비스·질문 목록은 렌더 시 승인 카탈로그에서 읽으므로 여기서 문구를 만들지 않는다.
+export function catalogStarterSite(catalog: SiteGenerationCatalog & { faqs?: unknown[] }): SiteContent | null {
+  const layout = layoutToSite({ template: 'essential', palette: palettes[0], pages: [{ kind: 'home',
+    sections: ['hero', 'introduction', 'services', 'region', 'hours', 'contact'] }] }, catalog);
+  if (!layout || !Array.isArray(catalog.faqs) || !catalog.faqs.length) return layout;
+  const home = layout.pages[0]!;
+  home.sections.splice(home.sections.findIndex(section => section.kind === 'service_list') + 1, 0,
+    { id: randomUUID(), kind: 'faq', heading: '자주 묻는 질문', body: '' });
+  return parseContent(layout);
 }
 
 export function preserveSitePhotos(proposal: SiteContent, draft: SiteContent): SiteContent | null {

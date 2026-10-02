@@ -16,7 +16,7 @@ assert.equal(database.pathname, '/fieldai_agent_mock');
 
 test('AP publisher distinguishes read failure from login and committed organization creation', async () => {
   const ready = await fetch('http://127.0.0.1:4311/health/ready');
-  assert.deepEqual(await ready.json(), { product: 'agent', status: 'ready' });
+  assert.deepEqual(await ready.json(), { product: 'agent', status: 'ready', integrations: { email: 'mock' } });
   const email = `ap-publisher-recovery-${randomUUID()}@example.invalid`;
   const password = `${randomBytes(24).toString('base64url')}A1!`;
   const origin = `https://pub-${randomUUID()}.example.invalid`;

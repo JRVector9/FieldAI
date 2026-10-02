@@ -8,6 +8,8 @@ import { rejectExpiredTrial } from './trial-access.js';
 import { activeSiteOrigin, primarySiteOrigin, resolvedCustomHost } from './custom-domains.js';
 import { isSiteFont, type SiteFont } from './site-fonts.js';
 import { bookingScheduleReady } from './bookings.js';
+import { catalogStarterSite } from './site-generation.js';
+import type { SiteGenerationCatalog } from './field-openai.js';
 
 type Section = { id: string; kind: 'hero' | 'text' | 'service_list' | 'faq'; heading: string; body: string; assetId?: string; alt?: string };
 type Page = { id: string; slug: string; title: string; sections: Section[] };
@@ -418,15 +420,20 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     if (!organization) return reply;
     const id = randomUUID();
     const slug = `field-${randomBytes(6).toString('hex')}`;
-    const content: SiteContent = { template: 'essential', palette: '#264653', pages: [{
-      id: randomUUID(), slug: 'home', title: '홈', sections: [{ id: randomUUID(), kind: 'hero', heading: organization.name, body: '' }],
-    }] };
     const client = await runtime.pool.connect();
     try {
       await client.query('begin');
       if (await rejectExpiredTrial(reply, client, organization.organization_id)) {
         await client.query('rollback'); return reply;
       }
+      // 승인 카탈로그가 있으면 승인값만으로 기본 섹션을 채운 초안을 만들고, 없으면 상호 hero 하나로 시작한다.
+      const catalog = await client.query<{ content: SiteGenerationCatalog & { faqs?: unknown[] } }>(
+        'select content from field.catalog_releases where organization_id = $1 order by revision desc limit 1',
+        [organization.organization_id]);
+      const content: SiteContent = (catalog.rows[0] && catalogStarterSite(catalog.rows[0].content))
+        ?? { template: 'essential', palette: '#264653', pages: [{
+          id: randomUUID(), slug: 'home', title: '홈', sections: [{ id: randomUUID(), kind: 'hero', heading: organization.name, body: '' }],
+        }] };
       const created = await client.query(
         'insert into field.sites(id, organization_id, slug) values ($1, $2, $3) on conflict do nothing returning id',
         [id, organization.organization_id, slug],

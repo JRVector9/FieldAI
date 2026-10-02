@@ -1,0 +1,27 @@
+/* 법적 고지 화면·고객 폼 안내·푸터 (추가). 고정 시안의 색·글자 토큰을 그대로 쓰고 최소 14px을 지킨다. */
+.legal-shell .site-header{height:auto;min-height:76px;flex-wrap:wrap;padding-block:12px}
+.legal-shell .site-header nav{gap:16px;font-size:15px;flex-wrap:wrap}
+.legal-main{display:grid;gap:18px}
+.legal-main>*{width:min(100%,960px);margin-inline:auto}
+.legal-main h1{font-size:34px;letter-spacing:-.025em;margin-top:9px}
+.legal-main .state-message{margin:18px 0 0;font-size:15px}
+.legal-section h2{margin-bottom:14px}
+.legal-section ul{margin:0;padding-left:20px;display:grid;gap:8px;font-size:16px;line-height:1.65}
+.legal-table{overflow-x:auto}
+.legal-table table{width:100%;border-collapse:collapse;font-size:15px;line-height:1.6}
+.legal-table th,.legal-table td{border-top:1px solid var(--line);padding:12px 10px;text-align:left;vertical-align:top}
+.legal-table th{width:22%;font-weight:600}
+.legal-operator{display:grid;gap:10px;margin:0}
+.legal-operator div{display:grid;grid-template-columns:180px minmax(0,1fr);gap:12px;font-size:15px}
+.legal-operator dt{font-weight:600}
+.legal-operator dd{margin:0;overflow-wrap:anywhere}
+.legal-unset{color:#ba3434;font-weight:700}
+.legal-notice ul{margin:8px 0;padding-left:18px;display:grid;gap:4px;font-size:14px;line-height:1.55}
+.legal-notice a{color:#0066cc;font-weight:600;font-size:14px}
+.legal-footer{display:grid;gap:6px;font-size:14px;line-height:1.6;color:#6e727c}
+.legal-footer nav{display:flex;gap:16px;flex-wrap:wrap}
+.legal-footer a{color:#0066cc}
+.legal-page-footer{padding:22px 0 40px;border-top:1px solid #e9e9ed}
+.legal-public-footer{width:min(930px,calc(100% - 40px));margin:0 auto}
+.field-home .legal-page-footer{border-top:0;padding-top:0}
+@media(max-width:700px){.legal-main h1{font-size:28px}.legal-table tr{display:block;border-top:1px solid var(--line);padding:10px 0}.legal-table th,.legal-table td{display:block;width:auto;border-top:0;padding:3px 0}.legal-operator div{grid-template-columns:1fr;gap:2px}}
