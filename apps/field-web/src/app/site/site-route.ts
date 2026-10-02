@@ -4,7 +4,8 @@ import type { SiteRelease } from "../../field-site";
 import { customHostMapping, platformHost } from "../../custom-domain-host";
 
 export async function publishedSite(slug: string, pageSlug: string): Promise<SiteRelease> {
-  const host = (await headers()).get("host") ?? "";
+  // 대문자 Host도 같은 사이트로 판정하도록 소문자로 맞춘다.
+  const host = ((await headers()).get("host") ?? "").toLowerCase();
   const domain = process.env.APP_PROFILE !== "live" ? "localhost:3002" : process.env.FIELD_SITE_BASE_DOMAIN;
   if (domain && host.endsWith(`.${domain}`) && host !== `${slug}.${domain}`) notFound();
 

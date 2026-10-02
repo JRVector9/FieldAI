@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
+import { createCipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { IncomingHttpHeaders } from 'node:http';
 import { resolve } from 'node:path';
 import { after, test } from 'node:test';
@@ -7,6 +7,7 @@ import { fromNodeHeaders } from 'better-auth/node';
 import { Pool } from 'pg';
 import sharp from 'sharp';
 import { createAgentApp } from '../src/app.js';
+import { dispatchAi, reserveAi } from '../src/ai-entitlement.js';
 
 process.loadEnvFile(resolve('../../infra/agent/.env'));
 process.env.AP_PROFILE = 'mock';
@@ -728,4 +729,87 @@ test('AP link keeps anonymous AI guidance and consented human followup in one co
     else process.env.AP_FIELD_PREFLIGHT_ORG_LIMIT = oldFieldPreflightLimit;
     await Promise.all([app.close(), disconnected.close()]);
   }
+});
+
+test('AP abandoned customer AI run is closed after ten minutes without touching usage', async () => {
+  const email = `consult-abandoned-${randomUUID()}@example.invalid`;
+  const password = `${randomBytes(16).toString('base64url')}A1!`;
+  const authPost = (path: string) => auth.handler(new Request(`${base}/api/auth${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: base },
+    body: JSON.stringify({ email, password, name: 'Synthetic owner' }),
+  }));
+  assert.equal((await authPost('/sign-up/email')).status, 200);
+  const ownerCookie = (await authPost('/sign-in/email')).headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+  let calls = 0;
+  const modelProvider = { model: 'synthetic-abandoned-model', generate: async () => {
+    calls += 1;
+    return { output: { answer: '상담 서비스를 안내합니다.', evidenceIds: ['service:0'], unknowns: [], handoffRecommended: false },
+      inputTokens: 32, outputTokens: 12, responseId: `synthetic-abandoned-${calls}` };
+  } };
+  const app = createAgentApp(async () => undefined, auth.handler, base, undefined, {
+    pool, resolveUserId: async (headers: IncomingHttpHeaders) =>
+      (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+    modelProvider, customerDailyLimit: 20,
+  });
+  try {
+    const organization = await app.inject({ method: 'POST', url: '/v1/organizations',
+      headers: { cookie: ownerCookie }, payload: { name: '중단 run 상담' } });
+    assert.equal(organization.statusCode, 201);
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/knowledge/draft',
+      headers: { cookie: ownerCookie }, payload: { expectedRevision: 0, businessName: '중단 run 상담',
+        introduction: '', services: [{ name: '상담', description: '방문' }], faqs: [] } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/knowledge/releases',
+      headers: { cookie: ownerCookie }, payload: { expectedRevision: 1 } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/agents/draft', headers: { cookie: ownerCookie },
+      payload: { expectedRevision: 0, name: '상담 AI', tone: 'clear', guideScope: '', handoffText: '담당자가 답변합니다.' } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/agents/releases', headers: { cookie: ownerCookie },
+      payload: { expectedRevision: 1, expectedKnowledgeRevision: 1 } })).statusCode, 201);
+    const deployment = await app.inject({ method: 'POST', url: '/v1/deployments',
+      headers: { cookie: ownerCookie }, payload: { kind: 'link' } });
+    assert.equal(deployment.statusCode, 201);
+    assert.equal((await app.inject({ method: 'POST', url: `/v1/deployments/${deployment.json().id}/activate`,
+      headers: { cookie: ownerCookie } })).statusCode, 200);
+    const engagement = await app.inject({ method: 'POST',
+      url: `/v1/public/deployments/${deployment.json().publicId}/engagements` });
+    assert.equal(engagement.statusCode, 201);
+    const inquiryId = engagement.json().id as string;
+    const cookie = engagement.headers['set-cookie']?.toString().split(';')[0];
+    const key = randomBytes(32).toString('base64url');
+    // dispatch까지 기록된 뒤 정산 전에 프로세스가 죽은 run을 재현한다
+    const runId = randomUUID();
+    const db = await pool.connect();
+    try {
+      await db.query('begin');
+      await db.query(`insert into ap.ai_runs(id, organization_id, agent_release_id, knowledge_release_id, kind, inquiry_id,
+          inquiry_revision, question, status, provider_model, idempotency_key_hash, started_at)
+        select $1, i.organization_id, i.agent_release_id, i.knowledge_release_id, 'customer_message', i.id, i.revision + 1,
+          '중단된 질문', 'in_progress', 'synthetic-abandoned-model', $3, now() - interval '9 minutes' from ap.inquiries i where i.id = $2`,
+      [runId, inquiryId, createHash('sha256').update(key).digest('hex')]);
+      await reserveAi(db, runId); await dispatchAi(db, runId);
+      await db.query('commit');
+    } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
+    const recover = () => app.inject({ url: `/v1/engagements/${inquiryId}/messages/recover`, headers: { cookie, 'idempotency-key': key } });
+    const ask = (question: string, idempotency = randomBytes(32).toString('base64url')) => app.inject({ method: 'POST',
+      url: `/v1/engagements/${inquiryId}/messages`, headers: { cookie, 'idempotency-key': idempotency }, payload: { question } });
+    // 10분 전에는 결과 미상으로 유지하고 새 질문을 막는다
+    assert.equal((await recover()).json().state, 'result_unknown');
+    assert.equal((await ask('새 질문입니다')).json().error, 'answer_in_progress');
+    await pool.query(`update ap.ai_runs set started_at = now() - interval '11 minutes' where id = $1`, [runId]);
+    const abandoned = await recover();
+    assert.equal(abandoned.statusCode, 200);
+    assert.equal(abandoned.json().state, 'failed');
+    assert.equal(abandoned.json().error, 'run_abandoned');
+    const replay = await ask('중단된 질문', key);
+    assert.equal(replay.statusCode, 503);
+    assert.equal(replay.json().error, 'run_abandoned');
+    assert.equal(calls, 0);
+    // 사용량 원장은 그대로 두고, 같은 문의의 다음 질문은 다시 처리된다
+    assert.equal((await pool.query<{ state: string }>('select state from ap.ai_usage_ledger where run_id = $1', [runId])).rows[0]?.state, 'dispatched');
+    const next = await ask('새 질문입니다');
+    assert.equal(next.statusCode, 200, next.body);
+    assert.equal(calls, 1);
+    const run = (await pool.query<{ status: string; error_code: string; finished_at: Date | null }>(
+      'select status, error_code, finished_at from ap.ai_runs where id = $1', [runId])).rows[0];
+    assert.equal(run?.status, 'failed'); assert.equal(run?.error_code, 'run_abandoned'); assert.ok(run?.finished_at);
+  } finally { await app.close(); }
 });

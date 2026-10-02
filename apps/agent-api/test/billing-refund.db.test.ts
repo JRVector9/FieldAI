@@ -8,6 +8,7 @@ import { createAgentApp } from '../src/app.js';
 import { sealBilling, type BillingContext } from '../src/billing-context.js';
 import { BillingProviderError, type BillingPayment, type BillingRefund } from '../src/toss-billing.js';
 import { runBillingChargeOnce } from '../src/billing-charge-execution.js';
+import { periodAt } from '../src/billing-period.js';
 
 process.loadEnvFile(resolve('../../infra/agent/.env'));
 const source=process.env.AP_DATABASE_URL!,databases=new Set<string>();let admin:Client;
@@ -76,13 +77,30 @@ test('owner refund request is scoped, idempotent and requires separate review an
  }finally{await f.close();}
 });
 
-test('partial refunds append verified proof once and full refund does not cancel the subscription',async()=>{
- const f=await fixture();try{for(const amount of [5500,5500]){const id=await f.request(amount);await f.approve(id);assert.equal(await f.run(),'succeeded');assert.equal((await f.row(id)).state,'succeeded');assert.equal(await f.run(),'empty');}
+test('partial refunds append verified proof once and full refund of the last period ends the subscription',async()=>{
+ const f=await fixture();try{for(const [index,amount] of [5500,5500].entries()){const id=await f.request(amount);await f.approve(id);assert.equal(await f.run(),'succeeded');assert.equal((await f.row(id)).state,'succeeded');assert.equal(await f.run(),'empty');
+ // 부분 환불까지는 구독을 유지한다
+ if(index===0)assert.equal((await f.pool.query('select state from ap.paid_subscriptions where id=$1',[f.subscription])).rows[0].state,'active');}
  const p=(await f.pool.query('select * from ap.billing_periods where id=$1',[f.period])).rows[0];assert.equal(p.refunded_amount,11000);assert.equal(p.state,'refunded');
- assert.equal((await f.pool.query('select state from ap.paid_subscriptions where id=$1',[f.subscription])).rows[0].state,'active');
+ // 전액 환불된 마지막 기간은 접근·갱신이 모두 없으므로 구독을 ended로 종료하고 이벤트를 남긴다
+ const s=(await f.pool.query('select state,terminated_at,plan_id from ap.paid_subscriptions where id=$1',[f.subscription])).rows[0];assert.equal(s.state,'ended');assert.ok(s.terminated_at);
+ assert.equal((await f.pool.query("select count(*)::int as n from ap.billing_events where subscription_id=$1 and event_type='subscription_ended_by_full_refund'",[f.subscription])).rows[0].n,1);
+ f.as(f.owner);const consent={planId:s.plan_id,termsVersion:'terms',refundVersion:'refund-v1',totalAmount:11000,supplyAmount:10000,vatAmount:1000,taxFreeAmount:0,currency:'KRW',includedAiUnits:500,graceDays:3,termsAccepted:true,autoRenew:true,firstChargePolicy:'after_authorization'};
+ const checkout=await f.call('POST','/v1/subscription/checkout',consent);assert.equal(checkout.statusCode,201,checkout.body);
  assert.equal(f.posts.length,2);assert.ok(f.posts.every(p=>p.paymentKey==='synthetic-payment-NO-RAW'));
  f.as(f.owner);assert.doesNotMatch((await f.call('GET','/v1/subscription/refunds')).body,/NO-RAW|ciphertext|fingerprint|transactionKey|synthetic-mid/);
  assert.equal((await f.call('POST','/v1/subscription/refunds',{periodId:f.period,amount:1,reason:'Another refund beyond paid value'})).statusCode,409);
+ }finally{await f.close();}
+});
+
+test('full refund of an earlier period keeps the subscription when a later period already exists',async()=>{
+ const f=await fixture();try{
+ const base=(await f.pool.query('select p.consent_id,p.plan_id,s.anchor_at from ap.billing_periods p join ap.paid_subscriptions s on s.id=p.subscription_id where p.id=$1',[f.period])).rows[0],next=periodAt(base.anchor_at,1);
+ await f.pool.query(`insert into ap.billing_periods(id,subscription_id,billing_period,consent_id,plan_id,starts_at,ends_at,total_amount,supply_amount,vat_amount,tax_free_amount,currency)
+ values($1,$2,1,$3,$4,$5,$6,11000,10000,1000,0,'KRW')`,[randomUUID(),f.subscription,base.consent_id,base.plan_id,next.startsAt,next.endsAt]);
+ const id=await f.request(11000);await f.approve(id);assert.equal(await f.run(),'succeeded');
+ assert.equal((await f.pool.query('select state from ap.billing_periods where id=$1',[f.period])).rows[0].state,'refunded');
+ const s=(await f.pool.query('select state,terminated_at from ap.paid_subscriptions where id=$1',[f.subscription])).rows[0];assert.equal(s.state,'active');assert.equal(s.terminated_at,null);
  }finally{await f.close();}
 });
 

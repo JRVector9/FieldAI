@@ -639,3 +639,80 @@ test('Field guest inquiry uses a separate receipt key and owner replies remain p
     await authPool.query('DELETE FROM "user" WHERE email = ANY($1::text[])', [[owner.email, other.email]]);
   }
 });
+
+test('Field public intake and customer messages are limited per client IP before the shared organization window', async () => {
+  const owner = await createOwner();
+  const app = createFieldApp(async () => undefined, auth.handler, base, {
+    pool,
+    resolveUserId: async (headers: IncomingHttpHeaders) =>
+      (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+  });
+  try {
+    const organization = await app.inject({ method: 'POST', url: '/v1/organizations', headers: { cookie: owner.cookie }, payload: { name: 'IP 한도 검수 상호' } });
+    const organizationId = (organization.json() as { id: string }).id;
+    const serviceId = randomUUID();
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft', headers: { cookie: owner.cookie }, payload: {
+      expectedRevision: 0, businessName: 'IP 한도 검수 상호', introduction: '직접 문의 가능', region: '서울',
+      openingHours: '예약 문의', contactPhone: '010-0000-0000',
+      services: [{ id: serviceId, name: '상담', description: '상담 서비스', bookingMode: 'request', durationMinutes: 30, priceAmount: null }],
+    } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases', headers: { cookie: owner.cookie }, payload: { expectedRevision: 1 } })).statusCode, 201);
+    const inquiryUrl = `/v1/public/catalog/${organizationId}/inquiries`;
+    const reservationUrl = `/v1/public/catalog/${organizationId}/reservations`;
+    // Next 프록시(loopback)를 거친 요청처럼 X-Forwarded-For로 고객 IP를 구분한다.
+    const from = (ip: string) => ({ 'x-forwarded-for': ip });
+    const inquiry = (index: number) => ({ serviceId, name: '비회원', phone: `010-7000-${String(index).padStart(4, '0')}`,
+      message: `IP 한도 ${index}`, consent: true });
+    let receiptKey = '';
+    let inquiryId = '';
+    for (let index = 0; index < 20; index += 1) {
+      const accepted = index % 2 === 0
+        ? await app.inject({ method: 'POST', url: inquiryUrl, headers: from('203.0.113.7'), payload: inquiry(index) })
+        : await app.inject({ method: 'POST', url: reservationUrl, headers: from('203.0.113.7'), payload: {
+          serviceId, name: '비회원', phone: `010-7000-${String(index).padStart(4, '0')}`, consent: true,
+          preferredTimeText: `IP 한도 ${index}` } });
+      assert.equal(accepted.statusCode, 201);
+      if (index === 0) ({ id: inquiryId, receiptKey } = accepted.json() as { id: string; receiptKey: string });
+    }
+    // 번호를 바꿔도 같은 IP는 21번째 접수부터 거절하고, 문의·예약이 같은 창을 쓴다.
+    const blocked = await app.inject({ method: 'POST', url: inquiryUrl, headers: from('203.0.113.7'), payload: inquiry(20) });
+    assert.equal(blocked.statusCode, 429);
+    assert.deepEqual(blocked.json(), { error: 'submission_rate_limited', scope: 'ip' });
+    assert.ok(Number(blocked.headers['retry-after']) > 0);
+    const blockedReservation = await app.inject({ method: 'POST', url: reservationUrl, headers: from('203.0.113.7'), payload: {
+      serviceId, name: '비회원', phone: '010-7000-0021', consent: true, preferredTimeText: 'IP 한도 예약' } });
+    assert.equal(blockedReservation.statusCode, 429);
+    assert.equal(blockedReservation.json().scope, 'ip');
+    // 다른 고객 IP는 영향을 받지 않고, 거절된 접수는 조직 공용 창을 소모하지 않는다.
+    assert.equal((await app.inject({ method: 'POST', url: inquiryUrl, headers: from('203.0.113.8'), payload: inquiry(22) })).statusCode, 201);
+    assert.equal((await pool.query<{ attempts: number }>(
+      'select attempts from field.public_submission_organization_windows where organization_id = $1', [organizationId])).rows[0]?.attempts, 21);
+    const ipWindows = await pool.query<{ subject_hash: string; attempts: number }>(
+      'select subject_hash, attempts from field.public_submission_ip_windows where organization_id = $1 order by attempts', [organizationId]);
+    assert.deepEqual(ipWindows.rows.map(row => row.attempts), [1, 20]);
+    assert.ok(ipWindows.rows.every(row => /^[0-9a-f]{64}$/.test(row.subject_hash)));
+    await pool.query(`update field.public_submission_ip_windows set window_started_at = now() - interval '16 minutes'
+      where organization_id = $1 and attempts = 20`, [organizationId]);
+    assert.equal((await app.inject({ method: 'POST', url: inquiryUrl, headers: from('203.0.113.7'), payload: inquiry(23) })).statusCode, 201);
+
+    // 고객 메시지는 접수와 별도 창으로 IP별 30건/15분까지 받는다.
+    const messageUrl = `/v1/inquiries/${inquiryId}/messages`;
+    const customer = (ip: string) => ({ ...from(ip), authorization: `Bearer ${receiptKey}` });
+    for (let index = 0; index < 30; index += 1)
+      assert.equal((await app.inject({ method: 'POST', url: messageUrl, headers: customer('203.0.113.7'),
+        payload: { body: `추가 질문 ${index}` } })).statusCode, 201);
+    const messageBlocked = await app.inject({ method: 'POST', url: messageUrl, headers: customer('203.0.113.7'),
+      payload: { body: '31번째 질문' } });
+    assert.equal(messageBlocked.statusCode, 429);
+    assert.deepEqual(messageBlocked.json(), { error: 'message_rate_limited', scope: 'ip' });
+    assert.ok(Number(messageBlocked.headers['retry-after']) > 0);
+    assert.equal((await app.inject({ method: 'POST', url: messageUrl, headers: customer('203.0.113.8'),
+      payload: { body: '다른 IP 질문' } })).statusCode, 201);
+    assert.equal((await pool.query<{ count: number }>(
+      "select count(*)::int as count from field.inquiry_messages where inquiry_id = $1 and sender = 'customer'", [inquiryId])).rows[0]?.count, 32);
+  } finally {
+    await app.close();
+    await pool.query('DELETE FROM field.organizations WHERE owner_user_id = (SELECT id FROM "user" WHERE email = $1)', [owner.email]).catch(() => undefined);
+    await authPool.query('DELETE FROM "user" WHERE email = $1', [owner.email]);
+  }
+});

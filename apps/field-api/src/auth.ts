@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { betterAuth } from 'better-auth';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { APIError } from 'better-auth/api';
+import { assertProductionProfile } from './production-profile.js';
 
 const databaseUrl = process.env.FIELD_DATABASE_URL;
 const secret = process.env.FIELD_AUTH_SECRET;
@@ -11,9 +12,7 @@ const baseURL = process.env.FIELD_AUTH_BASE_URL;
 if (!databaseUrl || !secret || !baseURL) {
   throw new Error('FIELD_DATABASE_URL, FIELD_AUTH_SECRET and FIELD_AUTH_BASE_URL are required');
 }
-if (process.env.NODE_ENV === 'production' && process.env.FIELD_PROFILE === 'mock') {
-  throw new Error('mock profile is forbidden in production');
-}
+assertProductionProfile();
 
 export const authPool = new Pool({ connectionString: databaseUrl });
 const webOrigin = process.env.FIELD_PUBLIC_WEB_ORIGIN

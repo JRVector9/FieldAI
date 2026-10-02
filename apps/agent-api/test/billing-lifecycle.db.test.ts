@@ -120,6 +120,30 @@ test('AP renews only one consented month and preserves its original anchor',asyn
   }finally{await f.close();}
 });
 
+test('AP expired past_due subscriptions do not occupy the renewal batch and starve a due renewal',async()=>{
+  const f=await fixture();try {
+    const anchor=new Date(f.approvedAt),next=periodAt(anchor,1);f.setNow(later(next.startsAt));
+    // 다음 기간까지 이미 끝난 오래된 past_due 구독 20개(갱신 후보 limit과 같은 수)를 먼저 만든다
+    const staleAnchor=new Date(anchor.getTime()-100*86400000),stale=periodAt(staleAnchor,0),staleIds:string[]=[];
+    assert.ok(periodAt(staleAnchor,1).endsAt.getTime()<=f.now().getTime());assert.ok(stale.endsAt.getTime()<periodAt(anchor,0).endsAt.getTime());
+    for(let i=0;i<20;i++){
+      const [user,org,sub,consent]=[randomUUID(),randomUUID(),randomUUID(),randomUUID()];staleIds.push(sub);
+      await f.pool.query('insert into "user"(id,name,email,"emailVerified") values($1,$2,$3,false)',[user,'Synthetic stale',`${user}@example.invalid`]);
+      await f.pool.query('insert into ap.organizations(id,owner_user_id,name) values($1,$2,$3)',[org,user,'합성 장기 미납 조직']);
+      await f.pool.query(`insert into ap.paid_subscriptions(id,organization_id,plan_id,customer_key,state,created_by,anchor_at) values($1,$2,$3,$4,'past_due',$5,$6)`,[sub,org,f.plan,randomUUID(),user,staleAnchor]);
+      await f.pool.query(`insert into ap.billing_consents(id,subscription_id,plan_id,accepted_by,terms_version,refund_version,total_amount,supply_amount,vat_amount,tax_free_amount,currency,included_ai_units,grace_days,auto_renew)
+        values($1,$2,$3,$4,'synthetic-terms','synthetic-refund',11000,10000,1000,0,'KRW',500,3,true)`,[consent,sub,f.plan,user]);
+      await f.pool.query(`insert into ap.billing_periods(id,subscription_id,billing_period,consent_id,plan_id,starts_at,ends_at,total_amount,supply_amount,vat_amount,tax_free_amount,currency,state,paid_at)
+        values($1,$2,0,$3,$4,$5,$6,11000,10000,1000,0,'KRW','paid',$5)`,[randomUUID(),sub,consent,f.plan,stale.startsAt,stale.endsAt]);
+    }
+    assert.equal(await f.run(),'paid');assert.equal(f.calls.length,2);
+    const renewed=(await f.pool.query('select billing_period,state from ap.billing_periods where subscription_id=$1 order by billing_period',[f.subscriptionId])).rows;
+    assert.deepEqual(renewed.map(r=>[r.billing_period,r.state]),[[0,'paid'],[1,'paid']]);
+    assert.equal((await f.pool.query('select count(*)::int as n from ap.billing_periods where subscription_id=any($1::uuid[])',[staleIds])).rows[0].n,20);
+    assert.equal((await f.pool.query("select count(*)::int as n from ap.paid_subscriptions where id=any($1::uuid[]) and state='past_due'",[staleIds])).rows[0].n,20);
+  }finally{await f.close();}
+});
+
 test('AP recovers a lost renewal response using one persisted order without shifting the month',async()=>{
   const f=await fixture();try {
     const period=periodAt(new Date(f.approvedAt),1);f.setNow(later(period.startsAt));f.setMode('lost');

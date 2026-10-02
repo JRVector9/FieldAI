@@ -11,10 +11,10 @@ import { createFieldSiteMediaStore } from './site-media.js';
 import { createFieldInquiryMediaStore } from './inquiry-media.js';
 import { apConnectorFromEnvironment } from './ap-connector.js';
 import { assertLifecycleServing, lifecycleJournalFromEnvironment } from './oauth-lifecycle-journal.js';
+import { assertProductionProfile } from './production-profile.js';
+import { createGracefulShutdown } from './shutdown.js';
 
-if (process.env.NODE_ENV === 'production' && process.env.FIELD_PROFILE === 'mock') {
-  throw new Error('mock profile is forbidden in production');
-}
+assertProductionProfile();
 
 const connectionString = process.env.FIELD_DATABASE_URL;
 if (!connectionString) throw new Error('FIELD_DATABASE_URL is required');
@@ -58,8 +58,11 @@ try {
   process.exitCode = 1;
 }
 
+const shutdown = createGracefulShutdown({
+  closeApp: () => app.close(),
+  closePools: [() => pool.end(), () => authPool.end()],
+  onError: (error) => app.log.error(error),
+});
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, () => {
-    void Promise.all([app.close(), pool.end(), authPool.end()]).then(() => process.exit(0));
-  });
+  process.on(signal, () => { void shutdown(); });
 }

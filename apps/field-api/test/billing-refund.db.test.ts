@@ -76,10 +76,14 @@ test('owner refund request is scoped, idempotent and requires separate review an
  }finally{await f.close();}
 });
 
-test('partial refunds append verified proof once and full refund does not cancel the subscription',async()=>{
- const f=await fixture();try{for(const amount of [5500,5500]){const id=await f.request(amount);await f.approve(id);assert.equal(await f.run(),'succeeded');assert.equal((await f.row(id)).state,'succeeded');assert.equal(await f.run(),'empty');}
+test('partial refunds append verified proof once and full refund of the last period ends the subscription',async()=>{
+ const f=await fixture();try{for(const [index,amount] of [5500,5500].entries()){const id=await f.request(amount);await f.approve(id);assert.equal(await f.run(),'succeeded');assert.equal((await f.row(id)).state,'succeeded');assert.equal(await f.run(),'empty');
+ // 부분 환불까지는 구독을 유지한다
+ if(index===0)assert.equal((await f.pool.query('select state from field.paid_subscriptions where id=$1',[f.subscription])).rows[0].state,'active');}
  const p=(await f.pool.query('select * from field.billing_periods where id=$1',[f.period])).rows[0];assert.equal(p.refunded_amount,11000);assert.equal(p.state,'refunded');
- assert.equal((await f.pool.query('select state from field.paid_subscriptions where id=$1',[f.subscription])).rows[0].state,'active');
+ // 전액 환불된 마지막 기간은 접근·갱신이 모두 없으므로 구독을 ended로 종료하고 이벤트를 남긴다(2026-10-03, AP와 동일 동작)
+ const s=(await f.pool.query('select state,terminated_at from field.paid_subscriptions where id=$1',[f.subscription])).rows[0];assert.equal(s.state,'ended');assert.ok(s.terminated_at);
+ assert.equal((await f.pool.query("select count(*)::int as n from field.billing_events where subscription_id=$1 and event_type='subscription_ended_by_full_refund'",[f.subscription])).rows[0].n,1);
  assert.equal(f.posts.length,2);assert.ok(f.posts.every(p=>p.paymentKey==='synthetic-payment-NO-RAW'));
  f.as(f.owner);assert.doesNotMatch((await f.call('GET','/v1/subscription/refunds')).body,/NO-RAW|ciphertext|fingerprint|transactionKey|synthetic-mid/);
  assert.equal((await f.call('POST','/v1/subscription/refunds',{periodId:f.period,amount:1,reason:'Another refund beyond paid value'})).statusCode,409);

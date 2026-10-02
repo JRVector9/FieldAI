@@ -105,6 +105,13 @@ export async function runBillingRefundOnce(input:{pool:Pool;billing?:BillingCont
  await db.query(`update ap.billing_refunds set state='succeeded',provider_transaction_hash=$2,provider_transaction_ciphertext=$3,provider_canceled_at=$4,
  completed_at=now(),claim_token=null,lease_expires_at=null,error_code=null where id=$1`,[row.id,refundHash(proof.transactionKey),sealBilling(proof.transactionKey,context.credentialKey,`refund-provider:${row.id}`),new Date(proof.canceledAt)]);
  await db.query(`update ap.billing_periods set refunded_amount=refunded_amount+$2,state=case when refunded_amount+$2=total_amount then 'refunded' else 'paid' end where id=$1`,[row.period_id,row.amount]);
+ // 마지막 기간이 전액 환불되면 접근·갱신이 모두 멈춘 active 상태로 남기지 않고 구독을 종료한다(재가입 허용, 원장·이벤트는 보존).
+ const ended=await db.query(`update ap.paid_subscriptions s set state='ended',terminated_at=now()
+ where s.id=$1 and s.terminated_at is null and s.cancel_requested_at is null
+ and exists(select 1 from ap.billing_periods p where p.id=$2 and p.state='refunded'
+  and not exists(select 1 from ap.billing_periods n where n.subscription_id=s.id and n.billing_period>p.billing_period)) returning s.plan_id`,[row.subscription_id,row.period_id]);
+ if(ended.rowCount)await db.query(`insert into ap.billing_events(organization_id,subscription_id,plan_id,event_type,payload)
+ values($1,$2,$3,'subscription_ended_by_full_refund',$4::jsonb)`,[row.organization_id,row.subscription_id,ended.rows[0].plan_id,JSON.stringify({refundId:row.id,periodId:row.period_id})]);
  await refundEvent(db,current,'succeeded');await db.query('commit');return 'succeeded';
  }catch(error){await db.query('rollback');throw error;}finally{db.release();}
 }

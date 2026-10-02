@@ -881,7 +881,7 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
       if (await rejectExpiredTrial(reply, client, organizationId)) {
         await client.query('rollback'); return reply;
       }
-      const submissionLimit = await consumePublicSubmission(client, organizationId, body.phone as string);
+      const submissionLimit = await consumePublicSubmission(client, organizationId, body.phone as string, request.ip);
       if (submissionLimit !== null) {
         await client.query('rollback');
         return reply.header('Retry-After', submissionLimit.retryAfter).header('Cache-Control', 'no-store')

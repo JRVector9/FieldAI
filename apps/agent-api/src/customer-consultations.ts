@@ -128,6 +128,15 @@ async function customerAiRun(pool: Pool | PoolClient, inquiryId: string, keyHash
     [inquiryId, keyHash]);
   return found.rows[0] ?? null;
 }
+// dispatch와 정산 사이에 프로세스가 죽어 in_progress로 남은 run을 10분 뒤 failed/run_abandoned로 종결한다.
+// 모델 호출 timeout(20초)보다 충분히 길게 잡아 진행 중인 run을 건드리지 않으며, 사용량 원장(ai_usage_ledger)은 바꾸지 않는다.
+async function abandonStaleAiRuns(pool: Pool | PoolClient, organizationId: string) {
+  await pool.query(
+    `update ap.ai_runs r set status = 'failed', error_code = 'run_abandoned', finished_at = now()
+     where r.organization_id = $1 and r.status = 'in_progress' and r.started_at <= now() - interval '10 minutes'
+       and not exists(select 1 from ap.inquiries i where i.id = r.inquiry_id and i.retention_work_purged_at is not null)`,
+    [organizationId]);
+}
 function replayCustomerAiRun(reply: FastifyReply, run: CustomerAiRun, question: string) {
   reply.header('Cache-Control', 'no-store');
   if (run.question !== question) return reply.code(409).send({ error: 'idempotency_conflict' });
@@ -367,6 +376,7 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
     const row = await session(runtime.pool, request, request.params.id, false, false);
     if (!row) return reply.code(401).send({ error: 'consult_session_required' });
     if (row.retention_work_purged_at) return reply.code(410).send({ error: 'retention_work_ended' });
+    await abandonStaleAiRuns(runtime.pool, row.organization_id);
     const run = await customerAiRun(runtime.pool, row.id, hash(key));
     if (!run) return reply.code(404).send({ error: 'ai_attempt_not_found' });
     if (run.status === 'in_progress') reply.header('Retry-After', run.result_unknown ? '30' : '2');
@@ -388,6 +398,7 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
     const initial = await session(runtime.pool, request, request.params.id, false, true, false, true);
     if (!initial) return reply.code(401).send({ error: 'consult_session_required' });
     if (initial.retention_work_purged_at) return reply.code(410).send({ error: 'retention_work_ended' });
+    await abandonStaleAiRuns(runtime.pool, initial.organization_id);
     if (keyHash) {
       const earlier = await customerAiRun(runtime.pool, initial.id, keyHash);
       if (earlier) return replayCustomerAiRun(reply, earlier, question);

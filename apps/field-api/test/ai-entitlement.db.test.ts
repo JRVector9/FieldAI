@@ -57,7 +57,9 @@ async function fixture(units = 1, fixturePool = pool, initialAt?: Date) {
     async issue() { return 'synthetic-billing-key'; },
     async charge(input) { payment = { paymentKey: 'synthetic-payment-key', orderId: input.orderId,
       status: 'DONE', totalAmount: 11000, balanceAmount: 11000, taxFreeAmount: 0,
-      suppliedAmount: 10000, vat: 1000, approvedAt: (providerAt ?? new Date()).toISOString(), cancels: [], isPartialCancelable: true };
+      suppliedAmount: 10000, vat: 1000, // 합성 공급사 승인 시각은 Node 시계다. DB 컨테이너 시계가 수 ms 느리면 starts_at이 DB now()보다 미래가 되어
+      // 결제 기간이 아직 시작되지 않은 것으로 판정되므로, 명시 시각이 없을 때는 1초 전으로 둔다(validApproval 허용 범위 내).
+      approvedAt: (providerAt ?? new Date(Date.now() - 1000)).toISOString(), cancels: [], isPartialCancelable: true };
       return payment; },
     async lookup() { return payment; },
     async refund(input) { assert.ok(payment); payment = { ...payment, balanceAmount: 0, status: 'CANCELED', suppliedAmount: 0, vat: 0,

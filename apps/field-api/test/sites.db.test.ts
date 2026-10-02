@@ -306,3 +306,77 @@ test('Field accepts safe site photos, scopes them to one business, and publishes
     await authPool.query('DELETE FROM "user" WHERE email = ANY($1::text[])', [[account.email, other.email]]);
   }
 });
+
+test('Field saves a draft near the content limit and keeps the photo cap under concurrent uploads', async () => {
+  const account = await owner();
+  const objects = new Map<string, Buffer>();
+  // 동시 업로드 검수에서는 업로드 5건이 모두 저장소에 도달한 뒤에 진행시켜 경합을 재현한다(최대 2초 대기).
+  let barrier: { waiting: number; size: number; release: () => void; done: Promise<void> } | null = null;
+  const runtime = {
+    pool,
+    resolveUserId: async (headers: IncomingHttpHeaders) =>
+      (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+    siteMedia: {
+      put: async (key: string, data: Buffer) => {
+        if (barrier) {
+          barrier.waiting += 1;
+          if (barrier.waiting >= barrier.size) barrier.release();
+          await Promise.race([barrier.done, new Promise(resolve => setTimeout(resolve, 2000))]);
+        }
+        objects.set(key, data);
+      },
+      get: async (key: string) => objects.get(key) ?? null,
+      delete: async (key: string) => { objects.delete(key); },
+    },
+  };
+  const app = createFieldApp(async () => undefined, auth.handler, base, runtime);
+  try {
+    const organization = await app.inject({ method: 'POST', url: '/v1/organizations',
+      headers: { cookie: account.cookie }, payload: { name: 'Field 초안 크기 검수' } });
+    assert.equal(organization.statusCode, 201);
+    const organizationId = (organization.json() as { id: string }).id;
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/sites', headers: { cookie: account.cookie } })).statusCode, 201);
+    const original = (await app.inject({ url: '/v1/sites/draft', headers: { cookie: account.cookie } })).json() as {
+      template: string; palette: string };
+    // 5페이지 × 20섹션 × 한글 본문 5000자(UTF-8 약 1.5MB)는 Fastify 기본 1MiB를 넘는다.
+    const pages = ['home', 'about', 'services', 'faq', 'contact'].map((slug, pageIndex) => ({
+      id: randomUUID(), slug, title: `페이지 ${pageIndex}`,
+      sections: Array.from({ length: 20 }, () => ({ id: randomUUID(), kind: 'text',
+        heading: '가'.repeat(200), body: '가'.repeat(5000) })),
+    }));
+    const payload = { expectedRevision: 0, template: original.template, palette: original.palette, pages };
+    assert.ok(Buffer.byteLength(JSON.stringify(payload)) > 1024 * 1024);
+    const saved = await app.inject({ method: 'PUT', url: '/v1/sites/draft',
+      headers: { cookie: account.cookie }, payload });
+    assert.equal(saved.statusCode, 200);
+    assert.equal((saved.json() as { revision: number }).revision, 1);
+    const reloaded = (await app.inject({ url: '/v1/sites/draft', headers: { cookie: account.cookie } })).json() as {
+      pages: { sections: { body: string }[] }[] };
+    assert.equal(reloaded.pages.length, 5);
+    assert.equal(reloaded.pages[4]!.sections[19]!.body.length, 5000);
+
+    // 48장이 있는 상태에서 5장을 동시에 올려도 50장을 넘지 않는다.
+    await pool.query(
+      `insert into field.site_assets (id, organization_id, object_key, content_type, byte_size, width, height, sha256, uploaded_by)
+       select gen_random_uuid(), $1::uuid, $1::text || '/seed-' || n || '.webp', 'image/webp', 1, 1, 1, 'seed',
+         (select id from "user" where email = $2)
+       from generate_series(1, 48) n`, [organizationId, account.email]);
+    const jpeg = await sharp({ create: { width: 4, height: 3, channels: 3, background: '#2f6f4e' } }).jpeg().toBuffer();
+    let release!: () => void;
+    barrier = { waiting: 0, size: 5, release: () => release(), done: new Promise<void>(resolve => { release = resolve; }) };
+    const uploads = await Promise.all(Array.from({ length: 5 }, () => app.inject({ method: 'POST', url: '/v1/sites/assets',
+      headers: { cookie: account.cookie, 'content-type': 'application/octet-stream' }, payload: jpeg })));
+    assert.deepEqual(uploads.map(result => result.statusCode).sort(), [201, 201, 429, 429, 429]);
+    assert.ok(uploads.filter(result => result.statusCode === 429)
+      .every(result => (result.json() as { error: string }).error === 'asset_limit'));
+    assert.equal((await pool.query<{ count: number }>(
+      'select count(*)::int as count from field.site_assets where organization_id = $1', [organizationId])).rows[0]?.count, 50);
+    // 거절된 업로드의 저장소 객체는 남기지 않는다.
+    assert.equal(objects.size, 2);
+  } finally {
+    await app.close();
+    await pool.query('DELETE FROM field.sites WHERE organization_id IN (SELECT o.id FROM field.organizations o JOIN "user" u ON u.id = o.owner_user_id WHERE u.email = $1)', [account.email]);
+    await pool.query('DELETE FROM field.organizations WHERE owner_user_id = (SELECT id FROM "user" WHERE email = $1)', [account.email]);
+    await authPool.query('DELETE FROM "user" WHERE email = $1', [account.email]);
+  }
+});

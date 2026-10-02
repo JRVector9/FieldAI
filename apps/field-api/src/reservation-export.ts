@@ -28,6 +28,7 @@ export function registerReservationExportRoute(app: FastifyInstance, runtime: Fi
       return reply.code(400).send({ error: 'invalid_organization_id' });
     }
     const client = await runtime.pool.connect();
+    let released = false;
     try {
       await client.query('begin isolation level repeatable read read only');
       const found = await client.query<ReservationRow>(
@@ -93,6 +94,9 @@ export function registerReservationExportRoute(app: FastifyInstance, runtime: Fi
            and state = 'ready' order by created_at, id`, [row.id, row.organization_id],
       );
       await client.query('commit');
+      // 사진을 가져오기 전에 연결을 반납해 동시 내보내기가 pool을 오래 잡지 않게 한다.
+      client.release();
+      released = true;
       if (attachments.rows.length && !runtime.inquiryMedia)
         return reply.code(503).send({ error: 'blocked_integration' });
       const photoData = new Map<string, string>();
@@ -142,10 +146,10 @@ export function registerReservationExportRoute(app: FastifyInstance, runtime: Fi
             receivedRecord: receivedWorkRecord(source) } : null,
         });
     } catch (error) {
-      await client.query('rollback');
+      if (!released) await client.query('rollback');
       throw error;
     } finally {
-      client.release();
+      if (!released) client.release();
     }
   });
 }

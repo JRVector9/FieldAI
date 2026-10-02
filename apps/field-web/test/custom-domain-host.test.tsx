@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { NextRequest } from 'next/server';
 import { proxy } from '../src/proxy';
+import { customHostMapping, customHostResource, platformHost } from '../src/custom-domain-host';
 import { GET as verification } from '../src/app/.well-known/ap-site-verification/route';
 
 const slug='field-012345abcdef',org='11111111-1111-4111-8111-111111111111';
@@ -55,4 +56,25 @@ test('custom AP proof is returned only for exact connected origin and cannot rep
     assert.equal((await verification(request('/.well-known/ap-site-verification'))).status,200);
     globalThis.fetch=async()=>new Response('',{status:404});assert.equal((await verification(request('/.well-known/ap-site-verification'))).status,404);
   }finally{globalThis.fetch=fetcher;if(profile===undefined)delete process.env.APP_PROFILE;else process.env.APP_PROFILE=profile;}
+});
+
+test('uppercase Host resolves the same platform host, custom mapping and scoped resource',async()=>{
+  const fetcher=globalThis.fetch,profile=process.env.APP_PROFILE,platform=process.env.NEXT_PUBLIC_FIELD_WEB_ORIGIN;
+  process.env.APP_PROFILE='live';process.env.NEXT_PUBLIC_FIELD_WEB_ORIGIN='https://field.platform.com';
+  const urls:string[]=[];
+  try{
+    assert.equal(platformHost('Field.Platform.COM'),true);
+    globalThis.fetch=async(input)=>{
+      urls.push(String(input));
+      return String(input).includes('/resources/')?Response.json({allowed:true}):Response.json({slug,organizationId:org,origin:'https://shop.example.com'});
+    };
+    assert.deepEqual(await customHostMapping('SHOP.Example.com'),{slug,organizationId:org,origin:'https://shop.example.com'});
+    assert.equal(await customHostResource('SHOP.Example.com','inquiries',org),true);
+    assert.ok(urls.every(url=>url.includes('/site-hosts/shop.example.com')));
+    const home=await proxy(request('/','SHOP.Example.com'));assert.match(home.headers.get('x-middleware-rewrite')??'',new RegExp(`/site/${slug}$`));
+  }finally{
+    globalThis.fetch=fetcher;
+    if(profile===undefined)delete process.env.APP_PROFILE;else process.env.APP_PROFILE=profile;
+    if(platform===undefined)delete process.env.NEXT_PUBLIC_FIELD_WEB_ORIGIN;else process.env.NEXT_PUBLIC_FIELD_WEB_ORIGIN=platform;
+  }
 });

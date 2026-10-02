@@ -4,9 +4,9 @@ import { fieldConnectorFromEnvironment } from './field-connector.js';
 import { deliverFieldConnectionRevokeOnce } from './field-connection-revoke-worker.js';
 import { processFieldSourceRefreshOnce } from './source-refresh-worker.js';
 import { processFieldFactsEventOnce } from './field-facts-events.js';
+import { assertProductionProfile } from './production-profile.js';
 
-if (process.env.NODE_ENV === 'production' && process.env.AP_PROFILE === 'mock')
-  throw new Error('mock profile is forbidden in production');
+assertProductionProfile();
 if (!process.env.AP_DATABASE_URL) throw new Error('AP_DATABASE_URL is required');
 
 const pool = new Pool({ connectionString: process.env.AP_DATABASE_URL });

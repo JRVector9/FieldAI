@@ -5,9 +5,9 @@ import { createAgentInquiryMediaStore } from './inquiry-media.js';
 import { AgentRetentionJournal } from './retention-journal.js';
 import { verifyAgentRetentionJournal } from './retention-journal-integrity.js';
 import { runAgentRetentionJobOnce } from './retention-purge.js';
+import { assertProductionProfile } from './production-profile.js';
 
-if (process.env.NODE_ENV === 'production' && process.env.AP_PROFILE === 'mock')
-  throw new Error('mock profile is forbidden in production');
+assertProductionProfile();
 const databaseUrl = process.env.AP_DATABASE_URL;
 const directory = process.env.AP_RETENTION_JOURNAL_DIRECTORY;
 const secret = process.env.AP_RETENTION_JOURNAL_SECRET;

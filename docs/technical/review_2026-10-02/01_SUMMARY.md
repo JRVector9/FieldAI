@@ -121,3 +121,24 @@ AP P2/P3·Field 중간/낮음 항목 전체는 `03_AP_CODE_REVIEW.md`, `04_FIELD
 | AP·Field `billing-authorization.db.test.ts` | unknown 취소 409 | credential 없는 unknown 취소 허용(Field는 멱등기간 경과 후). 새 테스트로 대체 |
 | AP `inquiries.db.test.ts`, Field `business-core`/`bookings.db.test.ts` XFF 검사 | 127.0.0.1 직접 접속 가정 | loopback이 신뢰 프록시가 되어 `remoteAddress: 192.0.2.10`으로 위조 방지 의도 유지, 프록시 경유 고객 분리 assertion 추가 |
 | Field `bookings.db.test.ts` 첫 테스트 | 공개 후 정책 없는 slot 승인 201 | 409 `booking_schedule_not_ready` → 정책 설정 → 승인 → 재공개 → 예약 201 |
+
+## 8. 1단계 후속 수정 — 2026-10-03 (§4 "범위 밖" 항목 처리)
+
+| # | 결함 | 수정 |
+|---|---|---|
+| A12 | production 가드가 `mock`만 거부 | 양 제품 `production-profile.ts`의 `assertProductionProfile`: production에서는 프로필이 정확히 `live`여야 부팅. server/auth/worker 진입점 전부 적용 |
+| A13 | 전액 환불 후 구독이 `active`로 남아 접근·갱신·재가입 모두 불가 | 마지막 기간 전액 환불 시 `ended`+`terminated_at`, `subscription_ended_by_full_refund` 이벤트, 새 checkout 허용(양 제품 `billing-refund-execution.ts`) |
+| A14 | 만료된 `past_due` 20건이 갱신 후보 `limit 20` 점유 | 다음 기간까지 끝난 past_due는 후보 제외(양 제품 `billing-charge-execution.ts`) |
+| A15 | dispatch~settle 사이 프로세스 종료로 AI run 영구 `in_progress` | 요청 경로에서 10분 초과 run을 `failed/run_abandoned`로 종결(`customer-consultations.ts`) |
+| A16 | OAuth 토큰 발급 시 같은 pool 이중 점유 → 동시 10건+ 교착 | AsyncLocalStorage로 트랜잭션 client 공유(`oauth-lifecycle-provider.ts`) |
+| A17 | 매체 origin 검증 전 영구 선점 | 미검증 등록 24h 만료, 검증 행만 unique(**migration 000083**) |
+| F12 | `server.ts` 종료 순서(app.close/pool.end 동시) | `shutdown.ts`: app → pool 순차, 멱등, 10초 상한 |
+| F13 | 공개 접수 IP 한도·고객 메시지 속도 제한 없음 | (조직, IP-HMAC) 15분 창 20건/메시지 30건, `FIELD_PUBLIC_SUBMISSION_IP_LIMIT`/`FIELD_PUBLIC_MESSAGE_IP_LIMIT`(**migration 000075**) |
+| F14 | 사이트 초안 1MiB 기본 한도로 긴 한글 본문 413 | `PUT /v1/sites/draft` 4MiB |
+| F15 | 자체 도메인 DNS 일시 오류 1회에 유효기간 삭제·소유권 해제 | 마지막 확정 점검 후 15분 유예, 유예 중 상태 유지·오류만 기록 |
+| F16 | 대문자 Host 404 | 소문자 정규화(`custom-domain-host.ts`, `site-route.ts`) |
+| F17 | 예약 내보내기가 사진 조회 중 pg client 보유 | commit 후 즉시 반납 |
+| F18 | 사진 50장 상한 경합 | 조직 advisory lock 안에서 재계수 |
+| T1 | Field `ai-entitlement.db.test.ts` 14건이 DB 컨테이너 시계가 Node보다 느릴 때 403 | fixture 승인 시각을 1초 전으로(제품 코드 변경 없음) |
+
+검수(2026-10-03, 동일 환경): lint/typecheck/unit 35/build 4종/`test:db:agent` 146/146/`test:db:field` 164/164/contracts/`e2e:agent` 9/9/`e2e:field` 7/7/`e2e:distribution` 2/2/`integration:faults` 9/9/`security` 313/313 모두 exit 0. 바뀐 기대값: AP·Field 환불 테스트(전액 환불 후 active→ended), Field custom-domain 3건(유예 경과 시각 설정 추가). 남긴 것: lifecycle 저널 요청마다 전체 스캔(P2-6, 추정 0.5~1일), 사진 삭제 경로, `.well-known/ap-site-verification` 라우트의 Host 소문자화.

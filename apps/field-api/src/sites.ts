@@ -15,6 +15,7 @@ export type SiteContent = { template: 'essential' | 'editorial' | 'warm'; palett
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const siteSlugPattern = /^field-[0-9a-f]{12}$/;
 const proofPattern = /^[A-Za-z0-9_-]{32,64}$/;
+const SITE_DRAFT_BODY_LIMIT = 4 * 1024 * 1024;
 export function publicSiteOrigin(slug: string): string | null {
   if (!siteSlugPattern.test(slug)) return null;
   if (process.env.FIELD_PROFILE === 'mock') return `http://${slug}.localhost:3002`;
@@ -339,18 +340,34 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     const key = `${organization.organization_id}/${id}.webp`;
     try { await runtime.siteMedia.put(key, normalized.data); }
     catch { return reply.code(503).send({ error: 'media_unavailable' }); }
+    // 동시 업로드가 50장 상한을 넘지 못하도록 조직별 잠금 아래에서 다시 세고 저장한다.
+    // 저장소 업로드는 잠금 밖에서 끝내 DB 연결을 오래 잡지 않는다.
+    const db = await runtime.pool.connect();
     try {
-      await runtime.pool.query(
+      await db.query('begin');
+      await db.query('select pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [`field-site-assets:${organization.organization_id}`]);
+      const locked = await db.query<{ count: string }>(
+        'select count(*) from field.site_assets where organization_id = $1', [organization.organization_id],
+      );
+      if (Number(locked.rows[0]?.count ?? 0) >= 50) {
+        await db.query('rollback');
+        await runtime.siteMedia.delete(key).catch(() => undefined);
+        return reply.code(429).send({ error: 'asset_limit' });
+      }
+      await db.query(
         `insert into field.site_assets
           (id, organization_id, object_key, content_type, byte_size, width, height, sha256, uploaded_by)
          values ($1, $2, $3, 'image/webp', $4, $5, $6, $7, $8)`,
         [id, organization.organization_id, key, normalized.data.length, normalized.width, normalized.height,
           createHash('sha256').update(normalized.data).digest('hex'), userId],
       );
+      await db.query('commit');
     } catch (error) {
+      await db.query('rollback').catch(() => undefined);
       await runtime.siteMedia.delete(key).catch(() => undefined);
       throw error;
-    }
+    } finally { db.release(); }
     return reply.code(201).send({ id, state: 'ready', contentType: 'image/webp',
       byteSize: normalized.data.length, width: normalized.width, height: normalized.height });
   });
@@ -438,7 +455,9 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     return { siteId: site.id, slug: site.slug, revision: result.rows[0]!.revision, ...result.rows[0]!.content };
   });
 
-  app.put('/v1/sites/draft', async (request, reply) => {
+  // 초안 PUT 본문 상한. parseContent 한도(5페이지 × 20섹션 × 본문 5000·제목 200·대체문구 300자)를
+  // JSON 최악 이스케이프(1자 → \u0000 6바이트)로 계산하면 약 3.4MB라 Fastify 기본 1MiB 대신 4MiB로 둔다.
+  app.put('/v1/sites/draft', { bodyLimit: SITE_DRAFT_BODY_LIMIT }, async (request, reply) => {
     const userId = await userFor(request, reply, runtime);
     if (!userId) return reply;
     const organization = await organizationFor(request, reply, runtime, userId, 'edit');

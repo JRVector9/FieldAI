@@ -1,9 +1,10 @@
 import { Pool } from 'pg';
 import { lifecycleJournalFromEnvironment } from './oauth-lifecycle-journal.js';
 import { finalizeApRouteKeyRequestsOnce } from './ap-route-key-lifecycle.js';
+import { assertProductionProfile } from './production-profile.js';
 
 if(!process.env.FIELD_DATABASE_URL)throw new Error('FIELD_DATABASE_URL is required');
-if(process.env.NODE_ENV==='production'&&process.env.FIELD_PROFILE==='mock')throw new Error('mock profile is forbidden in production');
+assertProductionProfile();
 const pool=new Pool({connectionString:process.env.FIELD_DATABASE_URL}),journal=lifecycleJournalFromEnvironment();
 let stopping=false,wake:(()=>void)|undefined,timer:ReturnType<typeof setTimeout>|undefined;
 for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{stopping=true;if(timer)clearTimeout(timer);wake?.();});

@@ -3,9 +3,9 @@ import { Pool } from 'pg';
 import { createFieldOpenAIProvider } from './field-openai.js';
 import { FieldSiteQueue } from './site-queue.js';
 import { reconcileQueuedSiteJobs, runSiteGenerationJob } from './site-generation.js';
+import { assertProductionProfile } from './production-profile.js';
 
-if (process.env.NODE_ENV === 'production' && process.env.FIELD_PROFILE === 'mock')
-  throw new Error('mock profile is forbidden in production');
+assertProductionProfile();
 const databaseUrl = process.env.FIELD_DATABASE_URL;
 const queueUrl = process.env.FIELD_VALKEY_URL;
 const siteGenerator = createFieldOpenAIProvider();

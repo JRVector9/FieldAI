@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { PoolClient } from 'pg';
 import type { FieldBusinessRuntime } from './business.js';
 import { inquiryAttachments } from './inquiry-attachments.js';
-import { consumePublicSubmission } from './public-submission-limit.js';
+import { consumePublicMessage, consumePublicSubmission } from './public-submission-limit.js';
 import { rejectExpiredTrial } from './trial-access.js';
 import { decodeOwnerListCursor, encodeOwnerListCursor } from './owner-list-cursor.js';
 import { parseRequestFallback, requestFallback, reviewRequestFallback, type FallbackRow } from './public-request-fallback.js';
@@ -271,7 +271,7 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
         await client.query('rollback');
         return reply;
       }
-      const submissionLimit = await consumePublicSubmission(client, request.params.id, phone);
+      const submissionLimit = await consumePublicSubmission(client, request.params.id, phone, request.ip);
       if (submissionLimit !== null) {
         await client.query('rollback');
         return reply.header('Retry-After', submissionLimit.retryAfter).header('Cache-Control', 'no-store')
@@ -392,6 +392,13 @@ export function registerInquiryRoutes(app: FastifyInstance, runtime: FieldBusine
         await client.query('rollback');
         if ('error' in replay) return reply.code(409).send(replay);
         return reply.code(200).send(replay);
+      }
+      // 재전송(replay)은 세지 않고 새 메시지만 IP별 창에 기록한다.
+      const messageLimit = await consumePublicMessage(client, inquiry.rows[0].organization_id, request.ip);
+      if (messageLimit !== null) {
+        await client.query('rollback');
+        return reply.header('Retry-After', messageLimit.retryAfter).header('Cache-Control', 'no-store')
+          .code(429).send({ error: 'message_rate_limited', scope: messageLimit.scope });
       }
       const messageId = randomUUID();
       await client.query(

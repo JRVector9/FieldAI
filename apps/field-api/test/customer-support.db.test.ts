@@ -16,12 +16,14 @@ test('Field support grants bind each original work kind and approved scope, pres
   const [owner, operator, approver, auditor, stranger] = users as [string, string, string, string, string];
   const objects = new Map<string, Buffer>();
   let slowRead = false, unblock: (() => void) | undefined, entered: (() => void) | undefined;
+  let measurePool = false, poolInUseDuringRead: number | null = null;
   const gate = new Promise<void>(resolve => { unblock = resolve; });
   const reading = new Promise<void>(resolve => { entered = resolve; });
   const app = createFieldApp(async () => undefined, undefined, undefined, {
     pool, resolveUserId: async headers => typeof headers['x-test-user'] === 'string' ? headers['x-test-user'] : null,
     inquiryMedia: { put: async (key, bytes) => { objects.set(key, bytes); },
-      get: async key => { if (slowRead) { entered?.(); await gate; } return objects.get(key) ?? null; },
+      get: async key => { if (measurePool) poolInUseDuringRead = pool.totalCount - pool.idleCount;
+        if (slowRead) { entered?.(); await gate; } return objects.get(key) ?? null; },
       delete: async key => { objects.delete(key); } },
   });
   const headers = (user: string, key?: string, access?: string) => ({ 'x-test-user': user,
@@ -65,6 +67,15 @@ test('Field support grants bind each original work kind and approved scope, pres
     };
     const inquiryPhoto = await photoFor(`/v1/inquiries/${inquiry.id}/messages/${original.messages[0].id}/attachments`, inquiry.receiptKey);
     const reservationPhoto = await photoFor(`/v1/reservations/${reservation.id}/attachments`, reservation.receiptKey);
+    // 예약 내보내기는 DB 연결을 반납한 뒤 사진을 읽고, 결과 형식은 그대로다.
+    measurePool = true;
+    const exportedReservation = await app.inject({ url: `/v1/owner/reservations/${reservation.id}/export`, headers: headers(owner) });
+    measurePool = false;
+    assert.equal(exportedReservation.statusCode, 200, exportedReservation.body);
+    assert.equal(poolInUseDuringRead, 0);
+    const exportedPhoto = exportedReservation.json().attachments[0];
+    assert.equal(exportedPhoto.id, reservationPhoto);
+    assert.equal(Buffer.from(exportedPhoto.dataBase64, 'base64').length, exportedPhoto.byteSize);
     const originalInquiry = (await pool.query('select * from field.inquiries where id=$1', [inquiry.id])).rows[0];
     const originalReservation = (await pool.query('select * from field.reservations where id=$1', [reservation.id])).rows[0];
     const outboxCount = (await pool.query('select count(*)::int as n from field.outbox where organization_id=$1', [org])).rows[0].n;

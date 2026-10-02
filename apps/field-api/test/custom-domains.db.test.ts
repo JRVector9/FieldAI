@@ -232,6 +232,7 @@ test('Field releases a former verified ownership claim through the edge before t
     f.as(f.other);const next=(await f.call('POST','/v1/sites/domains',{hostname:'shop.example.com',requestKey:randomUUID()},f.otherOrg)).json();
     await f.pool.query("update field.site_domains set next_check_at=now()+interval '1 hour' where id=$1",[next.id]);
     await f.pool.query('update field.site_domains set next_check_at=now() where id=$1',[former.id]);f.dns(false,true);
+    await f.pool.query("update field.site_domains set checked_at=now()-interval '16 minutes' where id=$1",[former.id]);
     assert.equal(await f.run(),'ownership_pending');
     assert.equal((await f.pool.query('select hostname_claimed from field.site_domains where id=$1',[former.id])).rows[0].hostname_claimed,false);
     await f.pool.query('update field.site_domains set next_check_at=now() where id=$1',[next.id]);f.dns(true,true);
@@ -244,6 +245,7 @@ test('Field releases a former verified ownership claim through the edge before t
 test('Field ownership loss preserves the same durable removal revision through unavailable authority and unknown results',async()=>{
   const f=await fixture();try{
     const opened=(await f.create()).json();assert.equal(await f.run(),'connected');f.dns(false,true);await f.due();
+    await f.pool.query("update field.site_domains set checked_at=now()-interval '16 minutes'");
     assert.equal(await f.run({...f.context,edge:undefined}),'blocked_integration');
     let row=(await f.pool.query('select * from field.site_domains where id=$1',[opened.id])).rows[0];assert.equal(row.hostname_claimed,true);const releaseGeneration=row.ownership_release_generation;
     assert.equal((await f.pool.query("select count(*)::integer as count from field.outbox where event_type='field.site.domain.status' and payload->>'state'='ownership_pending'")).rows[0].count,1);
@@ -261,11 +263,45 @@ test('Field ownership loss preserves the same durable removal revision through u
 test('Field completed disconnect clears interrupted ownership release and reconnect binds a newer revision',async()=>{
   const f=await fixture();try{
     const opened=(await f.create()).json();assert.equal(await f.run(),'connected');f.dns(false,true);await f.due();
+    await f.pool.query("update field.site_domains set checked_at=now()-interval '16 minutes'");
     assert.equal(await f.run({...f.context,edge:undefined}),'blocked_integration');
     const releasing=(await f.pool.query('select ownership_release_generation from field.site_domains where id=$1',[opened.id])).rows[0].ownership_release_generation;assert.ok(releasing);
     await f.call('POST',`/v1/sites/domains/${opened.id}/disconnect`,{});assert.equal(await f.run(),'disconnected');
     const stopped=(await f.pool.query('select * from field.site_domains where id=$1',[opened.id])).rows[0];assert.equal(stopped.ownership_release_generation,null);assert.equal(stopped.hostname_claimed,false);
     await f.call('POST',`/v1/sites/domains/${opened.id}/reconnect`,{});f.dns(true,true);assert.equal(await f.run(),'connected');
     assert.equal(f.removalCalls.length,1);assert.ok(f.removalCalls[0]!.generation>releasing);assert.ok(f.bindingCalls[1]!.generation>f.removalCalls[0]!.generation);
+  }finally{await f.close();}
+});
+
+test('Field keeps a connected domain through a transient DNS error or one missing TXT and downgrades only after the grace period',async()=>{
+  const f=await fixture();try{
+    const opened=(await f.create()).json();assert.equal(await f.run(),'connected');
+    const read=async()=>(await f.pool.query('select * from field.site_domains where id=$1',[opened.id])).rows[0];
+    const host=async()=>(await f.app.inject({url:'/v1/public/site-hosts/shop.example.com'})).statusCode;
+    const timeout={...f.context,dns:{async inspect():Promise<{ownership:boolean;routing:boolean}>{throw Object.assign(new Error('query timeout'),{code:'ETIMEOUT'});}}};
+    const verified=await read();
+    // DNS 시간 초과 한 번: 상태·유효기간·인증서 만료를 유지하고 오류만 남긴 뒤 1분 뒤 재점검한다.
+    await f.due();assert.equal(await f.run(timeout),'connected');
+    let row=await read();assert.equal(row.state,'connected');assert.equal(row.last_error,'domain_verification_unknown');
+    assert.equal(row.valid_until.getTime(),verified.valid_until.getTime());assert.equal(row.certificate_expires_at.getTime(),verified.certificate_expires_at.getTime());
+    assert.equal(row.checked_at.getTime(),verified.checked_at.getTime());assert.equal(row.claim_token,null);
+    assert.ok(row.next_check_at.getTime()-Date.now()<=90_000);assert.equal(await host(),200);
+    assert.equal((await f.pool.query("select count(*)::integer as count from field.outbox where event_type='field.site.domain.status'")).rows[0].count,1);
+    // TXT 한 번 미검출: 소유 해제를 시작하지 않는다(세대·바인딩 유지).
+    await f.due();f.dns(false,true);assert.equal(await f.run(),'connected');
+    row=await read();assert.equal(row.last_error,'ownership_txt_unconfirmed');assert.equal(row.ownership_release_generation,null);
+    assert.equal(row.generation,verified.generation);assert.equal(row.hostname_claimed,true);assert.equal(f.removalCalls.length,0);assert.equal(await host(),200);
+    // TXT가 다시 보이면 정상 확정 점검으로 돌아간다.
+    await f.due();f.dns(true,true);assert.equal(await f.run(),'connected');
+    row=await read();assert.equal(row.last_error,null);assert.ok(row.checked_at.getTime()>verified.checked_at.getTime());
+    // 오류가 유예 시간 넘게 이어지면 기존처럼 unknown으로 내리고 유효기간을 지운다.
+    await f.pool.query("update field.site_domains set checked_at=now()-interval '16 minutes'");
+    await f.due();assert.equal(await f.run(timeout),'unknown');
+    row=await read();assert.equal(row.valid_until,null);assert.equal(await host(),404);
+    await f.due();assert.equal(await f.run(),'connected');assert.equal(await host(),200);
+    // TXT 미검출이 유예 시간 넘게 이어지면 그때 해제를 시작한다.
+    await f.pool.query("update field.site_domains set checked_at=now()-interval '16 minutes'");
+    await f.due();f.dns(false,true);assert.equal(await f.run(),'ownership_pending');
+    row=await read();assert.equal(row.hostname_claimed,false);assert.equal(f.removalCalls.length,1);assert.equal(await host(),404);
   }finally{await f.close();}
 });

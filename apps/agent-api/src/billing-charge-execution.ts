@@ -68,6 +68,8 @@ async function prepareRenewal(pool:Pool,now:Date) {
     where s.anchor_at is not null and s.cancel_requested_at is null and s.terminated_at is null
     and s.state in ('active','past_due') and p.billing_period<1200 and p.ends_at<=$1
     and not exists(select 1 from ap.billing_periods n where n.subscription_id=s.id and n.billing_period>p.billing_period)
+    -- 다음 기간까지 이미 끝난 past_due 행은 더 준비할 갱신이 없으므로 후보에서 빼서 limit 20을 점유하지 않게 한다(active는 past_due 전환을 위해 한 번 남긴다).
+    and (s.state='active' or ap.billing_month_boundary(s.anchor_at,p.billing_period+2)>$1)
     order by p.ends_at,s.id limit 20`,[now])).rows;
   for(const candidate of candidates) {
     const db=await pool.connect();

@@ -5,9 +5,9 @@ import { createFieldInquiryMediaStore } from './inquiry-media.js';
 import { FieldRetentionJournal } from './retention-journal.js';
 import { verifyFieldRetentionJournal } from './retention-journal-integrity.js';
 import { runFieldRetentionJobOnce } from './retention-purge.js';
+import { assertProductionProfile } from './production-profile.js';
 
-if (process.env.NODE_ENV === 'production' && process.env.FIELD_PROFILE === 'mock')
-  throw new Error('mock profile is forbidden in production');
+assertProductionProfile();
 const databaseUrl = process.env.FIELD_DATABASE_URL;
 const directory = process.env.FIELD_RETENTION_JOURNAL_DIRECTORY;
 const secret = process.env.FIELD_RETENTION_JOURNAL_SECRET;

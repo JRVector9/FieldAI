@@ -154,6 +154,12 @@ export function registerPublisherRoutes(app: FastifyInstance, runtime: BusinessR
     const client = await runtime.pool.connect();
     try {
       await client.query('begin');
+      // 검증된 origin은 계속 점유하고, 다른 매체의 미검증 등록은 24시간 뒤 만료되어 실제 소유자가 등록할 수 있다.
+      await client.query("select pg_advisory_xact_lock(hashtextextended('ap-publisher-origin:' || $1, 0))", [input]);
+      const claimed = await client.query(
+        `select 1 from ap.publisher_domains where origin = $1 and publisher_id <> $2
+           and (verified_at is not null or created_at > now() - interval '24 hours') limit 1`, [input, actor.id]);
+      if (claimed.rowCount) { await client.query('rollback'); return reply.code(409).send({ error: 'origin_already_registered' }); }
       const result = await client.query<DomainRow>(
         `insert into ap.publisher_domains(id, publisher_id, origin, verification_proof)
          values ($1, $2, $3, $4) returning *`, [id, actor.id, input, value],
@@ -191,8 +197,12 @@ export function registerPublisherRoutes(app: FastifyInstance, runtime: BusinessR
       await outbox(client, actor.id, 'publisher.domain_verified', row.id);
       await client.query('commit');
       return domainOutput(updated.rows[0]);
-    } catch (error) { await client.query('rollback'); throw error; }
-    finally { client.release(); }
+    } catch (error) {
+      await client.query('rollback');
+      // 같은 origin을 다른 매체가 먼저 검증했으면 검증된 점유를 넘기지 않는다
+      if ((error as { code?: string }).code === '23505') return reply.code(409).send({ error: 'origin_already_registered' });
+      throw error;
+    } finally { client.release(); }
   });
 
   app.get<{ Params: { id: string } }>('/v1/publishers/:id/slots', async (request, reply) => {

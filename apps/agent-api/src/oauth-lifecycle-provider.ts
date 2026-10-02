@@ -1,6 +1,7 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { BetterAuthPlugin, DBAdapter } from 'better-auth';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { assertLifecycleServing, familyKey, fingerprint, recordLifecycle, type LifecycleIntent, type LifecycleJournal } from './oauth-lifecycle-journal.js';
 import { applyLifecycleEntry } from './oauth-lifecycle-restore.js';
 
@@ -27,7 +28,23 @@ async function record(pool:Pool,journal:LifecycleJournal|undefined,intents:Lifec
   if(apply){const db=await pool.connect();try{await db.query('begin');for(const e of entries)await applyLifecycleEntry(db,e);await db.query('commit');}
     catch(error){await db.query('rollback');throw error;}finally{db.release();}}
 }
+// 토큰 발급 중에는 승인 검사 client 하나만 쓴다. adapter.create가 같은 pool에서 client를 또 잡으면
+// 동시 발급이 pool max 이상일 때 서로 반납을 기다리며 교착되므로, 그 요청의 connect()는 이미 잡은 client를 돌려준다.
+const issuingClient=new AsyncLocalStorage<PoolClient>();
+function shareIssuingClient(pool:Pool) {
+  const connect=pool.connect;
+  Object.defineProperty(pool,'connect',{configurable:true,value:function(this:Pool,...args:unknown[]){
+    const held=issuingClient.getStore();
+    if(!held||args.length)return Reflect.apply(connect,this,args);
+    // 반납은 바깥 트랜잭션이 맡으므로 release는 무시한다.
+    return Promise.resolve(new Proxy(held,{get(target,key){
+      if(key==='release')return ()=>undefined;
+      const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+    }}));
+  }});
+}
 export function oauthLifecycleProvider(pool:Pool,journal:LifecycleJournal|undefined):BetterAuthPlugin {
+  shareIssuingClient(pool);
   return {id:'agent-oauth-lifecycle',hooks:{before:[{
     matcher:ctx=>['/oauth2/token','/oauth2/introspect','/oauth2/userinfo'].includes(ctx.path??''),
     handler:createAuthMiddleware(async()=>{try{await assertLifecycleServing(pool,journal);}catch{throw new APIError('SERVICE_UNAVAILABLE',{message:'OAuth lifecycle proof unavailable',error:'temporarily_unavailable'});}}),
@@ -48,7 +65,7 @@ export function oauthLifecycleProvider(pool:Pool,journal:LifecycleJournal|undefi
                 throw new APIError('BAD_REQUEST',{error:'invalid_grant',message:'OAuth approval is no longer current'});
             }
             const cutover=(await db.query("select max((payload->>'cutoffAt')::timestamptz) as cutoff from ap.oauth_lifecycle_tombstones where kind='legacy-baseline'")).rows[0]?.cutoff as Date|null;
-            const result=await adapter.create<T,R>({...opts,data:{...opts.data,createdAt:new Date(Math.max(Date.now(),cutover?cutover.getTime()+1:0))}});
+            const result=await issuingClient.run(db,()=>adapter.create<T,R>({...opts,data:{...opts.data,createdAt:new Date(Math.max(Date.now(),cutover?cutover.getTime()+1:0))}}));
             await db.query('commit');return result;
           }catch(error){await db.query('rollback');throw error;}finally{db.release();}
         }

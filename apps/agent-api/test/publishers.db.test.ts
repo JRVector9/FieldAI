@@ -139,3 +139,51 @@ test('publisher creation key converges concurrent retries without sharing anothe
     await authPool.query('delete from "user" where email = any($1::text[])', [[first.email, second.email]]);
   }
 });
+
+test('unverified publisher origin expires after a day while a verified origin stays claimed', async () => {
+  const [first, second, third] = [await user(), await user(), await user()];
+  const app = createAgentApp(async () => undefined, auth.handler, base, undefined, {
+    pool, resolveUserId: async headers => (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+    verifyDomain: async () => true,
+  });
+  const owned: string[] = [];
+  const origin = `https://squat-${randomUUID()}.example.test`;
+  try {
+    const create = async (cookie: string) => {
+      const created = await app.inject({ method: 'POST', url: '/v1/publishers', headers: { cookie }, payload: { name: '선점 검사 매체' } });
+      assert.equal(created.statusCode, 201);
+      owned.push(created.json().id as string); return created.json().id as string;
+    };
+    const [squatter, owner, late] = [await create(first.cookie), await create(second.cookie), await create(third.cookie)];
+    const register = (publisherId: string, cookie: string) => app.inject({ method: 'POST', url: `/v1/publishers/${publisherId}/domains`,
+      headers: { cookie }, payload: { origin } });
+    const squatted = await register(squatter, first.cookie);
+    assert.equal(squatted.statusCode, 201);
+    // 같은 매체의 중복 등록과 24시간 안의 다른 매체 등록은 막는다
+    assert.equal((await register(squatter, first.cookie)).statusCode, 409);
+    assert.equal((await register(owner, second.cookie)).statusCode, 409);
+    await pool.query("update ap.publisher_domains set created_at = now() - interval '25 hours' where id = $1", [squatted.json().id]);
+    // 미검증 등록이 만료되면 실제 소유자가 등록하고 검증한다
+    const claimed = await register(owner, second.cookie);
+    assert.equal(claimed.statusCode, 201, claimed.body);
+    const verified = await app.inject({ method: 'POST', url: `/v1/publishers/${owner}/domains/${claimed.json().id}/verify`,
+      headers: { cookie: second.cookie } });
+    assert.equal(verified.statusCode, 200, verified.body);
+    // 검증된 origin은 오래되어도 계속 점유한다: 만료된 선점 행의 검증과 다른 매체의 새 등록을 거절한다
+    await pool.query("update ap.publisher_domains set created_at = now() - interval '25 hours' where id = $1", [claimed.json().id]);
+    const stale = await app.inject({ method: 'POST', url: `/v1/publishers/${squatter}/domains/${squatted.json().id}/verify`,
+      headers: { cookie: first.cookie } });
+    assert.equal(stale.statusCode, 409);
+    assert.equal(stale.json().error, 'origin_already_registered');
+    const blocked = await register(late, third.cookie);
+    assert.equal(blocked.statusCode, 409);
+    assert.equal(blocked.json().error, 'origin_already_registered');
+    const rows = await pool.query<{ publisher_id: string; verified: boolean }>(
+      'select publisher_id, verified_at is not null as verified from ap.publisher_domains where origin = $1 order by created_at', [origin]);
+    assert.deepEqual(rows.rows.map(row => [row.publisher_id, row.verified]).sort(), [[owner, true], [squatter, false]].sort());
+  } finally {
+    await app.close();
+    for (const id of owned) await pool.query('delete from ap.publishers where id = $1', [id]);
+    await authPool.query('delete from "user" where email = any($1::text[])', [[first.email, second.email, third.email]]);
+  }
+});

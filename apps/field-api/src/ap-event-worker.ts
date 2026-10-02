@@ -5,9 +5,9 @@ import { deliverApConnectionRevokeOnce } from './ap-connection-revoke.js';
 import { createFieldInquiryMediaStore } from './inquiry-media.js';
 import { copyExternalRequestAttachmentOnce } from './external-request-attachment-worker.js';
 import { deliverFactsChangeOnce, reconcileFactsChangeDeliveries } from './facts-change-delivery.js';
+import { assertProductionProfile } from './production-profile.js';
 
-if (process.env.NODE_ENV === 'production' && process.env.FIELD_PROFILE === 'mock')
-  throw new Error('mock profile is forbidden in production');
+assertProductionProfile();
 if (!process.env.FIELD_DATABASE_URL) throw new Error('FIELD_DATABASE_URL is required');
 const connector = apConnectorFromEnvironment();
 if (!connector) throw new Error('Field AP connector configuration is required');

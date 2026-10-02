@@ -271,3 +271,25 @@ test('provider replay deletes only its signed snapshot while a fresh consented f
   assert.ok(fresh);assert.ok((await pool.query('select 1 from "oauthRefreshToken" where id=$1 and revoked is null',[fresh.refreshId])).rowCount,'fresh family outside signed snapshot must survive');
   assert.equal(await f.active(fresh.access),true);
 });
+
+test('twelve concurrent token issuances finish without each request holding two auth pool clients',async()=>{
+  const f=await fixture(),org=randomUUID(),selection=randomUUID();
+  await pool.query('insert into ap.organizations(id,owner_user_id,name) values($1,$2,$3)',[org,f.user,'Synthetic concurrent issuance']);
+  await pool.query("insert into ap.memberships(organization_id,user_id,role) values($1,$2,'owner')",[org,f.user]);
+  await pool.query(`insert into ap.oauth_selections(id,session_id,actor_user_id,client_id,organization_id,agent_id,requested_scopes,selection_expires_at) values($1,$2,$3,$4,$5,$6,array['ap.agent.read'],now()+interval '5 minutes')`,[selection,f.current.session.id,f.user,f.client.client_id,org,randomUUID()]);
+  const families=[];for(let i=0;i<12;i++)families.push(await f.insert(selection,randomUUID()));
+  // 별도 연결로 승인 행을 잠가 12개 발급이 모두 승인 검사(for share)에서 auth pool client를 쥔 채 모이게 한다
+  const locker=new Pool({connectionString:process.env.AP_DATABASE_URL,max:2}),held=await locker.connect();
+  let timer:NodeJS.Timeout|undefined,released=false;
+  try{
+    await held.query('begin');await held.query('select 1 from ap.oauth_selections where id=$1 for update',[selection]);
+    const pending=Promise.all(families.map(x=>f.form('/oauth2/token',{grant_type:'refresh_token',refresh_token:x.refresh})));
+    let waiting=0;for(let i=0;i<300&&waiting<10;i++){waiting=Number((await locker.query("select count(*) from pg_stat_activity where datname=current_database() and wait_event_type='Lock'")).rows[0].count);if(waiting<10)await new Promise(done=>setTimeout(done,10));}
+    assert.equal(waiting,10,'auth pool(max 10) must be fully held by blocked issuances');
+    await held.query('commit');released=true;
+    // pool보다 많은 동시 발급이 서로 client 반납을 기다리면 끝나지 않으므로 시간 제한으로 실패시킨다
+    const deadlock=new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('concurrent token issuance did not finish')),20000);});
+    const issued=await Promise.race([pending,deadlock]);
+    assert.deepEqual(issued.map(r=>r.status),Array(12).fill(200));
+  }finally{clearTimeout(timer);if(!released)await held.query('rollback');held.release();await locker.end();}
+});

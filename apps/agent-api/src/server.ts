@@ -9,10 +9,9 @@ import { createAgentInquiryMediaStore } from './inquiry-media.js';
 import { agentRevocationJournalFromEnvironment } from './revocation-journal.js';
 import { assertLifecycleServing, lifecycleJournalFromEnvironment } from './oauth-lifecycle-journal.js';
 import { fieldConnectorFromEnvironment } from './field-connector.js';
+import { assertProductionProfile } from './production-profile.js';
 
-if (process.env.NODE_ENV === 'production' && process.env.AP_PROFILE === 'mock') {
-  throw new Error('mock profile is forbidden in production');
-}
+assertProductionProfile();
 
 const connectionString = process.env.AP_DATABASE_URL;
 if (!connectionString) throw new Error('AP_DATABASE_URL is required');
