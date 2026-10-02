@@ -478,9 +478,11 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
     } catch (error) {
       const confirmed=error instanceof AgentModelUsageError&&validAiReceipt(error.receipt);
       const unknown=confirmed?(await settleAi(runtime.pool,runId,error.receipt),false):await failAi(runtime.pool,runId,error);
+      // 결과 미상도 run은 failed로 종결한다. 과금은 ai_usage_ledger의 unknown 기록으로 유지되고,
+      // in_progress로 남기면 같은 문의의 다음 질문이 영구히 answer_in_progress가 된다
       await runtime.pool.query(
-        `update ap.ai_runs set status = $2, error_code = $3, finished_at = case when $2='in_progress' then null else now() end,
-          provider_response_id=$4,input_tokens=$5,output_tokens=$6 where id=$1`, [runId,confirmed?'rejected':unknown?'in_progress':'failed',confirmed?'provider_output_rejected':unknown?'provider_result_unknown':'provider_unavailable',confirmed?error.receipt.responseId:null,confirmed?error.receipt.inputTokens:null,confirmed?error.receipt.outputTokens:null]);
+        `update ap.ai_runs set status = $2, error_code = $3, finished_at = now(),
+          provider_response_id=$4,input_tokens=$5,output_tokens=$6 where id=$1`, [runId,confirmed?'rejected':'failed',confirmed?'provider_output_rejected':unknown?'provider_result_unknown':'provider_unavailable',confirmed?error.receipt.responseId:null,confirmed?error.receipt.inputTokens:null,confirmed?error.receipt.outputTokens:null]);
       return reply.code(confirmed?422:503).send({ error: confirmed?'provider_output_rejected':unknown?'provider_result_unknown':'provider_unavailable', runId });
     }
     await settleAi(runtime.pool,runId,generated);
@@ -502,7 +504,7 @@ export function registerCustomerConsultationRoutes(app: FastifyInstance, runtime
       await runtime.pool.query(
         `update ap.ai_runs set status = $6, error_code = $2, provider_response_id = $3,
            input_tokens = $4, output_tokens = $5, finished_at = now() where id = $1`,
-        [runId, uncertain?'provider_result_unknown':error, responseId, inputTokens, outputTokens,uncertain?'in_progress':'rejected']);
+        [runId, uncertain?'provider_result_unknown':error, responseId, inputTokens, outputTokens,uncertain?'failed':'rejected']);
       return reply.code(uncertain?503:422).send({ error:uncertain?'provider_result_unknown':error, runId });
     }
     const afterGeneration = evidence.some(id => id.startsWith('field:'))

@@ -7,6 +7,7 @@ import { Client, Pool } from 'pg';
 import { createAgentApp } from '../src/app.js';
 import { unsealBilling, type BillingContext } from '../src/billing-context.js';
 import { runBillingAuthorizationOnce } from '../src/billing-authorization-execution.js';
+import { BillingProviderError } from '../src/toss-billing.js';
 
 process.loadEnvFile(resolve('../../infra/agent/.env'));
 
@@ -39,7 +40,7 @@ async function fixture() {
   assert.match(new URL(process.env.AP_DATABASE_URL!).pathname, /^\/fieldai_agent_test_[a-f0-9]+$/);
   const [owner, operator, approver] = [randomUUID(), randomUUID(), randomUUID()] as const;
   const calls: { authKey: string; customerKey: string; requestKey: string }[] = [];
-  let authorizationId = '', fail = false, releaseIssue: (() => void) | undefined;
+  let authorizationId = '', fail = false, declined = false, releaseIssue: (() => void) | undefined;
   let waiting: Promise<void> | undefined;
   const billing: BillingContext = { credentialKey: randomBytes(32), webOrigin: 'http://localhost:3001', provider: {
     mode: 'test', mid: 'synthetic-mid', clientKey: 'test_ck_synthetic',
@@ -49,6 +50,7 @@ async function fixture() {
       assert.equal(row.state, 'processing'); assert.ok(row.started_at); assert.ok(row.lease_expires_at); assert.ok(row.claim_token);
       assert.equal(input.requestKey, row.request_key);
       if (calls.length === 1) await waiting;
+      if (declined) throw new BillingProviderError('INVALID_CARD_NUMBER', 'declined');
       if (fail) throw new Error('SYNTHETIC-TRANSPORT-NO-RAW-ERROR');
       return 'synthetic-billing-key-NO-RAW-STORAGE';
     },
@@ -78,6 +80,7 @@ async function fixture() {
   };
   return { pool, billing, calls, run, org, owner, authorizationId, subscriptionId: opened.subscriptionId, call,
     setFailure(value: boolean) { fail = value; },
+    setDeclined(value: boolean) { declined = value; },
     holdIssue() { waiting = new Promise<void>(r => { releaseIssue = r; }); },
     release() { releaseIssue?.(); },
     row: async () => (await pool.query('select * from ap.billing_authorizations where id=$1', [authorizationId])).rows[0],
@@ -127,7 +130,7 @@ test('AP simultaneous workers do not issue twice while a request owns its lease'
   } finally { f.release(); await running?.catch(() => undefined); await f.close(); }
 });
 
-test('AP missing or changed provider settings preserve uncertainty instead of permitting cancellation', async () => {
+test('AP missing or changed provider settings preserve uncertainty without another provider call', async () => {
   const f = await fixture();
   try {
     assert.equal(await runBillingAuthorizationOnce({ pool: f.pool }), 'blocked_integration');
@@ -137,10 +140,45 @@ test('AP missing or changed provider settings preserve uncertainty instead of pe
     await f.pool.query('update ap.billing_authorizations set next_attempt_at=now() where id=$1', [f.authorizationId]);
     const originalMid = f.billing.provider.mid; f.billing.provider.mid = 'other-mid';
     assert.equal(await f.run(), 'unknown'); assert.equal(f.calls.length, 1);
-    assert.equal((await f.call(`/v1/subscription/authorizations/${f.authorizationId}/cancel`)).statusCode, 409);
     f.billing.provider.mid = originalMid;
     await f.pool.query('update ap.billing_authorizations set next_attempt_at=now() where id=$1', [f.authorizationId]);
     f.setFailure(false); assert.equal(await f.run(), 'completed');
+  } finally { await f.close(); }
+});
+
+test('AP owner can close an unknown authorization without a stored billing key and the worker stops', async () => {
+  const f = await fixture();
+  try {
+    f.setFailure(true); assert.equal(await f.run(), 'unknown');
+    const canceled = await f.call(`/v1/subscription/authorizations/${f.authorizationId}/cancel`);
+    assert.equal(canceled.statusCode, 200, canceled.body);
+    assert.equal(canceled.json().state, 'failed');
+    const row = await f.row();
+    assert.equal(row.state, 'failed'); assert.equal(row.error_code, 'authorization_canceled_by_owner'); assert.equal(row.auth_key_ciphertext, null);
+    assert.ok((await f.pool.query('select terminated_at from ap.paid_subscriptions where id=$1', [f.subscriptionId])).rows[0].terminated_at);
+    await f.pool.query('update ap.billing_authorizations set next_attempt_at=now() where id=$1', [f.authorizationId]);
+    f.setFailure(false); assert.equal(await f.run(), 'empty'); assert.equal(f.calls.length, 1);
+    assert.equal((await f.call(`/v1/subscription/authorizations/${f.authorizationId}/cancel`)).statusCode, 200);
+  } finally { await f.close(); }
+});
+
+test('AP confirmed card authorization rejection fails terminally and the owner can start checkout again', async () => {
+  const f = await fixture();
+  try {
+    f.setDeclined(true); assert.equal(await f.run(), 'failed');
+    const row = await f.row();
+    assert.equal(row.state, 'failed'); assert.equal(row.error_code, 'authorization_provider_declined');
+    assert.equal(row.auth_key_ciphertext, null); assert.equal(row.callback_token_ciphertext, null);
+    await f.pool.query('update ap.billing_authorizations set next_attempt_at=now() where id=$1', [f.authorizationId]);
+    assert.equal(await f.run(), 'empty'); assert.equal(f.calls.length, 1);
+    const canceled = await f.call(`/v1/subscription/authorizations/${f.authorizationId}/cancel`);
+    assert.equal(canceled.statusCode, 200, canceled.body);
+    assert.equal((await f.row()).error_code, 'authorization_provider_declined');
+    const plan = (await f.pool.query('select * from ap.billing_plans limit 1')).rows[0];
+    const again = await f.call('/v1/subscription/checkout', { planId: plan.id, termsVersion: 'synthetic-terms', refundVersion: 'synthetic-refund',
+      totalAmount: 11000, supplyAmount: 10000, vatAmount: 1000, includedAiUnits: 500, graceDays: 3, currency: 'KRW',
+      autoRenew: true, termsAccepted: true, firstChargePolicy: 'after_authorization' });
+    assert.equal(again.statusCode, 201, again.body);
   } finally { await f.close(); }
 });
 

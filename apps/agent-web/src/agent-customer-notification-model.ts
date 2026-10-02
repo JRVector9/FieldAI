@@ -25,7 +25,12 @@ export async function updateCustomerNotificationConsent(target:CustomerNotificat
   try{
     const response=await transport(url,{method:"POST",credentials:"same-origin",cache:"no-store",headers:{...headers(target),"content-type":"application/json"},
       body:JSON.stringify({kakao:channels.kakao,sms:channels.sms,consentVersion:"notification-v1"})});
-    if([400,401,403,404,429,503].includes(response.status))return {outcome:"rejected",error:response.status===404?"current_receipt_required":response.status===429?"receipt_rate_limited":response.status===503?"blocked_integration":"notification_consent_rejected"};
+    if([400,401,403,404,429,503].includes(response.status)){
+      // 400 중 휴대전화 형식 오류는 API 코드(notification_phone_invalid)를 그대로 전달해 화면이 번호 확인을 안내한다
+      const body=response.status===400?await response.json().catch(()=>null):null;
+      const phoneInvalid=typeof body==='object'&&body!==null&&(body as {error?:unknown}).error==='notification_phone_invalid';
+      return {outcome:"rejected",error:response.status===404?"current_receipt_required":response.status===429?"receipt_rate_limited":response.status===503?"blocked_integration":phoneInvalid?"notification_phone_invalid":"notification_consent_rejected"};
+    }
     // Non-2xx and network failures may already have stored the requested state. Read once; never repeat POST.
   }catch{/* Read the existing receipt-bound state without inventing a save result. */}
   try{const settings=await readCustomerNotificationConsent(target,transport);

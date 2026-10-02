@@ -12,7 +12,7 @@ const str = (v: unknown, max: number): v is string => typeof v === 'string' && v
 const fail = (reply: FastifyReply, code: number, error: string) => reply.code(code).send({ error });
 type Actor = { user: string; org: string; session: string | null };
 type Authorization = { id: string; subscription_id: string; customer_key: string; created_by: string; state: string;
-  session_id: string; provider_mode: string; provider_mid: string; expires_at: Date; callback_token_hash: string; callback_token_ciphertext: string | null; auth_key_hash: string | null };
+  started_at: Date | null; session_id: string; provider_mode: string; provider_mid: string; expires_at: Date; callback_token_hash: string; callback_token_ciphertext: string | null; auth_key_hash: string | null };
 
 async function ownerFor(request: FastifyRequest, reply: FastifyReply, runtime: BusinessRuntime): Promise<Actor | null> {
   reply.headers({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' });
@@ -155,13 +155,17 @@ export function registerAgentBillingConsentRoutes(app: FastifyInstance, runtime:
       await db.query('begin');if(!await lockOwner(db,a)){await db.query('rollback');return fail(reply,403,'owner_required');}
       const row=await authorization(db,a.org,id,true);
       if(!row){await db.query('rollback');return fail(reply,404,'authorization_not_found');}
-      if(!['awaiting','pending','failed','canceled','blocked_integration'].includes(row.state)){await db.query('rollback');return fail(reply,409,'authorization_result_unresolved');}
+      // 결과 미상(unknown) 인증도 AP에 저장된 billingKey가 없으면 취소할 수 있다(키가 없으므로 청구가 일어나지 않음)
+      const unknownWithoutKey=row.state==='unknown'&&!(await db.query('select 1 from ap.billing_credentials where subscription_id=$1',[row.subscription_id])).rowCount;
+      if(!['awaiting','pending','failed','canceled','blocked_integration'].includes(row.state)&&!unknownWithoutKey){await db.query('rollback');return fail(reply,409,'authorization_result_unresolved');}
+      // 이미 공급사 호출을 시작한 인증은 canceled로 바꿀 수 없으므로(DB 가드) failed로 종결한다
+      const closed=row.started_at?'failed':'canceled';
       if(row.state!=='canceled'){
-        await db.query("update ap.billing_authorizations set state='canceled',auth_key_ciphertext=null,callback_token_ciphertext=null where id=$1",[id]);
-        await db.query("update ap.paid_subscriptions set state='canceled',cancel_requested_at=now(),cancel_requested_by=$2,terminated_at=now() where id=$1",[row.subscription_id,a.user]);
-        await record(db,a,id,row.subscription_id,row.plan_id,'authorization_canceled');
+        if(row.state!==closed)await db.query("update ap.billing_authorizations set state=$2,error_code=case when $2='failed' then 'authorization_canceled_by_owner' else error_code end,auth_key_ciphertext=null,callback_token_ciphertext=null,claim_token=null,lease_expires_at=null where id=$1",[id,closed]);
+        const ended=await db.query("update ap.paid_subscriptions set state='canceled',cancel_requested_at=now(),cancel_requested_by=$2,terminated_at=now() where id=$1 and terminated_at is null",[row.subscription_id,a.user]);
+        if(ended.rowCount)await record(db,a,id,row.subscription_id,row.plan_id,'authorization_canceled');
       }
-      await db.query('commit');return {...view(row),state:'canceled'};
+      await db.query('commit');return {...view(row),state:row.state==='canceled'?'canceled':closed};
     }catch(e){await db.query('rollback');throw e;}finally{db.release();}
   });
   app.post('/v1/subscription/billing/cancel',async(request,reply)=>{

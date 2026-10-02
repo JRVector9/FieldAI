@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { sealNotification, unsealNotification, type NotificationContext } from './notification-context.js';
+import { normalizeMobilePhone, sealNotification, unsealNotification, type NotificationContext } from './notification-context.js';
 import type { NotificationResult, NotificationSend } from './notification-provider.js';
 export type NotificationDeliveryRuntime={pool:Pool;notification?:NotificationContext};
 type Source={id:string;organization_id:string;target_id:string;target_kind:string;audience:'owner'|'customer';created_at:Date;source_message_id:string|null;purged_at:Date|null;eligible:boolean;phone:string|null};
@@ -19,14 +19,18 @@ async function lockSource(db:PoolClient,id:string){
 async function prepare(runtime:NotificationDeliveryRuntime){
  const db=await runtime.pool.connect();try{
   await db.query('begin');
-  const rows=await db.query<Source>(`${sourceQuery} and exists(select 1 from ap.notification_recipients r where r.organization_id=n.organization_id and r.revoked_at is null and r.consented_at<=n.created_at and ((n.audience='owner' and r.target_kind='owner') or (n.audience='customer' and r.target_kind='inquiry' and r.target_id=n.inquiry_id::text))) and not exists(select 1 from ap.notification_deliveries d where d.notification_id=n.id) order by n.created_at,n.id limit 100`);
+  // 발송 대상 조건(eligible·채널·membership)을 LIMIT 전에 걸러, 대상이 아닌 오래된 이벤트가 전 조직의 준비를 막지 않게 한다
+  const rows=await db.query<Source>(`select * from (${sourceQuery} and exists(select 1 from ap.notification_recipients r where r.organization_id=n.organization_id and r.revoked_at is null and r.consented_at<=n.created_at and (r.push or r.kakao) and ((n.audience='owner' and r.target_kind='owner' and exists(select 1 from ap.memberships m where m.organization_id=r.organization_id and m.user_id=r.actor_user_id and m.role in ('owner','editor'))) or (n.audience='customer' and r.target_kind='inquiry' and r.target_id=n.inquiry_id::text))) and not exists(select 1 from ap.notification_deliveries d where d.notification_id=n.id)) x where x.eligible order by x.created_at,x.id limit 100`);
   for(const initial of rows.rows){
    await db.query('select id from ap.organizations where id=$1 for update',[initial.organization_id]);await lockSource(db,initial.id);const s=await source(db,initial.id);if(!s?.eligible)continue;
    const recipients=await db.query<Recipient>(`select r.* from ap.notification_recipients r where r.organization_id=$1 and r.audience=$2 and r.revoked_at is null and r.consented_at<=$3 and (($2='owner' and r.target_kind='owner' and exists(select 1 from ap.memberships m where m.organization_id=r.organization_id and m.user_id=r.actor_user_id and m.role in ('owner','editor'))) or ($2='customer' and r.target_kind=$4 and r.target_id=$5)) for share`,[s.organization_id,s.audience,s.created_at,s.target_kind,s.target_id]);
    for(const r of recipients.rows){
     for(const channel of (r.push?['web_push'] as const:r.kakao?['kakao'] as const:[])){
-     if(!runtime.notification)continue;let value:string;try{value=unsealNotification(r.recipient_ciphertext,runtime.notification.key,`recipient:${r.id}`);}catch{continue;}
-     if(channel!=='web_push'&&(s.audience==='customer'&&value!==s.phone||!/^01[016789]\d{7,8}$/.test(value)))continue;
+     if(!runtime.notification)continue;
+     // 수신자를 열 수 없거나 번호가 맞지 않으면 종결(suppressed) 행을 남겨 같은 이벤트가 다시 선택되지 않게 한다(번호 원문은 저장하지 않음)
+     const suppress=async(reason:string)=>{const id=randomUUID();await db.query(`insert into ap.notification_deliveries(id,organization_id,notification_id,recipient_id,channel,state,error_code,recipient_ciphertext) values($1,$2,$3,$4,$5,'suppressed',$6,$7) on conflict(notification_id,recipient_id,channel) do nothing`,[id,s.organization_id,s.id,r.id,channel,reason,sealNotification('',runtime.notification!.key,`delivery:${id}`)]);};
+     let value:string;try{value=unsealNotification(r.recipient_ciphertext,runtime.notification.key,`recipient:${r.id}`);}catch{await suppress('recipient_unavailable');continue;}
+     if(channel!=='web_push'&&(s.audience==='customer'&&value!==(s.phone&&normalizeMobilePhone(s.phone))||!/^01[016789]\d{7,8}$/.test(value))){await suppress('recipient_phone_invalid');continue;}
      const id=randomUUID();await db.query(`insert into ap.notification_deliveries(id,organization_id,notification_id,recipient_id,channel,state,recipient_ciphertext) values($1,$2,$3,$4,$5,'pending',$6) on conflict(notification_id,recipient_id,channel) do nothing`,[id,s.organization_id,s.id,r.id,channel,sealNotification(value,runtime.notification.key,`delivery:${id}`)]);
     }
    }
@@ -40,12 +44,13 @@ async function projection(db:PoolClient,d:Delivery,s:Source,state:string){
  await db.query("update ap.notification_events set state=$2 where id=$1 and state<>'not_applicable'",[s.id,projected]);
  if(s.source_message_id)await db.query("update ap.inquiry_messages set delivery_state=$2 where id=$1 and visibility='customer' and actor='owner'",[s.source_message_id,['accepted','unknown'].includes(projected)?'unknown':['sent','failed','pending'].includes(projected)?projected:'blocked_integration']);
 }
+// web push는 결과 조회 수단이 없으므로(lookup은 항상 null) accepted·unknown을 최종 상태로 보고 다시 claim하지 않는다
 async function claim(runtime:NotificationDeliveryRuntime){
  const db=await runtime.pool.connect();try{
   await db.query('begin');
-  const org=(await db.query<{organization_id:string}>(`select o.id as organization_id from ap.organizations o where exists(select 1 from ap.notification_deliveries d where d.organization_id=o.id and d.state in ('pending','processing','unknown','accepted','blocked_integration','blocked_limit') and (d.channel<>'web_push' or d.state<>'accepted') and d.next_attempt_at<=now() and (d.state<>'processing' or d.lease_expires_at<=now())) order by o.id for update skip locked limit 1`)).rows[0];
+  const org=(await db.query<{organization_id:string}>(`select o.id as organization_id from ap.organizations o where exists(select 1 from ap.notification_deliveries d where d.organization_id=o.id and d.state in ('pending','processing','unknown','accepted','blocked_integration','blocked_limit') and (d.channel<>'web_push' or d.state not in ('accepted','unknown')) and d.next_attempt_at<=now() and (d.state<>'processing' or d.lease_expires_at<=now())) order by o.id for update skip locked limit 1`)).rows[0];
   if(!org){await db.query('commit');return {state:'empty'} as const;}
-  const candidate=(await db.query<Delivery>(`select * from ap.notification_deliveries where organization_id=$1 and state in ('pending','processing','unknown','accepted','blocked_integration','blocked_limit') and (channel<>'web_push' or state<>'accepted') and next_attempt_at<=now() and (state<>'processing' or lease_expires_at<=now()) order by created_at,id for update limit 1`,[org.organization_id])).rows[0]!;
+  const candidate=(await db.query<Delivery>(`select * from ap.notification_deliveries where organization_id=$1 and state in ('pending','processing','unknown','accepted','blocked_integration','blocked_limit') and (channel<>'web_push' or state not in ('accepted','unknown')) and next_attempt_at<=now() and (state<>'processing' or lease_expires_at<=now()) order by created_at,id for update limit 1`,[org.organization_id])).rows[0]!;
   await lockSource(db,candidate.notification_id);const s=await source(db,candidate.notification_id);
   const r=(await db.query<Recipient>('select * from ap.notification_recipients where id=$1 for share',[candidate.recipient_id])).rows[0]!;
   const provider=candidate.channel==='web_push'?runtime.notification?.pushProvider:runtime.notification?.provider;

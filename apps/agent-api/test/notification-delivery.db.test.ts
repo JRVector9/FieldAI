@@ -152,3 +152,55 @@ test('AP customer channel failed capability shares existing source receipt abuse
  assert.equal((await f.app.inject({method:'GET',url,headers:{authorization:`Bearer ${f.cap}`}})).statusCode,200);
  assert.equal((await f.pool.query('select count(*) from ap.receipt_attempts')).rows[0].count,'0');assert.equal(f.calls.length,0);
  }finally{await f.close();}});
+
+test('AP prepare is not starved by ineligible backlog and terminally marks undeliverable recipients',async()=>{const f=await fixture();try{
+ // spam(not_applicable) 이벤트 100건이 가장 오래된 자리를 차지해도 새 알림 준비가 막히지 않아야 한다
+ await f.pool.query(`with o as (insert into ap.outbox(id,organization_id,event_type,aggregate_id,payload) select gen_random_uuid(),$1,'ap.inquiry.owner_reply',$2,'{}'::jsonb from generate_series(1,100) returning id)
+  insert into ap.notification_events(id,organization_id,outbox_id,inquiry_id,audience,channel,state,suppression_reason,created_at) select gen_random_uuid(),$1,o.id,$3,'customer','kakao','not_applicable','spam',now() from o`,[f.org,f.inquiry,f.inquiry]);
+ // 하이픈으로 입력된 문의 번호는 숫자로 정규화해 비교하고, 동의 번호가 다른 문의는 종결 표시한다
+ const extra=async(phone:string,consented:string)=>{const inquiry=randomUUID(),recipient=randomUUID(),outbox=randomUUID(),id=randomUUID();
+  await f.pool.query("insert into ap.inquiries(id,organization_id,knowledge_release_id,knowledge_revision,customer_name,customer_phone,visitor_key_hash,state,consent_at) select $1,organization_id,knowledge_release_id,1,'Synthetic',$2,$3,'waiting_customer',now() from ap.inquiries where id=$4",[inquiry,phone,randomBytes(32).toString('hex'),f.inquiry]);
+  await f.pool.query("insert into ap.notification_recipients(id,organization_id,target_kind,target_id,audience,recipient_ciphertext,kakao,sms,consent_version,consented_at) values($1,$2,'inquiry',$3,'customer',$4,true,false,'notification-v1',now()-interval '2 hours')",[recipient,f.org,inquiry,sealNotification(consented,f.notification.key,`recipient:${recipient}`)]);
+  await f.pool.query("insert into ap.outbox(id,organization_id,event_type,aggregate_id,payload) values($1,$2,'ap.inquiry.owner_reply',$3,'{}')",[outbox,f.org,inquiry]);
+  await f.pool.query("insert into ap.notification_events(id,organization_id,outbox_id,inquiry_id,audience,channel,state,created_at) values($1,$2,$3,$4,'customer','kakao','blocked_integration',now()-interval '30 minutes')",[id,f.org,outbox,inquiry]);return id;};
+ const hyphen=await extra('010-2222-3333','01022223333'),mismatch=await extra('010-4444-5555','01066667777');
+ const fresh=await f.event();
+ assert.equal(await f.run(),'sent');assert.equal(await f.run(),'sent');assert.equal(await f.run(),'empty');
+ const rows=(await f.pool.query('select notification_id,state,error_code from ap.notification_deliveries')).rows;
+ assert.equal(rows.length,3);
+ assert.equal(rows.find(r=>r.notification_id===hyphen)?.state,'sent');assert.equal(rows.find(r=>r.notification_id===fresh)?.state,'sent');
+ assert.deepEqual(rows.find(r=>r.notification_id===mismatch),{notification_id:mismatch,state:'suppressed',error_code:'recipient_phone_invalid'});
+ assert.deepEqual(f.calls.map(c=>c.recipient).sort(),['01012345678','01022223333']);
+ }finally{await f.close();}});
+
+test('AP notification consent stores digits only and rejects non-mobile numbers',async()=>{const f=await fixture();try{
+ const owner=await f.app.inject({method:'POST',url:'/v1/owner/notification-consent',headers:{'x-organization-id':f.org},payload:{phone:'010-8765-4321',kakao:true,sms:false,consentVersion:'notification-v1'}});
+ assert.equal(owner.statusCode,200,owner.body);
+ assert.equal((await f.app.inject({method:'POST',url:'/v1/owner/notification-consent',headers:{'x-organization-id':f.org},payload:{phone:'02-123-4567',kakao:true,sms:false,consentVersion:'notification-v1'}})).statusCode,400);
+ const settings=await f.app.inject({method:'GET',url:'/v1/owner/notification-deliveries',headers:{'x-organization-id':f.org}});
+ assert.equal(settings.json().ownerConsent.maskedPhone,'010-****-4321');
+ const url=`/v1/customer/notification-consents/inquiry/${f.inquiry}`,headers={authorization:`Bearer ${f.cap}`};f.as(null);
+ await f.pool.query("update ap.inquiries set customer_phone='010-1234-5678' where id=$1",[f.inquiry]);
+ const hyphen=await f.app.inject({method:'POST',url,headers,payload:{kakao:true,sms:false,consentVersion:'notification-v1'}});assert.equal(hyphen.statusCode,200,hyphen.body);
+ const {unsealNotification}=await import('../src/notification-context.js');
+ const stored=(await f.pool.query("select id,recipient_ciphertext from ap.notification_recipients where target_kind='inquiry' and revoked_at is null")).rows[0];
+ assert.equal(unsealNotification(stored.recipient_ciphertext,f.notification.key,`recipient:${stored.id}`),'01012345678');
+ await f.pool.query("update ap.inquiries set customer_phone='02-123-4567' where id=$1",[f.inquiry]);
+ const landline=await f.app.inject({method:'POST',url,headers,payload:{kakao:true,sms:false,consentVersion:'notification-v1'}});
+ assert.equal(landline.statusCode,400);assert.equal(landline.json().error,'notification_phone_invalid');
+ }finally{await f.close();}});
+
+test('AP web push result unknown is final because the provider has no lookup',async()=>{const f=await fixture();try{
+ await f.pool.query('update ap.notification_recipients set revoked_at=now()');
+ const recipient=randomUUID(),outbox=randomUUID();
+ await f.pool.query("insert into ap.notification_recipients(id,organization_id,target_kind,target_id,audience,actor_user_id,recipient_ciphertext,push,consent_version,consented_at) values($1,$2,'owner',$3,'owner',$3,$4,true,'notification-v1',now()-interval '1 minute')",[recipient,f.org,f.owner,sealNotification('{"synthetic":true}',f.notification.key,`recipient:${recipient}`)]);
+ await f.pool.query("insert into ap.outbox(id,organization_id,event_type,aggregate_id,payload) values($1,$2,'ap.inquiry.created',$3,'{}')",[outbox,f.org,f.inquiry]);
+ await f.pool.query("insert into ap.notification_events(id,organization_id,outbox_id,inquiry_id,audience,channel,state) values($1,$2,$3,$4,'owner','in_app','available')",[randomUUID(),f.org,outbox,f.inquiry]);
+ let sends=0,lookups=0;
+ const context:NotificationContext={...f.notification,pushProvider:{name:'web_push',accountId:'synthetic-push',keyFingerprint:'b'.repeat(64),async send(){sends++;throw Error('synthetic-push-lost');},async lookup(){lookups++;return null;}}};
+ assert.equal(await f.run(context),'unknown');
+ await f.due();
+ // 조회 수단이 없는 결과 미상 행은 1분마다 다시 claim되지 않는다
+ assert.equal(await f.run(context),'empty');assert.equal(sends,1);assert.equal(lookups,0);
+ assert.equal((await f.row())[0].state,'unknown');
+ }finally{await f.close();}});

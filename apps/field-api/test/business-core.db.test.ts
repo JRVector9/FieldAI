@@ -513,27 +513,32 @@ test('Field guest inquiry uses a separate receipt key and owner replies remain p
       ['field.inquiry.owner_reply', 'customer', 'blocked_integration'],
     ]);
     const badReceipt = randomBytes(32).toString('base64url');
+    // 신뢰하지 않는 직접 접속자가 X-Forwarded-For를 바꿔도 같은 접속 주소로 잠긴다.
+    const directClient = '192.0.2.10';
     for (let attemptNumber = 0; attemptNumber < 5; attemptNumber += 1) {
-      const attempt = await app.inject({ url: `/v1/inquiries/${id}`,
+      const attempt = await app.inject({ url: `/v1/inquiries/${id}`, remoteAddress: directClient,
         headers: { authorization: `Bearer ${badReceipt}`, 'x-forwarded-for': `198.51.100.${attemptNumber + 1}` } });
       assert.equal(attempt.statusCode, 401);
     }
-    const limited = await app.inject({ url: `/v1/inquiries/${id}`,
+    const limited = await app.inject({ url: `/v1/inquiries/${id}`, remoteAddress: directClient,
       headers: { authorization: `Bearer ${receiptKey}`, 'x-forwarded-for': '203.0.113.20' } });
     assert.equal(limited.statusCode, 429);
     assert.equal(limited.json().error, 'receipt_rate_limited');
     assert.ok(Number(limited.headers['retry-after']) > 0);
+    // 같은 장비의 웹 프록시가 전달한 다른 고객은 잠긴 접속자 때문에 막히지 않는다.
+    assert.equal((await app.inject({ url: `/v1/inquiries/${id}`,
+      headers: { authorization: `Bearer ${receiptKey}`, 'x-forwarded-for': '203.0.113.20' } })).statusCode, 200);
     assert.equal((await app.inject({ url: `/v1/inquiries/${retriedId}`,
       headers: { authorization: `Bearer ${retryReceipt}` } })).statusCode, 200);
     const failures = await pool.query<{ failures: number }>(
       "select failures from field.receipt_attempts where target_kind = 'inquiry' and target_id = $1", [id]);
     assert.equal(failures.rows[0]?.failures, 5);
     await pool.query("update field.receipt_attempts set blocked_until = now() - interval '1 second', window_started_at = now() - interval '16 minutes' where target_kind = 'inquiry' and target_id = $1", [id]);
-    assert.equal((await app.inject({ url: `/v1/inquiries/${id}`,
+    assert.equal((await app.inject({ url: `/v1/inquiries/${id}`, remoteAddress: directClient,
       headers: { authorization: `Bearer ${badReceipt}` } })).statusCode, 401);
     assert.equal((await pool.query<{ failures: number }>(
       "select failures from field.receipt_attempts where target_kind = 'inquiry' and target_id = $1", [id])).rows[0]?.failures, 1);
-    assert.equal((await app.inject({ url: `/v1/inquiries/${id}`,
+    assert.equal((await app.inject({ url: `/v1/inquiries/${id}`, remoteAddress: directClient,
       headers: { authorization: `Bearer ${receiptKey}` } })).statusCode, 200);
     assert.equal(Number((await pool.query<{ count: string }>(
       "select count(*) from field.receipt_attempts where target_kind = 'inquiry' and target_id = $1", [id])).rows[0]!.count), 0);

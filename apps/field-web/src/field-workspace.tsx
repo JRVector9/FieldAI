@@ -63,6 +63,10 @@ const mondayOf = (day: string) => {
 const timeInZone = (value: string, timezone: string) => new Intl.DateTimeFormat("ko-KR", {
   timeZone: timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23",
 }).format(new Date(value));
+// 시간표형 예약은 요청 시각만 있으므로 목록 미리보기에 날짜·시각을 보여준다.
+const dateTimeInZone = (value: string, timezone: string) => new Intl.DateTimeFormat("ko-KR", {
+  timeZone: timezone, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+}).format(new Date(value));
 function mergeReservations(current: Reservation[], loaded: Reservation[]) {
   const byId = new Map(current.map(item => [item.id, item]));
   for (const item of loaded) byId.set(item.id, item);
@@ -774,7 +778,10 @@ export function FieldWorkspace() {
       if (result.status === 200 || result.status === 201) {
         setReleaseRevision(catalog.revision); setCatalogReleaseState("ready");
         setStatus(`카탈로그 ${catalog.revision}번이 승인되었습니다. 고객 링크를 확인해 주세요.`);
-      } else if (result.status === 409) setStatus("초안 버전이 달라 승인하지 못했습니다.");
+      } else if (result.status === 409) setStatus((result.data as { error?: string }).error === "booking_schedule_not_ready"
+        // 공개된 사이트에서 시간표 예약 서비스를 승인하려면 예약 정책의 영업시간이 먼저 필요하다
+        ? "시간표 예약 서비스는 신청 가능한 영업시간이 있어야 승인할 수 있습니다. 예약 정책을 먼저 설정해 주세요."
+        : "초안 버전이 달라 승인하지 못했습니다.");
       else setStatus(`승인에 실패했습니다 (${result.status}).`);
     } catch { setStatus("승인 요청이 전달되지 않았습니다."); }
     finally { setBusy(false); }
@@ -973,7 +980,7 @@ export function FieldWorkspace() {
     ...reservations.filter(item => item.source === "public").map(item => ({
       key: `reservation:${item.id}`, source: "reservation" as const, id: item.id,
       name: item.name, service: item.service.name,
-      preview: item.requestMessage || item.preferredTimeText || item.service.name,
+      preview: item.requestMessage || (item.requestedStartAt ? `요청 시간 ${dateTimeInZone(item.requestedStartAt, item.timezone)}` : item.preferredTimeText) || item.service.name,
       status: ["requested", "customer_accepted", "change_accepted", "change_requested", "cancel_requested"].includes(item.state)
         ? "확인 필요" : item.state === "confirmed" ? "예약 확정" : item.state === "proposed" ? "시간 제안" : "예약 기록",
       time: item.createdAt, isTest: false,

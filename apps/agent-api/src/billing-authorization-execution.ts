@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { sealBilling, unsealBilling, type BillingContext } from './billing-context.js';
+import { BillingProviderError } from './toss-billing.js';
 
 type Authorization = { id: string; subscription_id: string; organization_id: string; plan_id: string; created_by: string;
   customer_key: string; state: string; auth_key_ciphertext: string | null; request_key: string; provider_mode: string;
@@ -79,10 +80,14 @@ export async function runBillingAuthorizationOnce(input: { pool: Pool; billing?:
   if (typeof claimed === 'string') return claimed;
   const { row,token,authKey,context } = claimed;
   let billingKey: string | undefined;
+  let declined = false;
   try {
     billingKey = await context.provider.issue({ authKey,customerKey: row.customer_key,requestKey: row.request_key });
     if (typeof billingKey !== 'string' || !billingKey || billingKey.length > 200) billingKey = undefined;
-  } catch { /* 공급사 오류 원문과 비밀값은 저장하거나 출력하지 않는다. */ }
+  } catch (error) {
+    // 공급사 오류 원문과 비밀값은 저장하거나 출력하지 않는다. 확정 거절(HTTP 4xx)만 구분한다.
+    declined = error instanceof BillingProviderError && error.kind === 'declined';
+  }
   const db = await input.pool.connect();
   try {
     await db.query('begin');
@@ -90,6 +95,11 @@ export async function runBillingAuthorizationOnce(input: { pool: Pool; billing?:
     const current = (await db.query(`select a.id from ap.billing_authorizations a join ap.paid_subscriptions s on s.id=a.subscription_id
       where a.id=$1 and a.state='processing' and a.claim_token=$2 for update of s,a`,[row.id,token])).rows[0];
     if (!current) { await db.query('rollback'); return 'superseded'; }
+    if (!billingKey && declined) {
+      // 확정 거절은 종결(failed)하고 인증 비밀값을 지운다. 사업자는 인증을 취소하고 다시 결제를 시작할 수 있다
+      await pause(db,{...row,state:'processing'},'failed','authorization_provider_declined');
+      await db.query('commit'); return 'failed';
+    }
     if (!billingKey) {
       await pause(db,{...row,state:'processing'},'unknown','authorization_provider_result_unknown');
       await db.query('commit'); return 'unknown';

@@ -57,6 +57,7 @@ test('AP customer approves current Field terms once and reconciles an unknown de
   let unknown = false;
   let failBeforeCommit = false;
   let fieldTrialEnded = false;
+  let resendRejection: { status: number; error: string } | null = null;
   let meUnavailable = false;
   let handoffCalls = 0;
   const acceptedBySource = new Map<string, { externalRequestId: string; reservationId: string }>();
@@ -92,6 +93,7 @@ test('AP customer approves current Field terms once and reconciles an unknown de
       assert.deepEqual(body.consent.items, ['name', 'phone', 'service', 'requested_time',
         ...((body as { attachmentRefs?: string[] }).attachmentRefs?.length ? ['attachments'] : [])]);
       if (fieldTrialEnded) return Response.json({ error: 'trial_ended', accessMode: 'cleanup_only' }, { status: 403 });
+      if (resendRejection) return Response.json({ error: resendRejection.error }, { status: resendRejection.status });
       if (failBeforeCommit) throw new Error('request_lost_before_field_commit');
       const ids = { externalRequestId: randomUUID(), reservationId: randomUUID() };
       acceptedBySource.set(body.actionRequestId, ids);
@@ -564,6 +566,42 @@ test('AP customer approves current Field terms once and reconciles an unknown de
     assert.equal(resent.json().state, 'accepted_external');
     assert.equal(resent.json().actionRequestId, unsentId);
     assert.equal(requestCalls, 4);
+    // reconcile 재전송의 연결·인증 오류와 24시간 지난 동의는 rejected가 아니라 delivery_unknown으로 남는다
+    failBeforeCommit = true;
+    const lostAction = await app.inject({ method: 'POST', url: actionPath,
+      headers: { ...bearer, 'idempotency-key': randomBytes(32).toString('base64url') },
+      payload: { ...actionBody, summary: '연결 확인 중 재전송' } });
+    assert.equal(lostAction.statusCode, 202, lostAction.body);
+    failBeforeCommit = false;
+    const lostPath = `${actionPath}/${lostAction.json().actionRequestId}/reconcile`;
+    for (const rejection of [{ status: 404, error: 'connection_not_found' },
+      { status: 409, error: 'connection_changed' }, { status: 409, error: 'idempotency_conflict' }]) {
+      resendRejection = rejection;
+      const kept = await app.inject({ method: 'POST', url: lostPath, headers: bearer });
+      assert.equal(kept.statusCode, 202, kept.body);
+      assert.equal(kept.json().state, 'delivery_unknown');
+    }
+    resendRejection = null;
+    const originalBody = (await pool.query<{ field_request_body: Record<string, unknown> }>(
+      'select field_request_body from ap.field_action_requests where id = $1',
+      [lostAction.json().actionRequestId])).rows[0]!.field_request_body;
+    await pool.query(`update ap.field_action_requests set field_request_body = jsonb_set(field_request_body,
+      '{consent,confirmedAt}', to_jsonb((now() - interval '25 hours')::text)) where id = $1`,
+    [lostAction.json().actionRequestId]);
+    const callsBeforeExpired = requestCalls;
+    const expiredConsent = await app.inject({ method: 'POST', url: lostPath, headers: bearer });
+    assert.equal(expiredConsent.statusCode, 202, expiredConsent.body);
+    assert.equal(expiredConsent.json().state, 'delivery_unknown');
+    assert.equal(requestCalls, callsBeforeExpired);
+    await pool.query('update ap.field_action_requests set field_request_body = $2 where id = $1',
+      [lostAction.json().actionRequestId, originalBody]);
+    // 연결·기존 요청 확인을 통과한 뒤의 명시 거절만 rejected가 된다
+    resendRejection = { status: 409, error: 'service_conditions_changed' };
+    const explicit = await app.inject({ method: 'POST', url: lostPath, headers: bearer });
+    resendRejection = null;
+    assert.equal(explicit.statusCode, 409, explicit.body);
+    assert.equal(explicit.json().state, 'rejected');
+    assert.equal(explicit.json().error, 'service_conditions_changed');
     const selectedPath = `/integrations/v1/action-requests/${accepted.json().actionRequestId}`
       + `/attachments/${selectedPhotoId}`;
     assert.equal((await app.inject({ url: selectedPath })).statusCode, 401);

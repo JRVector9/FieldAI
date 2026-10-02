@@ -1,4 +1,4 @@
-# CODEX 인수인계 — 2026-09-29
+# CODEX 인수인계 — 2026-10-02
 
 ## 사용자 지정 기준 시안 — 작업 재개 시 필수 확인
 
@@ -8,6 +8,13 @@
 - 원본에 있는 화면을 처음 구현할 때 해당 HTML/CSS를 직접 읽고 그대로 기준으로 사용한다. 이미 완료된 화면은 구체적 새 오류/요구 변경 없이 다시 작업하지 않는다. 제품별 API·권한·실제 상태는 v3.0 독립 제품 경계를 따른다.
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
+
+## 전체 검토·결함 수정·서비스화 갭 정리 — 2026-10-02
+
+- **Current objective / state:** 사용자 지시로 전체 프로젝트를 검토해 실결함 22건을 수정하고(AP 11, Field 11), 덜 된 개발과 서비스화 필수 기능을 `docs/technical/review_2026-10-02/`에 정리했다. 요약·수정표·검수 결과·결정 필요 사항은 `01_SUMMARY.md`, 미완료/필수 기능 전체 표는 `02_DOCS_GAP_AND_SERVICE_READINESS.md`, 리뷰 원문은 `03`~`06`.
+- **Key design decisions:** 상태 전이의 탈출구를 만들되 결과 미상(unknown)을 성공/거절로 단정하지 않는다(카드 인증 4xx만 failed, 전송 오류·429·5xx는 unknown 유지). Field 연결은 확정 인증 실패만 degraded. reconcile은 Field의 명시 거절만 rejected(docs/03:179). trustProxy 기본 loopback이며 운영 LB/엣지가 XFF를 append해야 한다. 숨김 사이트 신규 접수 차단은 사용자 결정 대기.
+- **Tests actually run / environment / commits:** Mac local Node24.18.0, PG17 mock 격리 DB, Playwright venv 세션 scratchpad. 전체 결과는 `01_SUMMARY.md` §6(모두 exit0). 독립성·실 공급사·실기기·운영 게이트는 미실행.
+- **Remaining work:** `01_SUMMARY.md` §3 결정 3건, §4 범위 밖 결함, §5 서비스화 착수 순서(live 빌드 허용·프로필 가드 통일 → 이메일 인증 → 운영 체험 정책 → 관리자 MFA → 템플릿 자동 구성 → Dockerfile/CI → 약관 → 공급사 키).
 
 ## 최신 AP·Field 누락 기능 구현 및 게이트 수리 — 2026-09-29
 

@@ -4,6 +4,8 @@ import { createSolapiNotificationProvider, type NotificationProvider } from './n
 export type NotificationContext={key:Buffer;webOrigin:string;callbackSecret?:string;provider?:NotificationProvider;pushProvider?:NotificationProvider;pushPublicKey?:string};
 export function sealNotification(value:string,key:Buffer,binding:string){const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,iv);cipher.setAAD(Buffer.from(`AP/notifications/v1/${binding}`));return Buffer.concat([iv,cipher.update(value,'utf8'),cipher.final(),cipher.getAuthTag()]).toString('base64url');}
 export function unsealNotification(value:string,key:Buffer,binding:string){const bytes=Buffer.from(value,'base64url');if(bytes.length<29)throw Error('invalid_notification_ciphertext');const cipher=createDecipheriv('aes-256-gcm',key,bytes.subarray(0,12));cipher.setAAD(Buffer.from(`AP/notifications/v1/${binding}`));cipher.setAuthTag(bytes.subarray(-16));return Buffer.concat([cipher.update(bytes.subarray(12,-16)),cipher.final()]).toString('utf8');}
+// 휴대전화 번호는 구분 기호(공백·하이픈·괄호)를 제거한 숫자만 저장·비교한다. 휴대전화 형식이 아니면 null
+export function normalizeMobilePhone(value:string){const digits=value.replace(/[\s()-]/g,'');return /^01[016789]\d{7,8}$/.test(digits)?digits:null;}
 export function notificationContextFromEnvironment(env:Record<string,string|undefined>=process.env):NotificationContext|undefined{
   const key=env.AP_NOTIFICATION_CREDENTIAL_KEY;if(!key){if(Object.keys(env).some(k=>(k.startsWith('AP_SOLAPI_')||k.startsWith('AP_PUSH_'))&&env[k]))throw Error('incomplete_AP_notification_configuration');return undefined;}
   if(!/^[A-Za-z0-9_-]{43}$/.test(key)||Buffer.from(key,'base64url').length!==32)throw Error('invalid_AP_notification_key');

@@ -78,6 +78,12 @@ async function ownedDeployment(request: FastifyRequest<{ Params: { id: string } 
   if (!result.rows[0]) { reply.code(404).send({ error: 'deployment_not_found' }); return null; }
   return { organization, deployment: result.rows[0] };
 }
+// 공개 경로(active())와 같은 기준: 최신 AI 승인본과 그 승인본의 지식이 최신 지식 승인본일 때만 현재 연결이다
+const currentBinding = `coalesce(d.agent_release_id = (select id from ap.agent_releases
+    where organization_id = d.organization_id order by revision desc limit 1)
+  and (select knowledge_release_id from ap.agent_releases where id = d.agent_release_id)
+    = (select id from ap.knowledge_releases where organization_id = d.organization_id order by revision desc limit 1),
+  false) as current`;
 function output(row: Deployment) {
   return { id: row.id, publicId: row.public_id, organizationId: row.organization_id, kind: row.kind,
     origin: row.allowed_origin, verificationProof: row.verification_proof, verifiedAt: row.verified_at,
@@ -89,10 +95,11 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
   app.get('/v1/deployments', async (request, reply) => {
     const organization = await ownerOrganization(request, reply, runtime);
     if (!organization) return reply;
-    const result = await runtime.pool.query<Deployment>(
-      "select * from ap.deployments where organization_id = $1 and kind <> 'placement_embed' order by created_at desc",
+    const result = await runtime.pool.query<Deployment & { current: boolean }>(
+      `select d.*, ${currentBinding} from ap.deployments d
+       where d.organization_id = $1 and d.kind <> 'placement_embed' order by d.created_at desc`,
       [organization.id]);
-    return { deployments: result.rows.map(output) };
+    return { deployments: result.rows.map(row => ({ ...output(row), current: row.current })) };
   });
   app.post('/v1/deployments', async (request, reply) => {
     const organization = await ownerOrganization(request, reply, runtime);
@@ -163,11 +170,12 @@ export function registerDeploymentRoutes(app: FastifyInstance, runtime: Business
       'select id from ap.knowledge_releases where organization_id = $1 order by revision desc limit 1', [found.organization.id]);
     if (!current.rows[0] || current.rows[0].knowledge_release_id !== knowledge.rows[0]?.id)
       return reply.code(409).send({ error: 'knowledge_stale' });
-    const result = await runtime.pool.query<Deployment>(
-      `update ap.deployments set status = 'active', agent_release_id = $2, knowledge_revision = $3, updated_at = now()
-       where id = $1 and not moderation_restricted returning *`, [row.id, current.rows[0].id, current.rows[0].knowledge_revision]);
+    const result = await runtime.pool.query<Deployment & { current: boolean }>(
+      `update ap.deployments d set status = 'active', agent_release_id = $2, knowledge_revision = $3, updated_at = now()
+       where d.id = $1 and not d.moderation_restricted returning d.*, ${currentBinding}`,
+      [row.id, current.rows[0].id, current.rows[0].knowledge_revision]);
     if (!result.rows[0]) return reply.code(409).send({ error: 'deployment_moderation_restricted' });
-    return output(result.rows[0]!);
+    return { ...output(result.rows[0]!), current: result.rows[0]!.current };
   });
   app.post<{ Params: { id: string } }>('/v1/deployments/:id/pause', async (request, reply) => {
     const found = await ownedDeployment(request, reply, runtime);

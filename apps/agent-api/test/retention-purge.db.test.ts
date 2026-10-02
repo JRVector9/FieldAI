@@ -106,6 +106,8 @@ test('AP independently approves and executes retained inquiry cleanup with real 
     let error='';child.stderr.on('data',chunk=>{error+=String(chunk);});child.once('error',reject);child.once('close',code=>code===0?resolveRestore():reject(new Error(error)));child.stdin.end(snapshot.stdout);
    });
    const restoreUrl=new URL(source);restoreUrl.pathname=`/${restoredName}`;restored=new Pool({connectionString:restoreUrl.toString()});
+   // pool.end()는 소켓 종료를 기다리지 않으므로, 아래 drop ... with(force)가 끊은 연결 오류를 처리되지 않은 'error'로 올리지 않게 받는다
+   restored.on('error',()=>undefined);
    assert.equal((await restored.query('select customer_name from ap.inquiries where id=$1',[inquiry.id])).rows[0].customer_name,'PRIVATE_PURGE_CUSTOMER');
    process.env.AP_INQUIRY_MEDIA_DIRECTORY=resolve(root,'restored-media');
    const restoredMedia=createAgentInquiryMediaStore()!;await restoredMedia.put(objectKey,originalPhoto);

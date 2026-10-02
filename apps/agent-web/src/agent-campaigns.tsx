@@ -202,6 +202,8 @@ export function AgentCampaigns() {
               {source.services.map((service, index) => <option key={`${index}-${service.name}`} value={index} disabled={!service.description.trim()}>{service.name}{!service.description.trim() ? " · 설명 필요" : ""}</option>)}</select></label>
             <p>문구를 바꾸려면 <a href="/workspace">사업 정보</a>에서 서비스를 수정하고 새 지식 버전을 승인하세요. 확인되지 않은 가격·자격·후기는 카드에 추가할 수 없습니다.</p>
             <button type="submit" disabled={busy || !name.trim() || !source.services[serviceIndex]?.description.trim() || (!!detail && !dirty && !needsSourceRefresh)}>{detail ? needsSourceRefresh ? "최신 승인 정보로 초안 저장" : "초안 저장" : "초안 만들기"}</button>
+            {/* 카드 이름이 비어 버튼이 비활성일 때 사유를 표시한다 */}
+            {!name.trim() && <p>관리용 카드 이름을 입력하면 초안을 만들 수 있습니다.</p>}
           </form>}
       </section></div>
       {(detail || shownDraft) && <div className="special-grid campaign-review"><section className="special-panel"><div className="panel-heading"><h2>초안 미리보기</h2><span>{dirty ? "저장 전 변경" : `초안 v${detail?.draftRevision ?? 1}`}</span></div>

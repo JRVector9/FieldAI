@@ -23,6 +23,8 @@ export function FieldApConnections() {
   const [status, setStatus] = useState("Field 사업장과 연결 상태를 확인하고 있습니다.");
   const [busy, setBusy] = useState(false);
   const [siteOrigin, setSiteOrigin] = useState<string | null>(null);
+  // 사용자 도메인이 대표 주소여도 공개 사이트 링크는 실제 slug(기본 주소 첫 label)로 만든다.
+  const [siteSlug, setSiteSlug] = useState<string | null>(null);
   const [sitePublished, setSitePublished] = useState(false);
   const [siteState, setSiteState] = useState<"idle" | "loading" | "ready" | "no_site" | "failed">("idle");
   const [installation, setInstallation] = useState<Installation | null>(null);
@@ -40,9 +42,10 @@ export function FieldApConnections() {
     try {
       const result = await requestJson("/v1/sites/ap-installation");
       if (result.status === 200) {
-        const value = result.data as { siteOrigin: string | null; published: boolean;
+        const value = result.data as { siteOrigin: string | null; defaultOrigin: string | null; published: boolean;
           installation: Installation | null };
         setSiteOrigin(value.siteOrigin);
+        setSiteSlug(value.defaultOrigin ? new URL(value.defaultOrigin).hostname.split(".")[0]! : null);
         setSitePublished(value.published);
         setInstallation(value.installation);
         setSiteState("ready");
@@ -110,7 +113,7 @@ export function FieldApConnections() {
   async function storeProof() {
     setBusy(true);
     try {
-      const result = await requestJson("/v1/sites/verification", "POST", { proof: proof.trim() });
+      const result = await requestJson("/v1/sites/verification", "POST", { proof: proof.trim(), origin: siteOrigin });
       setStatus(result.status === 200 || result.status === 201
         ? "사이트 주소 증명값을 저장했습니다. AP에서 이 배포의 소유 확인과 활성화를 진행해 주세요."
         : `사이트 주소 증명값 저장에 실패했습니다 (${result.status}).`);
@@ -122,7 +125,7 @@ export function FieldApConnections() {
     if (!sitePublished || connectionState !== "ready" || deploymentState !== "ready" || !connectionId || !deploymentId) return;
     setBusy(true);
     try {
-      const result = await requestJson("/v1/sites/ap-installation", "POST", { connectionId, deploymentId, mode });
+      const result = await requestJson("/v1/sites/ap-installation", "POST", { connectionId, deploymentId, mode, origin: siteOrigin });
       if (result.status === 200 || result.status === 201) {
         setInstallation({ connectionId, deploymentId, publicId: (result.data as { publicId: string }).publicId,
           origin: siteOrigin!, mode, status: "active" });
@@ -225,7 +228,7 @@ export function FieldApConnections() {
         {siteState === "no_site" && <p>아직 Field 사이트를 만들지 않았습니다. <a href="/workspace/site">사이트 제작 시작하기</a></p>}
         {siteState === "ready" && !sitePublished && <div className="state-message"><p>사이트 초안 주소: {siteOrigin ? <code>{siteOrigin}</code> : "주소 확인 불가"}</p><p>고객 사이트를 공개한 뒤 AP 배포의 소유 증명과 위젯 설치를 진행할 수 있습니다. AP 계정 연결은 위에서 먼저 시작할 수 있습니다.</p><a href="/workspace/site">사이트 편집·공개 열기</a></div>}
         {siteState === "ready" && sitePublished && !siteOrigin && <div className="state-message" role="alert"><p>사이트는 공개됐지만 설치 주소를 확인하지 못했습니다. 기본 주소 설정을 확인해 주세요.</p><button type="button" onClick={() => void loadInstallation()}>사이트 설치 상태 다시 확인</button></div>}
-        {siteState === "ready" && sitePublished && siteOrigin && <><p>Field 공개 사이트 주소: <code>{siteOrigin}</code></p><p><a href={`${siteOrigin}/site/${new URL(siteOrigin).hostname.split(".")[0]}`}>공개 사이트 열기</a></p>
+        {siteState === "ready" && sitePublished && siteOrigin && <><p>Field 공개 사이트 주소: <code>{siteOrigin}</code></p><p><a href={siteSlug ? `${siteOrigin}/site/${siteSlug}` : siteOrigin}>공개 사이트 열기</a></p>
           <ol><li>AP의 <a href={`${apWebOrigin}/workspace/deployments`}>상담 배포 관리</a>에서 위 주소의 소유 사이트 위젯을 만들고 증명값을 복사합니다.</li>
             <li>아래에 증명값을 저장한 뒤 AP에서 소유 확인과 배포 활성화를 진행합니다.</li>
             <li>AP 접근을 다시 승인할 때 활성 배포를 선택하고, 양쪽 동의 후 이 화면에서 설치합니다.</li></ol>

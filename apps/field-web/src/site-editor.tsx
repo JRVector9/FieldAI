@@ -386,7 +386,8 @@ export function SiteEditor() {
       }
       if (saved) {
         const hasNewerEdits = editSequence.current !== sequence;
-        setSite(current => current ? hasNewerEdits ? { ...current, revision: saved.revision } : saved : current);
+        // 서버 응답은 trim된 값이므로 입력 중인 끝 공백·줄바꿈을 지우지 않도록 revision만 반영한다(id는 클라이언트 생성).
+        setSite(current => current ? { ...current, revision: saved.revision } : current);
         setDirty(hasNewerEdits);
         setConflictDraft(null);
         setSaveState("idle");

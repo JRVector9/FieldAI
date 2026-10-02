@@ -25,7 +25,7 @@ export function createTossBillingProvider(config: { mode: 'test' | 'live'; mid: 
     || !config.clientKey.startsWith(`${config.mode}_ck_`) || !/^[A-Za-z0-9_-]{1,14}$/.test(config.mid)
     || /\s/.test(config.secretKey + config.clientKey)) throw new Error('invalid_toss_billing_configuration');
   const fetcher = config.fetcher ?? fetch;
-  async function request(path: string, method: 'GET' | 'POST', body?: object, key?: string, operation?:'charge') {
+  async function request(path: string, method: 'GET' | 'POST', body?: object, key?: string, operation?:'charge'|'issue') {
     if (key !== undefined && !uuid.test(key)) throw new Error('invalid_billing_request_key');
     try {
       const response = await fetcher(`https://api.tosspayments.com${path}`, { method,
@@ -38,7 +38,10 @@ export function createTossBillingProvider(config: { mode: 'test' | 'live'; mid: 
         const code=typeof value.code==='string'&&/^[A-Z_]{1,100}$/.test(value.code)?value.code:'provider_error';
         // Core /v1/billing/{billingKey} card approval errors, not Brandpay errors.
         const declined=operation==='charge'&&(response.status===403&&['REJECT_CARD_PAYMENT','REJECT_ACCOUNT_PAYMENT','REJECT_CARD_COMPANY'].includes(code)
-          ||response.status===400&&['INVALID_STOPPED_CARD','INVALID_REJECT_CARD','INVALID_CARD_LOST_OR_STOLEN','INVALID_CARD_EXPIRATION','INVALID_CARD_NUMBER'].includes(code));
+          ||response.status===400&&['INVALID_STOPPED_CARD','INVALID_REJECT_CARD','INVALID_CARD_LOST_OR_STOLEN','INVALID_CARD_EXPIRATION','INVALID_CARD_NUMBER'].includes(code))
+          // 카드 등록(빌링키 발급)은 돈이 움직이지 않으므로 공급사의 4xx 거절을 확정 실패로 본다.
+          // 408·409(같은 멱등키 처리 중)·429는 결과가 바뀔 수 있어 unknown으로 남긴다.
+          ||operation==='issue'&&response.status>=400&&response.status<500&&![408,409,429].includes(response.status);
         throw new BillingProviderError(code,declined?'declined':'unknown');
       }
       return value;
@@ -79,7 +82,7 @@ export function createTossBillingProvider(config: { mode: 'test' | 'live'; mid: 
     keyFingerprint: createHash('sha256').update(config.secretKey).digest('hex'),
     async issue({ authKey, customerKey, requestKey }) {
       if (!str(authKey, 300) || !str(customerKey, 50)) throw new Error('invalid_billing_authorization');
-      const v = await request('/v1/billing/authorizations/issue', 'POST', { authKey, customerKey }, requestKey);
+      const v = await request('/v1/billing/authorizations/issue', 'POST', { authKey, customerKey }, requestKey, 'issue');
       if (v?.mId !== config.mid || v.customerKey !== customerKey || !str(v.billingKey, 200)) throw new BillingProviderError('authorization_binding_mismatch');
       return v.billingKey as string;
     },

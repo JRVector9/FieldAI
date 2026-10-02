@@ -60,3 +60,36 @@ test('billing provider identifies its API key without exposing it', () => {
   assert.notEqual(fingerprint,(rotated as typeof rotated & { keyFingerprint?: string }).keyFingerprint);
   assert.doesNotMatch(fingerprint ?? '',/test_sk_/);
 });
+
+test('Field card registration treats provider 4xx as declined but keeps retryable and transport results unknown', async () => {
+  let status = 400, body: string = JSON.stringify({ code: 'INVALID_CARD_EXPIRATION', message: 'secret response must never escape' });
+  let transportFailure = false;
+  const fetcher: typeof fetch = async () => {
+    if (transportFailure) throw new TypeError('network down');
+    return new Response(body, { status });
+  };
+  const provider = createTossBillingProvider({ mode: 'test', mid: 'synthetic-mid', clientKey: 'test_ck_synthetic',
+    secretKey: 'test_sk_synthetic', fetcher });
+  const issue = () => provider.issue({ authKey: 'synthetic-auth-key', customerKey: 'synthetic-customer', requestKey: randomUUID() });
+  // 카드 등록 단계의 4xx는 돈이 움직이지 않은 확정 거절이다.
+  for (const [nextStatus, code] of [[400, 'INVALID_CARD_EXPIRATION'], [403, 'REJECT_CARD_COMPANY'], [404, 'NOT_FOUND_AUTH_KEY']] as const) {
+    status = nextStatus; body = JSON.stringify({ code, message: 'secret response must never escape' });
+    await assert.rejects(issue(), e => {
+      assert.equal((e as { kind: string }).kind, 'declined'); assert.equal((e as { code: string }).code, code);
+      assert.doesNotMatch(String(e), /secret response/); return true;
+    });
+  }
+  // 같은 멱등키 처리 중·한도 초과·시간 초과·5xx·응답 해석 불가·전송 오류는 결과 미상이다.
+  for (const nextStatus of [408, 409, 429, 500, 503]) {
+    status = nextStatus; body = JSON.stringify({ code: 'PROVIDER_ERROR' });
+    await assert.rejects(issue(), { kind: 'unknown' });
+  }
+  status = 400; body = 'not json';
+  await assert.rejects(issue(), { kind: 'unknown' });
+  transportFailure = true;
+  await assert.rejects(issue(), { kind: 'unknown', code: 'transport_or_invalid_response' });
+  // 결제(charge)의 거절 분류는 기존 목록만 유지한다.
+  transportFailure = false; status = 404; body = JSON.stringify({ code: 'NOT_FOUND_AUTH_KEY' });
+  await assert.rejects(provider.charge({ billingKey: 'synthetic-billing-key', customerKey: 'synthetic-customer', orderId: 'synthetic-order',
+    orderName: 'Synthetic only', amount: 11000, taxFreeAmount: 0, requestKey: randomUUID() }), { kind: 'unknown' });
+});

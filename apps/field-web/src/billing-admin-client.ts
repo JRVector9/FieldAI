@@ -2,6 +2,8 @@ import { billingProduct, currentBillingIdentity, parseBillingPlan, type BillingP
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const object=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const text=(v:unknown,max:number,min=1):v is string=>typeof v==='string'&&v.trim().length>=min&&v.length<=max&&!/[\u0000-\u001f]/.test(v);
+// 환불 사유는 API가 줄바꿈 등 문자 제한 없이 trim 후 저장하므로 같은 기준(길이만)으로 받는다.
+const storedText=(v:unknown,max:number):v is string=>typeof v==='string'&&v.trim().length>=1&&v.length<=max;
 const date=(v:unknown):v is string=>typeof v==='string'&&Number.isFinite(Date.parse(v));
 const nullableDate=(v:unknown)=>v===null||date(v);
 const integer=(v:unknown,min:number,max:number)=>Number.isSafeInteger(v)&&Number(v)>=min&&Number(v)<=max;
@@ -23,8 +25,8 @@ const error=(code='billing_admin_result_unknown',status=0)=>new AdminBillingErro
 function parsePlan(v:unknown):AdminPlan|null{const b=object(v),p=parseBillingPlan(v);if(!p||!text(b.reference,160)||!text(b.requestedBy,200)||b.approvedBy!==null&&!text(b.approvedBy,200)||!nullableDate(b.approvedAt)||!date(b.createdAt))return null;
  return {...p,reference:b.reference,requestedBy:b.requestedBy,approvedBy:b.approvedBy as string|null,approvedAt:b.approvedAt as string|null,createdAt:b.createdAt};}
 function parseRefund(v:unknown):AdminRefund|null{const b=object(v);if(!uuid.test(String(b.id))||!uuid.test(String(b.organizationId))||!uuid.test(String(b.periodId))||!integer(b.amount,1,1e9)||b.taxFreeAmount!==null&&!integer(b.taxFreeAmount,0,Number(b.amount))
- ||!['requested','reviewed','pending','processing','unknown','succeeded','rejected','blocked_integration'].includes(String(b.state))||!text(b.reason,500)||!text(b.refundVersion,100)||!date(b.createdAt)||['reviewedAt','approvedAt','completedAt'].some(k=>!nullableDate(b[k]))
- ||!['owner','operator'].includes(String(b.requestedRole))||!text(b.requestedBy,200)||['reviewedBy','approvedBy','reference','reviewReason','approvalReason','errorCode'].some(k=>b[k]!==null&&!text(b[k],k==='reference'?160:k.endsWith('Reason')?500:200)))return null;
+ ||!['requested','reviewed','pending','processing','unknown','succeeded','rejected','blocked_integration'].includes(String(b.state))||!storedText(b.reason,500)||!text(b.refundVersion,100)||!date(b.createdAt)||['reviewedAt','approvedAt','completedAt'].some(k=>!nullableDate(b[k]))
+ ||!['owner','operator'].includes(String(b.requestedRole))||!text(b.requestedBy,200)||['reviewedBy','approvedBy','reference','reviewReason','approvalReason','errorCode'].some(k=>b[k]!==null&&!(k.endsWith('Reason')?storedText(b[k],500):text(b[k],k==='reference'?160:200))))return null;
  return {id:b.id as string,organizationId:b.organizationId as string,periodId:b.periodId as string,amount:b.amount as number,taxFreeAmount:b.taxFreeAmount as number|null,state:b.state as string,reason:b.reason,refundVersion:b.refundVersion,
  createdAt:b.createdAt,reviewedAt:b.reviewedAt as string|null,approvedAt:b.approvedAt as string|null,completedAt:b.completedAt as string|null,errorCode:b.errorCode as string|null,requestedRole:b.requestedRole as string,requestedBy:b.requestedBy,reviewedBy:b.reviewedBy as string|null,approvedBy:b.approvedBy as string|null,reference:b.reference as string|null,reviewReason:b.reviewReason as string|null,approvalReason:b.approvalReason as string|null};}
 function parseOverview(v:unknown):AdminBillingOverview{const b=object(v),c=object(b.counts);if(b.product!==billingProduct||!text(b.actorUserId,200)||!text(b.sessionId,200)||!['operator','auditor'].includes(String(b.role))||!date(b.snapshotAt)

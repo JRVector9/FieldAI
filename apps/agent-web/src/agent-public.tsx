@@ -574,6 +574,11 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
       }
       else if (result.status === 409 && (result.data as { error?: string }).error === 'idempotency_conflict')
         setStatus("이 제출 키로 저장된 내용 또는 확인키가 다릅니다. 입력을 확인해 주세요.");
+      else if (result.status === 409 && (result.data as { error?: string }).error === 'knowledge_stale') {
+        // 서버가 저장 전에 거절했으므로 보관한 시도를 비워 새로고침 후 다시 선택해 제출할 수 있게 한다.
+        clearPendingPublicSubmission(pendingScope); pendingSubmission.current = null; setHasPending(false);
+        setStatus("사업자가 정보를 새로 승인했습니다. 화면을 새로고침한 뒤 다시 선택해 주세요.");
+      }
       else if (result.status === 429 && (result.data as { error?: string }).error === 'submission_rate_limited')
         setStatus((result.data as { scope?: string }).scope === 'organization'
           ? "이 사업장에 새 문의가 짧은 시간에 많이 접수되어 잠시 제한됩니다. 입력 내용은 유지했습니다. 잠시 뒤 다시 시도해 주세요."

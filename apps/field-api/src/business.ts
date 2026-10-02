@@ -9,6 +9,7 @@ import type { FieldSiteGenerator } from './field-openai.js';
 import type { FieldSiteMediaStore } from './site-media.js';
 import type { ApConnectorConfig } from './ap-connector.js';
 import { rejectExpiredTrial } from './trial-access.js';
+import { bookingScheduleReady } from './bookings.js';
 import type { FieldRevocationJournal } from './revocation-journal.js';
 
 export type FieldBusinessRuntime = {
@@ -237,9 +238,17 @@ export function registerFieldBusinessRoutes(app: FastifyInstance, runtime: Field
         await client.query('rollback');
         return reply.code(409).send({ error: 'catalog_incomplete' });
       }
+      const services = source.services.map(service => ({ ...service,
+        bookingMode: service.bookingMode === 'inherit' ? defaultBookingMode : service.bookingMode }));
+      // 공개 화면은 최신 승인 카탈로그를 바로 쓰므로, 이미 공개된 사이트에서는 시간표 서비스를 실제 시간표가 있을 때만 승인한다.
+      // 사이트 공개 전에는 공개 단계(sites.ts)에서 같은 검사를 한다.
+      if ((await client.query('select 1 from field.site_releases r join field.sites s on s.id = r.site_id where s.organization_id = $1 limit 1',
+        [organizationId])).rowCount && !await bookingScheduleReady(client, organizationId, services)) {
+        await client.query('rollback');
+        return reply.code(409).send({ error: 'booking_schedule_not_ready' });
+      }
       const content = JSON.stringify({ ...source, industry: source.industry ?? '', defaultBookingMode, faqs: source.faqs ?? [],
-        services: source.services.map(service => ({ ...service,
-          bookingMode: service.bookingMode === 'inherit' ? defaultBookingMode : service.bookingMode })) });
+        services });
       await client.query(
         'insert into field.catalog_releases(id, organization_id, revision, content, content_hash, approved_by) values ($1, $2, $3, $4::jsonb, $5, $6)',
         [id, organizationId, revision, content, createHash('sha256').update(content).digest('hex'), userId],

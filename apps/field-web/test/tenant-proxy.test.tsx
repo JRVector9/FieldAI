@@ -40,3 +40,22 @@ test("tenant public route distinguishes missing and mismatched sites from API fa
     else process.env.APP_PROFILE = originalProfile;
   }
 });
+
+test("tenant root and page paths rewrite to the tenant's public site", async () => {
+  const originalProfile = process.env.APP_PROFILE;
+  process.env.APP_PROFILE = "mock";
+  const tenant = (path: string) => new NextRequest(`http://field-012345abcdef.localhost:3002${path}`, {
+    headers: { host: "field-012345abcdef.localhost:3002" },
+  });
+  try {
+    const home = await proxy(tenant("/"));
+    assert.match(home.headers.get("x-middleware-rewrite") ?? "", /\/site\/field-012345abcdef$/);
+    const page = await proxy(tenant("/about"));
+    assert.match(page.headers.get("x-middleware-rewrite") ?? "", /\/site\/field-012345abcdef\/about$/);
+    assert.equal((await proxy(tenant("/workspace"))).status, 404);
+    assert.equal((await proxy(tenant("/a/b"))).status, 404);
+  } finally {
+    if (originalProfile === undefined) delete process.env.APP_PROFILE;
+    else process.env.APP_PROFILE = originalProfile;
+  }
+});

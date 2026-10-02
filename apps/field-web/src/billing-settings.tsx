@@ -180,7 +180,7 @@ export function FieldBillingSettings({organizationId,canManage}:{organizationId:
       {canManage&&<form className="refund-form mt24" onSubmit={e=>{e.preventDefault();void requestRefund();}}><label>결제 기간<select className="input" required value={refundPeriod} disabled={busy||Boolean(pendingRefund)} onChange={e=>setRefundPeriod(e.target.value)}><option value="">선택해 주세요</option>{snapshot?.periods.filter(p=>p.paidAt&&p.refundedAmount<p.totalAmount).map(p=><option value={p.id} key={p.id}>{date(p.startsAt)} · {money(p.totalAmount-p.refundedAmount)}</option>)}</select></label>
         <label>요청 금액<input className="input" type="number" min="1" step="1" required value={refundAmount} disabled={busy||Boolean(pendingRefund)} onChange={e=>setRefundAmount(e.target.value)}/></label>
         <label>요청 사유<textarea className="input" required minLength={10} maxLength={500} value={refundReason} disabled={busy||Boolean(pendingRefund)} onChange={e=>setRefundReason(e.target.value)}/></label>
-        <button className="btn btn-secondary" type="submit" disabled={busy||!allowed||!refundPeriod||refundReason.trim().length<10}>{pendingRefund?'같은 환불 요청 다시 접수':'환불 검토 요청'}</button></form>}
+        <button className="btn btn-secondary" type="submit" disabled={busy||!allowed||!refundPeriod||refundReason.trim().length<10}>{pendingRefund?'같은 환불 요청 다시 접수':'환불 검토 요청'}</button>{/* 환불 가능한 결제가 없으면 비활성 사유를 표시한다 */}{!pendingRefund&&!snapshot?.periods.some(p=>p.paidAt&&p.refundedAmount<p.totalAmount)&&<p className="field-note">결제 내역이 있을 때 요청할 수 있습니다.</p>}</form>}
       </>}
     </section>
   </section>;

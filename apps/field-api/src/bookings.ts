@@ -947,9 +947,12 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
     if (!['requested', 'proposed', 'customer_accepted'].includes(row.state))
       return reply.code(409).send({ error: 'review_not_allowed' });
     const release = await releaseFor(runtime.pool, row.organization_id);
+    // 바뀐 카탈로그가 없는 것은 정상 상태라 200으로 알린다. 재검토 본문(services)은 바뀐 경우에만 준다.
     if (!release || release.revision <= row.catalog_revision)
-      return reply.code(409).send({ error: 'catalog_current' });
+      return reply.headers({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }).send({
+        status: 'current', reservationId: row.id, catalogRevision: row.catalog_revision });
     return reply.headers({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' }).send({
+      status: 'changed',
       reservationId: row.id, expectedRevision: row.revision, previousCatalogRevision: row.catalog_revision,
       currentCatalogRevision: release.revision, previousService: row.service_snapshot,
       services: release.content.services,
@@ -978,15 +981,17 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
       const service = release.content.services.find(item => item.id === body.serviceId);
       if (!service) { await client.query('rollback'); return reply.code(409).send({ error: 'service_removed' }); }
       const policy = await policyFor(client, row.organization_id);
-      if (!policy) { await client.query('rollback'); return reply.code(409).send({ error: 'policy_not_set' }); }
+      // 희망시간 서비스는 시간표 없이도 재검토할 수 있다. 공개 접수와 같은 기본 시간대를 쓴다.
+      const timezone = policy?.timezone ?? (service.bookingMode === 'request' ? 'Asia/Seoul' : null);
+      if (!timezone) { await client.query('rollback'); return reply.code(409).send({ error: 'policy_not_set' }); }
       let start: Date | null = null;
       let preferred: string | null = null;
       if (service.bookingMode === 'slot') {
         start = body.startAt === undefined && row.booking_mode === 'slot'
           ? row.requested_start_at : validInstant(body.startAt);
         const desiredStart = start?.toISOString();
-        if (!start || !(await availableSlots(client, row.organization_id, policy, service,
-          localDay(start, policy.timezone))).some(slot => slot.startAt === desiredStart)) {
+        if (!start || !(await availableSlots(client, row.organization_id, policy!, service,
+          localDay(start, policy!.timezone))).some(slot => slot.startAt === desiredStart)) {
           await client.query('rollback'); return reply.code(409).send({ error: 'slot_unavailable' });
         }
       } else {
@@ -1003,7 +1008,7 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
           state = 'requested', revision = revision + 1, updated_at = now()
          where id = $1 returning *`,
         [row.id, release.revision, service.id, JSON.stringify(service), service.bookingMode,
-          preferred, start, policy.timezone]);
+          preferred, start, timezone]);
       const next = updated.rows[0]!;
       await recordEvent(client, row, 'requested', 'field.reservation.catalog_reviewed', 'customer', null,
         { previousCatalogRevision: row.catalog_revision, catalogRevision: release.revision,
@@ -1123,8 +1128,9 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
         await client.query('rollback'); return reply.code(409).send({ error: 'catalog_stale' });
       }
       const policy = await policyFor(client, owner.id);
-      if (!policy || !(await availableSlots(client, owner.id, policy, row.service_snapshot,
-        localDay(start, policy.timezone), true)).some(slot => slot.startAt === start.toISOString())) {
+      // 30분 격자·영업시간 검사는 시간표 예약에만 적용한다. 희망시간 예약은 정책 없이도 시간을 제안할 수 있다.
+      if (row.booking_mode === 'slot' && (!policy || !(await availableSlots(client, owner.id, policy, row.service_snapshot,
+        localDay(start, policy.timezone), true)).some(slot => slot.startAt === start.toISOString()))) {
         await client.query('rollback'); return reply.code(409).send({ error: 'slot_unavailable' });
       }
       const nextState = row.state === 'change_requested' ? 'change_proposed' : 'proposed';
@@ -1249,7 +1255,10 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
         await client.query('rollback'); return reply.code(409).send({ error: 'catalog_stale' });
       }
       const policy = await policyFor(client, owner.id);
-      if (!policy) { await client.query('rollback'); return reply.code(409).send({ error: 'policy_not_set' }); }
+      // 희망시간 예약은 정책이 없어도 확정할 수 있다(공개 접수와 같이 Asia/Seoul 기준, 점유 겹침만 검사).
+      if (!policy && reservation.booking_mode === 'slot') {
+        await client.query('rollback'); return reply.code(409).send({ error: 'policy_not_set' });
+      }
       const acceptedProposal = reservation.state === 'customer_accepted' || reservation.state === 'change_accepted';
       const start = acceptedProposal ? reservation.proposal_start_at
         : reservation.booking_mode === 'slot' ? reservation.requested_start_at : validInstant(body.startAt);
@@ -1257,14 +1266,17 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
           || (reservation.booking_mode === 'slot' && body.startAt !== undefined)) {
         await client.query('rollback'); return reply.code(400).send({ error: 'invalid_confirmation_time' });
       }
-      const day = localDay(start, policy.timezone);
-      const slots = await availableSlots(client, owner.id, policy, reservation.service_snapshot, day, true);
-      if (!slots.some(slot => slot.startAt === start.toISOString())) {
-        await client.query('rollback'); return reply.code(409).send({ error: 'slot_unavailable' });
+      // 30분 격자·영업시간 검사는 시간표 예약에만 적용한다. 겹침은 아래 점유 제약(23P01)이 검사한다.
+      if (reservation.booking_mode === 'slot') {
+        const day = localDay(start, policy!.timezone);
+        const slots = await availableSlots(client, owner.id, policy!, reservation.service_snapshot, day, true);
+        if (!slots.some(slot => slot.startAt === start.toISOString())) {
+          await client.query('rollback'); return reply.code(409).send({ error: 'slot_unavailable' });
+        }
       }
       const end = new Date(start.getTime() + reservation.service_snapshot.durationMinutes * 60_000);
-      const occupiedStart = new Date(start.getTime() - policy.before_minutes * 60_000);
-      const occupiedEnd = new Date(end.getTime() + policy.after_minutes * 60_000);
+      const occupiedStart = new Date(start.getTime() - (policy?.before_minutes ?? 0) * 60_000);
+      const occupiedEnd = new Date(end.getTime() + (policy?.after_minutes ?? 0) * 60_000);
       if (reservation.state === 'change_accepted') {
         const swapped = await client.query(
           `update field.occupancies set occupied = tstzrange($2::timestamptz, $3::timestamptz, '[)')
@@ -1424,7 +1436,7 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
           proposal_end_at = case when $3 then null else proposal_end_at end,
           proposal_accepted_at = case when $3 then null else proposal_accepted_at end,
           updated_at = now() where id = $1 returning *`,
-        [row.id, nextState, action === 'decline_change']);
+        [row.id, nextState, action === 'decline_change' || action === 'decline_cancel']);
       const eventType = `field.reservation.${action}`;
       await recordEvent(client, row, nextState, eventType, 'owner', owner.userId,
         { reason: body.reason.trim() }, updated.rows[0]!.revision);

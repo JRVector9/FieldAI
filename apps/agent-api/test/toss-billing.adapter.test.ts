@@ -32,6 +32,14 @@ test('AP Toss port verifies bindings, preserves request keys, and treats uncerta
     orderName: 'Synthetic only', amount: 11000, taxFreeAmount: 0, requestKey }), e => {
     assert.equal((e as { kind: string }).kind, 'unknown'); assert.doesNotMatch(String(e), /secret response/); return true;
   });
+  // 카드 인증 발급의 HTTP 4xx는 확정 거절, 429·5xx는 결과 미상이다
+  for (const [code, httpStatus, kind] of [['INVALID_CARD_NUMBER', 400, 'declined'], ['UNAUTHORIZED_KEY', 401, 'declined'],
+    ['TOO_MANY_REQUESTS', 429, 'unknown'], ['PROVIDER_ERROR', 500, 'unknown']] as const) {
+    next = { code, message: 'secret response must never escape' }; status = httpStatus;
+    await assert.rejects(provider.issue({ authKey: 'synthetic-auth-key', customerKey: 'synthetic-customer', requestKey }), e => {
+      assert.equal((e as { kind: string }).kind, kind); assert.doesNotMatch(String(e), /secret response/); return true;
+    });
+  }
   assert.throws(() => createTossBillingProvider({ ...options, secretKey: 'live_sk_synthetic' }));
   assert.throws(() => createTossBillingProvider({ ...options, clientKey: 'test_gck_widget' }));
 });

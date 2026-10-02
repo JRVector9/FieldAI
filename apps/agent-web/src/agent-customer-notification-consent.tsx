@@ -22,7 +22,7 @@ export function AgentCustomerNotificationConsent({ kind, id, receiptKey }: Custo
       if(result.settings){setData(result.settings);setKakao(result.settings.kakao);setSms(result.settings.sms);}
       if(result.outcome==='confirmed'){setUnknown(false);setNotice(kakao?"서비스 알림 동의가 저장된 것을 확인했습니다. 실제 발송·열람은 별도이며 공급사 연결 전에는 발송되지 않습니다.":"서비스 알림 동의 철회를 확인했습니다. 기존 문의·예약과 확인키는 유지됩니다.");}
       else if(result.outcome==='unknown'){setUnknown(true);setNotice("저장 결과를 아직 확인하지 못했습니다. 새 동의를 보내기 전에 현재 상태를 다시 확인해 주세요.");}
-      else{setNotice(result.error==='current_receipt_required'?"현재 접수 확인키로 다시 열어 주세요.":result.error==='blocked_integration'?"알림 동의 저장 환경이 연결되지 않았습니다. 철회는 현재 확인키로 할 수 있습니다.":"동의를 저장하지 못했습니다. 현재 확인키와 설정을 다시 확인해 주세요.");}
+      else{setNotice(result.error==='current_receipt_required'?"현재 접수 확인키로 다시 열어 주세요.":result.error==='blocked_integration'?"알림 동의 저장 환경이 연결되지 않았습니다. 철회는 현재 확인키로 할 수 있습니다.":result.error==='notification_phone_invalid'?"접수한 번호가 휴대전화 번호가 아니어서 알림을 받을 수 없습니다. 휴대전화 번호로 다시 접수해 주세요.":"동의를 저장하지 못했습니다. 현재 확인키와 설정을 다시 확인해 주세요.");}
     }catch{if(current===generation.current){setUnknown(true);setNotice("저장 결과를 확인하지 못했습니다. 현재 상태를 다시 확인해 주세요.");}}
     finally{if(current===generation.current)setBusy(false);}
   }

@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { sealBilling, unsealBilling, type BillingContext } from './billing-context.js';
+import { BillingProviderError } from './toss-billing.js';
 
 type Authorization = { id: string; subscription_id: string; organization_id: string; plan_id: string; created_by: string;
   customer_key: string; state: string; auth_key_ciphertext: string | null; request_key: string; provider_mode: string;
   provider_mid: string; started_at: Date | null; expires_at: Date; error_code: string | null; terminated_at: Date | null;
   cancel_requested_at: Date | null; claim_token: string | null };
 type Claimed = { row: Authorization; token: string; authKey: string; context: BillingContext };
-const idempotencyWindowMs = 15 * 86400000 - 60000;
+export const idempotencyWindowMs = 15 * 86400000 - 60000;
 
 async function event(db: PoolClient, row: Authorization, state: string, code: string | null) {
   await db.query(`insert into field.billing_events(organization_id,subscription_id,plan_id,event_type,payload)
@@ -79,10 +80,15 @@ export async function runBillingAuthorizationOnce(input: { pool: Pool; billing?:
   if (typeof claimed === 'string') return claimed;
   const { row,token,authKey,context } = claimed;
   let billingKey: string | undefined;
+  let declinedCode: string | undefined;
   try {
     billingKey = await context.provider.issue({ authKey,customerKey: row.customer_key,requestKey: row.request_key });
     if (typeof billingKey !== 'string' || !billingKey || billingKey.length > 200) billingKey = undefined;
-  } catch { /* 공급사 오류 원문과 비밀값은 저장하거나 출력하지 않는다. */ }
+  } catch (error) {
+    // 공급사 오류 원문과 비밀값은 저장하거나 출력하지 않는다. 분류된 오류 코드만 남긴다.
+    // 카드 등록 4xx 거절은 돈이 움직이지 않는 확정 결과라 failed로 끝내 소유자가 다시 결제를 시작할 수 있게 한다.
+    if (error instanceof BillingProviderError && error.kind === 'declined') declinedCode = `authorization_declined_${error.code}`;
+  }
   const db = await input.pool.connect();
   try {
     await db.query('begin');
@@ -90,6 +96,10 @@ export async function runBillingAuthorizationOnce(input: { pool: Pool; billing?:
     const current = (await db.query(`select a.id from field.billing_authorizations a join field.paid_subscriptions s on s.id=a.subscription_id
       where a.id=$1 and a.state='processing' and a.claim_token=$2 for update of s,a`,[row.id,token])).rows[0];
     if (!current) { await db.query('rollback'); return 'superseded'; }
+    if (!billingKey && declinedCode) {
+      await pause(db,{...row,state:'processing'},'failed',declinedCode);
+      await db.query('commit'); return 'failed';
+    }
     if (!billingKey) {
       await pause(db,{...row,state:'processing'},'unknown','authorization_provider_result_unknown');
       await db.query('commit'); return 'unknown';

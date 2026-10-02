@@ -105,6 +105,19 @@ export function AgentFieldConnections() {
     finally { setBusy(false); }
   }
 
+  // degraded 연결은 Field 권한을 다시 확인해 성공하면 서버가 review_required로 되돌린다
+  async function recheck(connectionId: string) {
+    setBusy(true); setStatus("Field 권한을 다시 확인하고 있습니다.");
+    try {
+      const result = await requestJson(`/v1/connections/field/${connectionId}/facts`);
+      await loadConnections();
+      setStatus(result.status === 200 ? "Field 권한을 다시 확인했습니다. 연결을 다시 사용할 수 있습니다."
+        : result.status === 503 ? "Field 권한 확인이 거부됐습니다. Field에서 연결 동의 상태를 확인해 주세요."
+          : result.status === 502 ? "Field 응답을 받지 못했습니다. 잠시 뒤 다시 확인해 주세요."
+            : `Field 권한을 확인하지 못했습니다 (${result.status}).`);
+    } catch { setStatus("Field 권한 확인 요청이 전달되지 않았습니다."); }
+    finally { setBusy(false); }
+  }
   async function inspect(connectionId: string) {
     setBusy(true); setPreview(null); setReviewConfirmed(false);
     setIncludeBusiness(false); setIncludeFaqs(false); setSelectedServices([]); setMappingOptions(null); setServiceChoices({});
@@ -311,6 +324,8 @@ export function AgentFieldConnections() {
               onClick={() => void inspect(item.id)}>Field 승인 정보 가져와 검토</button>}
             {item.status === "review_required" && <button type="button" disabled={busy}
               onClick={() => void inspectCapabilities(item.id)}>Field 지원 기능 확인</button>}
+            {item.status === "degraded" && <button type="button" disabled={busy}
+              onClick={() => void recheck(item.id)}>Field 권한 다시 확인 (추가)</button>}
             {capability && <div><p>Field 공개 계약 {capability.schemaVersion}</p>
               <ul><li>사업 정보 읽기: {capability.capabilities["facts.read"] ? "지원" : "미지원"}</li>
                 <li>예약 가능 시간 읽기: {capability.capabilities["availability.read"] ? "지원" : "아직 미지원"}</li>

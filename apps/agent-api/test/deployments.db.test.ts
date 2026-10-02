@@ -224,15 +224,24 @@ test('AP link and owned widget require approved AI, tenant ownership and verifie
       headers: { origin: 'http://localhost:3001' }, payload: { ticket: expiredTicket } })).statusCode, 410);
     assert.equal((await app.inject({ url: `/embed/v1/${publicId}/frame`, headers: { referer: 'https://owned.example.test.evil.invalid/' } })).statusCode, 403);
     assert.equal((await app.inject({ url: `/embed/v1/${publicId}/frame` })).statusCode, 403);
+    // 배포 목록의 current는 공개 경로와 같은 최신 승인 연결 여부를 알려 준다
+    const bindingOf = async () => ((await app.inject({ url: '/v1/deployments', headers: { cookie: first.cookie } }))
+      .json() as { deployments: { id: string; current: boolean }[] }).deployments.find(item => item.id === id)?.current;
+    assert.equal(await bindingOf(), true);
     assert.equal((await app.inject({ method: 'PUT', url: '/v1/knowledge/draft', headers: { cookie: first.cookie },
       payload: { ...knowledge, expectedRevision: 1, introduction: '변경한 승인 안내입니다.' } })).statusCode, 200);
     assert.equal((await app.inject({ method: 'POST', url: '/v1/knowledge/releases', headers: { cookie: first.cookie },
       payload: { expectedRevision: 2 } })).statusCode, 201);
     assert.equal((await app.inject({ url: `/v1/public/deployments/${publicId}` })).statusCode, 404);
+    assert.equal(await bindingOf(), false);
     assert.equal((await app.inject({ method: 'POST', url: `/v1/deployments/${id}/activate`, headers: { cookie: first.cookie } })).statusCode, 409);
     assert.equal((await app.inject({ method: 'POST', url: '/v1/agents/releases', headers: { cookie: first.cookie },
       payload: { expectedRevision: 1, expectedKnowledgeRevision: 2 } })).statusCode, 201);
-    assert.equal((await app.inject({ method: 'POST', url: `/v1/deployments/${id}/activate`, headers: { cookie: first.cookie } })).statusCode, 200);
+    assert.equal(await bindingOf(), false);
+    const rebound = await app.inject({ method: 'POST', url: `/v1/deployments/${id}/activate`, headers: { cookie: first.cookie } });
+    assert.equal(rebound.statusCode, 200);
+    assert.equal((rebound.json() as { current: boolean }).current, true);
+    assert.equal(await bindingOf(), true);
     assert.equal((await app.inject({ url: `/v1/public/deployments/${publicId}` })).statusCode, 200);
     assert.equal((await app.inject({ method: 'POST', url: `/v1/deployments/${id}/pause`, headers: { cookie: first.cookie } })).statusCode, 200);
     assert.equal((await app.inject({ url: `/sdk/v1.js?deployment=${publicId}` })).statusCode, 404);

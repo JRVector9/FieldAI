@@ -37,13 +37,7 @@ export async function proxy(request: NextRequest) {
         const id = receipt?.[2] ?? workApi?.[2] ?? notification?.[2] ?? asset![1]!;
         return await customHostResource(host, kind, id) ? NextResponse.next() : notFound();
       }
-      if (path === "/" || /^\/[a-z0-9][a-z0-9-]{0,39}\/?$/.test(path)
-        && !["workspace", "admin", "login", "signup", "start", "api", "v1", "integrations"].includes(path.replaceAll("/", ""))) {
-        const target = request.nextUrl.clone();
-        target.pathname = `/site/${mapping.slug}${path === "/" ? "" : path.replace(/\/$/, "")}`;
-        return NextResponse.rewrite(target);
-      }
-      return notFound();
+      return siteRootRewrite(request, mapping.slug) ?? notFound();
     } catch { return unavailable(); }
   }
 
@@ -73,5 +67,18 @@ export async function proxy(request: NextRequest) {
   }
 
   if (receiptPage.test(path)) return NextResponse.next();
-  return notFound();
+  // 기본 사이트 주소(테넌트 루트)도 사용자 도메인과 같이 /와 /<page>를 공개 사이트로 연결한다.
+  return siteRootRewrite(request, tenantSlug) ?? notFound();
+}
+
+// 사이트 루트·하위 페이지 경로를 /site/<slug>[/<page>]로 rewrite한다. 대상이 아니면 null.
+function siteRootRewrite(request: NextRequest, slug: string) {
+  const path = request.nextUrl.pathname;
+  if (path === "/" || /^\/[a-z0-9][a-z0-9-]{0,39}\/?$/.test(path)
+    && !["workspace", "admin", "login", "signup", "start", "api", "v1", "integrations"].includes(path.replaceAll("/", ""))) {
+    const target = request.nextUrl.clone();
+    target.pathname = `/site/${slug}${path === "/" ? "" : path.replace(/\/$/, "")}`;
+    return NextResponse.rewrite(target);
+  }
+  return null;
 }

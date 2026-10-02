@@ -1,7 +1,7 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { BusinessRuntime } from './business.js';
-import { sealNotification, unsealNotification, type NotificationContext } from './notification-context.js';
+import { normalizeMobilePhone, sealNotification, unsealNotification, type NotificationContext } from './notification-context.js';
 import { validPushSubscription } from './notification-web-push.js';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const object=(v:unknown):Record<string,unknown>|null=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:null;
@@ -44,9 +44,10 @@ export function registerAgentDeliveryRoutes(app:FastifyInstance,runtime:Pick<Bus
  async function saveConsent(organizationId:string,kind:string,target:string,audience:string,phone:string|undefined,body:Record<string,unknown>,actor:string|null,push=false,capHash?:string){
   const db=await runtime.pool.connect();try{await db.query('begin');await db.query('select id from ap.organizations where id=$1 for update',[organizationId]);
    if(actor&&!(await db.query("select 1 from ap.memberships where organization_id=$1 and user_id=$2 and role='owner' for share",[organizationId,actor])).rowCount){await db.query('rollback');return null;}
-   if(capHash){const source=await customerSource(kind,target,capHash,db,true);if(!source||source.organization_id!==organizationId){await db.query('rollback');return null;}phone=source.customer_phone;}
-   const active=(await db.query<{id:string;recipient_ciphertext:string|null;kakao:boolean;sms:boolean;push:boolean}>('select id,recipient_ciphertext,kakao,sms,push from ap.notification_recipients where organization_id=$1 and target_kind=$2 and target_id=$3 and push=$4 and revoked_at is null for update',[organizationId,kind,target,push])).rows[0];
    const enabled=push?body.push===true:body.kakao===true||body.sms===true;
+   // 고객 번호는 문의에 입력된 그대로이므로 숫자만 남겨 저장하고, 휴대전화가 아니면 동의를 거절한다
+   if(capHash){const source=await customerSource(kind,target,capHash,db,true);if(!source||source.organization_id!==organizationId){await db.query('rollback');return null;}const mobile=normalizeMobilePhone(source.customer_phone);if(enabled&&!mobile){await db.query('rollback');return 'phone_invalid';}phone=mobile??undefined;}
+   const active=(await db.query<{id:string;recipient_ciphertext:string|null;kakao:boolean;sms:boolean;push:boolean}>('select id,recipient_ciphertext,kakao,sms,push from ap.notification_recipients where organization_id=$1 and target_kind=$2 and target_id=$3 and push=$4 and revoked_at is null for update',[organizationId,kind,target,push])).rows[0];
    if(enabled&&phone===undefined&&active?.recipient_ciphertext&&context){try{phone=unsealNotification(active.recipient_ciphertext,context.key,`recipient:${active.id}`);}catch{/* A new recipient is required when the stored value cannot be opened. */}}
    if(enabled&&(phone===undefined||!context)){await db.query('rollback');return 'recipient_required';}
    if(active&&enabled&&active.kakao===(body.kakao===true)&&active.sms===(body.sms===true)&&active.push===push&&active.recipient_ciphertext!==null&&unsealNotification(active.recipient_ciphertext,context!.key,`recipient:${active.id}`)===phone){await db.query('commit');return active.id;}
@@ -58,9 +59,10 @@ export function registerAgentDeliveryRoutes(app:FastifyInstance,runtime:Pick<Bus
  app.post('/v1/owner/notification-consent',async(request,reply)=>{
   const actor=await organization(request,reply,true);if(!actor)return reply;if(!allowedOrigin(request,context))return reply.code(403).send({error:'origin_not_allowed'});
   const session=await runtime.resolveSession?.(request.headers);if(!session||session.userId!==actor.userId)return reply.code(401).send({error:'current_session_required'});
-  const body=object(request.body);if(!body||body.consentVersion!=='notification-v1'||typeof body.kakao!=='boolean'||body.sms===true||body.phone!==undefined&&(typeof body.phone!=='string'||!/^01[016789]\d{7,8}$/.test(body.phone)))return reply.code(400).send({error:'invalid_notification_consent'});
+  // 사업자 번호도 010-1234-5678처럼 입력해도 숫자만 저장한다
+  const body=object(request.body),ownerPhone=typeof body?.phone==='string'?normalizeMobilePhone(body.phone):null;if(!body||body.consentVersion!=='notification-v1'||typeof body.kakao!=='boolean'||body.sms===true||body.phone!==undefined&&!ownerPhone)return reply.code(400).send({error:'invalid_notification_consent'});
   if(body.kakao&&!context)return reply.code(503).send({error:'notification_configuration_missing',state:'blocked_integration'});
-  const id=await saveConsent(actor.organizationId,'owner',actor.userId,'owner',body.phone as string|undefined,body,actor.userId);if(id==='recipient_required')return reply.code(400).send({error:'notification_phone_required'});if(!id)return reply.code(404).send({error:'organization_not_found'});
+  const id=await saveConsent(actor.organizationId,'owner',actor.userId,'owner',ownerPhone??undefined,body,actor.userId);if(id==='recipient_required')return reply.code(400).send({error:'notification_phone_required'});if(!id)return reply.code(404).send({error:'organization_not_found'});
   return {recipientId:id,phoneVerified:false,providerState:context?.provider?'configured':'blocked_integration'};
  });
  app.post('/v1/owner/push-subscriptions',async(request,reply)=>{
@@ -89,7 +91,7 @@ export function registerAgentDeliveryRoutes(app:FastifyInstance,runtime:Pick<Bus
   const body=object(request.body);if(!body||body.consentVersion!=='notification-v1'||typeof body.kakao!=='boolean'||typeof body.sms!=='boolean'||body.sms===true&&body.kakao!==true)return reply.code(400).send({error:'invalid_notification_consent'});
   if((body.kakao||body.sms)&&!context)return reply.code(503).send({error:'notification_configuration_missing',state:'blocked_integration'});
   const id=await saveConsent(found.organization_id,kind,request.params.id,'customer',found.customer_phone,body,null,false,capHash);
-  if(!id)return reply.code(404).send({error:'notification_target_not_found'});
+  if(!id)return reply.code(404).send({error:'notification_target_not_found'});if(id==='phone_invalid')return reply.code(400).send({error:'notification_phone_invalid'});
   return {recipientId:id,state:id==='withdrawn'?'withdrawn':'consented',providerState:context?.provider?'configured':'blocked_integration'};
  });
  app.post('/integrations/v1/notifications/solapi',async(request,reply)=>{

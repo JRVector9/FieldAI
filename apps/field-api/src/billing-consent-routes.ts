@@ -4,6 +4,7 @@ import type { PoolClient } from 'pg';
 import type { FieldBusinessRuntime } from './business.js';
 import { sealBilling, unsealBilling, type BillingContext } from './billing-context.js';
 import type { BillingPlan } from './billing.js';
+import { idempotencyWindowMs } from './billing-authorization-execution.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -12,7 +13,8 @@ const str = (v: unknown, max: number): v is string => typeof v === 'string' && v
 const fail = (reply: FastifyReply, code: number, error: string) => reply.code(code).send({ error });
 type Actor = { user: string; org: string; session: string | null };
 type Authorization = { id: string; subscription_id: string; customer_key: string; created_by: string; state: string;
-  session_id: string; provider_mode: string; provider_mid: string; expires_at: Date; callback_token_hash: string; callback_token_ciphertext: string | null; auth_key_hash: string | null };
+  session_id: string; provider_mode: string; provider_mid: string; expires_at: Date; callback_token_hash: string; callback_token_ciphertext: string | null; auth_key_hash: string | null;
+  started_at: Date | null };
 
 async function ownerFor(request: FastifyRequest, reply: FastifyReply, runtime: FieldBusinessRuntime): Promise<Actor | null> {
   reply.headers({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' });
@@ -155,7 +157,24 @@ export function registerFieldBillingConsentRoutes(app: FastifyInstance, runtime:
       await db.query('begin');if(!await lockOwner(db,a)){await db.query('rollback');return fail(reply,403,'owner_required');}
       const row=await authorization(db,a.org,id,true);
       if(!row){await db.query('rollback');return fail(reply,404,'authorization_not_found');}
-      if(!['awaiting','pending','failed','canceled','blocked_integration'].includes(row.state)){await db.query('rollback');return fail(reply,409,'authorization_result_unresolved');}
+      // 결과 미상(unknown)은 공급사 멱등 기간 동안 worker가 같은 요청키로 다시 확인하므로 취소하지 않는다.
+      // 기간이 지나 더 확인할 수 없고 저장된 빌링키도 없으면(돈이 움직이지 않은 단계) 소유자가 정리할 수 있다.
+      const unresolvedExpired=row.state==='unknown'&&row.started_at!==null&&Date.now()-row.started_at.getTime()>=idempotencyWindowMs
+        &&!(await db.query('select 1 from field.billing_credentials where subscription_id=$1',[row.subscription_id])).rowCount;
+      if(!unresolvedExpired&&!['awaiting','pending','failed','canceled','blocked_integration'].includes(row.state)){await db.query('rollback');return fail(reply,409,'authorization_result_unresolved');}
+      if(row.started_at!==null){
+        // 공급사에 보낸 인증은 DB 규칙상 canceled로 바꿀 수 없으므로 failed로 닫고 구독만 종료해 새 결제를 시작할 수 있게 한다.
+        if(!(await db.query('select 1 from field.paid_subscriptions where id=$1 and terminated_at is not null',[row.subscription_id])).rowCount){
+          await db.query(`update field.billing_authorizations set state='failed',
+            error_code=case when state='failed' then error_code else 'authorization_abandoned_by_owner' end,
+            auth_key_ciphertext=null,callback_token_ciphertext=null,claim_token=null,lease_expires_at=null where id=$1`,[id]);
+          // 이미 받은 해지 요청 기록은 바꿀 수 없으므로(DB 규칙) 없을 때만 남긴다.
+          await db.query(`update field.paid_subscriptions set state='canceled',cancel_requested_at=coalesce(cancel_requested_at,now()),
+            cancel_requested_by=case when cancel_requested_at is null then $2 else cancel_requested_by end,terminated_at=now() where id=$1`,[row.subscription_id,a.user]);
+          await record(db,a,id,row.subscription_id,row.plan_id,'authorization_canceled');
+        }
+        await db.query('commit');return {...view(row),state:'failed'};
+      }
       if(row.state!=='canceled'){
         await db.query("update field.billing_authorizations set state='canceled',auth_key_ciphertext=null,callback_token_ciphertext=null where id=$1",[id]);
         await db.query("update field.paid_subscriptions set state='canceled',cancel_requested_at=now(),cancel_requested_by=$2,terminated_at=now() where id=$1",[row.subscription_id,a.user]);

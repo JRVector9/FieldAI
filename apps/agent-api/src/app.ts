@@ -47,7 +47,8 @@ export function createAgentApp(
   embedSpikePool?: Pool,
   businessRuntime?: BusinessRuntime,
 ) {
-  const app = Fastify();
+  // 신뢰할 프록시 hop만 X-Forwarded-For를 반영한다. 기본은 같은 호스트의 Next rewrite(loopback)
+  const app = Fastify({ trustProxy: process.env.AP_TRUST_PROXY ?? 'loopback' });
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_request, body, done) => {
     done(null, body);
   });

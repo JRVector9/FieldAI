@@ -7,6 +7,7 @@ import { Client, Pool } from 'pg';
 import { createFieldApp } from '../src/app.js';
 import { unsealBilling, type BillingContext } from '../src/billing-context.js';
 import { runBillingAuthorizationOnce } from '../src/billing-authorization-execution.js';
+import { BillingProviderError } from '../src/toss-billing.js';
 
 process.loadEnvFile(resolve('../../infra/field/.env'));
 
@@ -39,7 +40,7 @@ async function fixture() {
   assert.match(new URL(process.env.FIELD_DATABASE_URL!).pathname, /^\/fieldai_field_test_[a-f0-9]+$/);
   const [owner, operator, approver] = [randomUUID(), randomUUID(), randomUUID()] as const;
   const calls: { authKey: string; customerKey: string; requestKey: string }[] = [];
-  let authorizationId = '', fail = false, releaseIssue: (() => void) | undefined;
+  let authorizationId = '', fail = false, declined = false, releaseIssue: (() => void) | undefined;
   let waiting: Promise<void> | undefined;
   const billing: BillingContext = { credentialKey: randomBytes(32), webOrigin: 'http://localhost:3002', provider: {
     mode: 'test', mid: 'synthetic-mid', clientKey: 'test_ck_synthetic',
@@ -49,6 +50,7 @@ async function fixture() {
       assert.equal(row.state, 'processing'); assert.ok(row.started_at); assert.ok(row.lease_expires_at); assert.ok(row.claim_token);
       assert.equal(input.requestKey, row.request_key);
       if (calls.length === 1) await waiting;
+      if (declined) throw new BillingProviderError('INVALID_CARD_EXPIRATION', 'declined');
       if (fail) throw new Error('SYNTHETIC-TRANSPORT-NO-RAW-ERROR');
       return 'synthetic-billing-key-NO-RAW-STORAGE';
     },
@@ -76,8 +78,9 @@ async function fixture() {
   const run = async (context: BillingContext | undefined = billing) => {
     return runBillingAuthorizationOnce({ pool, billing: context });
   };
-  return { pool, billing, calls, run, org, owner, authorizationId, subscriptionId: opened.subscriptionId, call,
+  return { pool, billing, calls, run, org, owner, authorizationId, subscriptionId: opened.subscriptionId, call, plan,
     setFailure(value: boolean) { fail = value; },
+    setDeclined(value: boolean) { declined = value; },
     holdIssue() { waiting = new Promise<void>(r => { releaseIssue = r; }); },
     release() { releaseIssue?.(); },
     row: async () => (await pool.query('select * from field.billing_authorizations where id=$1', [authorizationId])).rows[0],
@@ -210,4 +213,50 @@ test('Field disposes expired unstarted auth keys even when configuration is miss
       assert.equal(f.calls.length,0);
     } finally { Date.now=originalClock; await f.close(); }
   }
+});
+
+test('Field closes a declined card registration so the owner can start a new checkout', async () => {
+  const f = await fixture();
+  try {
+    f.setDeclined(true); assert.equal(await f.run(), 'failed');
+    const row = await f.row();
+    assert.equal(row.state, 'failed'); assert.equal(row.error_code, 'authorization_declined_INVALID_CARD_EXPIRATION');
+    assert.equal(row.auth_key_ciphertext, null); assert.equal(row.callback_token_ciphertext, null);
+    assert.equal((await f.pool.query('select count(*)::int n from field.billing_credentials where subscription_id=$1', [f.subscriptionId])).rows[0].n, 0);
+    const closed = await f.call(`/v1/subscription/authorizations/${f.authorizationId}/cancel`);
+    assert.equal(closed.statusCode, 200, closed.body); assert.equal(closed.json().state, 'failed');
+    assert.equal((await f.row()).error_code, 'authorization_declined_INVALID_CARD_EXPIRATION');
+    assert.ok((await f.pool.query('select terminated_at from field.paid_subscriptions where id=$1', [f.subscriptionId])).rows[0].terminated_at);
+    assert.equal((await f.call(`/v1/subscription/authorizations/${f.authorizationId}/cancel`)).statusCode, 200);
+    assert.equal((await f.pool.query("select count(*)::int n from field.billing_events where subscription_id=$1 and event_type='authorization_canceled'",
+      [f.subscriptionId])).rows[0].n, 1);
+    const retried = await f.call('/v1/subscription/checkout', { planId: f.plan, termsVersion: 'synthetic-terms', refundVersion: 'synthetic-refund',
+      totalAmount: 11000, supplyAmount: 10000, vatAmount: 1000, includedAiUnits: 500, graceDays: 3, currency: 'KRW',
+      autoRenew: true, termsAccepted: true, firstChargePolicy: 'after_authorization' });
+    assert.equal(retried.statusCode, 201, retried.body);
+    assert.equal(f.calls.length, 1);
+  } finally { await f.close(); }
+});
+
+test('Field lets the owner close an unknown card registration only after the provider idempotency window without a stored key', async () => {
+  const f = await fixture();
+  let stored: Awaited<ReturnType<typeof fixture>> | undefined;
+  const originalClock = Date.now;
+  try {
+    f.setFailure(true); assert.equal(await f.run(), 'unknown');
+    stored = await fixture();
+    // 다른 worker 경로와 섞이지 않도록 저장된 키가 있는 비교 대상은 상태만 결과 미상으로 둔다.
+    await stored.pool.query("update field.billing_authorizations set state='unknown',started_at=now(),next_attempt_at=now()+interval '1 hour' where id=$1",
+      [stored.authorizationId]);
+    assert.equal((await f.call(`/v1/subscription/authorizations/${f.authorizationId}/cancel`)).statusCode, 409);
+    Date.now = () => originalClock() + 16 * 86400000;
+    await stored.pool.query('insert into field.billing_credentials(subscription_id,billing_key_ciphertext) values($1,null)', [stored.subscriptionId]);
+    assert.equal((await stored.call(`/v1/subscription/authorizations/${stored.authorizationId}/cancel`)).statusCode, 409);
+    const closed = await f.call(`/v1/subscription/authorizations/${f.authorizationId}/cancel`);
+    assert.equal(closed.statusCode, 200, closed.body); assert.equal(closed.json().state, 'failed');
+    const row = await f.row();
+    assert.equal(row.state, 'failed'); assert.equal(row.error_code, 'authorization_abandoned_by_owner');
+    assert.equal(row.auth_key_ciphertext, null); assert.equal(row.claim_token, null);
+    assert.ok((await f.pool.query('select terminated_at from field.paid_subscriptions where id=$1', [f.subscriptionId])).rows[0].terminated_at);
+  } finally { Date.now = originalClock; await f.close(); await stored?.close(); }
 });

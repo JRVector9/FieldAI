@@ -73,26 +73,22 @@ test('a first published Field site accepts requests and blocks a later slot rele
     assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft', headers: { cookie: account.cookie },
       payload: { ...catalog, expectedRevision: 1, services: [...catalog.services,
         { id: slotServiceId, name: '시간표 접수', description: '', bookingMode: 'slot', durationMinutes: 30, priceAmount: null }] } })).statusCode, 200);
-    assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases',
-      headers: { cookie: account.cookie }, payload: { expectedRevision: 2 } })).statusCode, 201);
-    assert.equal((await app.inject({ method: 'PUT', url: '/v1/sites/draft', headers: { cookie: account.cookie },
-      payload: { expectedRevision: 1, ...siteContent } })).statusCode, 200);
-    const blocked = await app.inject({ method: 'POST', url: '/v1/sites/releases',
+    // 이미 공개된 사이트는 최신 승인 카탈로그를 바로 쓰므로 시간표 서비스 승인 자체를 실제 시간표가 생길 때까지 막는다.
+    const blocked = await app.inject({ method: 'POST', url: '/v1/catalog/releases',
       headers: { cookie: account.cookie }, payload: { expectedRevision: 2 } });
     assert.equal(blocked.statusCode, 409, blocked.body);
     assert.equal(blocked.json().error, 'booking_schedule_not_ready');
-    const releases = await app.inject({ url: '/v1/sites/releases', headers: { cookie: account.cookie } });
-    assert.deepEqual(releases.json().releases.map((item: { revision: number }) => item.revision), [1]);
+    assert.equal((await app.inject({ url: `/v1/public/catalog/${organizationId}` })).json().revision, 1);
     const slot = await app.inject({ url: `/v1/public/catalog/${organizationId}/availability?serviceId=${slotServiceId}&date=${futureWeekday()}` });
-    assert.equal(slot.statusCode, 409, slot.body);
-    assert.equal(slot.json().error, 'policy_not_set');
+    assert.equal(slot.statusCode, 404, slot.body);
+    assert.equal(slot.json().error, 'slot_service_not_found');
     const allDays = Object.fromEntries(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
       .map(day => [day, { open: '10:00', close: '18:00' }]));
     assert.equal((await app.inject({ method: 'PUT', url: '/v1/booking-policy', headers: { cookie: account.cookie },
       payload: { expectedRevision: 0, timezone: 'Asia/Seoul', weekly: { mon: { open: '10:00', close: '10:15' } },
         closedDates: [], specialDates: {}, beforeMinutes: 0, afterMinutes: 0,
         minLeadMinutes: 60, horizonDays: 30 } })).statusCode, 200);
-    const tooShort = await app.inject({ method: 'POST', url: '/v1/sites/releases',
+    const tooShort = await app.inject({ method: 'POST', url: '/v1/catalog/releases',
       headers: { cookie: account.cookie }, payload: { expectedRevision: 2 } });
     assert.equal(tooShort.statusCode, 409, tooShort.body);
     assert.equal(tooShort.json().error, 'booking_schedule_not_ready');
@@ -100,6 +96,10 @@ test('a first published Field site accepts requests and blocks a later slot rele
       payload: { expectedRevision: 1, timezone: 'Asia/Seoul', weekly: allDays,
         closedDates: [], specialDates: {}, beforeMinutes: 0, afterMinutes: 0,
         minLeadMinutes: 60, horizonDays: 30 } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 2 } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/sites/draft', headers: { cookie: account.cookie },
+      payload: { expectedRevision: 1, ...siteContent } })).statusCode, 200);
     const publishedSlot = await app.inject({ method: 'POST', url: '/v1/sites/releases',
       headers: { cookie: account.cookie }, payload: { expectedRevision: 2 } });
     assert.equal(publishedSlot.statusCode, 201, publishedSlot.body);
@@ -110,6 +110,113 @@ test('a first published Field site accepts requests and blocks a later slot rele
     const slotRequest = await app.inject({ method: 'POST', url: `/v1/public/catalog/${organizationId}/reservations`,
       payload: { serviceId: slotServiceId, startAt, name: '시간표 고객', phone: '010-2222-4444', consent: true } });
     assert.equal(slotRequest.statusCode, 201, slotRequest.body);
+  } finally { await app.close(); }
+});
+
+test('Field request-mode bookings proceed without a booking policy and check only overlapping time', async () => {
+  const account = await owner();
+  const app = createFieldApp(async () => undefined, auth.handler, base, {
+    pool,
+    resolveUserId: async (headers: IncomingHttpHeaders) =>
+      (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+  });
+  try {
+    const organization = await app.inject({ method: 'POST', url: '/v1/organizations',
+      headers: { cookie: account.cookie }, payload: { name: '정책 없는 희망시간 검수' } });
+    assert.equal(organization.statusCode, 201, organization.body);
+    const organizationId = organization.json().id as string;
+    const requestServiceId = randomUUID(), slotServiceId = randomUUID();
+    const requestService = { id: requestServiceId, name: '희망시간 방문', description: '', bookingMode: 'request', durationMinutes: 30, priceAmount: 30000 };
+    const catalog = { expectedRevision: 0, businessName: '정책 없는 희망시간 검수', industry: '',
+      introduction: '', region: '', openingHours: '', contactPhone: '', services: [requestService] };
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft',
+      headers: { cookie: account.cookie }, payload: catalog })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 1 } })).statusCode, 201);
+    assert.equal((await app.inject({ url: '/v1/booking-policy', headers: { cookie: account.cookie } })).statusCode, 404);
+    const submitUrl = `/v1/public/catalog/${organizationId}/reservations`;
+    const submit = async (name: string, phone: string) => {
+      const created = await app.inject({ method: 'POST', url: submitUrl,
+        payload: { serviceId: requestServiceId, preferredTimeText: '평일 오후', name, phone, consent: true } });
+      assert.equal(created.statusCode, 201, created.body);
+      return created.json() as { id: string; receiptKey: string; timezone: string };
+    };
+    const owned = (path: string, payload: object) => app.inject({ method: 'POST', url: `/v1/owner/reservations/${path}`,
+      headers: { cookie: account.cookie }, payload });
+    const customer = (path: string, receiptKey: string, payload: object) => app.inject({ method: 'POST',
+      url: `/v1/reservations/${path}`, headers: { authorization: `Bearer ${receiptKey}` }, payload });
+    const one = await submit('정책 없는 고객', '010-1212-3434');
+    assert.equal(one.timezone, 'Asia/Seoul');
+    // 바뀐 카탈로그가 없으면 409가 아니라 200 current로 알린다.
+    const current = await app.inject({ url: `/v1/reservations/${one.id}/catalog-review`,
+      headers: { authorization: `Bearer ${one.receiptKey}` } });
+    assert.equal(current.statusCode, 200, current.body);
+    assert.equal(current.json().status, 'current');
+    assert.equal(current.json().services, undefined);
+    const day = futureWeekday();
+    const at = (time: string) => new Date(`${day}T${time}:00+09:00`).toISOString();
+    // 희망시간 예약은 30분 격자·영업시간이 아닌 사업자가 정한 시각으로 확정한다.
+    const confirmed = await owned(`${one.id}/confirm`, { expectedRevision: 0, expectedCatalogRevision: 1, startAt: at('14:15') });
+    assert.equal(confirmed.statusCode, 201, confirmed.body);
+    assert.equal(confirmed.json().confirmedStartAt, at('14:15'));
+    const occupancy = await pool.query<{ lower_at: Date; upper_at: Date }>(
+      'select lower(occupied) as lower_at, upper(occupied) as upper_at from field.occupancies where reservation_id = $1', [one.id]);
+    assert.equal(occupancy.rows[0]!.lower_at.toISOString(), at('14:15'));
+    assert.equal(occupancy.rows[0]!.upper_at.toISOString(), at('14:45'));
+    const two = await submit('겹침 검수 고객', '010-1212-5656');
+    const overlapping = await owned(`${two.id}/confirm`, { expectedRevision: 0, expectedCatalogRevision: 1, startAt: at('14:30') });
+    assert.equal(overlapping.statusCode, 409, overlapping.body);
+    assert.equal(overlapping.json().error, 'time_conflict');
+    const proposed = await owned(`${two.id}/proposals`, { expectedRevision: 0, expectedCatalogRevision: 1, startAt: at('16:05') });
+    assert.equal(proposed.statusCode, 201, proposed.body);
+    assert.equal((await customer(`${two.id}/accept-proposal`, two.receiptKey, { expectedRevision: 1 })).statusCode, 200);
+    const acceptedConfirm = await owned(`${two.id}/confirm`, { expectedRevision: 2, expectedCatalogRevision: 1 });
+    assert.equal(acceptedConfirm.statusCode, 201, acceptedConfirm.body);
+    assert.equal(acceptedConfirm.json().confirmedStartAt, at('16:05'));
+    // 변경 제안을 수락한 뒤 들어온 취소 요청을 거절하면 무효가 된 제안 기록을 지운다.
+    assert.equal((await customer(`${two.id}/change-request`, two.receiptKey,
+      { expectedRevision: 3, preferredTimeText: '조금 늦게' })).statusCode, 200);
+    assert.equal((await owned(`${two.id}/proposals`, { expectedRevision: 4, expectedCatalogRevision: 1, startAt: at('17:05') })).statusCode, 201);
+    assert.equal((await customer(`${two.id}/accept-proposal`, two.receiptKey, { expectedRevision: 5 })).json().state, 'change_accepted');
+    assert.equal((await customer(`${two.id}/cancel-request`, two.receiptKey,
+      { expectedRevision: 6, reason: '취소 검토' })).json().state, 'cancel_requested');
+    const keptBooking = await owned(`${two.id}/decision`, { expectedRevision: 7, action: 'decline_cancel', reason: '통화 후 유지' });
+    assert.equal(keptBooking.statusCode, 200, keptBooking.body);
+    assert.equal(keptBooking.json().state, 'confirmed');
+    assert.equal(keptBooking.json().confirmedStartAt, at('16:05'));
+    assert.equal(keptBooking.json().proposalStartAt, null);
+    assert.equal(keptBooking.json().proposalEndAt, null);
+    assert.equal(keptBooking.json().proposalAcceptedAt, null);
+    // 정책이 없어도 고객은 희망시간 서비스의 바뀐 카탈로그를 다시 확인할 수 있다.
+    const three = await submit('재검토 고객', '010-1212-7878');
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft', headers: { cookie: account.cookie },
+      payload: { ...catalog, expectedRevision: 1, services: [{ ...requestService, priceAmount: 35000 }] } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 2 } })).statusCode, 201);
+    const changed = await app.inject({ url: `/v1/reservations/${three.id}/catalog-review`,
+      headers: { authorization: `Bearer ${three.receiptKey}` } });
+    assert.equal(changed.statusCode, 200, changed.body);
+    assert.equal(changed.json().status, 'changed');
+    assert.equal(changed.json().currentCatalogRevision, 2);
+    const reviewed = await customer(`${three.id}/review-catalog`, three.receiptKey,
+      { expectedRevision: 0, expectedCatalogRevision: 2, serviceId: requestServiceId, consent: true });
+    assert.equal(reviewed.statusCode, 200, reviewed.body);
+    assert.equal(reviewed.json().catalogRevision, 2);
+    assert.equal(reviewed.json().timezone, 'Asia/Seoul');
+    // 공개 전에는 시간표 서비스 승인을 허용하고, 사이트 공개에서 실제 시간표를 요구한다.
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft', headers: { cookie: account.cookie },
+      payload: { ...catalog, expectedRevision: 2, services: [requestService,
+        { id: slotServiceId, name: '시간표 방문', description: '', bookingMode: 'slot', durationMinutes: 30, priceAmount: null }] } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 3 } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/sites', headers: { cookie: account.cookie } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/sites/draft', headers: { cookie: account.cookie },
+      payload: { expectedRevision: 0, template: 'essential', palette: '#264653',
+        pages: [{ id: randomUUID(), slug: 'home', title: '홈', sections: [] }] } })).statusCode, 200);
+    const unpublished = await app.inject({ method: 'POST', url: '/v1/sites/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 1 } });
+    assert.equal(unpublished.statusCode, 409, unpublished.body);
+    assert.equal(unpublished.json().error, 'booking_schedule_not_ready');
   } finally { await app.close(); }
 });
 
@@ -444,17 +551,19 @@ test('Field public reservation retries create one record and preserve the receip
     assert.equal(archive.statusCode, 200);
     assert.equal(archive.json().reservations.find((item: { id: string }) => item.id === one.id).messages.length, 2);
     const badReceipt = randomBytes(32).toString('base64url');
+    // 신뢰하지 않는 직접 접속자가 X-Forwarded-For를 바꿔도 같은 접속 주소로 잠긴다.
+    const directClient = '192.0.2.10';
     for (let attemptNumber = 0; attemptNumber < 5; attemptNumber += 1) {
-      assert.equal((await app.inject({ url: `/v1/reservations/${one.id}`,
+      assert.equal((await app.inject({ url: `/v1/reservations/${one.id}`, remoteAddress: directClient,
         headers: { authorization: `Bearer ${badReceipt}`, 'x-forwarded-for': `198.51.100.${attemptNumber + 1}` } })).statusCode, 404);
     }
-    const limited = await app.inject({ url: `/v1/reservations/${one.id}`,
+    const limited = await app.inject({ url: `/v1/reservations/${one.id}`, remoteAddress: directClient,
       headers: { authorization: `Bearer ${receiptKey}`, 'x-forwarded-for': '203.0.113.20' } });
     assert.equal(limited.statusCode, 429);
     assert.equal(limited.json().error, 'receipt_rate_limited');
     assert.ok(Number(limited.headers['retry-after']) > 0);
     await pool.query("update field.receipt_attempts set blocked_until = now() - interval '1 second', window_started_at = now() - interval '16 minutes' where target_kind = 'reservation' and target_id = $1", [one.id]);
-    assert.equal((await app.inject({ url: `/v1/reservations/${one.id}`,
+    assert.equal((await app.inject({ url: `/v1/reservations/${one.id}`, remoteAddress: directClient,
       headers: { authorization: `Bearer ${receiptKey}` } })).statusCode, 200);
     assert.equal(Number((await pool.query<{ count: string }>(
       "select count(*) from field.receipt_attempts where target_kind = 'reservation' and target_id = $1", [one.id])).rows[0]!.count), 0);

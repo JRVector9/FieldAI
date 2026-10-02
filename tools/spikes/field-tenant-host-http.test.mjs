@@ -79,7 +79,11 @@ test('Field tenant origin serves only its approved site and public intake while 
     assert.equal((await request(`/site/${b.slug}/services`, 'GET', undefined, undefined, tenantHost)).response.status, 404);
     assert.equal((await request(`/public/${b.organizationId}`, 'GET', undefined, undefined, tenantHost)).response.status, 404);
     assert.equal((await request('/workspace', 'GET', undefined, undefined, tenantHost)).response.status, 404);
-    assert.equal((await request('/', 'GET', undefined, undefined, tenantHost)).response.status, 404);
+    // 2026-10-02: 기본 사이트 주소 루트는 사업자에게 안내되는 주소이므로 /site/<slug>로 연결되어 홈을 보여준다(이전 404는 결함).
+    const rootResponse = (await request('/', 'GET', undefined, undefined, tenantHost)).response;
+    assert.equal(rootResponse.status, 200);
+    assert.match(await rootResponse.text(), /<title>홈 \| Tenant A 검수<\/title>/);
+    assert.equal((await request('/services', 'GET', undefined, undefined, tenantHost)).response.status, 200);
     assert.equal((await request('/', 'GET', undefined, undefined, 'field-000000000000.localhost:3002')).response.status, 404);
     assert.equal((await request(`/inquiry/${randomUUID()}`, 'GET', undefined, undefined, tenantHost)).response.status, 200);
     assert.equal((await request(`/public/${b.organizationId}`)).response.status, 200);

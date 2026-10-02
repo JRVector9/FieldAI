@@ -520,6 +520,12 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
     assert.equal((await pool.query<{ status: string }>(
       'select status from ap.field_connections where id = $1', [fieldConnectionId]))
       .rows[0]?.status, 'review_required');
+    // 사업자 경로(degrade 기본값)에서도 Field 일시 장애(5xx)는 연결을 degraded로 바꾸지 않는다
+    const ownerDuringProbeOutage = await app.inject({ url: factsPath, headers: { cookie: owner.cookie } });
+    assert.equal(ownerDuringProbeOutage.statusCode, 503, ownerDuringProbeOutage.body);
+    assert.equal((await pool.query<{ status: string }>(
+      'select status from ap.field_connections where id = $1', [fieldConnectionId]))
+      .rows[0]?.status, 'review_required');
     fieldProbeUnavailable = false;
     const guestFallback = await app.inject({ method: 'POST',
       url: `/v1/engagements/${guest.json().id}/messages`, headers: { cookie: guestCookie },
@@ -723,8 +729,12 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
       [fieldConnectionId]);
     const beforeRotation = await pool.query<{ refresh_token_cipher: Buffer }>(
       'select refresh_token_cipher from ap.field_connections where id = $1', [fieldConnectionId]);
-    const rotated = await app.inject({ url: factsPath, headers: { cookie: owner.cookie } });
+    // 동시에 만료 토큰을 확인해도 refresh token은 한 번만 사용한다(재사용 시 Field가 토큰 계열을 무효화함)
+    const [rotated, concurrentRotation] = await Promise.all([
+      app.inject({ url: factsPath, headers: { cookie: owner.cookie } }),
+      app.inject({ url: factsPath, headers: { cookie: owner.cookie } })]);
     assert.equal(rotated.statusCode, 200, rotated.body);
+    assert.equal(concurrentRotation.statusCode, 200, concurrentRotation.body);
     assert.equal(tokenCalls, 2);
     assert.ok(factsCalls >= 8);
     const afterRotation = await pool.query<{ refresh_token_cipher: Buffer; status: string }>(
@@ -746,15 +756,27 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
     assert.equal((await pool.query<{ status: string }>(
       'select status from ap.field_connections where id = $1', [fieldConnectionId])).rows[0]?.status,
     'degraded');
-    const noRetry = await app.inject({ url: factsPath, headers: { cookie: owner.cookie } });
-    assert.equal(noRetry.statusCode, 409);
-    assert.equal(tokenCalls, 3);
+    // degraded 연결도 다시 확인할 수 있고, 거절이 계속되면 degraded로 남는다
+    const degradedRetry = await app.inject({ url: factsPath, headers: { cookie: owner.cookie } });
+    assert.equal(degradedRetry.statusCode, 503, degradedRetry.body);
+    assert.equal(tokenCalls, 4);
+    assert.equal((await pool.query<{ status: string }>(
+      'select status from ap.field_connections where id = $1', [fieldConnectionId])).rows[0]?.status,
+    'degraded');
     assert.equal((await app.inject({ url: `/v1/connections/field/${fieldConnectionId}/source`,
       headers: { cookie: owner.cookie } })).statusCode, 200);
     const revokePath = `/v1/connections/field/${fieldConnectionId}/revoke`;
     assert.equal((await app.inject({ method: 'POST', url: revokePath,
       headers: { cookie: outsider.cookie } })).statusCode, 404);
     refreshFails = false;
+    // 재검증에 성공하면 degraded 연결이 review_required로 복구된다
+    await pool.query(`update ap.field_connections set access_expires_at = now() + interval '10 minutes'
+      where id = $1`, [fieldConnectionId]);
+    const restored = await app.inject({ url: factsPath, headers: { cookie: owner.cookie } });
+    assert.equal(restored.statusCode, 200, restored.body);
+    assert.equal((await pool.query<{ status: string }>(
+      'select status from ap.field_connections where id = $1', [fieldConnectionId])).rows[0]?.status,
+    'review_required');
     await pool.query(`update ap.field_connections set status = 'review_required',
       access_expires_at = now() + interval '10 minutes' where id = $1`, [fieldConnectionId]);
     const raceRefresh = await app.inject({ method: 'POST', url: refreshPath,

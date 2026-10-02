@@ -112,3 +112,9 @@ test('multiline terms and refund policy preserve explicit legal text but other c
  assert.throws(()=>m.prepareAdminBillingMutation('plan-request',null,{...body,name:'name\ninvalid'},context,storage(),()=>key),/billing_admin_input_invalid/);
  assert.throws(()=>m.prepareAdminBillingMutation('plan-request',null,{...body,termsText:'명시 조건에 잘못된 NUL\u0000 값이 있습니다.'},context,storage(),()=>key),/billing_admin_input_invalid/);
 });
+test('multi-line refund reasons stored by the API still load the admin refund list',async()=>{
+ const m=await client(),base=fetcher(()=>{throw new Error('unexpected POST');});
+ const multiline={...refund,state:'reviewed',reason:'첫 줄 사유\n둘째 줄 사유\r\n\t셋째 줄',reviewReason:'검토 사유\n추가 설명',reviewedBy:'operator-b',reference:'evidence-1'};
+ const s=await m.loadBillingAdmin(context.origin,async(url,init)=>url==='/v1/admin/billing/refunds'?Response.json({product:overview.product,refunds:[multiline]}):base(url,init));
+ assert.equal(s.refunds[0]?.reason,multiline.reason);assert.equal(s.refunds[0]?.reviewReason,multiline.reviewReason);
+});

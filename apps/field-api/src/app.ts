@@ -40,13 +40,22 @@ import { registerFieldRetentionPurgeRoutes } from './retention-purge-routes.js';
 import { registerFieldRetentionConsumers } from './retention-consumers.js';
 import { fieldRevocationJournalFromEnvironment } from './revocation-journal.js';
 
+// 브라우저 요청은 Next rewrite를 거쳐 오므로 앞단 프록시가 보낸 X-Forwarded-For로 고객 IP를 구한다.
+// 기본값은 같은 장비의 프록시(loopback)만 신뢰해 외부에서 직접 보낸 헤더로 IP를 바꿀 수 없게 한다.
+// 앞단 주소가 다르면 FIELD_TRUST_PROXY에 true/false 또는 쉼표로 구분한 IP·CIDR·이름(loopback 등)을 지정한다.
+function trustProxyFromEnvironment(value = process.env.FIELD_TRUST_PROXY): boolean | string {
+  if (value === undefined || value.trim() === '') return 'loopback';
+  if (value === 'true' || value === 'false') return value === 'true';
+  return value;
+}
+
 export function createFieldApp(
   probe: () => Promise<void>,
   authHandler?: (request: Request) => Promise<Response>,
   authBaseURL = 'http://127.0.0.1:4321',
   businessRuntime?: FieldBusinessRuntime,
 ) {
-  const app = Fastify();
+  const app = Fastify({ trustProxy: trustProxyFromEnvironment() });
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 8 * 1024 * 1024 },
     (_request, body, done) => done(null, body));
   if (businessRuntime) {

@@ -10,6 +10,7 @@ import { FieldRequestFallback, fallbackSubmission } from "./FieldRequestFallback
 import { FieldFallbackReview } from "./FieldFallbackReview";
 import { FieldReceivedWorkRecord } from "./FieldReceivedWorkRecord";
 import { ReceiptRotationPanel } from "./receipt-rotation";
+import { catalogReviewNeeded } from "./catalog-review-state";
 import { PrivateReservationPhoto } from "./private-reservation-photo";
 import { FieldReceipt } from "./field-receipt";
 import { ownerReservationDeliveryNotice, reservationMessageNotificationLabel } from "./booking-notification-state";
@@ -963,7 +964,7 @@ export function ReservationPage({ id, initialKey }: { id: string; initialKey?: s
         setReservation(value);
         const reviewed = await requestJson(`/v1/reservations/${id}/catalog-review`, "GET", undefined, handoffKey);
         if (!active) return;
-        if (reviewed.status === 200) {
+        if (catalogReviewNeeded(reviewed.status, reviewed.data)) {
           const next = reviewed.data as NonNullable<typeof review>;
           setReview(next);
           setReviewServiceId(next.services.some(service => service.id === value.service.id) ? value.service.id : "");
@@ -1115,7 +1116,7 @@ export function ReservationPage({ id, initialKey }: { id: string; initialKey?: s
   }
   async function loadCatalogReview(value: Reservation) {
     const result = await requestJson(`/v1/reservations/${id}/catalog-review`, "GET", undefined, key);
-    if (result.status === 200) {
+    if (catalogReviewNeeded(result.status, result.data)) {
       const next = result.data as NonNullable<typeof review>;
       setReview(next);
       setReviewServiceId(next.services.some(service => service.id === value.service.id) ? value.service.id : "");

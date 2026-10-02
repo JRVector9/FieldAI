@@ -619,14 +619,13 @@ export function registerFieldActionRoutes(app: FastifyInstance, runtime: Busines
         else if (response.status !== 404) return reply.code(202).send(status(action));
       } catch { return reply.code(202).send(status(action)); }
       if (!external) {
+        // by-source 404는 Field 연결 상태 때문에도 나므로 미수신 증거가 아니다(계약: delivery_unknown은 새 업무 생성 금지).
+        // 동의가 24시간을 넘으면 재전송하지 않고 결과 미상으로 유지해 고객 재제출로 중복 업무가 생기지 않게 한다
         const consent = object(action.field_request_body.consent);
         const confirmedAt = typeof consent?.confirmedAt === 'string'
           ? Date.parse(consent.confirmedAt) : NaN;
-        if (!Number.isFinite(confirmedAt) || confirmedAt < Date.now() - 24 * 60 * 60_000) {
-          const expired = await advanceAction(runtime, action.id, 'rejected',
-            null, null, 'transfer_consent_expired');
-          return reply.code(409).send(status(expired));
-        }
+        if (!Number.isFinite(confirmedAt) || confirmedAt < Date.now() - 24 * 60 * 60_000)
+          return reply.code(202).send(status(action));
         const writer = await fieldResourceForCustomer(runtime, inquiry.id, secretHash,
           action.connection_id, 'field.requests.create');
         if (!writer.ok) return reply.code(writer.statusCode).send({ error: writer.error });
@@ -639,6 +638,12 @@ export function registerFieldActionRoutes(app: FastifyInstance, runtime: Busines
           if (response.status === 200 || response.status === 201)
             external = receipt(await response.json(), action.id);
           else if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+            // 인증·연결·멱등 충돌 응답은 Field가 기존 요청을 확인하기 전에 나므로 결과 미상으로 유지한다.
+            // 연결과 기존 요청 확인을 통과한 뒤의 명시 거절만 rejected로 기록한다
+            const code = object(await response.clone().json().catch(() => null))?.error;
+            if (response.status === 401 || (response.status === 403 && code !== 'trial_ended')
+              || ['connection_not_found', 'connection_changed', 'idempotency_conflict'].includes(String(code)))
+              return reply.code(202).send(status(action));
             const rejected = await advanceAction(runtime, action.id, 'rejected', null, null,
               await fieldSubmitError(response));
             return reply.code(409).send(status(rejected));

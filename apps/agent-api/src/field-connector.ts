@@ -104,6 +104,8 @@ function target(config: FieldConnectorConfig, result: string, connectionId?: str
   return url.toString();
 }
 
+// Field가 인증 실패를 확정한 경우(401/403, refresh 거절, grant·조직·scope 불일치)만 나타낸다
+class FieldGrantRejected extends Error {}
 async function refreshStoredFieldGrant(config: FieldConnectorConfig, cipher: Buffer) {
   const previous = unseal(cipher, config.tokenKey);
   const transport = config.fetcher ?? fetch;
@@ -113,7 +115,10 @@ async function refreshStoredFieldGrant(config: FieldConnectorConfig, cipher: Buf
     body: new URLSearchParams({ grant_type: 'refresh_token', client_id: config.clientId,
       refresh_token: previous }), signal: AbortSignal.timeout(8000),
   });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    if ([400, 401, 403].includes(response.status)) throw new FieldGrantRejected('field_grant_refresh_rejected');
+    return null;
+  }
   const token = object(await response.json());
   if (!token || typeof token.access_token !== 'string' || !token.access_token
     || typeof token.refresh_token !== 'string' || !token.refresh_token
@@ -123,6 +128,45 @@ async function refreshStoredFieldGrant(config: FieldConnectorConfig, cipher: Buf
     || !tokenScopes.every(scope => (token.scope as string).split(' ').includes(scope))) return null;
   return { access: token.access_token, accessCipher: seal(token.access_token, config.tokenKey),
     refreshCipher: seal(token.refresh_token, config.tokenKey), expiresIn: token.expires_in };
+}
+
+type StoredFieldToken = { access_token_cipher: Buffer; refresh_token_cipher: Buffer; access_expires_at: Date };
+// 네트워크 호출 동안 DB client와 행 잠금을 쥐지 않는다. 만료 임박 토큰은 짧은 임대(CAS)를 얻은 한 요청만 갱신하고,
+// 결과는 이전 refresh token이 그대로일 때만 저장한다. 다른 요청은 갱신 결과를 잠시 기다렸다가 다시 읽는다.
+async function currentFieldAccess(runtime: BusinessRuntime, config: FieldConnectorConfig,
+  connectionId: string, stored: StoredFieldToken): Promise<string> {
+  const deadline = Date.now() + 10_000;
+  let token = stored;
+  while (token.access_expires_at.getTime() <= Date.now() + 30_000) {
+    const claimed = await runtime.pool.query(
+      `update ap.field_connections set token_refresh_lease_until = now() + interval '20 seconds'
+       where id = $1 and status in ('review_required', 'degraded') and refresh_token_cipher = $2
+         and (token_refresh_lease_until is null or token_refresh_lease_until <= now())`,
+      [connectionId, token.refresh_token_cipher]);
+    if (claimed.rowCount) {
+      let rotated: Awaited<ReturnType<typeof refreshStoredFieldGrant>> = null;
+      try { rotated = await refreshStoredFieldGrant(config, token.refresh_token_cipher); } finally {
+        if (!rotated) await runtime.pool.query(`update ap.field_connections set token_refresh_lease_until = null
+          where id = $1 and refresh_token_cipher = $2`, [connectionId, token.refresh_token_cipher]);
+      }
+      if (!rotated) throw new Error('field_grant_refresh_unknown');
+      const saved = await runtime.pool.query(`update ap.field_connections set access_token_cipher = $3,
+        refresh_token_cipher = $4, access_expires_at = now() + ($5::text || ' seconds')::interval,
+        token_refresh_lease_until = null, updated_at = now()
+        where id = $1 and refresh_token_cipher = $2 and status in ('review_required', 'degraded')`,
+      [connectionId, token.refresh_token_cipher, rotated.accessCipher, rotated.refreshCipher, rotated.expiresIn]);
+      if (!saved.rowCount) throw new Error('field_connection_changed');
+      return rotated.access;
+    }
+    if (Date.now() >= deadline) throw new Error('field_grant_refresh_unknown');
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const current = (await runtime.pool.query<StoredFieldToken>(
+      `select access_token_cipher, refresh_token_cipher, access_expires_at from ap.field_connections
+       where id = $1 and status in ('review_required', 'degraded')`, [connectionId])).rows[0];
+    if (!current) throw new Error('field_connection_changed');
+    token = current;
+  }
+  return unseal(token.access_token_cipher, config.tokenKey);
 }
 
 export function fieldConnectorFromEnvironment(): FieldConnectorConfig | undefined {
@@ -169,10 +213,8 @@ export async function fieldResourceForCustomer(runtime: BusinessRuntime, inquiry
   receiptHash: string, connectionId: string, requiredScope: string): Promise<CustomerFieldResource> {
   const config = runtime.fieldConnector;
   if (!config || !valid(config)) return { ok: false, statusCode: 503, error: 'blocked_integration' };
-  const db = await runtime.pool.connect();
-  try {
-    await db.query('begin');
-    const found = await db.query<{ ap_organization_id: string; deployment_id: string;
+  // 연결 행을 잠그지 않고 읽는다. Field 호출 동안 pool client를 쥐지 않기 위해서다
+  const found = await runtime.pool.query<{ ap_organization_id: string; deployment_id: string;
       field_organization_id: string; field_grant_id: string; scopes: string[];
       access_token_cipher: Buffer; refresh_token_cipher: Buffer; access_expires_at: Date }>(
       `select i.organization_id as ap_organization_id, i.deployment_id,
@@ -196,46 +238,31 @@ export async function fieldResourceForCustomer(runtime: BusinessRuntime, inquiry
            and oc.scopes @> '["ap.agent.read","ap.conversations.read"]'::jsonb)
          and exists (select 1 from "oauthRefreshToken" t where t."referenceId" = s.id::text
            and t."clientId" = s.client_id and t."userId" = s.actor_user_id
-           and t.revoked is null and t."expiresAt" > now())
-       for update of c`,
+           and t.revoked is null and t."expiresAt" > now())`,
       [inquiryId, receiptHash, connectionId, config.clientId, config.issuer]);
-    const row = found.rows[0];
-    if (!row) { await db.query('rollback'); return { ok: false, statusCode: 404,
-      error: 'connection_not_available' }; }
-    if (!row.scopes.includes(requiredScope)) { await db.query('rollback');
-      return { ok: false, statusCode: 403, error: 'field_reauthorization_required' }; }
-    let access: string;
-    try {
-      if (row.access_expires_at.getTime() <= Date.now() + 30_000) {
-        const rotated = await refreshStoredFieldGrant(config, row.refresh_token_cipher);
-        if (!rotated) throw new Error('field_grant_refresh_unknown');
-        access = rotated.access;
-        await db.query(`update ap.field_connections set access_token_cipher = $2,
-          refresh_token_cipher = $3, access_expires_at = now() + ($4::text || ' seconds')::interval,
-          updated_at = now() where id = $1`,
-        [connectionId, rotated.accessCipher, rotated.refreshCipher, rotated.expiresIn]);
-      } else access = unseal(row.access_token_cipher, config.tokenKey);
-      const transport = config.fetcher ?? fetch;
-      const response = await transport(`${resource(config)}/me`, {
-        headers: { authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(8000),
-      });
-      const me = response.ok ? object(await response.json()) : null;
-      if (!me || me.grantId !== row.field_grant_id
-        || me.organizationId !== row.field_organization_id || me.state !== 'active'
-        || !Array.isArray(me.scopes)) throw new Error('field_grant_invalid');
-      if (!(me.scopes as string[]).includes(requiredScope)) {
-        await db.query('commit');
-        return { ok: false, statusCode: 403, error: 'field_reauthorization_required' };
-      }
-    } catch {
-      await db.query('commit');
-      return { ok: false, statusCode: 503, error: 'field_grant_unknown' };
-    }
-    await db.query('commit');
-    return { ok: true, apOrganizationId: row.ap_organization_id,
-      fieldOrganizationId: row.field_organization_id, deploymentId: row.deployment_id,
-      access, apiUrl: resource(config), transport: config.fetcher ?? fetch };
-  } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
+  const row = found.rows[0];
+  if (!row) return { ok: false, statusCode: 404, error: 'connection_not_available' };
+  if (!row.scopes.includes(requiredScope))
+    return { ok: false, statusCode: 403, error: 'field_reauthorization_required' };
+  let access: string;
+  try {
+    access = await currentFieldAccess(runtime, config, connectionId, row);
+    const transport = config.fetcher ?? fetch;
+    const response = await transport(`${resource(config)}/me`, {
+      headers: { authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(8000),
+    });
+    const me = response.ok ? object(await response.json()) : null;
+    if (!me || me.grantId !== row.field_grant_id
+      || me.organizationId !== row.field_organization_id || me.state !== 'active'
+      || !Array.isArray(me.scopes)) throw new Error('field_grant_invalid');
+    if (!(me.scopes as string[]).includes(requiredScope))
+      return { ok: false, statusCode: 403, error: 'field_reauthorization_required' };
+  } catch {
+    return { ok: false, statusCode: 503, error: 'field_grant_unknown' };
+  }
+  return { ok: true, apOrganizationId: row.ap_organization_id,
+    fieldOrganizationId: row.field_organization_id, deploymentId: row.deployment_id,
+    access, apiUrl: resource(config), transport: config.fetcher ?? fetch };
 }
 async function inspectFieldGrant(runtime: BusinessRuntime, userId: string,
   connectionId: string, degradeOnFailure = true,
@@ -243,70 +270,54 @@ async function inspectFieldGrant(runtime: BusinessRuntime, userId: string,
   if (!uuid.test(connectionId)) return { ok: false, statusCode: 400, error: 'invalid_connection_id' };
   const config = runtime.fieldConnector;
   if (!config || !valid(config)) return { ok: false, statusCode: 503, error: 'blocked_integration' };
-  const db = await runtime.pool.connect();
-  let access = '';
-  let apOrganizationId = '';
-  let fieldGrantId = '';
-  let fieldOrganizationId = '';
+  // 연결 행을 잠그지 않고 읽는다. Field 호출 동안 pool client를 쥐지 않기 위해서다
+  const found = await runtime.pool.query<{ access_token_cipher: Buffer; refresh_token_cipher: Buffer;
+    access_expires_at: Date; ap_organization_id: string; field_grant_id: string;
+    field_organization_id: string; scopes: string[]; status: string }>(
+    `select c.access_token_cipher, c.refresh_token_cipher, c.access_expires_at,
+      c.ap_organization_id, c.field_grant_id, c.field_organization_id, c.scopes, c.status
+     from ap.field_connections c
+     join ap.memberships m on m.organization_id = c.ap_organization_id
+     join ap.oauth_selections s on s.id = c.ap_grant_id
+     where c.id = $1 and m.user_id = $2 and m.role = 'owner'
+       and s.revoked_at is null and s.actor_user_id = c.initiator_user_id
+       and exists (select 1 from "oauthRefreshToken" t
+         where t."referenceId" = s.id::text and t."clientId" = s.client_id
+           and t."userId" = s.actor_user_id and t.revoked is null
+           and t."expiresAt" > now())`, [connectionId, userId]);
+  const connection = found.rows[0];
+  if (!connection) return { ok: false, statusCode: 404, error: 'connection_not_found' };
+  // degraded 연결도 다시 확인할 수 있어야 복구된다
+  if (connection.status !== 'review_required' && connection.status !== 'degraded')
+    return { ok: false, statusCode: 409, error: 'connection_not_ready', status: connection.status };
+  const apOrganizationId = connection.ap_organization_id;
+  const fieldGrantId = connection.field_grant_id;
+  const fieldOrganizationId = connection.field_organization_id;
+  const transport = config.fetcher ?? fetch;
+  let access: string;
   try {
-    await db.query('begin');
-    const found = await db.query<{ access_token_cipher: Buffer; refresh_token_cipher: Buffer;
-      access_expires_at: Date; ap_organization_id: string; field_grant_id: string;
-      field_organization_id: string; scopes: string[]; status: string }>(
-      `select c.access_token_cipher, c.refresh_token_cipher, c.access_expires_at,
-        c.ap_organization_id, c.field_grant_id, c.field_organization_id, c.scopes, c.status
-       from ap.field_connections c
-       join ap.memberships m on m.organization_id = c.ap_organization_id
-       join ap.oauth_selections s on s.id = c.ap_grant_id
-       where c.id = $1 and m.user_id = $2 and m.role = 'owner'
-         and s.revoked_at is null and s.actor_user_id = c.initiator_user_id
-         and exists (select 1 from "oauthRefreshToken" t
-           where t."referenceId" = s.id::text and t."clientId" = s.client_id
-             and t."userId" = s.actor_user_id and t.revoked is null
-             and t."expiresAt" > now()) for update of c`, [connectionId, userId]);
-    const connection = found.rows[0];
-    if (!connection) {
-      await db.query('rollback');
-      return { ok: false, statusCode: 404, error: 'connection_not_found' };
-    }
-    if (connection.status !== 'review_required') {
-      await db.query('rollback');
-      return { ok: false, statusCode: 409, error: 'connection_not_ready', status: connection.status };
-    }
-    apOrganizationId = connection.ap_organization_id;
-    fieldGrantId = connection.field_grant_id;
-    fieldOrganizationId = connection.field_organization_id;
-    const transport = config.fetcher ?? fetch;
-    try {
-      if (connection.access_expires_at.getTime() <= Date.now() + 30_000) {
-        const rotated = await refreshStoredFieldGrant(config, connection.refresh_token_cipher);
-        if (!rotated) throw new Error('field_grant_refresh_unknown');
-        access = rotated.access;
-        await db.query(`update ap.field_connections set access_token_cipher = $2,
-          refresh_token_cipher = $3, access_expires_at = now() + ($4::text || ' seconds')::interval,
-          updated_at = now() where id = $1`,
-        [connectionId, rotated.accessCipher, rotated.refreshCipher, rotated.expiresIn]);
-      } else access = unseal(connection.access_token_cipher, config.tokenKey);
-      const probe = await transport(`${resource(config)}/me`, {
-        headers: { authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(8000),
-      });
-      const me = probe.ok ? object(await probe.json()) : null;
-      if (!me || me.grantId !== fieldGrantId || me.organizationId !== fieldOrganizationId
-        || me.state !== 'active' || !Array.isArray(me.scopes)
-        || !requiredScopes.every(scope => (me.scopes as string[]).includes(scope)
-          && connection.scopes.includes(scope))) throw new Error('field_grant_invalid');
-    } catch {
-      if (degradeOnFailure) await db.query(
-        "update ap.field_connections set status = 'degraded', updated_at = now() where id = $1",
-        [connectionId]);
-      await db.query('commit');
-      return { ok: false, statusCode: 503, error: 'field_grant_refresh_unknown' };
-    }
-    await db.query('commit');
+    access = await currentFieldAccess(runtime, config, connectionId, connection);
+    const probe = await transport(`${resource(config)}/me`, {
+      headers: { authorization: `Bearer ${access}` }, signal: AbortSignal.timeout(8000),
+    });
+    if (probe.status === 401 || probe.status === 403) throw new FieldGrantRejected('field_grant_rejected');
+    const me = probe.ok ? object(await probe.json()) : null;
+    if (!me) throw new Error('field_grant_unknown');
+    if (me.grantId !== fieldGrantId || me.organizationId !== fieldOrganizationId
+      || me.state !== 'active' || !Array.isArray(me.scopes)
+      || !requiredScopes.every(scope => (me.scopes as string[]).includes(scope)
+        && connection.scopes.includes(scope))) throw new FieldGrantRejected('field_grant_invalid');
   } catch (error) {
-    await db.query('rollback');
-    throw error;
-  } finally { db.release(); }
+    // 확정 인증 실패만 degraded로 기록한다. timeout·5xx 같은 일시 장애는 상태를 바꾸지 않는다
+    if (degradeOnFailure && error instanceof FieldGrantRejected) await runtime.pool.query(
+      "update ap.field_connections set status = 'degraded', updated_at = now() where id = $1 and status = 'review_required'",
+      [connectionId]);
+    return { ok: false, statusCode: 503, error: 'field_grant_refresh_unknown' };
+  }
+  // 재검증에 성공하면 degraded 연결을 다시 사용 가능 상태로 되돌린다
+  if (connection.status === 'degraded') await runtime.pool.query(
+    "update ap.field_connections set status = 'review_required', updated_at = now() where id = $1 and status = 'degraded'",
+    [connectionId]);
   return { ok: true, apOrganizationId, fieldOrganizationId, fieldGrantId, access,
     apiUrl: resource(config), transport: config.fetcher ?? fetch };
 }
