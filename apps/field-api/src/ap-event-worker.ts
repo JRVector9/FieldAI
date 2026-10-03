@@ -6,8 +6,12 @@ import { createFieldInquiryMediaStore } from './inquiry-media.js';
 import { copyExternalRequestAttachmentOnce } from './external-request-attachment-worker.js';
 import { deliverFactsChangeOnce, reconcileFactsChangeDeliveries } from './facts-change-delivery.js';
 import { assertProductionProfile } from './production-profile.js';
+import { fieldSignatureSendVersion } from './ap-signature.js';
 
 assertProductionProfile();
+// 발신 서명 버전 설정을 시작 시 확인한다. 잘못된 값이면 여기서 멈춘다.
+const signatureSendVersion = fieldSignatureSendVersion();
+process.stdout.write(`Field AP event worker: signature send version v${signatureSendVersion}\n`);
 if (!process.env.FIELD_DATABASE_URL) throw new Error('FIELD_DATABASE_URL is required');
 const connector = apConnectorFromEnvironment();
 if (!connector) throw new Error('Field AP connector configuration is required');

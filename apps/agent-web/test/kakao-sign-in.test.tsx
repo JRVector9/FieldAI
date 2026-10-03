@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { kakaoAuthorizeUrl, kakaoErrorMessage, kakaoProviderStateFrom, kakaoReturnFromSearch,
-  kakaoUnavailableReason } from '../src/agent-kakao-sign-in';
+import { kakaoAuthorizeUrl, kakaoCallbackUrls, kakaoErrorMessage, kakaoProviderStateFrom, kakaoReturnFromSearch,
+  kakaoUnavailableReason, searchWithoutKakaoReturn } from '../src/agent-kakao-sign-in';
 
 test('AP Kakao button is enabled only for a configured provider; other states keep an honest reason', () => {
   assert.equal(kakaoProviderStateFrom(200, { kakao: 'configured' }), 'configured');
@@ -39,4 +39,25 @@ test('AP Kakao sign-in only navigates to the Kakao authorize origin', () => {
   assert.equal(kakaoAuthorizeUrl({ url: 'https://evil.example/oauth/authorize' }), null);
   assert.equal(kakaoAuthorizeUrl({ url: 'javascript:alert(1)' }), null);
   assert.equal(kakaoAuthorizeUrl({}), null);
+});
+
+test('AP Kakao return cleanup strips only the Kakao markers and keeps the signed connect query', () => {
+  const signed = 'client_id=c1&scope=openid+offline_access&exp=4102444800&sig=s1';
+  assert.equal(searchWithoutKakaoReturn(`?${signed}&auth_error=kakao&error=account_not_linked&error_description=x`), `?${signed}`);
+  assert.equal(searchWithoutKakaoReturn(`?${signed}&two_factor=kakao`), `?${signed}`);
+  assert.equal(new URLSearchParams(searchWithoutKakaoReturn(`?${signed}&two_factor=kakao`)).get('scope'), 'openid offline_access');
+  assert.equal(searchWithoutKakaoReturn('?auth_error=kakao&error=access_denied'), '');
+  assert.equal(searchWithoutKakaoReturn(''), '');
+});
+
+test('AP Kakao callbackPath maps to callback and error URLs; default stays on the workspace', () => {
+  assert.deepEqual(kakaoCallbackUrls(undefined, '?client_id=c1&sig=s1'),
+    { callbackURL: '/workspace', errorCallbackURL: '/workspace?auth_error=kakao' });
+  assert.deepEqual(kakaoCallbackUrls('/connect/sign-in', '?client_id=c1&sig=s1'),
+    { callbackURL: '/connect/sign-in?client_id=c1&sig=s1', errorCallbackURL: '/connect/sign-in?client_id=c1&sig=s1&auth_error=kakao' });
+  // 이전 카카오 실패 표시가 남아 있어도 다음 시도 주소에는 싣지 않는다.
+  assert.deepEqual(kakaoCallbackUrls('/connect/sign-in', '?client_id=c1&sig=s1&auth_error=kakao&error=access_denied'),
+    { callbackURL: '/connect/sign-in?client_id=c1&sig=s1', errorCallbackURL: '/connect/sign-in?client_id=c1&sig=s1&auth_error=kakao' });
+  assert.deepEqual(kakaoCallbackUrls('/connect/sign-in', ''),
+    { callbackURL: '/connect/sign-in', errorCallbackURL: '/connect/sign-in?auth_error=kakao' });
 });

@@ -1,9 +1,11 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { unsealFieldEventSecret, type FieldConnectorConfig } from './field-connector.js';
+import { apToFieldSigning } from './field-signature.js';
 
 type Claim = { id: string; connection_id: string; body: string; attempts: number };
-// Field 401은 시계 오차(±5분)로도 날 수 있어 이 횟수까지는 백오프 재시도하고, 넘으면 blocked로 멈춘다
+// Field 401은 시계 오차(±5분)·서명 버전 불일치(구버전 수신자)로도 날 수 있어 이 횟수까지는 백오프 재시도하고, 넘으면 blocked로 멈춘다.
+// v2 발신이 401을 받아도 v1로 자동 전환하지 않는다(운영자가 AP_EVENT_SIGNATURE_SEND_VERSION으로만 정한다)
 export const AUTH_REJECT_RETRY_LIMIT = 5;
 type Route = { field_issuer: string; status: string; event_key_id: string | null;
   event_secret_cipher: Buffer | null };
@@ -32,10 +34,11 @@ export async function enqueueFieldAgentEvent(db: PoolClient, input: { organizati
   return eventId;
 }
 
-// Field 수신함 검증과 같은 서명: HMAC-SHA256(연결 비밀, `${timestamp}.${event_id}.` + 원문 바이트)
-function signFieldAgentEvent(secret: Buffer, timestamp: string, eventId: string, raw: Buffer) {
+// Field 수신함 검증과 같은 서명: HMAC-SHA256(연결 비밀, `${prefix}${timestamp}.${event_id}.` + 원문 바이트).
+// prefix는 v2면 `v2:ap->field.`, 전환 기간 v1이면 빈 문자열이다(AP_EVENT_SIGNATURE_SEND_VERSION)
+function signFieldAgentEvent(secret: Buffer, prefix: string, timestamp: string, eventId: string, raw: Buffer) {
   return createHmac('sha256', secret)
-    .update(Buffer.concat([Buffer.from(`${timestamp}.${eventId}.`), raw])).digest('hex');
+    .update(Buffer.concat([Buffer.from(`${prefix}${timestamp}.${eventId}.`), raw])).digest('hex');
 }
 
 // 발신함 한 건을 보낸다. 202 수신 영수증만 acked이며, 일시 장애는 같은 event_id·본문으로 재시도한다.
@@ -85,12 +88,13 @@ export async function deliverFieldAgentEventOnce(pool: Pool, config: FieldConnec
   if (secret.length !== 32) return finish('blocked', null, 'invalid_route_key');
   const raw = Buffer.from(claim.body, 'utf8');
   const timestamp = String(Math.floor(Date.now() / 1000));
+  const signing = apToFieldSigning();
   let response: Response;
   try {
     response = await (config.fetcher ?? fetch)(target, { method: 'POST',
       headers: { 'content-type': 'application/vnd.agent-event+json', 'x-event-id': claim.id,
-        'x-key-id': connection.event_key_id, 'x-timestamp': timestamp,
-        'x-signature': signFieldAgentEvent(secret, timestamp, claim.id, raw) },
+        'x-key-id': connection.event_key_id, 'x-timestamp': timestamp, ...signing.headers,
+        'x-signature': signFieldAgentEvent(secret, signing.prefix, timestamp, claim.id, raw) },
       body: raw, signal: AbortSignal.timeout(8000) });
   } catch { return finish('retry', null, 'delivery_unknown'); }
   if (response.status === 202) {

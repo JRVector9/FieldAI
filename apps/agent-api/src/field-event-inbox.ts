@@ -2,8 +2,10 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
 import type { BusinessRuntime } from './business.js';
-import { recordFieldReservationEvent, type ReservationEvent } from './field-actions.js';
-import { unsealFieldEventSecret } from './field-connector.js';
+import { customerNoticeEvents, readFieldNotificationRoute, recordFieldReservationEvent,
+  type FieldNotificationRoute, type ReservationEvent } from './field-actions.js';
+import { unsealFieldEventSecret, type FieldConnectorConfig } from './field-connector.js';
+import { acceptsV1FieldSignature, fieldToApSignaturePrefix } from './field-signature.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const topKeys = new Set(['spec_version', 'event_id', 'event_type', 'source_product', 'connection_id',
@@ -72,6 +74,9 @@ function parseFactsEnvelope(raw: Buffer): FactsChangedEnvelope | null {
 }
 
 export function registerFieldEventInboxRoutes(app: FastifyInstance, runtime: BusinessRuntime) {
+  // 시작 시 v1 서명 전환 모드를 남긴다. 잘못된 설정값은 여기서 부팅을 멈춘다.
+  app.log.info({ acceptV1: acceptsV1FieldSignature() },
+    'field event signature: v2 direction-bound required; v1 accepted only in transition mode');
   app.post('/integrations/v1/field-events', async (request, reply) => {
     const raw = request.body;
     if (!Buffer.isBuffer(raw) || raw.length > 65_536)
@@ -84,7 +89,8 @@ export function registerFieldEventInboxRoutes(app: FastifyInstance, runtime: Bus
     const keyId = request.headers['x-key-id'];
     const timestamp = request.headers['x-timestamp'];
     const signature = request.headers['x-signature'];
-    if (typeof eventId !== 'string' || eventId !== event.event_id
+    const signaturePrefix = fieldToApSignaturePrefix(request.headers['x-signature-version']);
+    if (signaturePrefix === null || typeof eventId !== 'string' || eventId !== event.event_id
       || typeof keyId !== 'string' || !uuid.test(keyId)
       || typeof timestamp !== 'string' || !/^\d{10}$/.test(timestamp)
       || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300
@@ -128,7 +134,8 @@ export function registerFieldEventInboxRoutes(app: FastifyInstance, runtime: Bus
       if (secret.length !== 32) {
         await db.query('rollback'); return reply.code(503).send({ error: 'event_route_unavailable' });
       }
-      const signed = Buffer.concat([Buffer.from(`${timestamp}.${eventId}.`), raw]);
+      // v2 원문은 `v2:field->ap.` 방향 접두사로 시작해 AP가 보낸 서명의 반사를 거부한다.
+      const signed = Buffer.concat([Buffer.from(`${signaturePrefix}${timestamp}.${eventId}.`), raw]);
       const expected = createHmac('sha256', secret).update(signed).digest();
       if (!timingSafeEqual(expected, Buffer.from(signature, 'hex'))) {
         await db.query('rollback'); return reply.code(401).send({ error: 'invalid_event_signature' });
@@ -181,12 +188,66 @@ type InboxRow = { id: string; source_event_id: string; connection_id: string;
 type ActionRow = { id: string; organization_id: string; inquiry_id: string;
   connection_id: string; reservation_id: string | null; state: string;
   route_generation: number | null; connection_status: string; revoked_at: Date | null;
-  route_closed: boolean };
+  route_closed: boolean; external_request_id: string | null; scopes: string[];
+  visitor_key_hash: string | null };
 type MirrorRow = { field_event_id: string; revision: number; event_type: string;
   state: string; occurred_at: Date; route_generation: number;
   start_at: Date | null; end_at: Date | null };
 
-export async function processFieldEventInboxOnce(pool: Pool): Promise<'empty' | 'processed' | 'deferred' | 'rejected'> {
+// (연결, 외부 요청)별 Field 알림 경로 조회 결과와 조회 시각. 일시 장애 결과는 담지 않는다.
+// 항목은 10초 안에서만 재사용한다(같은 배치의 연속 사건용). 그 사이 Field 경로가 바뀌어도 오래된 값으로 기록하지 않기 위해서다.
+// inboxId가 있는 항목은 그 수신함 행에만 쓴다(미루기 기한이 지나 route_unresolved로 닫는 경우)
+export type FieldRouteCache = Map<string, { route: FieldNotificationRoute | null; at: number; inboxId?: string }>;
+const ROUTE_CACHE_TTL_MS = 10_000;
+const ROUTE_CACHE_MAX_ENTRIES = 1000;
+// 확인키가 없는 상담은 연결 조회 자체가 성립하지 않으므로 조회 없이 생략(route_unknown)으로 기록한다
+const KEYLESS_ROUTE: FieldNotificationRoute = { owner: null, allowed: false, reason: 'route_unknown' };
+// 미루기 기한(24시간) 안에 경로를 확인하지 못한 사건은 AP 알림을 만들지 않고 이 사유로 닫는다
+const UNRESOLVED_ROUTE: FieldNotificationRoute = { owner: null, allowed: false, reason: 'route_unresolved' };
+function cacheRoute(cache: FieldRouteCache, key: string,
+  entry: { route: FieldNotificationRoute | null; at: number; inboxId?: string }) {
+  cache.delete(key);
+  // 크기 상한: 가장 오래 넣은 항목부터 버린다(Map은 넣은 순서를 유지한다)
+  if (cache.size >= ROUTE_CACHE_MAX_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  cache.set(key, entry);
+}
+type RouteLookup = { inboxId: string; key: string; inquiryId: string; visitorKeyHash: string;
+  action: Pick<ActionRow, 'connection_id' | 'external_request_id' | 'reservation_id'> };
+
+// 고객 알림을 만드는 Field 사건은 sync 경로처럼 기록 직전에 Field 알림 경로를 확인한다.
+// 조회는 DB 잠금·트랜잭션 밖에서 하고, 결과를 캐시에 둔 뒤 사건을 잠금 아래에서 처음부터 다시 검사한다
+export async function processFieldEventInboxOnce(pool: Pool, fieldConnector?: FieldConnectorConfig,
+  routeCache: FieldRouteCache = new Map()): Promise<'empty' | 'processed' | 'deferred' | 'rejected'> {
+  for (let lookups = 0; ; lookups++) {
+    const result = await processFieldEventInboxRow(pool, routeCache);
+    if (typeof result === 'string') return result;
+    // 한 호출의 경로 조회는 한 번으로 제한한다. 남은 사건은 다음 호출이 처리한다
+    if (lookups > 0) return 'deferred';
+    const route = await readFieldNotificationRoute({ pool, resolveUserId: async () => null, fieldConnector },
+      result.inquiryId, result.visitorKeyHash, result.action);
+    // 일시 장애·커넥터 미설정·AP 연결 조건 불충족(배포 일시중지·동의 없음·owner 멤버십 변경·refresh token 만료 등의 404)은
+    // 영구 생략으로 기록하지 않고, 사건을 claim·미러링하지 않은 채 상태를 그대로 두고 미룬다(오류 코드는 실제 원인).
+    // 간격은 수신 뒤 지난 시간만큼(30초부터 약 2배씩, 최대 1시간)이고, 기한은 수신 시각(received_at)부터 24시간이다.
+    // 첫 미루기 시각 대신 received_at을 쓰는 이유: 새 열 없이 기한을 정하고, 앞 revision을 기다린 시간까지 포함해
+    // 오래된 사건이 기한 없이 남지 않게 하기 위해서다. 기한이 지나면 AP 알림 없이 route_unresolved로 닫는다
+    if (route?.transient || route?.cause === 'connection_not_available') {
+      const deferred = await pool.query(`update ap.field_event_inbox set error_code = $2,
+        next_attempt_at = now() + least(greatest(now() - received_at, interval '30 seconds'), interval '1 hour')
+        where id = $1 and state in ('received','pending_gap') and received_at > now() - interval '24 hours'`,
+      [result.inboxId, route.cause ?? 'route_unknown']);
+      if (deferred.rowCount) return 'deferred';
+      cacheRoute(routeCache, result.key, { route: UNRESOLVED_ROUTE, at: Date.now(), inboxId: result.inboxId });
+      continue;
+    }
+    cacheRoute(routeCache, result.key, { route, at: Date.now() });
+  }
+}
+
+async function processFieldEventInboxRow(pool: Pool, routeCache: FieldRouteCache):
+  Promise<'empty' | 'processed' | 'deferred' | 'rejected' | RouteLookup> {
   const db = await pool.connect();
   try {
     await db.query('begin');
@@ -202,7 +263,9 @@ export async function processFieldEventInboxOnce(pool: Pool): Promise<'empty' | 
       `select a.id,a.organization_id,a.inquiry_id,a.connection_id,a.reservation_id,a.state,
         c.route_generation,c.status as connection_status,s.revoked_at,
         exists(select 1 from ap.field_notification_route_closures x
-          where x.action_request_id = a.id) as route_closed
+          where x.action_request_id = a.id) as route_closed,
+        a.external_request_id,c.scopes,
+        (select q.visitor_key_hash from ap.inquiries q where q.id = a.inquiry_id) as visitor_key_hash
        from ap.field_action_requests a
        join ap.field_connections c on c.id = a.connection_id
        join ap.oauth_selections s on s.id = c.ap_grant_id
@@ -260,13 +323,31 @@ export async function processFieldEventInboxOnce(pool: Pool): Promise<'empty' | 
         await db.query('commit'); return 'rejected';
       }
     } else {
+      // 새 고객 알림 사건이고 알림 경로 scope를 가진 활성 연결이면 확인한 Field 경로로만 기록한다(잠금을 놓고 먼저 조회).
+      // scope가 없거나 해제된 연결은 기존 규칙(세대 일치·종료 원장)을 따르며 경로를 조회하지 않는다
+      const routeKey = `${target.connection_id}:${target.external_request_id}`;
+      const routeRequired = customerNoticeEvents.has(row.event_type)
+        && target.connection_status === 'review_required'
+        && target.scopes.includes('field.notification_route.read');
+      let route: FieldNotificationRoute | null = null;
+      if (routeRequired) {
+        const cached = routeCache.get(routeKey);
+        if (target.visitor_key_hash === null) route = KEYLESS_ROUTE;
+        else if (cached && Date.now() - cached.at < ROUTE_CACHE_TTL_MS
+          && (!cached.inboxId || cached.inboxId === row.id)) route = cached.route;
+        else {
+          await db.query('rollback');
+          return { inboxId: row.id, key: routeKey, inquiryId: target.inquiry_id,
+            visitorKeyHash: target.visitor_key_hash, action: target };
+        }
+      }
       const event: ReservationEvent = { eventId: row.source_event_id, revision: row.revision,
         eventType: row.event_type, state: row.reservation_state,
         occurredAt: row.occurred_at.toISOString(), customerNotificationOwnerProduct: 'ap',
         routeGeneration: row.route_generation,
         ...(row.start_at ? { startAt: row.start_at.toISOString() } : {}),
         ...(row.end_at ? { endAt: row.end_at.toISOString() } : {}) };
-      await recordFieldReservationEvent(db, target, event);
+      await recordFieldReservationEvent(db, target, event, route);
     }
     await db.query(`update ap.field_event_inbox set state = 'processed',
       error_code = null,processed_at = now() where id = $1`, [row.id]);

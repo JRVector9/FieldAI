@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 import sharp from 'sharp';
 import { createFieldApp } from '../src/app.js';
 import { deliverApEventOnce, reconcileApEventDeliveries } from '../src/ap-event-delivery.js';
+import { acceptsV1ApSignature, fieldSignatureSendVersion } from '../src/ap-signature.js';
 import { copyExternalRequestAttachmentOnce } from '../src/external-request-attachment-worker.js';
 import { purgeExpiredInboundRecords } from '../src/retention-purge.js';
 
@@ -523,6 +524,8 @@ test('Field owner delegates only approved catalog facts to a selected OAuth clie
     assert.equal(await ownDeliveryCount(), 3);
     const deliveredIds: string[] = [];
     let loseAck = true;
+    // FIELD_EVENT_SIGNATURE_SEND_VERSION으로 고른 발신 서명 버전. '1'이면 헤더·접두사가 없어야 한다.
+    let expectedSendVersion: '1' | '2' = '2';
     const eventConnector = { issuer: 'http://127.0.0.1:4311/api/auth', clientId: 'test-ap',
       clientSecret: 'synthetic', tokenKey: connectorKey,
       redirectUri: 'http://127.0.0.1:4321/v1/connections/ap/callback',
@@ -535,8 +538,10 @@ test('Field owner delegates only approved catalog facts to a selected OAuth clie
         const headers = new Headers(init?.headers);
         assert.equal(headers.get('x-event-id'), event.event_id);
         assert.equal(headers.get('x-key-id'), eventKeyId);
+        // Field 사건 발신은 기본 v2(`v2:field->ap.` 방향 접두사)로, 전환 설정 v1이면 헤더·접두사 없이 서명한다.
+        assert.equal(headers.get('x-signature-version'), expectedSendVersion === '2' ? '2' : null);
         assert.equal(headers.get('x-signature'), createHmac('sha256', eventSecret)
-          .update(Buffer.concat([Buffer.from(`${headers.get('x-timestamp')}.${event.event_id}.`), body]))
+          .update(Buffer.concat([Buffer.from(`${expectedSendVersion === '2' ? 'v2:field->ap.' : ''}${headers.get('x-timestamp')}.${event.event_id}.`), body]))
           .digest('hex'));
         assert.equal(event.data.resource_id, accepted.json().reservationId);
         assert.doesNotMatch(body.toString('utf8'), /010-2222-3333|전달 고객|일정 취소/);
@@ -544,7 +549,11 @@ test('Field owner delegates only approved catalog facts to a selected OAuth clie
         if (loseAck) { loseAck = false; throw new Error('ack_lost'); }
         return Response.json({ received: true }, { status: 202 });
       } };
-    assert.equal(await deliverApEventOnce(pool, eventConnector), 'retry');
+    // 첫 시도는 전환 설정 v1로 보낸다. 이후 시도와 재전송은 기본 v2다.
+    process.env.FIELD_EVENT_SIGNATURE_SEND_VERSION = '1'; expectedSendVersion = '1';
+    try {
+      assert.equal(await deliverApEventOnce(pool, eventConnector), 'retry');
+    } finally { delete process.env.FIELD_EVENT_SIGNATURE_SEND_VERSION; expectedSendVersion = '2'; }
     assert.equal(await deliverApEventOnce(pool, eventConnector), 'acked');
     assert.equal(await deliverApEventOnce(pool, eventConnector), 'acked');
     await pool.query(`update field.ap_event_deliveries set next_attempt_at = now()
@@ -1470,16 +1479,21 @@ test('Field ID 조회·고객 제안 결정·알림 경로·AP 사건 수신함�
       externalRequestId: first.externalRequestId, reservationId: first.reservationId,
       owner: 'field', generation: 2, allowed: false, reason: 'field_route_active' });
 
+    // prefix ''는 v1 원문, versionHeader null은 X-Signature-Version 헤더 생략이다. 기본은 AP 발신과 같은 v2다.
     const send = (envelope: Record<string, unknown>, options: { keyId?: string; timestamp?: string;
-      secret?: Buffer; eventId?: string; contentType?: string } = {}) => {
+      secret?: Buffer; eventId?: string; contentType?: string; prefix?: string;
+      versionHeader?: string | null } = {}) => {
       const raw = Buffer.from(JSON.stringify(envelope));
       const timestamp = options.timestamp ?? String(Math.floor(Date.now() / 1000));
       const eventId = options.eventId ?? String(envelope.event_id);
+      const versionHeader = options.versionHeader === undefined ? '2' : options.versionHeader;
       return app.inject({ method: 'POST', url: '/integrations/v1/webhooks/agent', payload: raw,
         headers: { 'content-type': options.contentType ?? 'application/vnd.agent-event+json',
           'x-event-id': eventId, 'x-key-id': options.keyId ?? eventKeyId, 'x-timestamp': timestamp,
+          ...(versionHeader === null ? {} : { 'x-signature-version': versionHeader }),
           'x-signature': createHmac('sha256', options.secret ?? eventSecret)
-            .update(Buffer.concat([Buffer.from(`${timestamp}.${eventId}.`), raw])).digest('hex') } });
+            .update(Buffer.concat([Buffer.from(`${options.prefix ?? 'v2:ap->field.'}${timestamp}.${eventId}.`), raw]))
+            .digest('hex') } });
     };
     const updated = { spec_version: '1.0', event_id: randomUUID(), event_type: 'agent.conversation.updated',
       source_product: 'agent_platform', connection_id: connectionId, aggregate_type: 'conversation',
@@ -1494,10 +1508,44 @@ test('Field ID 조회·고객 제안 결정·알림 경로·AP 사건 수신함�
     assert.equal((await send({ ...updated, source_product: 'field' })).statusCode, 400);
     assert.equal((await send({ ...updated, aggregate_type: 'action' })).statusCode, 400);
     assert.equal((await send({ ...updated, data: { ...updated.data, phone: '010-3333-4444' } })).statusCode, 400);
+    // 같은 연결 키라도 Field 방향(field->ap)으로 서명된 v2 사건은 반사로 보고 거부한다.
+    assert.equal((await send(updated, { prefix: 'v2:field->ap.' })).statusCode, 401);
+    // v1 원문에 v2 헤더를 붙이거나 알 수 없는 버전을 보내면 거부한다.
+    assert.equal((await send(updated, { prefix: '' })).statusCode, 401);
+    assert.equal((await send(updated, { versionHeader: '3' })).statusCode, 401);
+    process.env.FIELD_EVENT_SIGNATURE_ACCEPT_V1 = 'false';
+    try {
+      assert.equal((await send(updated, { prefix: '', versionHeader: null })).statusCode, 401);
+    } finally { delete process.env.FIELD_EVENT_SIGNATURE_ACCEPT_V1; }
     const received = await send(updated);
     assert.equal(received.statusCode, 202, received.body);
     assert.deepEqual(received.json(), { received: true });
     assert.equal((await send(updated)).statusCode, 202);
+    // v1(헤더·접두사 없음)은 전환 설정이 켜졌을 때만 받는다. 같은 사건 재전송이라 202 영수증이다.
+    process.env.FIELD_EVENT_SIGNATURE_ACCEPT_V1 = 'true';
+    try {
+      assert.equal((await send(updated, { prefix: '', versionHeader: null })).statusCode, 202);
+      process.env.FIELD_EVENT_SIGNATURE_ACCEPT_V1 = 'false';
+      assert.equal((await send(updated, { prefix: '', versionHeader: null })).statusCode, 401);
+    } finally { delete process.env.FIELD_EVENT_SIGNATURE_ACCEPT_V1; }
+    // 미설정 기본값: mock/sandbox는 전환 허용, live는 거부, 잘못된 값은 부팅 실패. 비교는 상수시간을 유지한다.
+    assert.equal(acceptsV1ApSignature({ FIELD_PROFILE: 'mock' }), true);
+    assert.equal(acceptsV1ApSignature({ FIELD_PROFILE: 'sandbox' }), true);
+    assert.equal(acceptsV1ApSignature({ FIELD_PROFILE: 'live' }), false);
+    assert.equal(acceptsV1ApSignature({ FIELD_PROFILE: 'live', FIELD_EVENT_SIGNATURE_ACCEPT_V1: 'true' }), true);
+    assert.equal(acceptsV1ApSignature({ FIELD_PROFILE: 'mock', FIELD_EVENT_SIGNATURE_ACCEPT_V1: 'false' }), false);
+    assert.throws(() => acceptsV1ApSignature({ FIELD_PROFILE: 'mock', FIELD_EVENT_SIGNATURE_ACCEPT_V1: 'yes' }),
+      /invalid_FIELD_EVENT_SIGNATURE_ACCEPT_V1/);
+    // 발신 버전: 미설정은 v2(live 포함), '1'은 전환 기간 v1, 그 외 값은 워커 시작 실패다.
+    assert.equal(fieldSignatureSendVersion({ FIELD_PROFILE: 'live' }), 2);
+    assert.equal(fieldSignatureSendVersion({ FIELD_PROFILE: 'live', FIELD_EVENT_SIGNATURE_SEND_VERSION: '2' }), 2);
+    assert.equal(fieldSignatureSendVersion({ FIELD_PROFILE: 'live', FIELD_EVENT_SIGNATURE_SEND_VERSION: '1' }), 1);
+    for (const invalid of ['', '3', 'v2'])
+      assert.throws(() => fieldSignatureSendVersion({ FIELD_EVENT_SIGNATURE_SEND_VERSION: invalid }),
+        /invalid_FIELD_EVENT_SIGNATURE_SEND_VERSION/);
+    assert.match(readFileSync(resolve('src', 'ap-event-worker.ts'), 'utf8'), /fieldSignatureSendVersion\(\)/);
+    for (const file of ['ap-webhook-inbox.ts', 'ap-connection-revoke-receiver.ts'])
+      assert.match(readFileSync(resolve('src', file), 'utf8'), /timingSafeEqual\(expected, Buffer\.from\(signature, 'hex'\)\)/);
     assert.equal((await send({ ...updated, aggregate_version: 4 })).statusCode, 409);
     const inbox = await pool.query<{ state: string; event_type: string; processed_at: Date | null }>(
       `select state,event_type,processed_at from field.ap_webhook_inbox where source_event_id = $1`, [updated.event_id]);

@@ -124,7 +124,8 @@ test('AP public integrator preview contract has resolvable schemas and explicit 
 
 
 test('preview.10 pins nullable current snapshot receipt metadata without changing the preview.9 write subset',()=>{
-  assert.equal(document.info.version,'1.0.0-preview.10');
+  // preview.11은 서명 원문만 바꾸므로 preview.10 출처 수신 메타데이터 고정은 그대로 유지한다.
+  assert.equal(document.info.version,'1.0.0-preview.11');
   const source=document.components.schemas.SourceRevision;
   assert.ok(source.required.includes('syncedAt'));
   assert.deepEqual(source.properties.syncedAt.type,['string','null']);
@@ -134,4 +135,26 @@ test('preview.10 pins nullable current snapshot receipt metadata without changin
   assert.match(source.properties.syncedAt.description,/matching the current source revision/);
   assert.equal(document.paths['/integrations/v1/connections'].post.parameters.find(p=>p.name==='Idempotency-Key').schema.format,'uuid');
   assert.equal(document.components.schemas.PublicInstallationConnection.properties.state.const,'installation_only');
+});
+
+test('preview.11 binds Field event and revoke signatures to the field->ap direction', () => {
+  assert.equal(document.info.version, '1.0.0-preview.11');
+  const schemes = document.components.securitySchemes;
+  assert.match(schemes.fieldEventHmac.description, /v2:field->ap\.timestamp\.event_id\.raw_body_bytes/);
+  assert.match(schemes.fieldRevokeHmac.description, /v2:field->ap\.timestamp\.revocation_id\.connection_id\.revoke/);
+  for (const name of ['fieldEventHmac', 'fieldRevokeHmac']) {
+    assert.match(schemes[name].description, /X-Signature-Version: 2/);
+    assert.match(schemes[name].description, /AP_EVENT_SIGNATURE_ACCEPT_V1/);
+    assert.match(schemes[name].description, /default true in mock\/sandbox, false in live/);
+    assert.match(schemes[name].description, /ap->field direction is rejected/);
+  }
+  for (const path of ['/integrations/v1/field-events', '/integrations/v1/connections/{id}/revoke']) {
+    const version = document.paths[path].post.parameters.find(parameter => parameter.name === 'X-Signature-Version');
+    assert.equal(version.in, 'header');
+    assert.equal(version.required, false);
+    assert.deepEqual(version.schema.enum, ['2']);
+  }
+  // 단방향 전용 서명(복구 조회·알림 경로 종료)은 이번 버전에서 바뀌지 않는다.
+  assert.doesNotMatch(schemes.fieldRecoveryHmac.description, /v2:/);
+  assert.doesNotMatch(schemes.fieldRouteCloseHmac.description, /v2:/);
 });

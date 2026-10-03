@@ -2,19 +2,19 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Agent Platform delegated integrator API",
-    "version": "1.0.0-preview.10",
-    "description": "AP bearer reads, selected deployment discovery, delegated conversation replies and source refresh requests, action-bound authorized attachment bytes, signed Field reservation/facts event inbox, signed connection revoke, post-revoke event status recovery, and durable reservation notification route closure. Adds consent-bound installation-only public connections and origin-verified owned_embed preparation and management; native Field bidirectional bindings and selected conversation resources remain unchanged."
+    "version": "1.0.0-preview.11",
+    "description": "AP bearer reads, selected deployment discovery, delegated conversation replies and source refresh requests, action-bound authorized attachment bytes, signed Field reservation/facts event inbox, signed connection revoke, post-revoke event status recovery, and durable reservation notification route closure. Adds consent-bound installation-only public connections and origin-verified owned_embed preparation and management; native Field bidirectional bindings and selected conversation resources remain unchanged. preview.11 binds the Field event and Field revoke HMAC base strings to the field->ap direction (X-Signature-Version: 2) so an AP-originated signature cannot be reflected back to AP with the shared connection key."
   },
   "servers": [{ "url": "/" }],
   "components": {
     "securitySchemes": {
       "fieldEventHmac": {
         "type": "apiKey", "in": "header", "name": "X-Signature",
-        "description": "HMAC-SHA256 over timestamp.event_id.raw_body_bytes using the connection key selected by X-Key-Id. X-Event-Id and X-Timestamp are required."
+        "description": "HMAC-SHA256 over the v2 base string v2:field->ap.timestamp.event_id.raw_body_bytes (UTF-8 prefix followed by the exact raw body bytes) using the connection key selected by X-Key-Id. X-Event-Id, X-Timestamp and X-Signature-Version: 2 are required from senders. The deprecated v1 base string timestamp.event_id.raw_body_bytes without X-Signature-Version is accepted only during the transition window controlled by AP_EVENT_SIGNATURE_ACCEPT_V1 (default true in mock/sandbox, false in live). A v2 signature for the ap->field direction is rejected. Signatures are compared in constant time."
       },
       "fieldRevokeHmac": {
         "type": "apiKey", "in": "header", "name": "X-Signature",
-        "description": "HMAC-SHA256 over timestamp.revocation_id.connection_id.revoke using the connection key selected by X-Key-Id. X-Revocation-Id and X-Timestamp are required. The same revocation ID can be retried."
+        "description": "HMAC-SHA256 over the v2 base string v2:field->ap.timestamp.revocation_id.connection_id.revoke using the connection key selected by X-Key-Id. X-Revocation-Id, X-Timestamp and X-Signature-Version: 2 are required from senders. The deprecated v1 base string timestamp.revocation_id.connection_id.revoke without X-Signature-Version is accepted only while AP_EVENT_SIGNATURE_ACCEPT_V1 is true (default true in mock/sandbox, false in live). A v2 signature for the ap->field direction is rejected. The same revocation ID can be retried."
       },
       "fieldRecoveryHmac": {
         "type": "apiKey", "in": "header", "name": "X-Signature",
@@ -1349,7 +1349,8 @@
         "parameters": [
           { "in": "header", "name": "X-Event-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
           { "in": "header", "name": "X-Key-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
-          { "in": "header", "name": "X-Timestamp", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{10}$" } }
+          { "in": "header", "name": "X-Timestamp", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{10}$" } },
+          { "in": "header", "name": "X-Signature-Version", "required": false, "schema": { "type": "string", "enum": ["2"] }, "description": "Senders MUST send 2 (direction-bound field->ap base string). Absent means the deprecated v1 base string, accepted only while AP_EVENT_SIGNATURE_ACCEPT_V1 is true (default true in mock/sandbox, false in live). Any other value is rejected with 401." }
         ],
         "requestBody": { "required": true, "content": { "application/vnd.field-event+json": {
           "schema": { "oneOf": [
@@ -1375,7 +1376,8 @@
           { "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } },
           { "in": "header", "name": "X-Key-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
           { "in": "header", "name": "X-Revocation-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
-          { "in": "header", "name": "X-Timestamp", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{10}$" } }
+          { "in": "header", "name": "X-Timestamp", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{10}$" } },
+          { "in": "header", "name": "X-Signature-Version", "required": false, "schema": { "type": "string", "enum": ["2"] }, "description": "Senders MUST send 2 (direction-bound field->ap base string). Absent means the deprecated v1 base string, accepted only while AP_EVENT_SIGNATURE_ACCEPT_V1 is true (default true in mock/sandbox, false in live). Any other value is rejected with 401." }
         ],
         "security": [{ "fieldRevokeHmac": [] }],
         "responses": {

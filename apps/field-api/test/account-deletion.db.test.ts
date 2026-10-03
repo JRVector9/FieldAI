@@ -68,6 +68,14 @@ test('Field organization deletion unpublishes, cools, cancels, removes site data
     await pool.query(`insert into field.site_assets(id,organization_id,object_key,content_type,byte_size,width,height,sha256,uploaded_by)
       values ($1,$2,$3,'image/webp',15,10,10,$4,$5)`, [asset, org, objectKey, hash('synthetic-image'), owner]);
     await pool.query('insert into field.site_release_assets(release_id,asset_id) values ($1,$2)', [release, asset]);
+    // 삭제 요청 중(state='deleting', 추가)인 사진도 조직 삭제 실행기가 같은 잠금 아래에서 저장소 객체와 행을 함께 지운다.
+    // 작업자가 멈춘 행('infinity')이어도 남지 않는다.
+    const deletingAsset = randomUUID(), deletingKey = `${org}/${deletingAsset}.webp`;
+    await siteMedia.put(deletingKey, Buffer.from('deleting-image'));
+    await pool.query(`insert into field.site_assets(id,organization_id,object_key,content_type,byte_size,width,height,sha256,uploaded_by,
+      state,deletion_requested_at,deletion_next_attempt_at,deletion_error)
+      values ($1,$2,$3,'image/webp',14,10,10,$4,$5,'deleting',now(),'infinity','media_permission')`,
+    [deletingAsset, org, deletingKey, hash('deleting-image'), owner]);
     await pool.query(`insert into field.inquiries(id,organization_id,catalog_revision,service_id,service_snapshot,customer_name,customer_phone,
       visitor_key_hash,state,consent_at) values ($1,$2,1,$3,$4::jsonb,'Customer','010-4567-7893',$5,'needs_owner',now())`,
     [inquiry, org, service, snapshot, hash(inquiryKey)]);
@@ -146,7 +154,7 @@ test('Field organization deletion unpublishes, cools, cancels, removes site data
     assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'empty');
     const steps = (await pool.query('select status,steps from field.organization_deletion_requests where id=$1', [requestId])).rows[0];
     assert.equal(steps.status, 'executed');
-    assert.equal(steps.steps.executed.siteAssetsDeleted, 1);
+    assert.equal(steps.steps.executed.siteAssetsDeleted, 2);
     assert.equal(files.size, 0);
     for (const table of ['site_releases', 'site_drafts'])
       assert.equal((await pool.query(`select count(*)::int as n from field.${table} where site_id=$1`, [site])).rows[0].n, 0);

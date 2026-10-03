@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { FieldConnectorConfig } from './field-connector.js';
 import { unsealFieldEventSecret } from './field-connector.js';
+import { apToFieldSigning } from './field-signature.js';
 
 type Claim = { id: string; connection_id: string; attempts: number };
 type Source = { field_issuer: string; status: string; event_key_id: string | null;
@@ -50,13 +51,15 @@ export async function deliverFieldConnectionRevokeOnce(pool: Pool, config: Field
   catch { return finish('blocked', null, 'route_key_unreadable'); }
   if (secret.length !== 32) return finish('blocked', null, 'invalid_route_key');
   const timestamp = String(Math.floor(Date.now() / 1000));
+  // 발신 서명 버전은 AP_EVENT_SIGNATURE_SEND_VERSION(기본 2)을 따른다. v1은 접두사·버전 헤더가 없다
+  const signing = apToFieldSigning();
   const signature = createHmac('sha256', secret)
-    .update(`${timestamp}.${claim.id}.${claim.connection_id}.revoke`).digest('hex');
+    .update(`${signing.prefix}${timestamp}.${claim.id}.${claim.connection_id}.revoke`).digest('hex');
   let response: Response;
   try {
     response = await (config.fetcher ?? fetch)(target, { method: 'POST',
       headers: { 'x-key-id': connection.event_key_id, 'x-revocation-id': claim.id,
-        'x-timestamp': timestamp, 'x-signature': signature },
+        'x-timestamp': timestamp, ...signing.headers, 'x-signature': signature },
       signal: AbortSignal.timeout(8000) });
   } catch { return finish('retry', null, 'delivery_unknown'); }
   if (response.status === 200) {

@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
 import { unsealApEventSecret } from './integrator-routes.js';
 import { commitReceivedApRevocation } from './ap-connection-revoke-receiver.js';
+import { acceptsV1ApSignature, apToFieldSignaturePrefix } from './ap-signature.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_EVENT_BYTES = 65_536;
@@ -46,6 +47,9 @@ function parseAgentEvent(raw: Buffer): AgentEvent | null {
 }
 
 export function registerApWebhookInbox(app: FastifyInstance, runtime: FieldBusinessRuntime) {
+  // 시작 시 v1 서명 전환 모드를 남긴다. 잘못된 설정값은 여기서 부팅을 멈춘다.
+  app.log.info({ acceptV1: acceptsV1ApSignature() },
+    'AP event signature: v2 direction-bound required; v1 accepted only in transition mode');
   // 서명은 원문 바이트에 대해 계산하므로 이 경로에서만 전용 content type을 버퍼로 받는다.
   app.register(async scope => {
     scope.addContentTypeParser('application/vnd.agent-event+json',
@@ -60,7 +64,8 @@ export function registerApWebhookInbox(app: FastifyInstance, runtime: FieldBusin
       const keyId = request.headers['x-key-id'];
       const timestamp = request.headers['x-timestamp'];
       const signature = request.headers['x-signature'];
-      if (typeof eventId !== 'string' || eventId !== event.event_id
+      const signaturePrefix = apToFieldSignaturePrefix(request.headers['x-signature-version']);
+      if (signaturePrefix === null || typeof eventId !== 'string' || eventId !== event.event_id
         || typeof keyId !== 'string' || !uuid.test(keyId)
         || typeof timestamp !== 'string' || !/^\d{10}$/.test(timestamp)
         || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300
@@ -89,8 +94,9 @@ export function registerApWebhookInbox(app: FastifyInstance, runtime: FieldBusin
         if (secret.length !== 32) {
           await db.query('rollback'); return reply.code(503).send({ error: 'event_route_unavailable' });
         }
+        // v2 원문은 `v2:ap->field.` 방향 접두사로 시작해 Field가 보낸 서명의 반사를 거부한다.
         const expected = createHmac('sha256', secret)
-          .update(Buffer.concat([Buffer.from(`${timestamp}.${eventId}.`), raw])).digest();
+          .update(Buffer.concat([Buffer.from(`${signaturePrefix}${timestamp}.${eventId}.`), raw])).digest();
         if (!timingSafeEqual(expected, Buffer.from(signature, 'hex'))) {
           await db.query('rollback'); return reply.code(401).send({ error: 'invalid_event_signature' });
         }

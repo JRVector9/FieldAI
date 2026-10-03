@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { BetterAuthPlugin } from 'better-auth';
-import { APIError, createAuthMiddleware } from 'better-auth/api';
+import { APIError, createAuthMiddleware, getOAuthState } from 'better-auth/api';
 import type { twoFactor } from 'better-auth/plugins/two-factor';
 
 // Field 전용 카카오 로그인 설정. AP 카카오 앱·키·세션과 공유하지 않는다(결정 19).
@@ -45,8 +45,24 @@ export function rejectUnverifiedKakaoUser(user: { emailVerified?: boolean | null
     throw new APIError('FORBIDDEN', { code: 'kakao_email_unverified', message: 'Kakao email is not verified' });
 }
 
+// 2단계 인증 대기 시 돌아갈 Field 웹 주소. 외부 서비스 연결 로그인 화면에서 시작한 카카오 로그인만 그 화면(서명된 연결 요청 쿼리 포함)으로
+// 되돌리고, 그 밖의 주소·다른 origin은 기본 작업 공간으로 보낸다(open redirect 금지).
+const KAKAO_TWO_FACTOR_RETURN_PATHS = new Set(['/connect/sign-in']);
+export function kakaoTwoFactorReturnUrl(callbackURL: unknown, webOrigin: string) {
+  const fallback = new URL('/workspace?two_factor=kakao', webOrigin).toString();
+  if (typeof callbackURL !== 'string') return fallback;
+  let target: URL;
+  try { target = new URL(callbackURL, webOrigin); } catch { return fallback; }
+  if (target.origin !== new URL(webOrigin).origin || !KAKAO_TWO_FACTOR_RETURN_PATHS.has(target.pathname)) return fallback;
+  // 같은 host의 userinfo(https://u:p@host/...)는 남기지 않는다.
+  target.username = ''; target.password = ''; target.hash = '';
+  target.searchParams.set('two_factor', 'kakao');
+  return target.toString();
+}
+
 // better-auth twoFactor 플러그인은 이메일 로그인에만 2단계 확인을 건다. 카카오 콜백에도 같은 확인 훅을 재사용하고,
 // JSON 응답 대신 Field 웹 2단계 인증 화면으로 보낸다. 세션은 TOTP·백업코드 검증 뒤에만 만들어진다.
+// 돌아갈 화면은 콜백에서 better-auth가 복원한 OAuth state의 callbackURL(로그인 시작 때 origin 검사를 거친 값)로 정한다.
 export function kakaoTwoFactorBridge(plugin: ReturnType<typeof twoFactor>, webOrigin: string): BetterAuthPlugin {
   const challenge = plugin.hooks.after[0];
   if (!challenge) throw new Error('two_factor_hook_missing');
@@ -60,7 +76,7 @@ export function kakaoTwoFactorBridge(plugin: ReturnType<typeof twoFactor>, webOr
           handler: createAuthMiddleware(async ctx => {
             const returned = ctx.context.returned as { twoFactorRedirect?: unknown } | undefined;
             if (returned && typeof returned === 'object' && returned.twoFactorRedirect === true)
-              throw ctx.redirect(new URL('/workspace?two_factor=kakao', webOrigin).toString());
+              throw ctx.redirect(kakaoTwoFactorReturnUrl((await getOAuthState())?.callbackURL, webOrigin));
           }),
         },
       ],

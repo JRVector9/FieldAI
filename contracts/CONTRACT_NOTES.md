@@ -1,6 +1,6 @@
 # 계약 예제 사용 안내
 
-이 디렉터리는 연동 명세의 **JSON Schema·합성 예제**와 구현 중인 AP/Field 공개 API의 `agent-integrator-v1.openapi.json`·`field-integrator-v1.openapi.json` 미리보기를 제공합니다. Field 미리보기 preview.9에는 현재 동작하는 bearer 읽기, 승인된 FAQ와 명시 binding 경로, Field ID 요청 상태 조회·고객 제안 결정(확정 아님)·알림 경로 조회·AP 서명 사건 수신함이, AP 미리보기 preview.10에는 명시 scope를 가진 설치 전용 connection·owned_embed 공개 생성/관리와 연결별 source 버전·갱신 요청/상태, Field 서명 `facts.changed` 수신, 연결 해제 후 서명된 사건 상태 복구 조회와 예약별 세대 1 종료 영수증이 포함됩니다. 정보 동기화·설치·업무 요청을 포함한 완성 OpenAPI 또는 SDK가 아니며 실제 서명 검증은 각 제품 서버 구현에서 수행합니다.
+이 디렉터리는 연동 명세의 **JSON Schema·합성 예제**와 구현 중인 AP/Field 공개 API의 `agent-integrator-v1.openapi.json`·`field-integrator-v1.openapi.json` 미리보기를 제공합니다. Field 미리보기 preview.10(preview.9 + 서명 방향 접두사)에는 현재 동작하는 bearer 읽기, 승인된 FAQ와 명시 binding 경로, Field ID 요청 상태 조회·고객 제안 결정(확정 아님)·알림 경로 조회·AP 서명 사건 수신함이, AP 미리보기 preview.11(preview.10 + 서명 방향 접두사)에는 명시 scope를 가진 설치 전용 connection·owned_embed 공개 생성/관리와 연결별 source 버전·갱신 요청/상태, Field 서명 `facts.changed` 수신, 연결 해제 후 서명된 사건 상태 복구 조회와 예약별 세대 1 종료 영수증이 포함됩니다. 정보 동기화·설치·업무 요청을 포함한 완성 OpenAPI 또는 SDK가 아니며 실제 서명 검증은 각 제품 서버 구현에서 수행합니다.
 
 - event_envelope: 웹훅 최소 메타데이터 계약. 서명/인가/원본 조회는 서버 별도 검증입니다.
 - action_request: 고객 확인 후 외부 문의/예약 요청. 예약 확정 권한이 아닙니다.
@@ -27,3 +27,10 @@ Schema/example 검사는 문서 패키지 품질 검사이며 서비스 인수 �
 - source GET의 `syncedAt`는 현재 `source_id`/`source_revision`에 맞는 AP source snapshot의 실제 `fetched_at`만 읽는 nullable RFC3339 metadata다. 같은revision heartbeat·owner 승인·AP 지식/AI 공개시각을 뜻하지 않는다. source나맞는snapshot이없으면null이며now/updated_at/source.fetched_at/원격publishedAt로채우지않는다.
 - Field BFF의 신규consumer는 preview.9의missing syncedAt을legacy null로호환하지만 present malformedtimestamp는502로거부한다. 상태와시각은readonly이며자동승인이나고객AI반영을의미하지않는다.
 - preview.9의publicwrite endpoint subset/UUID/If-Match/scope/origin 계약은변경없다. 설치용 `ap-public-write-client.ts`는그고정subset을계속소비하며source GET을사용하지않으므로version/client변경없음. 이미리보기는전체SDK/실외부/버전호환출시승인을뜻하지않는다.
+
+## AP preview.11 / Field preview.10 서명 방향 접두사
+
+- 사건·연결 해제 HMAC은 bind 때 양쪽에 저장한 같은 연결 키를 쓴다. 원문 `v2:<direction>.<timestamp>.<event_id>.<raw_body>`(해제는 `v2:<direction>.<timestamp>.<revocation_id>.<connection_id>.revoke`)에 방향을 넣고 `X-Signature-Version: 2`를 보낸다. Field→AP(`/integrations/v1/field-events`, AP 해제 수신)는 `field->ap`, AP→Field(`/integrations/v1/webhooks/agent`, Field 해제 수신)는 `ap->field`다. 반대 방향 v2 서명은 401이다.
+- 발신자는 기본 v2로 서명한다. Field 발신 버전은 `FIELD_EVENT_SIGNATURE_SEND_VERSION`(`1`|`2`, 미설정 `2`, 다른 값은 worker 시작 실패)이고 `1`은 구버전 수신자가 남은 전환 기간에만 쓴다. 401에 v1로 자동 하향하지 않는다. 배포 순서와 blocked 재큐 절차는 `docs/03_INTEGRATION_CONTRACT.md` 서명 계약 절을 따른다. 헤더·접두사 없는 v1은 전환 기간에만 받는다: AP `AP_EVENT_SIGNATURE_ACCEPT_V1`, Field `FIELD_EVENT_SIGNATURE_ACCEPT_V1`. 미설정이면 mock/sandbox `true`, live `false`이고 다른 값은 부팅 실패다. 시작 로그에 수용 모드를 남긴다. 버전 헤더가 `2` 외 값이거나 v1 원문에 v2 헤더를 붙이면 401이다.
+- 복구 조회(`notification-status`)·알림 경로 종료(`route-close`)는 Field→AP 단방향 전용 원문 접미사라 이번 버전에서 바꾸지 않았다.
+- 서명 helper는 제품마다 따로 둔다(`apps/agent-api/src/field-signature.ts`, `apps/field-api/src/ap-signature.ts`). 상대 제품 코드를 import하지 않는다. 전환 기간 종료(live에서 v1 허용 해제 확인)는 운영 승인 대상이며 이 미리보기는 출시 승인이 아니다.

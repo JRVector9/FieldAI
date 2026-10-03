@@ -6,7 +6,7 @@ const document = JSON.parse(readFileSync(new URL('../../contracts/field-integrat
 
 test('Field public integrator preview declares implemented bearer reads and explicit binding', () => {
   assert.equal(document.openapi, '3.1.0');
-  assert.equal(document.info.version, '1.0.0-preview.9');
+  assert.equal(document.info.version, '1.0.0-preview.10');
   const declaredScopes = document.components.securitySchemes.fieldOAuth.flows.authorizationCode.scopes;
   assert.deepEqual(Object.keys(declaredScopes), ['field.facts.read', 'field.availability.read',
     'field.requests.create', 'field.requests.read', 'field.customer_access.create',
@@ -100,7 +100,8 @@ test('Field public integrator preview declares implemented bearer reads and expl
   const inbox = document.paths['/integrations/v1/webhooks/agent'].post;
   assert.ok(document.components.securitySchemes.apEventHmac);
   assert.ok(inbox.requestBody.content['application/vnd.agent-event+json'].schema);
-  assert.deepEqual(inbox.parameters.map(parameter => parameter.name), ['X-Event-Id', 'X-Key-Id', 'X-Timestamp']);
+  assert.deepEqual(inbox.parameters.map(parameter => parameter.name),
+    ['X-Event-Id', 'X-Key-Id', 'X-Timestamp', 'X-Signature-Version']);
   assert.equal(document.components.schemas.AgentEventEnvelope.properties.source_product.const, 'agent_platform');
   const issue = document.paths['/integrations/v1/customer-handoffs'].post;
   assert.deepEqual(issue.security, [{ fieldOAuth: ['field.customer_access.create'] }]);
@@ -120,4 +121,23 @@ test('Field public integrator preview declares implemented bearer reads and expl
   visit(document);
   assert.doesNotMatch(JSON.stringify(document.paths['/integrations/v1/facts']),
     /contactPhone|customerPhone|receiptKey|internalNote|draft/);
+});
+
+test('preview.10 binds AP event and revoke signatures to the ap->field direction', () => {
+  assert.equal(document.info.version, '1.0.0-preview.10');
+  const schemes = document.components.securitySchemes;
+  assert.match(schemes.apEventHmac.description, /v2:ap->field\.timestamp\.event_id\.raw_body_bytes/);
+  assert.match(schemes.apRevokeHmac.description, /v2:ap->field\.timestamp\.revocation_id\.connection_id\.revoke/);
+  for (const name of ['apEventHmac', 'apRevokeHmac']) {
+    assert.match(schemes[name].description, /X-Signature-Version: 2/);
+    assert.match(schemes[name].description, /FIELD_EVENT_SIGNATURE_ACCEPT_V1/);
+    assert.match(schemes[name].description, /default true in mock\/sandbox, false in live/);
+    assert.match(schemes[name].description, /field->ap direction is rejected/);
+  }
+  for (const path of ['/integrations/v1/webhooks/agent', '/integrations/v1/connections/{id}/revoke']) {
+    const version = document.paths[path].post.parameters.find(parameter => parameter.name === 'X-Signature-Version');
+    assert.equal(version.in, 'header');
+    assert.equal(version.required, false);
+    assert.deepEqual(version.schema.enum, ['2']);
+  }
 });

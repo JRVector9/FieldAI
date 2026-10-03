@@ -15,7 +15,7 @@ process.env.FIELD_KAKAO_CLIENT_ID = 'synthetic-field-kakao-client';
 process.env.FIELD_KAKAO_CLIENT_SECRET = 'synthetic-field-kakao-secret';
 const { auth, authPool } = await import('../src/auth.js');
 const { createFieldApp } = await import('../src/app.js');
-const { kakaoProviderConfig } = await import('../src/kakao-provider.js');
+const { kakaoProviderConfig, kakaoTwoFactorReturnUrl } = await import('../src/kakao-provider.js');
 const pool = new Pool({ connectionString: process.env.FIELD_DATABASE_URL });
 const base = process.env.FIELD_AUTH_BASE_URL!;
 const webOrigin = process.env.FIELD_PUBLIC_WEB_ORIGIN!;
@@ -70,9 +70,10 @@ function syntheticKakao(email: string, verified = true): KakaoProfile {
     kakao_account: { email, is_email_valid: verified, is_email_verified: verified, profile: { nickname: '합성 카카오 사용자' } } };
 }
 // 웹과 같은 요청(sign-in/social) → 카카오 인가 주소 확인 → 콜백(합성 code)까지 진행하고 콜백 응답을 돌려준다.
-async function kakaoLogin(jar: Jar, profile: KakaoProfile) {
+async function kakaoLogin(jar: Jar, profile: KakaoProfile,
+  urls: { callbackURL: string; errorCallbackURL: string } = { callbackURL: '/workspace', errorCallbackURL: '/workspace?auth_error=kakao' }) {
   kakaoProfile = profile;
-  const start = await call(jar, '/sign-in/social', { provider: 'kakao', callbackURL: '/workspace', errorCallbackURL: '/workspace?auth_error=kakao' });
+  const start = await call(jar, '/sign-in/social', { provider: 'kakao', ...urls });
   assert.equal(start.status, 200, await start.clone().text());
   const authorize = new URL((await start.json() as { url: string }).url);
   assert.equal(`${authorize.origin}${authorize.pathname}`, 'https://kauth.kakao.com/oauth/authorize');
@@ -197,4 +198,54 @@ test('Field Kakao sign-in for a 2FA user issues no session until the TOTP challe
   const current = await session(jar);
   assert.equal(current?.user.id, userId);
   assert.equal((current?.session as { twoFactorVerified?: boolean } | undefined)?.twoFactorVerified, true);
+});
+
+// 카카오 전용 계정을 만든 뒤 플러그인과 같은 방식(서버 비밀값으로 암호화)으로 TOTP 비밀값을 넣어 2단계 인증 계정으로 만든다.
+async function kakaoTwoFactorUser(email: string) {
+  const profile = syntheticKakao(email);
+  assert.equal(await kakaoLogin(new Map(), profile), '/workspace');
+  const userId = (await pool.query<{ id: string }>('select id from "user" where email=$1', [email])).rows[0]!.id;
+  const secret = randomBytes(20).toString('hex');
+  const encrypted = await symmetricEncrypt({ key: (await auth.$context).secretConfig, data: secret });
+  await pool.query(`insert into "twoFactor"(id, secret, "backupCodes", "userId", verified) values ($1,$2,$3,$4,true)`,
+    [randomUUID(), encrypted, encrypted, userId]);
+  await pool.query('update "user" set "twoFactorEnabled"=true where id=$1', [userId]);
+  return { profile, userId };
+}
+
+test('Field Kakao 2FA from the connect sign-in page returns to that page with the signed OAuth query and no session', async () => {
+  const email = `field-kakao-2fa-connect-${randomUUID()}@example.invalid`;
+  const { profile, userId } = await kakaoTwoFactorUser(email);
+  // 연결 로그인 화면의 서명된 OAuth 쿼리를 흉내 낸 값. 서명 검증은 웹이 continue를 호출할 때 OAuth 공급자가 한다.
+  const connect = '/connect/sign-in?client_id=synthetic-client&scope=openid%20offline_access&exp=4102444800&sig=synthetic-sig';
+  const jar: Jar = new Map();
+  const location = new URL((await kakaoLogin(jar, profile, { callbackURL: connect, errorCallbackURL: `${connect}&auth_error=kakao` }))!);
+  assert.equal(location.origin, new URL(webOrigin).origin);
+  assert.equal(location.pathname, '/connect/sign-in');
+  assert.equal(location.searchParams.get('two_factor'), 'kakao');
+  assert.equal(location.searchParams.get('client_id'), 'synthetic-client');
+  assert.equal(location.searchParams.get('scope'), 'openid offline_access');
+  assert.equal(location.searchParams.get('exp'), '4102444800');
+  assert.equal(location.searchParams.get('sig'), 'synthetic-sig');
+  assert.equal(await session(jar), null, 'Kakao callback must not leave a session before 2FA');
+  assert.equal((await pool.query('select count(*)::int as n from session where "userId"=$1', [userId])).rows[0].n, 1,
+    'only the earlier pre-2FA session exists; the challenged login session was deleted');
+});
+
+test('Field Kakao 2FA started with a non-connect callbackURL falls back to the workspace challenge', async () => {
+  const email = `field-kakao-2fa-fallback-${randomUUID()}@example.invalid`;
+  const { profile } = await kakaoTwoFactorUser(email);
+  const jar: Jar = new Map();
+  assert.equal(await kakaoLogin(jar, profile, { callbackURL: '/connect/select?client_id=x', errorCallbackURL: '/workspace?auth_error=kakao' }),
+    `${webOrigin}/workspace?two_factor=kakao`);
+  assert.equal(await session(jar), null);
+  // 다른 origin·해석 불가 주소·경로 우회는 콜백 전 단계와 무관하게 순수 함수에서도 작업 공간으로 떨어진다(open redirect 금지).
+  const fallback = `${webOrigin}/workspace?two_factor=kakao`;
+  for (const callbackURL of [undefined, 42, 'https://evil.example/connect/sign-in?sig=x', '//evil.example/connect/sign-in',
+    'javascript:alert(1)', '/connect/sign-in-evil', '/connect/sign-in/../select', '/workspace?x=1'])
+    assert.equal(kakaoTwoFactorReturnUrl(callbackURL, webOrigin), fallback, String(callbackURL));
+  assert.equal(kakaoTwoFactorReturnUrl(`${webOrigin}/connect/sign-in?a=1#frag`, webOrigin), `${webOrigin}/connect/sign-in?a=1&two_factor=kakao`);
+  assert.equal(kakaoTwoFactorReturnUrl('/connect/sign-in?a=1&two_factor=other', webOrigin), `${webOrigin}/connect/sign-in?a=1&two_factor=kakao`);
+  // 같은 origin이어도 userinfo는 복귀 주소에 남기지 않는다.
+  assert.equal(kakaoTwoFactorReturnUrl(`${webOrigin.replace('://', '://u:p@')}/connect/sign-in?a=1`, webOrigin), `${webOrigin}/connect/sign-in?a=1&two_factor=kakao`);
 });

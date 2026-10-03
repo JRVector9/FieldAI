@@ -247,3 +247,28 @@ AP P2/P3·Field 중간/낮음 항목 전체는 `03_AP_CODE_REVIEW.md`, `04_FIELD
 | Docker `Dockerfile.api` 양 제품 | 0 | R5 보고: 이미지 868→460MB, next 미포함, 부팅 거부 정상 |
 
 첫 실행에서 `test:e2e:distribution`·`test:integration:faults`가 `tools/spikes/ap-field-connection-http.test.mjs`의 Field 선택 scope(5개)와 AP 요청 scope(7개) 불일치로 재선택 화면에 가 실패 → spike의 선택 scope와 capabilities 기대값(`proposal.respond: true`)을 갱신해 재실행 통과. 실 Caddy/ACME·카카오·토스·S3·SMTP, 독립성 검사, 사용자 최종 화면 테스트는 미실행.
+
+## 12. 5단계 — 남은 코드 작업 4건 + 리뷰 반영 — 2026-10-03
+
+| 항목 | 구현 | 주요 파일 |
+|---|---|---|
+| 연결 화면 카카오 로그인 + 2FA 경로 보존(양 제품) | 2FA 브리지가 소셜 로그인의 `callbackURL`(같은 origin의 `/connect/sign-in`만 허용)로 되돌리며 서명 `oauth_query` 유지. 카카오 컴포넌트 `callbackPath`, 복귀 시 카카오 표시 파라미터만 제거. 연결 화면에 카카오 버튼·2FA 후 동의 이어가기 | `kakao-provider.ts`, `*-kakao-sign-in.tsx`, `*-connect.tsx` |
+| 사이트 사진 2단계 삭제(Field) | `DELETE /v1/sites/assets/:id` → 짧은 트랜잭션에서 `deleting` 표시 후 202, 저장소 삭제는 보존 워커가 잠금 없이 처리(backoff 30초×2 최대 1시간, 12회·권한 오류 정지). 초안/공개는 `deleting` 참조 409, 공개 조회 404. 편집기 "삭제 요청 (추가)"·"삭제 중/삭제 지연 (추가)". migration 000083 | `sites.ts`, `site-media.ts`, `retention-purge-worker.ts`, `site-editor.tsx` |
+| Field→AP push 경로 알림 경로 확인(AP) | 수신함 처리 시 잠금 밖에서 Field 알림 경로를 읽고(배치 캐시), owner field/전환 중이면 `not_applicable`+사유, 일시 장애면 claim 없이 `next_attempt_at`+30초로 미룸. 마이그레이션 없음 | `field-event-inbox.ts`, `field-event-worker.ts` |
+| 서명 사건 채널 v2 방향 접두사(양 제품, 계약 AP preview.11 / Field preview.10) | 원문 `v2:<direction>.<ts>.<event_id>.<body>`(해제 채널 포함), `X-Signature-Version: 2`, v1은 `AP_EVENT_SIGNATURE_ACCEPT_V1`/`FIELD_EVENT_SIGNATURE_ACCEPT_V1`(mock/sandbox 기본 true, live 기본 false)일 때만 수용. 반대 방향 서명 401 | `field-signature.ts`, `ap-signature.ts`, 수신기·발신기 전부, `contracts/*`, CONTRACT_NOTES, docs/03 |
+
+**리뷰에서 나와 반영한 것:** AP — 경로 캐시 10초 유효시간·1000개 상한·catch 시 초기화, push 경로 404는 확인키 자체가 없을 때만 영구 생략하고 그 외(배포 일시중지·동의 없음·토큰 만료)는 `received_at` 기준 30초→1시간 backoff로 최대 24시간 미룬 뒤 `route_unresolved`(migration 000093), 커넥터 미설정은 `blocked_integration`으로 구분, 2FA 복귀 URL의 userinfo 제거, 발신 서명 버전 `AP_EVENT_SIGNATURE_SEND_VERSION`. Field — 편집기가 `asset_deleting` 409를 초안 충돌로 오인하던 문제(선택 목록은 ready만, 저장·공개 전용 안내), 발신 서명 버전 `FIELD_EVENT_SIGNATURE_SEND_VERSION`과 docs/03 전환 순서·blocked 재큐 절차, 보존 워커 단계별 try/catch·S3 호출 30초 timeout, 연결 화면 카카오 버튼 문구("카카오로 로그인", 계정·사업장 선행 안내), 삭제 중 사진의 리소스 허용 제외, `.env.live.example` 갱신.
+
+검수(2026-10-03, Mac local mock, Node 24.18.0, PG17 격리 DB, Playwright venv):
+
+| 명령 | exit | 결과 |
+|---|---|---|
+| `lint` / `typecheck` / `test:unit` | 0 | tools 37, agent-api 32, field-api 51, agent-web 85, field-web 138 |
+| `build:agent` / `build:field` / `build:web:agent` / `build:web:field` | 0 | |
+| `test:db:agent` | 0 | 42파일 171/171 (migration 000093 포함) |
+| `test:db:field` | 0 | 36파일 194/194 (migration 000083 포함) |
+| `test:contracts`, `test:integration:faults` | 0 | 12/12 |
+| `test:e2e:agent` / `field` / `distribution` | 0 | 9/9, 7/7, 2/2 |
+| `test:security` | 0 | 368/368 |
+
+실 Caddy/ACME·카카오·토스·S3·SMTP, 독립성 검사, 사용자 최종 화면 테스트는 미실행.

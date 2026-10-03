@@ -284,6 +284,9 @@ test('Field custom host scopes existing customer inquiry and image paths to the 
       values($1,$2,$3,'image/webp',100,10,10,$4,$5)`,[id,org,`synthetic/${id}`,'a'.repeat(64),owner]);
     assert.equal((await f.app.inject({url:`/v1/public/site-hosts/shop.example.com/resources/site-assets/${ownAsset}`})).statusCode,200);
     assert.equal((await f.app.inject({url:`/v1/public/site-hosts/shop.example.com/resources/site-assets/${otherAsset}`})).statusCode,404);
+    // 삭제 요청된 사진은 같은 조직이어도 허용하지 않는다(공개 GET도 404).
+    await f.pool.query(`update field.site_assets set state='deleting',deletion_requested_at=now(),deletion_next_attempt_at=now() where id=$1`,[ownAsset]);
+    assert.equal((await f.app.inject({url:`/v1/public/site-hosts/shop.example.com/resources/site-assets/${ownAsset}`})).statusCode,404);
 
   }finally{await f.close();}
 });

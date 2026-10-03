@@ -6,6 +6,11 @@ import { lockRetentionTarget, retentionBasisHash, type RetentionJob } from './re
 import { previewRetention, RETENTION_TABLES, type RetentionKind } from './work-retention.js';
 
 const PURGED_BODY = '[보존 기간 종료]';
+// 보존 worker 한 주기의 단계를 따로 실행한다. 실패하면 onFailure로 알리고 undefined를 돌려줘 다음 단계가 계속 실행되게 한다.
+export async function runIsolatedStep<T>(name: string, run: () => Promise<T>, onFailure: (name: string) => void): Promise<T | undefined> {
+  try { return await run(); }
+  catch { onFailure(name); return undefined; }
+}
 export const RETENTION_PHOTO_TABLES = {
   inquiry: { table: 'field.inquiry_attachments', column: 'inquiry_id', ready: 'ready' },
   reservation: { table: 'field.reservation_attachments', column: 'reservation_id', ready: 'ready' },

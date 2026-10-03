@@ -9,6 +9,12 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
+## 남은 코드 작업 4건(5단계) — 2026-10-03
+
+- **Current objective / state:** 연결 화면 카카오 로그인+2FA 경로 보존, 사이트 사진 2단계 삭제(Field 000083, 저장소 삭제는 워커가 잠금 없이), Field→AP push 경로의 알림 경로 확인, 서명 사건 채널 v2 방향 접두사(계약 AP preview.11 / Field preview.10)를 구현하고 리뷰(`docs/technical/review_2026-10-02/11`, `12`)를 반영했다(`01_SUMMARY.md` §12).
+- **Key design decisions:** 사진 삭제 요청은 `deleting` 표시 후 202이며 저장소 I/O는 잠금 밖 워커가 한다(4단계의 "조직 행 → advisory → sites → asset" 동기 삭제 설명은 이 문단으로 대체). v2 서명은 수신 `*_EVENT_SIGNATURE_ACCEPT_V1`과 발신 `*_EVENT_SIGNATURE_SEND_VERSION`으로 전환하며 자동 다운그레이드는 없다. push 경로의 404는 확인키가 아예 없을 때만 영구 생략, 그 외는 24시간 한도로 미룬다.
+- **Remaining work:** 결정 필요 항목(§3·§9·§10)과 실 공급사·운영 검증.
+
 ## 남은 작업 일괄 구현(4단계) — 2026-10-03
 
 - **Current objective / state:** 3단계 뒤 남겼던 항목을 모두 구현하고 리뷰 반영까지 마쳤다(`docs/technical/review_2026-10-02/01_SUMMARY.md` §11, 리뷰 원문 `09`·`10`). 로컬 mock 서버는 커밋 후 재기동했다(AP http://localhost:3001/workspace, Field http://127.0.0.1:3002/workspace).

@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
 import { signInOutcome } from "./auth-flow";
 import { TwoFactorChallenge } from "./field-auth-pages";
+import { FieldKakaoSignIn } from "./field-kakao-sign-in";
 import { scopeLabel } from "./connect-scope-label";
 import "./field-connect.css";
 
@@ -69,10 +70,14 @@ export function FieldConnectSignIn() {
   return <Shell title="Field 계정으로 로그인" status={status}>
     <p>공유할 Field 사업장을 소유한 계정으로 로그인하세요. 계정과 사업장 생성은 Field 작업 공간에서 진행합니다.</p>
     {twoFactorPending ? <TwoFactorChallenge onVerified={verified} onCancel={() => { setTwoFactorPending(false); setPassword(""); }} />
-      : <form className="form-fields field-connect-form" onSubmit={event => void signIn(event)}>
+      : <>{/* 카카오 로그인도 이 연결 화면(서명된 연결 요청 쿼리 포함)으로 돌아와 2단계 인증·연결 이어 가기를 같은 흐름으로 처리한다 */}
+      <FieldKakaoSignIn callbackPath="/connect/sign-in" label="카카오로 로그인" onTwoFactor={() => { setStatus(""); setTwoFactorPending(true); }} />
+      <p>카카오로 로그인해도 연결할 Field 계정과 사업장은 Field 작업 공간에서 먼저 만들어 두어야 합니다.</p>
+      <div className="field-auth-divider">또는 이메일로</div>
+      <form className="form-fields field-connect-form" onSubmit={event => void signIn(event)}>
       <label>이메일<input type="email" required autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} /></label>
       <label>비밀번호<input type="password" required autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} /></label>
-      <button type="submit" disabled={busy}>로그인하고 연결 계속</button></form>}
+      <button type="submit" disabled={busy}>로그인하고 연결 계속</button></form></>}
     <p><a href="/workspace">Field 작업 공간에서 계정 확인</a></p></Shell>;
 }
 
@@ -94,6 +99,7 @@ export function FieldConnectSelect() {
         }
         setOptions(value);
         setStatus(value.organizations.some(item => item.catalogRevision !== null) ? ""
+          : value.organizations.length === 0 ? "연결할 Field 사업장이 없습니다. Field 작업 공간(/workspace)에서 사업장을 만들고 사업 정보를 승인한 뒤 연결 요청을 다시 시작해 주세요."
           : "연결할 승인 사업 정보가 없습니다. Field 작업 공간에서 카탈로그를 승인해 주세요.");
       }).catch(() => setStatus("Field 서버에 연결할 수 없습니다."));
   }, []);

@@ -120,14 +120,19 @@ function status(row: Action) {
 export type ReservationEvent = { eventId: string; revision: number; eventType: string; state: string;
   occurredAt: string; customerNotificationOwnerProduct: 'ap'; routeGeneration: number;
   startAt?: string; endAt?: string };
-const customerNoticeEvents = new Set(['field.reservation.proposed', 'field.reservation.confirmed',
+export const customerNoticeEvents = new Set(['field.reservation.proposed', 'field.reservation.confirmed',
   'field.reservation.changed', 'field.reservation.canceled', 'field.reservation.reject',
   'field.reservation.expire', 'field.reservation.decline_cancel', 'field.reservation.decline_change']);
 // Field 알림 경로 조회 결과. owner/allowed/reason은 Field 계약 값이고, 조회 실패는 route_unknown이다.
 // transient는 일시 장애(시간 초과·5xx·/me 확인 불가)로 확인하지 못한 경우이며, 이때는 생략을 기록하지 않고 다음 동기화에서 다시 확인한다.
+// cause는 Field를 부르기 전 AP 쪽에서 막힌 원인이다. blocked_integration은 커넥터 미설정(transient와 함께),
+// connection_not_available은 AP 연결 조건 불충족(배포 일시중지·동의·owner 멤버십·refresh token 만료 등, 404)이다.
+// sync 경로는 cause와 무관하게 기존대로 다루고, push 수신함은 cause로 미루기 여부와 오류 코드를 정한다.
+// route_unresolved는 push 수신함이 기한(24시간) 안에 경로를 확인하지 못해 닫을 때만 쓴다.
 export type FieldNotificationRoute = { owner: 'ap' | 'field' | null; allowed: boolean;
   reason: 'ap_route_generation_1' | 'route_transfer_pending' | 'field_route_active'
-    | 'field_route_suspended' | 'route_unknown'; transient?: true };
+    | 'field_route_suspended' | 'route_unknown' | 'route_unresolved'; transient?: true;
+  cause?: 'blocked_integration' | 'connection_not_available' };
 const unknownRoute: FieldNotificationRoute = { owner: null, allowed: false, reason: 'route_unknown' };
 const transientRoute: FieldNotificationRoute = { ...unknownRoute, transient: true };
 const routeReasons = new Set(['ap_route_generation_1', 'route_transfer_pending',
@@ -139,7 +144,10 @@ export async function readFieldNotificationRoute(runtime: BusinessRuntime, inqui
   Promise<FieldNotificationRoute | null> {
   const grant = await fieldResourceForCustomer(runtime, inquiryId, secretHash,
     action.connection_id, 'field.notification_route.read');
-  if (!grant.ok) return grant.statusCode === 403 ? null : grant.statusCode === 503 ? transientRoute : unknownRoute;
+  if (!grant.ok) return grant.statusCode === 403 ? null
+    : grant.statusCode === 503 ? (grant.error === 'blocked_integration'
+      ? { ...transientRoute, cause: 'blocked_integration' } : transientRoute)
+    : { ...unknownRoute, cause: 'connection_not_available' };
   let response: Response;
   try {
     response = await grant.transport(

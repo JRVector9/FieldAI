@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import type { Pool } from 'pg';
 import sharp from 'sharp';
 
 export type FieldSiteMediaStore = {
@@ -79,6 +80,8 @@ export class FieldFileMediaStore implements FieldSiteMediaStore {
   }
 }
 
+// 삭제 작업자의 저장소 삭제·존재 확인 호출 제한 시간. 응답이 없는 호출이 작업 임대(5분)를 넘기지 않게 한다.
+const S3_DELETION_TIMEOUT_MS = 30_000;
 export class FieldS3MediaStore implements FieldSiteMediaStore {
   constructor(private readonly client: S3Client, private readonly bucket: string) {}
   async put(key: string, data: Buffer) {
@@ -97,7 +100,8 @@ export class FieldS3MediaStore implements FieldSiteMediaStore {
   }
   async delete(key: string) {
     if (!objectKeyPattern.test(key)) throw new Error('invalid Field media key');
-    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+      { abortSignal: AbortSignal.timeout(S3_DELETION_TIMEOUT_MS) });
   }
   // HeadObject로 존재 여부만 확인한다. 404(NotFound/NoSuchKey)는 부재다.
   // S3는 s3:ListBucket 권한이 없으면 없는 키에도 404 대신 403을 돌려주므로, 삭제 확인에는 ListBucket 권한이 필요하다.
@@ -105,7 +109,8 @@ export class FieldS3MediaStore implements FieldSiteMediaStore {
   async exists(key: string) {
     if (!objectKeyPattern.test(key)) throw new Error('invalid Field media key');
     try {
-      await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+        { abortSignal: AbortSignal.timeout(S3_DELETION_TIMEOUT_MS) });
       return true;
     } catch (error) {
       const failure = error as { name?: string; $metadata?: { httpStatusCode?: number } };
@@ -127,4 +132,70 @@ export function createFieldSiteMediaStore(): FieldSiteMediaStore | undefined {
   if (!bucket || !region || !accessKeyId || !secretAccessKey) return undefined;
   return new FieldS3MediaStore(new S3Client({ region, endpoint,
     forcePathStyle: Boolean(endpoint), credentials: { accessKeyId, secretAccessKey } }), bucket);
+}
+
+// 사진 보관함 2단계 삭제의 2단계(추가). retention 작업자 주기마다 실행한다.
+// 삭제 요청(sites.ts DELETE /v1/sites/assets/:id)은 state='deleting'만 표시하고, 여기서 저장소 객체 삭제 → 부재 확인 → 행 삭제·최종 outbox를 한다.
+// 저장소 I/O 동안 어떤 행 잠금도 잡지 않는다: 행은 짧은 UPDATE(skip locked)로 임대 시각만큼 미뤄 두고, I/O가 끝난 뒤 짧은 트랜잭션에서 지운다.
+// 작업자가 임대 중에 멈추면 임대가 끝난 뒤 다시 잡힌다(저장소 삭제·부재 확인은 반복해도 같은 결과다).
+const SITE_ASSET_DELETION_BATCH = 10;
+const SITE_ASSET_DELETION_MAX_ATTEMPTS = 12;
+const SITE_ASSET_DELETION_LEASE = '5 minutes';
+export type SiteAssetDeletionResult = { deleted: number; retried: number; stopped: number; blocked: number };
+export async function runSiteAssetDeletionOnce(runtime: { pool: Pool; siteMedia?: FieldSiteMediaStore }): Promise<SiteAssetDeletionResult> {
+  const result: SiteAssetDeletionResult = { deleted: 0, retried: 0, stopped: 0, blocked: 0 };
+  const { pool, siteMedia } = runtime;
+  // 저장소 설정이 없으면 시도 횟수를 늘리지 않고 blocked_integration을 남긴 채 1시간 뒤 다시 확인한다.
+  const claimed = (await pool.query<{ id: string; organization_id: string; object_key: string }>(
+    `update field.site_assets a set deletion_next_attempt_at = clock_timestamp() + $2::interval,
+       deletion_error = case when $3 then 'blocked_integration' else a.deletion_error end
+     from (select id from field.site_assets where state = 'deleting' and deletion_next_attempt_at <= clock_timestamp()
+           order by deletion_next_attempt_at, id for update skip locked limit $1) due
+     where a.id = due.id returning a.id, a.organization_id, a.object_key`,
+    [SITE_ASSET_DELETION_BATCH, siteMedia ? SITE_ASSET_DELETION_LEASE : '1 hour', !siteMedia])).rows;
+  if (!siteMedia) { result.blocked = claimed.length; return result; }
+  for (const asset of claimed) {
+    let code: string | null = null;
+    try {
+      await siteMedia.delete(asset.object_key);
+      const present = siteMedia.exists ? await siteMedia.exists(asset.object_key) : await siteMedia.get(asset.object_key) !== null;
+      if (present) code = 'file_delete_unconfirmed';
+    } catch (error) { code = error instanceof MediaPermissionError ? 'media_permission' : 'media_unavailable'; }
+    if (code) {
+      // 권한 부족은 재시도로 풀리지 않으므로 시도 횟수를 그대로 두고 멈춘다. 그 밖의 실패는 30초부터 두 배씩(최대 1시간) 미루고
+      // 12회째 실패하면 멈춘다. 멈춘 행은 deletion_next_attempt_at='infinity'와 deletion_error로 운영자가 확인한다(원인 해결 뒤 시각을 되돌린다).
+      const stopped = (await pool.query<{ stopped: boolean }>(
+        `update field.site_assets set
+           deletion_attempts = deletion_attempts + case when $2 = 'media_permission' then 0 else 1 end,
+           deletion_error = case when $2 <> 'media_permission' and deletion_attempts + 1 >= $3 then $2 || ',attempts_stopped' else $2 end,
+           deletion_next_attempt_at = case when $2 = 'media_permission' or deletion_attempts + 1 >= $3 then 'infinity'::timestamptz
+             else clock_timestamp() + least(interval '30 seconds' * power(2, deletion_attempts), interval '1 hour') end
+         where id = $1 and state = 'deleting' returning deletion_next_attempt_at = 'infinity'::timestamptz as stopped`,
+        [asset.id, code, SITE_ASSET_DELETION_MAX_ATTEMPTS])).rows[0]?.stopped;
+      if (stopped) result.stopped += 1; else if (stopped === false) result.retried += 1;
+      continue;
+    }
+    const db = await pool.connect();
+    try {
+      await db.query('begin');
+      // 조직 행 KEY SHARE를 먼저 잡는다. 조직 삭제 실행기(조직 FOR UPDATE → 사진 FOR UPDATE)와 같은 순서라
+      // 사진 행을 먼저 지우고 outbox FK 검사로 조직을 기다리는 순환 대기(40P01)가 생기지 않는다.
+      await db.query('select 1 from field.organizations where id = $1 for key share', [asset.organization_id]);
+      // 조직 삭제 실행기가 먼저 지웠으면 0행이고 최종 이벤트도 내지 않는다(그쪽 실행 기록이 결과다).
+      const removed = await db.query("delete from field.site_assets where id = $1 and state = 'deleting'", [asset.id]);
+      if (removed.rowCount) {
+        const siteId = (await db.query<{ id: string }>('select id from field.sites where organization_id = $1',
+          [asset.organization_id])).rows[0]?.id ?? null;
+        await db.query(`insert into field.outbox(id, organization_id, event_type, aggregate_id, payload)
+          values ($1, $2, 'field.site.asset.deleted', $3, $4::jsonb)`,
+        [randomUUID(), asset.organization_id, asset.id, JSON.stringify({ siteId, assetId: asset.id })]);
+        result.deleted += 1;
+      }
+      await db.query('commit');
+    } catch (error) {
+      await db.query('rollback').catch(() => undefined);
+      throw error;
+    } finally { db.release(); }
+  }
+  return result;
 }

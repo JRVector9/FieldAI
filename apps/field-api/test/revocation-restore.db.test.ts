@@ -106,7 +106,8 @@ test('Field revocations survive a real pre-revoke PG17 restore without reviving 
     const at = String(Math.floor(Date.now() / 1000));
     const remotePath = `/integrations/v1/connections/${incomingConnection}/revoke`;
     const remoteHeaders = { 'x-key-id': eventKey, 'x-revocation-id': incomingId, 'x-timestamp': at,
-      'x-signature': createHmac('sha256', eventSecret).update(`${at}.${incomingId}.${incomingConnection}.revoke`).digest('hex') };
+      'x-signature-version': '2',
+      'x-signature': createHmac('sha256', eventSecret).update(`v2:ap->field.${at}.${incomingId}.${incomingConnection}.revoke`).digest('hex') };
     assert.equal((await app.inject({ method: 'POST', url: remotePath, headers: { ...remoteHeaders, 'x-signature': 'a'.repeat(64) } })).statusCode, 401);
     assert.equal((await app.inject({ method: 'POST', url: remotePath, headers: remoteHeaders })).statusCode, 200);
     assert.equal((await app.inject({ method: 'POST', url: remotePath, headers: remoteHeaders })).statusCode, 200);

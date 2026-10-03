@@ -118,3 +118,6 @@
 .site-photo-library li img{width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0}
 .site-photo-library li span{font-size:14px;flex:1 1 120px;min-width:0}
 .site-photo-library li p{flex-basis:100%}
+/* 삭제 요청된 사진 (추가): 원본 이미지는 더 이상 열리지 않으므로 같은 크기의 빈 자리와 상태 표시를 둔다. */
+.site-photo-library li .site-photo-placeholder{width:56px;height:56px;border-radius:8px;flex:0 0 56px;background:#e9ecef}
+.site-photo-library li .site-photo-badge{font-size:14px;flex:0 0 auto}

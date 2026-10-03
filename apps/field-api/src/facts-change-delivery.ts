@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { ApConnectorConfig } from './ap-connector.js';
 import { unsealApEventSecret } from './integrator-routes.js';
+import { fieldToApSignature } from './ap-signature.js';
 
 type Claim = { id: string; attempts: number };
 type Source = { id: string; connection_id: string; catalog_release_id: string;
@@ -86,13 +87,15 @@ export async function deliverFactsChangeOnce(pool: Pool, config: ApConnectorConf
     data: { resource_id: row.catalog_release_id, status: 'approved',
       source_revision: row.revision } }));
   const timestamp = String(Math.floor(Date.now() / 1000));
+  // 발신 버전은 FIELD_EVENT_SIGNATURE_SEND_VERSION으로 정한다(기본 v2, v1은 전환 기간만).
+  const signed = fieldToApSignature();
   const signature = createHmac('sha256', secret)
-    .update(Buffer.concat([Buffer.from(`${timestamp}.${row.id}.`), raw])).digest('hex');
+    .update(Buffer.concat([Buffer.from(`${signed.prefix}${timestamp}.${row.id}.`), raw])).digest('hex');
   let response: Response;
   try { response = await (config.fetcher ?? fetch)(target, { method: 'POST',
     headers: { 'content-type': 'application/vnd.field-event+json',
       'x-event-id': row.id, 'x-key-id': row.event_key_id,
-      'x-timestamp': timestamp, 'x-signature': signature },
+      'x-timestamp': timestamp, ...signed.headers, 'x-signature': signature },
     body: raw, signal: AbortSignal.timeout(8000) }); }
   catch { return finish('retry', null, 'delivery_unknown'); }
   if (response.status === 202) return finish('acked', 202, null);

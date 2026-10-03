@@ -137,7 +137,9 @@ export function registerCustomDomainRoutes(app: FastifyInstance, runtime: FieldB
     if(typeof table!=='string'||!uuid.test(request.params.id))return reply.code(404).send({error:'site_resource_not_found'});
     const host=await resolvedCustomHost(runtime.pool,request.params.hostname);
     if(!host)return reply.code(404).send({error:'site_resource_not_found'});
-    const found=await runtime.pool.query(`select 1 from ${table} where id=$1 and organization_id=$2`,[request.params.id,host.organization_id]);
+    // 삭제 요청된 사진('deleting')은 공개 GET이 404이므로 허용하지 않는다.
+    const usable=table==='field.site_assets'?" and state='ready'":'';
+    const found=await runtime.pool.query(`select 1 from ${table} where id=$1 and organization_id=$2${usable}`,[request.params.id,host.organization_id]);
     return found.rowCount?{allowed:true}:reply.code(404).send({error:'site_resource_not_found'});
   });
   app.get<{Params:{hostname:string}}>('/v1/public/site-hosts/:hostname',async(request,reply)=>{

@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { PoolClient } from 'pg';
 import type { FieldBusinessRuntime } from './business.js';
 import { unsealApEventSecret } from './integrator-routes.js';
+import { apToFieldSignaturePrefix } from './ap-signature.js';
 import { recordFieldRevocation } from './revocation-journal.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -50,7 +51,8 @@ export function registerApConnectionRevokeReceiver(app: FastifyInstance, runtime
     const revocationId = request.headers['x-revocation-id'];
     const timestamp = request.headers['x-timestamp'];
     const signature = request.headers['x-signature'];
-    if (!uuid.test(connectionId) || typeof keyId !== 'string' || !uuid.test(keyId)
+    const signaturePrefix = apToFieldSignaturePrefix(request.headers['x-signature-version']);
+    if (signaturePrefix === null || !uuid.test(connectionId) || typeof keyId !== 'string' || !uuid.test(keyId)
       || typeof revocationId !== 'string' || !uuid.test(revocationId)
       || typeof timestamp !== 'string' || !/^\d{10}$/.test(timestamp)
       || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300
@@ -80,7 +82,7 @@ export function registerApConnectionRevokeReceiver(app: FastifyInstance, runtime
         await db.query('rollback'); return reply.code(503).send({ error: 'revoke_key_unavailable' });
       }
       const expected = createHmac('sha256', secret)
-        .update(`${timestamp}.${revocationId}.${connectionId}.revoke`).digest();
+        .update(`${signaturePrefix}${timestamp}.${revocationId}.${connectionId}.revoke`).digest();
       if (!timingSafeEqual(expected, Buffer.from(signature, 'hex'))) {
         await db.query('rollback'); return reply.code(401).send({ error: 'invalid_revoke_signature' });
       }

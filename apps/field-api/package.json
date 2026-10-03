@@ -14,7 +14,7 @@
     "checkpoint:revocations": "node dist/revocation-checkpoint-cli.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test:unit": "tsx --test test/health.test.ts test/billing-period.test.ts test/toss-billing.adapter.test.ts test/billing-webhook.test.ts test/notification-delivery.adapter.test.ts test/ap-public-write-client.test.ts test/custom-domain-dns.test.ts test/toss-billing-refund.adapter.test.ts test/admin-billing.test.ts test/production-profile.test.ts test/shutdown.test.ts test/email-provider.adapter.test.ts test/logging.test.ts test/image-format.test.ts test/site-media-store.test.ts test/custom-domain-edge-caddy.test.ts",
+    "test:unit": "tsx --test test/health.test.ts test/billing-period.test.ts test/toss-billing.adapter.test.ts test/billing-webhook.test.ts test/notification-delivery.adapter.test.ts test/ap-public-write-client.test.ts test/custom-domain-dns.test.ts test/toss-billing-refund.adapter.test.ts test/admin-billing.test.ts test/production-profile.test.ts test/shutdown.test.ts test/email-provider.adapter.test.ts test/logging.test.ts test/image-format.test.ts test/site-media-store.test.ts test/custom-domain-edge-caddy.test.ts test/retention-worker-steps.test.ts",
     "start:billing-authorization": "node dist/billing-authorization-worker.js",
     "start:billing-charge": "node dist/billing-charge-worker.js",
     "start:notifications": "node dist/notification-delivery-worker.js",

@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
 import type { FieldBusinessRuntime } from './business.js';
-import { MediaPermissionError, normalizeSiteImage, unsupportedImageError } from './site-media.js';
+import { normalizeSiteImage, unsupportedImageError } from './site-media.js';
 import { authorizedApDeployments } from './ap-connector.js';
 import { publicInstallationFor } from './ap-public-installation-execution.js';
 import { rejectExpiredTrial } from './trial-access.js';
@@ -88,13 +88,18 @@ function assetIds(content: SiteContent) {
 const ASSET_IN_USE_SQL = `(exists(select 1 from field.site_release_assets ra where ra.asset_id = a.id)
   or exists(select 1 from field.sites s join field.site_drafts d on d.site_id = s.id where s.organization_id = a.organization_id
     and jsonb_path_exists(d.content, '$.pages[*].sections[*] ? (@.assetId == $id)', jsonb_build_object('id', a.id::text))))`;
-async function ownedAssets(db: Pick<Pool | PoolClient, 'query'>, organizationId: string, ids: string[]) {
-  if (!ids.length) return true;
-  const result = await db.query<{ id: string }>(
-    "select id from field.site_assets where organization_id = $1 and state = 'ready' and id = any($2::uuid[])",
+// 참조한 사진의 사용 가능 여부. 'deleting'(삭제 요청됨, 추가) 사진은 초안·공개에 쓸 수 없다.
+// lock이면 사진 행을 FOR SHARE로 잡아 삭제 요청(사진 행 FOR UPDATE → 사용 여부 확인)과 직렬화한다:
+// 삭제 요청이 먼저면 기다린 뒤 최신 행(state='deleting')을 보고, 초안 저장이 먼저면 삭제 요청이 저장된 초안을 보고 거절한다.
+async function assetsUsable(db: Pick<Pool | PoolClient, 'query'>, organizationId: string, ids: string[], lock = false)
+  : Promise<'ok' | 'missing' | 'deleting'> {
+  if (!ids.length) return 'ok';
+  const result = await db.query<{ state: string }>(
+    `select state from field.site_assets where organization_id = $1 and id = any($2::uuid[])${lock ? ' order by id for share' : ''}`,
     [organizationId, ids],
   );
-  return result.rows.length === ids.length;
+  if (result.rows.length !== ids.length) return 'missing';
+  return result.rows.some(row => row.state !== 'ready') ? 'deleting' : 'ok';
 }
 export async function userFor(request: FastifyRequest, reply: FastifyReply, runtime: FieldBusinessRuntime) {
   const userId = await runtime.resolveUserId(request.headers);
@@ -318,15 +323,18 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     if (!userId) return reply;
     const organization = await organizationFor(request, reply, runtime, userId, 'read');
     if (!organization) return reply;
+    // 삭제 요청된 사진도 지워질 때까지 state:'deleting'으로 돌려준다(화면 "삭제 중"). 작업자가 멈춘 행은 deletionStopped(추가)로 알린다.
     const result = await runtime.pool.query<{
-      id: string; state: string; width: number; height: number; byte_size: number; created_at: Date; in_use: boolean;
+      id: string; state: string; width: number; height: number; byte_size: number; created_at: Date; in_use: boolean; deletion_stopped: boolean;
     }>(
-      `select a.id, a.state, a.width, a.height, a.byte_size, a.created_at, ${ASSET_IN_USE_SQL} as in_use from field.site_assets a
+      `select a.id, a.state, a.width, a.height, a.byte_size, a.created_at, ${ASSET_IN_USE_SQL} as in_use,
+         coalesce(a.deletion_next_attempt_at = 'infinity'::timestamptz, false) as deletion_stopped from field.site_assets a
        where a.organization_id = $1 order by a.created_at desc limit 50`, [organization.organization_id],
     );
     reply.header('Cache-Control', 'private, no-store');
     return { assets: result.rows.map(row => ({ id: row.id, state: row.state, width: row.width,
-      height: row.height, byteSize: row.byte_size, createdAt: row.created_at.toISOString(), inUse: row.in_use })) };
+      height: row.height, byteSize: row.byte_size, createdAt: row.created_at.toISOString(), inUse: row.in_use,
+      ...(row.state === 'deleting' ? { deletionStopped: row.deletion_stopped } : {}) })) };
   });
 
   app.post('/v1/sites/assets', { bodyLimit: 8 * 1024 * 1024 }, async (request, reply) => {
@@ -339,6 +347,8 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     if (!Buffer.isBuffer(request.body)) return reply.code(415).send({ error: 'unsupported_image' });
     const normalized = await normalizeSiteImage(request.body);
     if (!normalized) return reply.code(415).send(unsupportedImageError(request.body));
+    // 50장 상한은 'deleting'(삭제 요청됨) 행도 센다. 저장소 객체는 작업자가 지우고 부재를 확인할 때까지 남아 있으므로,
+    // 빼고 세면 저장소 삭제가 실패·정지된 사진이 쌓여도 업로드가 계속되어 실제 보관량이 상한을 넘는다. 행이 지워지면 자리가 난다.
     const count = await runtime.pool.query<{ count: string }>(
       'select count(*) from field.site_assets where organization_id = $1', [organization.organization_id],
     );
@@ -398,13 +408,12 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     } catch { return reply.code(503).send({ error: 'media_unavailable' }); }
   });
 
-  // 사진 보관함 삭제(추가). 조직 소유자만, 현재 초안·공개 버전 기록이 참조하지 않는 사진만 지운다.
-  // 조직 행(FOR KEY SHARE) → 업로드 50장 상한과 같은 조직 advisory 잠금 → 사이트 행(공개·초안 저장과 같은 순서) → 사진 행 순으로 잠그고,
-  // 저장소 객체를 지운 뒤 부재를 확인하고 나서 행을 지운다. 이미 지운 사진을 다시 요청하면 404다.
-  // 조직 행을 먼저 잡는 이유: 조직 삭제 실행기·AI 생성은 조직 FOR UPDATE → 사이트/사진 순으로 잠그고, outbox insert의 FK 검사가
-  // 조직 행에 KEY SHARE를 요구한다. 조직 행을 마지막에 잡으면 순환 대기(40P01)가 생기므로 맨 앞에서 잡는다.
-  // 저장소 I/O 동안 사이트 행 잠금을 유지한다(교환 조건): 잠금 밖에서 먼저 지우면 그 사이 초안·공개가 사진을 참조해
-  // 되돌릴 수 없이 깨진 공개 사진이 생길 수 있고, 삭제 대기 상태를 표시할 컬럼이 없어 2단계 처리는 migration이 필요하다.
+  // 사진 보관함 삭제 요청(추가). 조직 소유자만, 현재 초안·공개 버전 기록이 참조하지 않는 사진만 받는다.
+  // 2단계 삭제: 여기서는 짧은 트랜잭션으로 state='deleting'만 표시하고 202를 돌려준다. 저장소 객체 삭제·부재 확인·행 삭제와
+  // 최종 outbox(field.site.asset.deleted)는 retention 작업자(site-media.ts runSiteAssetDeletionOnce)가 잠금 밖에서 한다.
+  // 잠금 순서: 조직 행(FOR KEY SHARE, outbox FK와 조직 삭제 실행기 순서) → 업로드 50장 상한과 같은 조직 advisory → 사이트 행(FOR SHARE:
+  // 공개의 FOR UPDATE와는 직렬화되고 자동 저장의 FOR SHARE는 막지 않는다) → 사진 행(FOR UPDATE, 초안 저장의 사진 FOR SHARE와 직렬화).
+  // 사용 여부는 사진 행을 잡은 뒤 별도 문장으로 확인해 먼저 커밋된 초안까지 본다. 'deleting' 행을 다시 요청하면 같은 202, 없으면 404다.
   app.delete<{ Params: { id: string } }>('/v1/sites/assets/:id', async (request, reply) => {
     reply.header('Cache-Control', 'private, no-store');
     if (!uuidPattern.test(request.params.id)) return reply.code(404).send({ error: 'asset_not_found' });
@@ -412,36 +421,31 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     if (!userId) return reply;
     const organization = await organizationFor(request, reply, runtime, userId, 'publish');
     if (!organization) return reply;
+    // 저장소가 연결되지 않은 배포에서는 끝낼 수 없는 삭제 요청을 받지 않는다.
+    if (!runtime.siteMedia) return reply.code(503).send({ error: 'blocked_integration' });
     const db = await runtime.pool.connect();
     try {
       await db.query('begin');
       await db.query('select 1 from field.organizations where id = $1 for key share', [organization.organization_id]);
       await db.query('select pg_advisory_xact_lock(hashtextextended($1, 0))',
         [`field-site-assets:${organization.organization_id}`]);
-      const siteId = (await db.query<{ id: string }>('select id from field.sites where organization_id = $1 for update',
+      const siteId = (await db.query<{ id: string }>('select id from field.sites where organization_id = $1 for share',
         [organization.organization_id])).rows[0]?.id ?? null;
-      const asset = (await db.query<{ object_key: string; in_use: boolean }>(
-        `select a.object_key, ${ASSET_IN_USE_SQL} as in_use from field.site_assets a
-         where a.id = $1 and a.organization_id = $2 for update of a`, [request.params.id, organization.organization_id])).rows[0];
+      const asset = (await db.query<{ state: string }>(
+        'select state from field.site_assets where id = $1 and organization_id = $2 for update',
+        [request.params.id, organization.organization_id])).rows[0];
       if (!asset) { await db.query('rollback'); return reply.code(404).send({ error: 'asset_not_found' }); }
-      if (asset.in_use) { await db.query('rollback'); return reply.code(409).send({ error: 'asset_in_use' }); }
-      if (!runtime.siteMedia) { await db.query('rollback'); return reply.code(503).send({ error: 'blocked_integration' }); }
-      try {
-        await runtime.siteMedia.delete(asset.object_key);
-        const present = runtime.siteMedia.exists ? await runtime.siteMedia.exists(asset.object_key)
-          : await runtime.siteMedia.get(asset.object_key) !== null;
-        if (present) throw new Error('file_delete_unconfirmed');
-      } catch (error) {
-        // 파일 부재를 확인하지 못하면 행을 남겨 다시 시도할 수 있게 한다.
-        await db.query('rollback');
-        return reply.code(503).send({ error: error instanceof MediaPermissionError ? 'media_permission' : 'media_unavailable' });
-      }
-      await db.query('delete from field.site_assets where id = $1', [request.params.id]);
+      if (asset.state === 'deleting') { await db.query('commit'); return reply.code(202).send({ id: request.params.id, state: 'deleting' }); }
+      const inUse = (await db.query<{ in_use: boolean }>(`select ${ASSET_IN_USE_SQL} as in_use from field.site_assets a where a.id = $1`,
+        [request.params.id])).rows[0]?.in_use;
+      if (inUse) { await db.query('rollback'); return reply.code(409).send({ error: 'asset_in_use' }); }
+      await db.query(`update field.site_assets set state = 'deleting', deletion_requested_at = now(),
+        deletion_next_attempt_at = now(), deletion_attempts = 0, deletion_error = null where id = $1`, [request.params.id]);
       await db.query(`insert into field.outbox(id, organization_id, event_type, aggregate_id, payload)
-        values ($1, $2, 'field.site.asset.deleted', $3, $4::jsonb)`,
+        values ($1, $2, 'field.site.asset.deletion_requested', $3, $4::jsonb)`,
       [randomUUID(), organization.organization_id, request.params.id, JSON.stringify({ siteId, assetId: request.params.id })]);
       await db.query('commit');
-      return reply.send({ id: request.params.id, state: 'deleted' });
+      return reply.code(202).send({ id: request.params.id, state: 'deleting' });
     } catch (error) {
       await db.query('rollback').catch(() => undefined);
       throw error;
@@ -454,7 +458,7 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
       `select a.object_key, a.sha256 from field.site_assets a
        join field.site_release_assets ra on ra.asset_id = a.id
        join field.site_releases r on r.id = ra.release_id
-       where a.id = $1 and not exists (select 1 from field.site_visibility_holds h where h.site_id=r.site_id and h.released_at is null)
+       where a.id = $1 and a.state = 'ready' and not exists (select 1 from field.site_visibility_holds h where h.site_id=r.site_id and h.released_at is null)
          and not exists (select 1 from field.organization_deletion_requests d where d.organization_id=a.organization_id and d.status in ('scheduled','executed')) and r.revision = (
          select max(latest.revision) from field.site_releases latest where latest.site_id = r.site_id)
        limit 1`, [request.params.id],
@@ -530,14 +534,16 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     const revision = revisionFrom(request.body);
     const content = parseContent(request.body);
     if (revision === null || !content) return reply.code(400).send({ error: 'invalid_site_draft' });
-    // 사진 삭제(사이트 행 for update)와 겹치지 않도록 사이트 행을 공유 잠금한 뒤 사진 소유 확인과 저장을 한다.
+    // 사이트 행을 공유 잠금하고, 참조 사진 행을 FOR SHARE로 잡아 삭제 요청(사진 행 FOR UPDATE)과 직렬화한 뒤 저장한다.
+    // 삭제 요청된('deleting', 추가) 사진을 참조하면 409 asset_deleting이다.
     const db = await runtime.pool.connect();
     try {
       await db.query('begin');
       await db.query('select id from field.sites where id = $1 for share', [site.id]);
-      if (!await ownedAssets(db, organization.organization_id, assetIds(content))) {
+      const usable = await assetsUsable(db, organization.organization_id, assetIds(content), true);
+      if (usable !== 'ok') {
         await db.query('rollback');
-        return reply.code(400).send({ error: 'invalid_site_asset' });
+        return usable === 'deleting' ? reply.code(409).send({ error: 'asset_deleting' }) : reply.code(400).send({ error: 'invalid_site_asset' });
       }
       const result = await db.query<{ revision: number }>(
         `update field.site_drafts set revision = revision + 1, content = $3::jsonb,
@@ -592,9 +598,11 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
         await client.query('rollback');
         return reply.code(409).send({ error: 'revision_conflict' });
       }
-      if (!await ownedAssets(runtime.pool, organization.organization_id, assetIds(draft.rows[0].content))) {
+      // 사이트 행 FOR UPDATE가 삭제 요청(사이트 FOR SHARE)과 직렬화하므로, 여기서 본 상태가 공개 시점의 상태다.
+      const usable = await assetsUsable(client, organization.organization_id, assetIds(draft.rows[0].content));
+      if (usable !== 'ok') {
         await client.query('rollback');
-        return reply.code(409).send({ error: 'site_asset_missing' });
+        return reply.code(409).send({ error: usable === 'deleting' ? 'asset_deleting' : 'site_asset_missing' });
       }
       const existing = await client.query<{ id: string; catalog_revision: number }>(
         'select id, catalog_revision from field.site_releases where site_id = $1 and revision = $2', [site.id, revision],

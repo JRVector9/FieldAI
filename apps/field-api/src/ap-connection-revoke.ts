@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { ApConnectorConfig } from './ap-connector.js';
 import { unsealApEventSecret } from './integrator-routes.js';
+import { fieldToApSignature } from './ap-signature.js';
 
 type Claim = { id: string; connection_id: string; attempts: number };
 type Source = { ap_issuer: string; status: string; event_key_id: string | null;
@@ -50,13 +51,15 @@ export async function deliverApConnectionRevokeOnce(pool: Pool, config: ApConnec
   catch { return finish('blocked', null, 'route_key_unreadable'); }
   if (secret.length !== 32) return finish('blocked', null, 'invalid_route_key');
   const timestamp = String(Math.floor(Date.now() / 1000));
+  // 발신 버전은 FIELD_EVENT_SIGNATURE_SEND_VERSION으로 정한다(기본 v2, v1은 전환 기간만).
+  const signed = fieldToApSignature();
   const signature = createHmac('sha256', secret)
-    .update(`${timestamp}.${claim.id}.${claim.connection_id}.revoke`).digest('hex');
+    .update(`${signed.prefix}${timestamp}.${claim.id}.${claim.connection_id}.revoke`).digest('hex');
   let response: Response;
   try {
     response = await (config.fetcher ?? fetch)(target, { method: 'POST',
       headers: { 'x-key-id': connection.event_key_id, 'x-revocation-id': claim.id,
-        'x-timestamp': timestamp, 'x-signature': signature },
+        'x-timestamp': timestamp, ...signed.headers, 'x-signature': signature },
       signal: AbortSignal.timeout(8000) });
   } catch { return finish('retry', null, 'delivery_unknown'); }
   if (response.status === 200) {

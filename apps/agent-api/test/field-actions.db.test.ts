@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createCipheriv, createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { after, test } from 'node:test';
 import { fromNodeHeaders } from 'better-auth/node';
@@ -8,6 +9,7 @@ import sharp from 'sharp';
 import { agentRevocationJournalFromEnvironment } from '../src/revocation-journal.js';
 import { createAgentApp } from '../src/app.js';
 import { processFieldEventInboxOnce } from '../src/field-event-inbox.js';
+import { acceptsV1FieldSignature } from '../src/field-signature.js';
 
 process.loadEnvFile(resolve('../../infra/agent/.env'));
 process.env.AP_PROFILE = 'mock';
@@ -350,11 +352,14 @@ test('AP customer approves current Field terms once and reconciles an unknown de
       route_generation: 1, data: { resource_id: accepted.json().reservationId, status: 'requested' } };
     const webhookPath = '/integrations/v1/field-events';
     const webhookRaw = JSON.stringify(webhookEvent);
-    const webhookHeaders = (raw: string, timestamp = String(Math.floor(Date.now() / 1000))) => ({
+    // prefix ''는 X-Signature-Version 헤더 없는 v1 원문이다. 기본은 Field 발신과 같은 v2다.
+    const webhookHeaders = (raw: string, timestamp = String(Math.floor(Date.now() / 1000)),
+      prefix = 'v2:field->ap.') => ({
       'content-type': 'application/vnd.field-event+json', 'x-event-id': webhookEvent.event_id,
       'x-key-id': eventKeyId, 'x-timestamp': timestamp,
+      ...(prefix ? { 'x-signature-version': '2' } : {}),
       'x-signature': createHmac('sha256', eventSecret)
-        .update(Buffer.concat([Buffer.from(`${timestamp}.${webhookEvent.event_id}.`), Buffer.from(raw)]))
+        .update(Buffer.concat([Buffer.from(`${prefix}${timestamp}.${webhookEvent.event_id}.`), Buffer.from(raw)]))
         .digest('hex') });
     assert.equal((await app.inject({ method: 'POST', url: webhookPath,
       headers: { 'content-type': 'application/vnd.field-event+json' }, payload: webhookRaw })).statusCode, 401);
@@ -366,6 +371,33 @@ test('AP customer approves current Field terms once and reconciles an unknown de
     assert.equal(signed.statusCode, 202, signed.body);
     assert.equal((await app.inject({ method: 'POST', url: webhookPath,
       headers: webhookHeaders(webhookRaw), payload: webhookRaw })).statusCode, 202);
+    // 같은 연결 키라도 AP 방향(ap->field)으로 서명된 v2 사건은 반사로 보고 거부한다.
+    assert.equal((await app.inject({ method: 'POST', url: webhookPath, payload: webhookRaw,
+      headers: webhookHeaders(webhookRaw, undefined, 'v2:ap->field.') })).statusCode, 401);
+    // 알 수 없는 버전, v1 원문에 v2 헤더를 붙인 서명은 거부한다.
+    assert.equal((await app.inject({ method: 'POST', url: webhookPath, payload: webhookRaw,
+      headers: { ...webhookHeaders(webhookRaw), 'x-signature-version': '3' } })).statusCode, 401);
+    assert.equal((await app.inject({ method: 'POST', url: webhookPath, payload: webhookRaw,
+      headers: { ...webhookHeaders(webhookRaw, undefined, ''), 'x-signature-version': '2' } })).statusCode, 401);
+    // v1(헤더·접두사 없음)은 전환 설정이 켜졌을 때만 받는다. 같은 사건 재전송이라 202 영수증이다.
+    process.env.AP_EVENT_SIGNATURE_ACCEPT_V1 = 'true';
+    try {
+      assert.equal((await app.inject({ method: 'POST', url: webhookPath, payload: webhookRaw,
+        headers: webhookHeaders(webhookRaw, undefined, '') })).statusCode, 202);
+      process.env.AP_EVENT_SIGNATURE_ACCEPT_V1 = 'false';
+      assert.equal((await app.inject({ method: 'POST', url: webhookPath, payload: webhookRaw,
+        headers: webhookHeaders(webhookRaw, undefined, '') })).statusCode, 401);
+    } finally { delete process.env.AP_EVENT_SIGNATURE_ACCEPT_V1; }
+    // 미설정 기본값: mock/sandbox는 전환 허용, live는 거부, 잘못된 값은 부팅 실패. 비교는 상수시간을 유지한다.
+    assert.equal(acceptsV1FieldSignature({ AP_PROFILE: 'mock' }), true);
+    assert.equal(acceptsV1FieldSignature({ AP_PROFILE: 'sandbox' }), true);
+    assert.equal(acceptsV1FieldSignature({ AP_PROFILE: 'live' }), false);
+    assert.equal(acceptsV1FieldSignature({ AP_PROFILE: 'live', AP_EVENT_SIGNATURE_ACCEPT_V1: 'true' }), true);
+    assert.equal(acceptsV1FieldSignature({ AP_PROFILE: 'mock', AP_EVENT_SIGNATURE_ACCEPT_V1: 'false' }), false);
+    assert.throws(() => acceptsV1FieldSignature({ AP_PROFILE: 'mock', AP_EVENT_SIGNATURE_ACCEPT_V1: 'yes' }),
+      /invalid_AP_EVENT_SIGNATURE_ACCEPT_V1/);
+    for (const file of ['field-event-inbox.ts', 'field-connection-revoke.ts'])
+      assert.match(readFileSync(resolve('src', file), 'utf8'), /timingSafeEqual\(expected, Buffer\.from\(signature, 'hex'\)\)/);
     const tampered = JSON.stringify({ ...webhookEvent, data: { ...webhookEvent.data, status: 'confirmed' } });
     assert.equal((await app.inject({ method: 'POST', url: webhookPath,
       headers: webhookHeaders(tampered), payload: tampered })).statusCode, 409);
@@ -524,8 +556,9 @@ test('AP customer approves current Field terms once and reconciles an unknown de
       return app.inject({ method: 'POST', url: webhookPath, payload: raw,
         headers: { 'content-type': 'application/vnd.field-event+json',
           'x-event-id': String(source.eventId), 'x-key-id': eventKeyId, 'x-timestamp': timestamp,
+          'x-signature-version': '2',
           'x-signature': createHmac('sha256', eventSecret)
-            .update(Buffer.concat([Buffer.from(`${timestamp}.${source.eventId}.`), Buffer.from(raw)]))
+            .update(Buffer.concat([Buffer.from(`v2:field->ap.${timestamp}.${source.eventId}.`), Buffer.from(raw)]))
             .digest('hex') } });
     };
     assert.equal((await sendEvent(secondConfirmed)).statusCode, 202);
@@ -670,16 +703,26 @@ test('AP customer approves current Field terms once and reconciles an unknown de
     assert.equal(racedStatus, 401, 'revoke must win before an in-flight event is accepted');
     const revocationId = randomUUID();
     const revocationPath = `/integrations/v1/connections/${connectionId}/revoke`;
-    const revocationHeaders = (at = String(Math.floor(Date.now() / 1000))) => ({
+    // prefix ''는 X-Signature-Version 헤더 없는 v1 원문이다. 기본은 Field 해제 발신과 같은 v2다.
+    const revocationHeaders = (at = String(Math.floor(Date.now() / 1000)), prefix = 'v2:field->ap.') => ({
       'x-key-id': eventKeyId, 'x-revocation-id': revocationId, 'x-timestamp': at,
+      ...(prefix ? { 'x-signature-version': '2' } : {}),
       'x-signature': createHmac('sha256', eventSecret)
-        .update(`${at}.${revocationId}.${connectionId}.revoke`).digest('hex'),
+        .update(`${prefix}${at}.${revocationId}.${connectionId}.revoke`).digest('hex'),
     });
     assert.equal((await app.inject({ method: 'POST', url: revocationPath })).statusCode, 401);
     assert.equal((await app.inject({ method: 'POST', url: revocationPath,
       headers: { ...revocationHeaders(), 'x-signature': 'a'.repeat(64) } })).statusCode, 401);
     assert.equal((await app.inject({ method: 'POST', url: revocationPath,
       headers: revocationHeaders(String(Math.floor(Date.now() / 1000) - 600)) })).statusCode, 401);
+    // 같은 연결 키라도 AP 방향(ap->field)으로 서명된 해제는 반사로 보고 거부한다. v1은 전환 설정이 꺼지면 거부한다.
+    assert.equal((await app.inject({ method: 'POST', url: revocationPath,
+      headers: revocationHeaders(undefined, 'v2:ap->field.') })).statusCode, 401);
+    process.env.AP_EVENT_SIGNATURE_ACCEPT_V1 = 'false';
+    try {
+      assert.equal((await app.inject({ method: 'POST', url: revocationPath,
+        headers: revocationHeaders(undefined, '') })).statusCode, 401);
+    } finally { delete process.env.AP_EVENT_SIGNATURE_ACCEPT_V1; }
     const revoked = await app.inject({ method: 'POST', url: revocationPath,
       headers: revocationHeaders() });
     assert.equal(revoked.statusCode, 200, revoked.body);
@@ -687,6 +730,12 @@ test('AP customer approves current Field terms once and reconciles an unknown de
     assert.deepEqual(revoked.json(), { connectionId, status: 'revoked', revocationId });
     assert.equal((await app.inject({ method: 'POST', url: revocationPath,
       headers: revocationHeaders() })).statusCode, 200);
+    // 전환 설정이 켜져 있으면 같은 해제의 v1 재전송도 받는다.
+    process.env.AP_EVENT_SIGNATURE_ACCEPT_V1 = 'true';
+    try {
+      assert.equal((await app.inject({ method: 'POST', url: revocationPath,
+        headers: revocationHeaders(undefined, '') })).statusCode, 200);
+    } finally { delete process.env.AP_EVENT_SIGNATURE_ACCEPT_V1; }
     assert.equal((await app.inject({ method: 'POST', url: webhookPath,
       headers: webhookHeaders(webhookRaw), payload: webhookRaw })).statusCode, 401);
     assert.equal((await sendEvent({ ...receivedBeforeRevoke, eventId: randomUUID(), revision: 3 })).statusCode, 401);

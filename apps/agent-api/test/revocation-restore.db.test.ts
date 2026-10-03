@@ -70,7 +70,7 @@ test('AP native revocations preserve customer work and remain revoked after isol
     const revoked=await app.inject({method:'POST',url:localPath});assert.equal(revoked.statusCode,200,revoked.body);
     assert.equal((await app.inject({method:'POST',url:localPath})).json().revocationId,revoked.json().revocationId);assert.equal((await journal.read()).length,1);
     const at=String(Math.floor(Date.now()/1000));
-    const remotePath=`/integrations/v1/connections/${incomingConnection}/revoke`,remoteHeaders={'x-key-id':eventKey,'x-revocation-id':incomingId,'x-timestamp':at,'x-signature':createHmac('sha256',eventSecret).update(`${at}.${incomingId}.${incomingConnection}.revoke`).digest('hex')};
+    const remotePath=`/integrations/v1/connections/${incomingConnection}/revoke`,remoteHeaders={'x-key-id':eventKey,'x-revocation-id':incomingId,'x-timestamp':at,'x-signature-version':'2','x-signature':createHmac('sha256',eventSecret).update(`v2:field->ap.${at}.${incomingId}.${incomingConnection}.revoke`).digest('hex')};
     assert.equal((await app.inject({method:'POST',url:remotePath,headers:{...remoteHeaders,'x-signature':'a'.repeat(64)}})).statusCode,401);
     assert.equal((await app.inject({method:'POST',url:remotePath,headers:remoteHeaders})).statusCode,200);
     assert.equal((await app.inject({method:'POST',url:remotePath,headers:remoteHeaders})).statusCode,200);

@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { ApConnectorConfig } from './ap-connector.js';
 import { unsealApEventSecret } from './integrator-routes.js';
+import { fieldToApSignature } from './ap-signature.js';
 
 type Claimed = { event_id: string; attempts: number };
 type Source = { event_id: string; reservation_id: string; revision: number; event_type: string;
@@ -96,13 +97,15 @@ export async function deliverApEventOnce(pool: Pool, config: ApConnectorConfig):
     route_generation: row.route_generation, data }));
   if (raw.length > 65_536) return finish('blocked', null, 'event_body_too_large');
   const timestamp = String(Math.floor(Date.now() / 1000));
+  // 발신 버전은 FIELD_EVENT_SIGNATURE_SEND_VERSION으로 정한다(기본 v2, v1은 전환 기간만).
+  const signed = fieldToApSignature();
   const signature = createHmac('sha256', secret)
-    .update(Buffer.concat([Buffer.from(`${timestamp}.${row.event_id}.`), raw])).digest('hex');
+    .update(Buffer.concat([Buffer.from(`${signed.prefix}${timestamp}.${row.event_id}.`), raw])).digest('hex');
   let response: Response;
   try { response = await (config.fetcher ?? fetch)(target, { method: 'POST',
     headers: { 'content-type': 'application/vnd.field-event+json',
       'x-event-id': row.event_id, 'x-key-id': row.event_key_id,
-      'x-timestamp': timestamp, 'x-signature': signature },
+      'x-timestamp': timestamp, ...signed.headers, 'x-signature': signature },
     body: raw, signal: AbortSignal.timeout(8000) }); }
   catch { return finish('retry', null, 'delivery_unknown'); }
   if (response.status === 202) return finish('acked', 202, null);

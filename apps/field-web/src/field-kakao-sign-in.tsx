@@ -27,12 +27,29 @@ export function kakaoErrorMessage(code: string | null) {
   return "카카오 로그인에 실패했습니다. 잠시 뒤 다시 시도해 주세요.";
 }
 
-// 카카오에서 돌아온 주소를 해석한다. 오류·2단계 인증 대기 표시는 한 번만 읽고 주소에서 지운다.
+// 카카오에서 돌아온 주소를 해석한다. 오류·2단계 인증 대기 표시는 한 번만 읽고 그 표시만 주소에서 지운다.
 export function kakaoReturnFromSearch(search: string): { kind: "error"; message: string } | { kind: "two_factor" } | null {
   const params = new URLSearchParams(search);
   if (params.get("auth_error") === "kakao") return { kind: "error", message: kakaoErrorMessage(params.get("error")) };
   if (params.get("two_factor") === "kakao") return { kind: "two_factor" };
   return null;
+}
+
+// 카카오 복귀 표시(auth_error·error·error_description·two_factor)만 지우고 나머지 쿼리(특히 서명된 연결 요청 쿼리)는 남긴다.
+const KAKAO_RETURN_PARAMS = ["auth_error", "error", "error_description", "two_factor"];
+export function searchWithoutKakaoReturn(search: string) {
+  const params = new URLSearchParams(search);
+  for (const key of KAKAO_RETURN_PARAMS) params.delete(key);
+  const rest = params.toString();
+  return rest ? `?${rest}` : "";
+}
+
+// 카카오 로그인 뒤 돌아올 주소. callbackPath가 없으면 기존처럼 작업 공간으로, 있으면 그 화면의 현재 쿼리를 그대로 붙여 돌아온다.
+export function kakaoCallbackUrls(callbackPath: string | undefined, search: string) {
+  if (!callbackPath) return { callbackURL: "/workspace", errorCallbackURL: "/workspace?auth_error=kakao" };
+  const rest = searchWithoutKakaoReturn(search);
+  const callbackURL = `${callbackPath}${rest}`;
+  return { callbackURL, errorCallbackURL: `${callbackURL}${rest ? "&" : "?"}auth_error=kakao` };
 }
 
 // 카카오 인가 주소로만 이동한다(서버 응답이 다른 곳을 가리키면 따르지 않음).
@@ -42,7 +59,8 @@ export function kakaoAuthorizeUrl(data: unknown) {
   try { return new URL(url).origin === KAKAO_AUTHORIZE_ORIGIN ? url : null; } catch { return null; }
 }
 
-export function FieldKakaoSignIn({ onTwoFactor }: { onTwoFactor: () => void }) {
+// label: 연결 화면처럼 기존 계정 로그인만 안내할 곳에서 버튼 문구를 바꾼다(기본은 시작하기).
+export function FieldKakaoSignIn({ onTwoFactor, callbackPath, label = "카카오로 시작하기" }: { onTwoFactor: () => void; callbackPath?: string; label?: string }) {
   const [state, setState] = useState<KakaoProviderState>("loading");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -52,7 +70,7 @@ export function FieldKakaoSignIn({ onTwoFactor }: { onTwoFactor: () => void }) {
       handled.current = true;
       const returned = kakaoReturnFromSearch(window.location.search);
       if (returned) {
-        window.history.replaceState(null, "", window.location.pathname);
+        window.history.replaceState(null, "", `${window.location.pathname}${searchWithoutKakaoReturn(window.location.search)}`);
         if (returned.kind === "error") setMessage(returned.message);
         else onTwoFactor();
       }
@@ -71,7 +89,7 @@ export function FieldKakaoSignIn({ onTwoFactor }: { onTwoFactor: () => void }) {
     try {
       const response = await fetch("/api/auth/sign-in/social", {
         method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ provider: "kakao", callbackURL: "/workspace", errorCallbackURL: "/workspace?auth_error=kakao" }),
+        body: JSON.stringify({ provider: "kakao", ...kakaoCallbackUrls(callbackPath, window.location.search) }),
       });
       const target = response.status === 200 ? kakaoAuthorizeUrl(await response.json().catch(() => null)) : null;
       if (target) { window.location.assign(target); return; }
@@ -82,7 +100,7 @@ export function FieldKakaoSignIn({ onTwoFactor }: { onTwoFactor: () => void }) {
 
   const reason = kakaoUnavailableReason(state);
   return <>
-    <button className="field-auth-kakao" type="button" disabled={state !== "configured" || busy} onClick={() => void start()}>카카오로 시작하기</button>
+    <button className="field-auth-kakao" type="button" disabled={state !== "configured" || busy} onClick={() => void start()}>{label}</button>
     {reason && state !== "loading" && <p className="field-auth-unavailable">{reason}</p>}
     {message && <p role="status" className="state-message">{message}</p>}
   </>;

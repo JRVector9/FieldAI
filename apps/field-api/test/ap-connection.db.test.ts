@@ -52,6 +52,8 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
   let factsChangeEventId = '';
   let sentRevocationId = '';
   let apRevision = 1;
+  // FIELD_EVENT_SIGNATURE_SEND_VERSION으로 고른 발신 서명 버전. '1'이면 헤더·접두사가 없어야 한다.
+  let expectedSendVersion: '1' | '2' = '2';
   const sourceRefreshId = randomUUID();
   let sourceRefreshCalls = 0;
   let refreshConnectionId = '';
@@ -71,8 +73,10 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
       assert.equal(event.connection_id, refreshConnectionId);
       assert.equal(headers['x-event-id'], event.event_id);
       assert.equal(headers['x-key-id'], bindEventKeyId);
+      // Field 사건 발신은 기본 v2(`v2:field->ap.` 방향 접두사)로, 전환 설정 v1이면 헤더·접두사 없이 서명한다.
+      assert.equal(headers['x-signature-version'], expectedSendVersion === '2' ? '2' : undefined);
       assert.equal(headers['x-signature'], createHmac('sha256', Buffer.from(revokeSecret, 'base64url'))
-        .update(Buffer.concat([Buffer.from(`${headers['x-timestamp']}.${event.event_id}.`), raw]))
+        .update(Buffer.concat([Buffer.from(`${expectedSendVersion === '2' ? 'v2:field->ap.' : ''}${headers['x-timestamp']}.${event.event_id}.`), raw]))
         .digest('hex'));
       assert.doesNotMatch(raw.toString(), /010-|priceAmount|introduction|server-only-secret/);
       if (factsChangeEventId) assert.equal(event.event_id, factsChangeEventId);
@@ -86,8 +90,10 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
       const revocationId = headers['x-revocation-id'];
       const connectionId = revokeTarget.split('/').at(-2);
       assert.ok(connectionId && revocationId);
+      // Field 해제 발신도 같은 연결 키를 쓰므로 기본 v2 방향 접두사로, 전환 설정 v1이면 헤더·접두사 없이 서명한다.
+      assert.equal(headers['x-signature-version'], expectedSendVersion === '2' ? '2' : undefined);
       assert.equal(headers['x-signature'], createHmac('sha256', Buffer.from(revokeSecret, 'base64url'))
-        .update(`${headers['x-timestamp']}.${revocationId}.${connectionId}.revoke`).digest('hex'));
+        .update(`${expectedSendVersion === '2' ? 'v2:field->ap.' : ''}${headers['x-timestamp']}.${revocationId}.${connectionId}.revoke`).digest('hex'));
       assert.equal(headers['x-key-id'], bindEventKeyId);
       assert.equal(sentRevocationId === '' || sentRevocationId === revocationId, true);
       sentRevocationId = revocationId;
@@ -318,7 +324,11 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
       releaseId, JSON.stringify({ organizationId, releaseId, revision: 1 })]);
     assert.equal(await reconcileFactsChangeDeliveries(pool), 1);
     assert.equal(await reconcileFactsChangeDeliveries(pool), 0);
-    assert.equal(await deliverFactsChangeOnce(pool, runtime.apConnector!), 'retry');
+    // 첫 시도는 전환 설정 v1로 보낸다(재시도는 기본 v2). 같은 사건이 버전만 바꿔 다시 나간다.
+    process.env.FIELD_EVENT_SIGNATURE_SEND_VERSION = '1'; expectedSendVersion = '1';
+    try {
+      assert.equal(await deliverFactsChangeOnce(pool, runtime.apConnector!), 'retry');
+    } finally { delete process.env.FIELD_EVENT_SIGNATURE_SEND_VERSION; expectedSendVersion = '2'; }
     assert.equal(factsChangeCalls, 1);
     await pool.query(`update field.facts_change_deliveries set next_attempt_at = now()
       where connection_id = $1`, [connectionId]);
@@ -486,7 +496,11 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
     const listedAfterRevoke = (await app.inject({ url: '/v1/connections/ap',
       headers: { cookie: owner.cookie } })).json().connections;
     assert.equal(listedAfterRevoke.find((item: { id: string }) => item.id === connectionId).status, 'revoked');
-    assert.equal(await deliverApConnectionRevokeOnce(pool, runtime.apConnector), 'retry');
+    // 해제 첫 시도는 전환 설정 v1, 재시도는 기본 v2로 서명한다.
+    process.env.FIELD_EVENT_SIGNATURE_SEND_VERSION = '1'; expectedSendVersion = '1';
+    try {
+      assert.equal(await deliverApConnectionRevokeOnce(pool, runtime.apConnector), 'retry');
+    } finally { delete process.env.FIELD_EVENT_SIGNATURE_SEND_VERSION; expectedSendVersion = '2'; }
     assert.equal(revokeCalls, 1);
     assert.equal((await app.inject({ url: '/v1/connections/ap',
       headers: { cookie: owner.cookie } })).json().connections
@@ -503,11 +517,13 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
       .find((item: { id: string }) => item.id === connectionId).remoteRevokeState, 'acked');
     const incomingRevocationId = randomUUID();
     const incomingRevokePath = `/integrations/v1/connections/${connectionId}/revoke`;
-    const incomingHeaders = (at = String(Math.floor(Date.now() / 1000))) => ({
+    // prefix ''는 헤더 없는 v1 원문, 그 외는 X-Signature-Version: 2와 함께 보낸다.
+    const incomingHeaders = (at = String(Math.floor(Date.now() / 1000)), prefix = 'v2:ap->field.') => ({
       'x-key-id': bindBody.eventKeyId, 'x-revocation-id': incomingRevocationId,
+      ...(prefix ? { 'x-signature-version': '2' } : {}),
       'x-timestamp': at, 'x-signature': createHmac('sha256',
         Buffer.from(bindBody.eventSecret, 'base64url'))
-        .update(`${at}.${incomingRevocationId}.${connectionId}.revoke`).digest('hex'),
+        .update(`${prefix}${at}.${incomingRevocationId}.${connectionId}.revoke`).digest('hex'),
     });
     assert.equal((await app.inject({ method: 'POST', url: incomingRevokePath })).statusCode, 401);
     assert.equal((await app.inject({ method: 'POST', url: incomingRevokePath,
@@ -521,6 +537,20 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
       revocationId: incomingRevocationId });
     assert.equal((await app.inject({ method: 'POST', url: incomingRevokePath,
       headers: incomingHeaders() })).statusCode, 200);
+    // 같은 연결 키라도 Field 방향(field->ap)으로 서명된 해제는 반사로 보고 거부한다.
+    assert.equal((await app.inject({ method: 'POST', url: incomingRevokePath,
+      headers: incomingHeaders(undefined, 'v2:field->ap.') })).statusCode, 401);
+    // v1(헤더·접두사 없음)은 전환 설정이 켜졌을 때만 받는다.
+    process.env.FIELD_EVENT_SIGNATURE_ACCEPT_V1 = 'true';
+    try {
+      assert.equal((await app.inject({ method: 'POST', url: incomingRevokePath,
+        headers: incomingHeaders(undefined, '') })).statusCode, 200);
+      process.env.FIELD_EVENT_SIGNATURE_ACCEPT_V1 = 'false';
+      assert.equal((await app.inject({ method: 'POST', url: incomingRevokePath,
+        headers: incomingHeaders(undefined, '') })).statusCode, 401);
+    } finally { delete process.env.FIELD_EVENT_SIGNATURE_ACCEPT_V1; }
+    assert.equal((await app.inject({ method: 'POST', url: incomingRevokePath,
+      headers: { ...incomingHeaders(), 'x-signature-version': '3' } })).statusCode, 401);
   } finally {
     await Promise.all([app.close(), standalone.close()]);
     if (organizationId) await pool.query('delete from field.organizations where id = $1', [organizationId]);

@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
 import { signInOutcome } from "./auth-flow";
 import { TwoFactorChallenge } from "./agent-auth-pages";
+import { AgentKakaoSignIn } from "./agent-kakao-sign-in";
 import "./agent-connect.css";
 
 type Deployment = { id: string; publicId: string; kind: string; origin: string | null };
@@ -84,10 +85,13 @@ export function ConnectSignIn() {
     {continueFailed ? <div className="ap-connect-actions">
       <button type="button" disabled={busy} onClick={() => void verified()}>다시 시도 (추가)</button></div>
       : twoFactorPending ? <TwoFactorChallenge onVerified={verified} onCancel={() => { setTwoFactorPending(false); setPassword(""); }} />
-      : <form className="form-fields ap-connect-form" onSubmit={event => void signIn(event)}>
+      : <>{/* 카카오 로그인도 이 연결 화면(서명된 연결 요청 쿼리 포함)으로 돌아와 2단계 인증·연결 이어 가기를 같은 흐름으로 처리한다 */}
+      <AgentKakaoSignIn callbackPath="/connect/sign-in" onTwoFactor={() => { setStatus(""); setTwoFactorPending(true); }} />
+      <div className="agent-auth-divider">또는 이메일로</div>
+      <form className="form-fields ap-connect-form" onSubmit={event => void signIn(event)}>
       <label>이메일<input type="email" required autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} /></label>
       <label>비밀번호<input type="password" required autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} /></label>
-      <button type="submit" disabled={busy}>로그인하고 연결 계속</button></form>}
+      <button type="submit" disabled={busy}>로그인하고 연결 계속</button></form></>}
     <p><a href="/workspace">AP 작업 공간에서 계정 확인</a></p></Shell>;
 }
 

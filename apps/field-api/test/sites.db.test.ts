@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 import sharp from 'sharp';
 import { SYNTHETIC_HEIC } from './heic-fixture.js';
 import { createFieldApp } from '../src/app.js';
+import { MediaPermissionError, runSiteAssetDeletionOnce } from '../src/site-media.js';
 
 process.loadEnvFile(resolve('../../infra/field/.env'));
 process.env.FIELD_PROFILE = 'mock';
@@ -336,7 +337,14 @@ test('Field deletes only unused site photos, keeps draft and released photos, an
       headers: { cookie: account.cookie, 'content-type': 'application/octet-stream' }, payload }));
   const remove = (id: string, cookie = account.cookie) => app.inject({ method: 'DELETE', url: `/v1/sites/assets/${id}`, headers: { cookie } });
   const library = async () => ((await app.inject({ url: '/v1/sites/assets', headers: { cookie: account.cookie } })).json() as {
-    assets: { id: string; inUse: boolean }[] }).assets;
+    assets: { id: string; inUse: boolean; state: string; deletionStopped?: boolean }[] }).assets;
+  const deletionRow = async (id: string) => (await pool.query<{ state: string; deletion_attempts: number; deletion_error: string | null;
+    stopped: boolean; delay: number }>(
+    `select state, deletion_attempts, deletion_error, deletion_next_attempt_at = 'infinity'::timestamptz as stopped,
+       case when deletion_next_attempt_at = 'infinity'::timestamptz then null
+         else extract(epoch from deletion_next_attempt_at - clock_timestamp())::float end as delay
+     from field.site_assets where id = $1`, [id])).rows[0];
+  const worker = (siteMedia = runtime.siteMedia) => runSiteAssetDeletionOnce({ pool, siteMedia });
   try {
     const organization = await app.inject({ method: 'POST', url: '/v1/organizations',
       headers: { cookie: account.cookie }, payload: { name: 'Field 사진 삭제 검수' } });
@@ -381,32 +389,93 @@ test('Field deletes only unused site photos, keeps draft and released photos, an
 
     // 다른 조직 소유자는 사진 존재를 알 수 없다.
     assert.equal((await remove(unused.id, other.cookie)).statusCode, 404);
-    // 저장소 삭제를 확인하지 못하면 행을 남기고 다시 시도할 수 있다.
-    failDelete = true;
-    const storageDown = await remove(unused.id);
-    assert.equal(storageDown.statusCode, 503);
-    assert.equal((storageDown.json() as { error: string }).error, 'media_unavailable');
-    assert.equal((await library()).some(asset => asset.id === unused.id), true);
-    failDelete = false;
     const withoutStore = createFieldApp(async () => undefined, auth.handler, base, { pool, resolveUserId: runtime.resolveUserId });
     try {
       const blocked = await withoutStore.inject({ method: 'DELETE', url: `/v1/sites/assets/${unused.id}`, headers: { cookie: account.cookie } });
       assert.equal(blocked.statusCode, 503);
       assert.equal((blocked.json() as { error: string }).error, 'blocked_integration');
     } finally { await withoutStore.close(); }
+    assert.equal((await deletionRow(unused.id))?.state, 'ready');
 
-    const deleted = await remove(unused.id);
-    assert.equal(deleted.statusCode, 200);
-    assert.deepEqual(deleted.json(), { id: unused.id, state: 'deleted' });
+    // 2단계 삭제(추가): 요청은 저장소를 건드리지 않고 202 + state='deleting'만 남긴다(예전 동기 200 응답을 대체).
+    const requested = await remove(unused.id);
+    assert.equal(requested.statusCode, 202);
+    assert.deepEqual(requested.json(), { id: unused.id, state: 'deleting' });
+    assert.equal(objects.size, 2);
+    assert.equal((await pool.query("select 1 from field.outbox where event_type = 'field.site.asset.deletion_requested' and aggregate_id = $1", [unused.id])).rowCount, 1);
+    assert.equal((await pool.query("select 1 from field.outbox where event_type = 'field.site.asset.deleted' and aggregate_id = $1", [unused.id])).rowCount, 0);
+    const listed = (await library()).find(asset => asset.id === unused.id);
+    assert.deepEqual([listed?.state, listed?.inUse, listed?.deletionStopped], ['deleting', false, false]);
+    // 삭제 요청된 사진은 사진 조회·초안 저장에 쓸 수 없다.
+    assert.equal((await app.inject({ url: `/v1/sites/assets/${unused.id}`, headers: { cookie: account.cookie } })).statusCode, 404);
+    const withDeleting = await app.inject({ method: 'PUT', url: '/v1/sites/draft', headers: { cookie: account.cookie },
+      payload: { expectedRevision: 2, template: original.template, palette: original.palette,
+        pages: original.pages.map(page => ({ ...page, sections: page.sections.map(section => ({ ...section, assetId: unused.id, alt: '삭제 중 사진' })) })) } });
+    assert.equal(withDeleting.statusCode, 409);
+    assert.equal((withDeleting.json() as { error: string }).error, 'asset_deleting');
+    // 같은 요청을 반복해도 같은 202이고 재시도 상태를 바꾸지 않는다.
+    const again = await remove(unused.id);
+    assert.equal(again.statusCode, 202);
+    assert.deepEqual(again.json(), { id: unused.id, state: 'deleting' });
+    assert.equal((await pool.query("select 1 from field.outbox where event_type = 'field.site.asset.deletion_requested' and aggregate_id = $1", [unused.id])).rowCount, 1);
+
+    // 저장소 삭제가 실패하면 행을 남기고 시도 횟수·오류를 기록한 뒤 30초부터 두 배씩 미룬다.
+    failDelete = true;
+    assert.deepEqual(await worker(), { deleted: 0, retried: 1, stopped: 0, blocked: 0 });
+    let row = (await deletionRow(unused.id))!;
+    assert.deepEqual([row.state, row.deletion_attempts, row.deletion_error, row.stopped], ['deleting', 1, 'media_unavailable', false]);
+    assert.ok(row.delay > 25 && row.delay <= 30, `first backoff ${row.delay}`);
+    // 기한 전에는 다시 잡지 않는다.
+    assert.deepEqual(await worker(), { deleted: 0, retried: 0, stopped: 0, blocked: 0 });
+    await pool.query('update field.site_assets set deletion_next_attempt_at = now() where id = $1', [unused.id]);
+    assert.deepEqual(await worker(), { deleted: 0, retried: 1, stopped: 0, blocked: 0 });
+    row = (await deletionRow(unused.id))!;
+    assert.equal(row.deletion_attempts, 2);
+    assert.ok(row.delay > 55 && row.delay <= 60, `second backoff ${row.delay}`);
+    assert.equal(objects.size, 2);
+    assert.equal((await pool.query("select 1 from field.outbox where event_type = 'field.site.asset.deleted' and aggregate_id = $1", [unused.id])).rowCount, 0);
+
+    // 회복 뒤 작업자가 저장소 객체를 지우고 부재를 확인한 다음 행을 지우고 최종 이벤트를 낸다.
+    failDelete = false;
+    await pool.query('update field.site_assets set deletion_next_attempt_at = now() where id = $1', [unused.id]);
+    assert.deepEqual(await worker(), { deleted: 1, retried: 0, stopped: 0, blocked: 0 });
     assert.equal(objects.size, 1);
     assert.equal((await pool.query('select 1 from field.site_assets where id = $1', [unused.id])).rowCount, 0);
-    assert.equal((await pool.query("select 1 from field.outbox where event_type = 'field.site.asset.deleted' and aggregate_id = $1", [unused.id])).rowCount, 1);
-    // 같은 요청을 반복하면 이미 없는 사진이다.
+    const siteId = (await pool.query<{ id: string }>('select id from field.sites where organization_id = $1', [organizationId])).rows[0]!.id;
+    assert.deepEqual((await pool.query<{ payload: unknown }>(
+      "select payload from field.outbox where event_type = 'field.site.asset.deleted' and aggregate_id = $1", [unused.id])).rows.map(item => item.payload),
+    [{ siteId, assetId: unused.id }]);
+    // 행이 지워진 뒤 같은 요청은 이미 없는 사진이다.
     const repeated = await remove(unused.id);
     assert.equal(repeated.statusCode, 404);
     assert.equal((repeated.json() as { error: string }).error, 'asset_not_found');
 
-    // 50장 상한에서는 업로드가 거절되고, 쓰지 않는 사진을 지우면 다시 올릴 수 있다.
+    // 저장소 권한 부족(media_permission)은 재시도하지 않고 시도 횟수를 그대로 둔 채 멈추며, 목록에 지연으로 보인다.
+    const denied = (await upload('#334455')).json() as { id: string };
+    assert.equal((await remove(denied.id)).statusCode, 202);
+    const deniedStore = { ...runtime.siteMedia, exists: async () => { throw new MediaPermissionError(); } };
+    assert.deepEqual(await worker(deniedStore), { deleted: 0, retried: 0, stopped: 1, blocked: 0 });
+    row = (await deletionRow(denied.id))!;
+    assert.deepEqual([row.state, row.deletion_attempts, row.deletion_error, row.stopped], ['deleting', 0, 'media_permission', true]);
+    assert.equal((await library()).find(asset => asset.id === denied.id)?.deletionStopped, true);
+    assert.deepEqual(await worker(), { deleted: 0, retried: 0, stopped: 0, blocked: 0 });
+    // 저장소 설정이 없는 작업자는 시도 횟수를 늘리지 않고 blocked_integration만 남긴다.
+    await pool.query("update field.site_assets set deletion_next_attempt_at = now(), deletion_error = null where id = $1", [denied.id]);
+    assert.deepEqual(await runSiteAssetDeletionOnce({ pool }), { deleted: 0, retried: 0, stopped: 0, blocked: 1 });
+    row = (await deletionRow(denied.id))!;
+    assert.deepEqual([row.deletion_attempts, row.deletion_error, row.stopped], [0, 'blocked_integration', false]);
+    // 12회째 실패하면 멈추고 마지막 오류에 정지 표시를 붙인다.
+    failDelete = true;
+    await pool.query('update field.site_assets set deletion_next_attempt_at = now(), deletion_attempts = 11 where id = $1', [denied.id]);
+    assert.deepEqual(await worker(), { deleted: 0, retried: 0, stopped: 1, blocked: 0 });
+    row = (await deletionRow(denied.id))!;
+    assert.deepEqual([row.deletion_attempts, row.deletion_error, row.stopped], [12, 'media_unavailable,attempts_stopped', true]);
+    failDelete = false;
+    // 운영자가 원인을 해결하고 시각을 되돌리면 이어서 지운다.
+    await pool.query('update field.site_assets set deletion_next_attempt_at = now(), deletion_attempts = 0 where id = $1', [denied.id]);
+    assert.deepEqual(await worker(), { deleted: 1, retried: 0, stopped: 0, blocked: 0 });
+
+    // 50장 상한: 'deleting' 행은 지워질 때까지 상한에 포함되고(저장소 객체가 남아 있으므로), 작업자가 지우면 다시 올릴 수 있다.
     await pool.query(
       `insert into field.site_assets (id, organization_id, object_key, content_type, byte_size, width, height, sha256, uploaded_by)
        select gen_random_uuid(), $1::uuid, $1::text || '/seed-' || n || '.webp', 'image/webp', 1, 1, 1, 'seed',
@@ -416,7 +485,10 @@ test('Field deletes only unused site photos, keeps draft and released photos, an
     const seeded = (await pool.query<{ id: string; object_key: string }>(
       "select id, object_key from field.site_assets where organization_id = $1 and sha256 = 'seed' limit 1", [organizationId])).rows[0]!;
     objects.set(seeded.object_key, Buffer.from('seed'));
-    assert.equal((await remove(seeded.id)).statusCode, 200);
+    assert.equal((await remove(seeded.id)).statusCode, 202);
+    assert.equal((await upload('#123456')).statusCode, 429);
+    assert.equal(objects.has(seeded.object_key), true);
+    assert.deepEqual(await worker(), { deleted: 1, retried: 0, stopped: 0, blocked: 0 });
     assert.equal(objects.has(seeded.object_key), false);
     assert.equal((await upload('#123456')).statusCode, 201);
     assert.equal((await pool.query<{ count: number }>(
@@ -430,9 +502,10 @@ test('Field deletes only unused site photos, keeps draft and released photos, an
   }
 });
 
-test('Field photo delete takes the organization row first so the org-deletion lock order cannot deadlock', async () => {
-  // 회귀 검수: 사진 삭제가 저장소 I/O 중일 때 조직 삭제 실행기 잠금 순서(조직 FOR UPDATE → 사진 FOR UPDATE)가 끼어들면
-  // 예전 순서(사이트·사진 → outbox FK의 조직 KEY SHARE)는 40P01 교착을 만들었다.
+test('Field photo deletion holds no lock during storage I/O and keeps the org-deletion lock order', async () => {
+  // 회귀 검수: 예전에는 삭제 요청이 저장소 I/O 동안 조직·사이트·사진 잠금을 잡아 자동 저장·공개를 막았다.
+  // 2단계 삭제(추가)에서 요청은 짧은 트랜잭션만 쓰고, 작업자는 저장소 I/O 동안 어떤 잠금도 잡지 않으며,
+  // 최종 행 삭제는 조직 KEY SHARE → 사진 순서라 조직 삭제 실행기(조직 FOR UPDATE → 사진 FOR UPDATE)와 교착(40P01)하지 않는다.
   const account = await owner();
   const objects = new Map<string, Buffer>();
   let releaseDelete: () => void = () => undefined;
@@ -446,10 +519,11 @@ test('Field photo delete takes the organization row first so the org-deletion lo
     siteMedia: {
       put: async (key: string, data: Buffer) => { objects.set(key, data); },
       get: async (key: string) => objects.get(key) ?? null,
-      // 저장소 삭제 중간에 멈춰 다른 트랜잭션이 잠금을 시도할 시간을 만든다.
-      delete: async (key: string) => { deleteEntered(); await gate; objects.delete(key); },
+      delete: async (key: string) => { objects.delete(key); },
     },
   };
+  // 작업자 저장소 삭제 중간에 멈춰 다른 트랜잭션이 잠금을 시도할 시간을 만든다.
+  const gatedMedia = { ...runtime.siteMedia, delete: async (key: string) => { deleteEntered(); await gate; objects.delete(key); } };
   const app = createFieldApp(async () => undefined, auth.handler, base, runtime);
   const executor = await pool.connect();
   try {
@@ -461,27 +535,37 @@ test('Field photo delete takes the organization row first so the org-deletion lo
     const payload = await sharp({ create: { width: 4, height: 3, channels: 3, background: '#445566' } }).jpeg().toBuffer();
     const photo = (await app.inject({ method: 'POST', url: '/v1/sites/assets',
       headers: { cookie: account.cookie, 'content-type': 'application/octet-stream' }, payload })).json() as { id: string };
-
-    const removal = app.inject({ method: 'DELETE', url: `/v1/sites/assets/${photo.id}`,
+    const removal = await app.inject({ method: 'DELETE', url: `/v1/sites/assets/${photo.id}`,
       headers: { cookie: account.cookie, 'x-organization-id': organizationId } });
+    assert.equal(removal.statusCode, 202);
+    assert.equal(objects.size, 1);
+
+    const run = runSiteAssetDeletionOnce({ pool, siteMedia: gatedMedia });
+    run.catch(() => undefined);
     await entered;
+    // 저장소 I/O 중에도 자동 저장(초안 PUT)은 기다리지 않는다.
+    const draft = (await app.inject({ url: '/v1/sites/draft', headers: { cookie: account.cookie } })).json() as {
+      revision: number; template: string; palette: string; pages: unknown[] };
+    const autosave = await app.inject({ method: 'PUT', url: '/v1/sites/draft', headers: { cookie: account.cookie },
+      payload: { expectedRevision: draft.revision, template: draft.template, palette: draft.palette, pages: draft.pages } });
+    assert.equal(autosave.statusCode, 200);
+    // 조직 삭제 실행기와 같은 순서로 조직 행을 먼저 잡는다(작업자는 아직 아무 잠금도 없으므로 바로 잡힌다).
     const pid = (await executor.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
     await executor.query('begin');
-    // 조직 삭제 실행기(account-deletion.ts)와 같은 잠금 순서.
-    const executorRun = executor.query('select id from field.organizations where id=$1 for update', [organizationId])
-      .then(() => executor.query('select id from field.site_assets where organization_id=$1 order by id for update', [organizationId]))
-      .then(() => executor.query('commit'), async error => { await executor.query('rollback').catch(() => undefined); throw error; });
-    executorRun.catch(() => undefined);
+    await executor.query('select id from field.organizations where id=$1 for update', [organizationId]);
+    releaseDelete();
+    // 작업자는 최종 트랜잭션에서 조직 KEY SHARE를 기다린다(사진 행은 아직 잡지 않았다).
     for (let attempt = 0; ; attempt += 1) {
-      const waiting = await pool.query("select 1 from pg_stat_activity where pid = $1 and wait_event_type = 'Lock'", [pid]);
+      const waiting = await pool.query(`select 1 from pg_stat_activity where pid <> $1 and wait_event_type = 'Lock'
+        and query like '%field.organizations%for key share%'`, [pid]);
       if (waiting.rowCount) break;
-      assert.ok(attempt < 200, 'executor did not reach a lock wait');
+      assert.ok(attempt < 200, 'worker did not reach the organization lock wait');
       await new Promise(resolve => setTimeout(resolve, 10));
     }
-    releaseDelete();
-    const [removed] = await Promise.all([removal, executorRun]);
-    assert.equal(removed.statusCode, 200);
-    assert.deepEqual(removed.json(), { id: photo.id, state: 'deleted' });
+    // 실행기가 사진 행을 잠가도 기다리지 않는다(예전 순서였다면 40P01).
+    await executor.query('select id from field.site_assets where organization_id=$1 order by id for update', [organizationId]);
+    await executor.query('commit');
+    assert.deepEqual(await run, { deleted: 1, retried: 0, stopped: 0, blocked: 0 });
     assert.equal(objects.size, 0);
     const event = (await pool.query<{ payload: { siteId: string; assetId: string } }>(
       "select payload from field.outbox where event_type = 'field.site.asset.deleted' and aggregate_id = $1", [photo.id])).rows[0];
@@ -489,6 +573,7 @@ test('Field photo delete takes the organization row first so the org-deletion lo
     assert.deepEqual(event?.payload, { siteId, assetId: photo.id });
   } finally {
     releaseDelete();
+    await executor.query('rollback').catch(() => undefined);
     executor.release();
     await app.close();
     await pool.query('DELETE FROM field.sites WHERE organization_id IN (SELECT o.id FROM field.organizations o JOIN "user" u ON u.id = o.owner_user_id WHERE u.email = $1)', [account.email]);
