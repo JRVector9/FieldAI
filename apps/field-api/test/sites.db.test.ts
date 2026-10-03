@@ -314,6 +314,189 @@ test('Field accepts safe site photos, scopes them to one business, and publishes
   }
 });
 
+test('Field deletes only unused site photos, keeps draft and released photos, and frees the photo cap', async () => {
+  const account = await owner();
+  const other = await owner();
+  const objects = new Map<string, Buffer>();
+  let failDelete = false;
+  const runtime = {
+    pool,
+    resolveUserId: async (headers: IncomingHttpHeaders) =>
+      (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+    siteMedia: {
+      put: async (key: string, data: Buffer) => { objects.set(key, data); },
+      get: async (key: string) => objects.get(key) ?? null,
+      // 저장소 장애를 재현할 때는 삭제 요청이 실패한다.
+      delete: async (key: string) => { if (failDelete) throw new Error('storage unavailable'); objects.delete(key); },
+    },
+  };
+  const app = createFieldApp(async () => undefined, auth.handler, base, runtime);
+  const upload = (color: string) => sharp({ create: { width: 4, height: 3, channels: 3, background: color } }).jpeg().toBuffer()
+    .then(payload => app.inject({ method: 'POST', url: '/v1/sites/assets',
+      headers: { cookie: account.cookie, 'content-type': 'application/octet-stream' }, payload }));
+  const remove = (id: string, cookie = account.cookie) => app.inject({ method: 'DELETE', url: `/v1/sites/assets/${id}`, headers: { cookie } });
+  const library = async () => ((await app.inject({ url: '/v1/sites/assets', headers: { cookie: account.cookie } })).json() as {
+    assets: { id: string; inUse: boolean }[] }).assets;
+  try {
+    const organization = await app.inject({ method: 'POST', url: '/v1/organizations',
+      headers: { cookie: account.cookie }, payload: { name: 'Field 사진 삭제 검수' } });
+    assert.equal(organization.statusCode, 201);
+    const organizationId = (organization.json() as { id: string }).id;
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/organizations',
+      headers: { cookie: other.cookie }, payload: { name: '다른 사진 삭제 검수 사업체' } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/sites', headers: { cookie: account.cookie } })).statusCode, 201);
+    const used = (await upload('#f16e50')).json() as { id: string };
+    const unused = (await upload('#2f6f4e')).json() as { id: string };
+    assert.equal(objects.size, 2);
+    assert.deepEqual((await library()).map(asset => asset.inUse), [false, false]);
+
+    const original = (await app.inject({ url: '/v1/sites/draft', headers: { cookie: account.cookie } })).json() as {
+      template: string; palette: string; pages: { id: string; slug: string; title: string;
+        sections: { id: string; kind: string; heading: string; body: string }[] }[] };
+    const withPhoto = { expectedRevision: 0, template: original.template, palette: original.palette,
+      pages: original.pages.map(page => ({ ...page, sections: page.sections.map(section => ({ ...section, assetId: used.id, alt: '작업 사진' })) })) };
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/sites/draft', headers: { cookie: account.cookie }, payload: withPhoto })).statusCode, 200);
+    assert.equal((await library()).find(asset => asset.id === used.id)?.inUse, true);
+    // 현재 초안이 쓰는 사진은 거절하고 저장소 객체도 남긴다.
+    const inDraft = await remove(used.id);
+    assert.equal(inDraft.statusCode, 409);
+    assert.equal((inDraft.json() as { error: string }).error, 'asset_in_use');
+    assert.equal(objects.size, 2);
+
+    // 공개 버전이 참조하면 초안에서 빼도 삭제하지 않는다.
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft', headers: { cookie: account.cookie },
+      payload: { expectedRevision: 0, businessName: 'Field 사진 삭제 검수', introduction: '', region: '서울',
+        openingHours: '평일', contactPhone: '', services: [
+          { id: randomUUID(), name: '사진 상담', description: '', bookingMode: 'request', durationMinutes: 30, priceAmount: null },
+        ] } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 1 } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/sites/releases',
+      headers: { cookie: account.cookie }, payload: { expectedRevision: 1 } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/sites/draft', headers: { cookie: account.cookie },
+      payload: { expectedRevision: 1, template: original.template, palette: original.palette, pages: original.pages } })).statusCode, 200);
+    assert.equal((await library()).find(asset => asset.id === used.id)?.inUse, true);
+    assert.equal((await remove(used.id)).statusCode, 409);
+    assert.equal((await app.inject({ url: `/v1/public/site-assets/${used.id}` })).statusCode, 200);
+
+    // 다른 조직 소유자는 사진 존재를 알 수 없다.
+    assert.equal((await remove(unused.id, other.cookie)).statusCode, 404);
+    // 저장소 삭제를 확인하지 못하면 행을 남기고 다시 시도할 수 있다.
+    failDelete = true;
+    const storageDown = await remove(unused.id);
+    assert.equal(storageDown.statusCode, 503);
+    assert.equal((storageDown.json() as { error: string }).error, 'media_unavailable');
+    assert.equal((await library()).some(asset => asset.id === unused.id), true);
+    failDelete = false;
+    const withoutStore = createFieldApp(async () => undefined, auth.handler, base, { pool, resolveUserId: runtime.resolveUserId });
+    try {
+      const blocked = await withoutStore.inject({ method: 'DELETE', url: `/v1/sites/assets/${unused.id}`, headers: { cookie: account.cookie } });
+      assert.equal(blocked.statusCode, 503);
+      assert.equal((blocked.json() as { error: string }).error, 'blocked_integration');
+    } finally { await withoutStore.close(); }
+
+    const deleted = await remove(unused.id);
+    assert.equal(deleted.statusCode, 200);
+    assert.deepEqual(deleted.json(), { id: unused.id, state: 'deleted' });
+    assert.equal(objects.size, 1);
+    assert.equal((await pool.query('select 1 from field.site_assets where id = $1', [unused.id])).rowCount, 0);
+    assert.equal((await pool.query("select 1 from field.outbox where event_type = 'field.site.asset.deleted' and aggregate_id = $1", [unused.id])).rowCount, 1);
+    // 같은 요청을 반복하면 이미 없는 사진이다.
+    const repeated = await remove(unused.id);
+    assert.equal(repeated.statusCode, 404);
+    assert.equal((repeated.json() as { error: string }).error, 'asset_not_found');
+
+    // 50장 상한에서는 업로드가 거절되고, 쓰지 않는 사진을 지우면 다시 올릴 수 있다.
+    await pool.query(
+      `insert into field.site_assets (id, organization_id, object_key, content_type, byte_size, width, height, sha256, uploaded_by)
+       select gen_random_uuid(), $1::uuid, $1::text || '/seed-' || n || '.webp', 'image/webp', 1, 1, 1, 'seed',
+         (select id from "user" where email = $2)
+       from generate_series(1, 49) n`, [organizationId, account.email]);
+    assert.equal((await upload('#123456')).statusCode, 429);
+    const seeded = (await pool.query<{ id: string; object_key: string }>(
+      "select id, object_key from field.site_assets where organization_id = $1 and sha256 = 'seed' limit 1", [organizationId])).rows[0]!;
+    objects.set(seeded.object_key, Buffer.from('seed'));
+    assert.equal((await remove(seeded.id)).statusCode, 200);
+    assert.equal(objects.has(seeded.object_key), false);
+    assert.equal((await upload('#123456')).statusCode, 201);
+    assert.equal((await pool.query<{ count: number }>(
+      'select count(*)::int as count from field.site_assets where organization_id = $1', [organizationId])).rows[0]?.count, 50);
+  } finally {
+    await app.close();
+    await pool.query('DELETE FROM field.sites WHERE organization_id IN (SELECT o.id FROM field.organizations o JOIN "user" u ON u.id = o.owner_user_id WHERE u.email = ANY($1::text[]))', [[account.email, other.email]]);
+    await pool.query('DELETE FROM field.organizations WHERE owner_user_id = (SELECT id FROM "user" WHERE email = $1)', [account.email]);
+    await pool.query('DELETE FROM field.organizations WHERE owner_user_id = (SELECT id FROM "user" WHERE email = $1)', [other.email]);
+    await authPool.query('DELETE FROM "user" WHERE email = ANY($1::text[])', [[account.email, other.email]]);
+  }
+});
+
+test('Field photo delete takes the organization row first so the org-deletion lock order cannot deadlock', async () => {
+  // 회귀 검수: 사진 삭제가 저장소 I/O 중일 때 조직 삭제 실행기 잠금 순서(조직 FOR UPDATE → 사진 FOR UPDATE)가 끼어들면
+  // 예전 순서(사이트·사진 → outbox FK의 조직 KEY SHARE)는 40P01 교착을 만들었다.
+  const account = await owner();
+  const objects = new Map<string, Buffer>();
+  let releaseDelete: () => void = () => undefined;
+  let deleteEntered: () => void = () => undefined;
+  const entered = new Promise<void>(resolve => { deleteEntered = resolve; });
+  const gate = new Promise<void>(resolve => { releaseDelete = resolve; });
+  const runtime = {
+    pool,
+    resolveUserId: async (headers: IncomingHttpHeaders) =>
+      (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+    siteMedia: {
+      put: async (key: string, data: Buffer) => { objects.set(key, data); },
+      get: async (key: string) => objects.get(key) ?? null,
+      // 저장소 삭제 중간에 멈춰 다른 트랜잭션이 잠금을 시도할 시간을 만든다.
+      delete: async (key: string) => { deleteEntered(); await gate; objects.delete(key); },
+    },
+  };
+  const app = createFieldApp(async () => undefined, auth.handler, base, runtime);
+  const executor = await pool.connect();
+  try {
+    const organization = await app.inject({ method: 'POST', url: '/v1/organizations',
+      headers: { cookie: account.cookie }, payload: { name: 'Field 사진 삭제 잠금 순서 검수' } });
+    assert.equal(organization.statusCode, 201);
+    const organizationId = (organization.json() as { id: string }).id;
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/sites', headers: { cookie: account.cookie } })).statusCode, 201);
+    const payload = await sharp({ create: { width: 4, height: 3, channels: 3, background: '#445566' } }).jpeg().toBuffer();
+    const photo = (await app.inject({ method: 'POST', url: '/v1/sites/assets',
+      headers: { cookie: account.cookie, 'content-type': 'application/octet-stream' }, payload })).json() as { id: string };
+
+    const removal = app.inject({ method: 'DELETE', url: `/v1/sites/assets/${photo.id}`,
+      headers: { cookie: account.cookie, 'x-organization-id': organizationId } });
+    await entered;
+    const pid = (await executor.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
+    await executor.query('begin');
+    // 조직 삭제 실행기(account-deletion.ts)와 같은 잠금 순서.
+    const executorRun = executor.query('select id from field.organizations where id=$1 for update', [organizationId])
+      .then(() => executor.query('select id from field.site_assets where organization_id=$1 order by id for update', [organizationId]))
+      .then(() => executor.query('commit'), async error => { await executor.query('rollback').catch(() => undefined); throw error; });
+    executorRun.catch(() => undefined);
+    for (let attempt = 0; ; attempt += 1) {
+      const waiting = await pool.query("select 1 from pg_stat_activity where pid = $1 and wait_event_type = 'Lock'", [pid]);
+      if (waiting.rowCount) break;
+      assert.ok(attempt < 200, 'executor did not reach a lock wait');
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    releaseDelete();
+    const [removed] = await Promise.all([removal, executorRun]);
+    assert.equal(removed.statusCode, 200);
+    assert.deepEqual(removed.json(), { id: photo.id, state: 'deleted' });
+    assert.equal(objects.size, 0);
+    const event = (await pool.query<{ payload: { siteId: string; assetId: string } }>(
+      "select payload from field.outbox where event_type = 'field.site.asset.deleted' and aggregate_id = $1", [photo.id])).rows[0];
+    const siteId = (await pool.query<{ id: string }>('select id from field.sites where organization_id = $1', [organizationId])).rows[0]!.id;
+    assert.deepEqual(event?.payload, { siteId, assetId: photo.id });
+  } finally {
+    releaseDelete();
+    executor.release();
+    await app.close();
+    await pool.query('DELETE FROM field.sites WHERE organization_id IN (SELECT o.id FROM field.organizations o JOIN "user" u ON u.id = o.owner_user_id WHERE u.email = $1)', [account.email]);
+    await pool.query('DELETE FROM field.organizations WHERE owner_user_id = (SELECT id FROM "user" WHERE email = $1)', [account.email]);
+    await authPool.query('DELETE FROM "user" WHERE email = $1', [account.email]);
+  }
+});
+
 test('Field saves a draft near the content limit and keeps the photo cap under concurrent uploads', async () => {
   const account = await owner();
   const objects = new Map<string, Buffer>();

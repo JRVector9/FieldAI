@@ -172,6 +172,76 @@ test('Field organization deletion denies TLS ask and releases the custom domain 
   }finally{await f.close();}
 });
 
+// Caddy edge 어댑터(추가): 상태 경로는 ask와 같은 도메인에만 서버 비밀값 HMAC 증명을 주고, 작업자는 그 증명이 같은 도메인·조직일 때만 연결한다.
+// TLS 확인 유예는 DB(checked_at·last_error)에 남는다. 이전 기대(어댑터 메모리 유예, error 뒤 다음 점검에서 tls_pending으로 복귀,
+// error에서 상태 경로 404)는 L1~L3 수정으로 바뀌었다: 여러 작업자·재시작이 같은 유예를 보고, error는 확인 성공 전까지 유지되며
+// 그동안 ask·상태 경로를 열어 재발급·재확인이 가능해야 하기 때문이다.
+test('Field Caddy edge connects only after the site health route proves the same domain and organization over the edge',async()=>{
+  const f=await fixture();try{
+    const {createCaddyDomainEdge,siteHealthProof}=await import('../src/custom-domain-edge-caddy.js');
+    const secret=process.env.FIELD_AUTH_SECRET!;assert.ok(secret);
+    const health=(host:string)=>f.app.inject({url:'/.well-known/field-site-health',headers:{host}});
+    // 실제 TLS 대신 Host만 바꿔 같은 앱의 상태 경로를 읽는다(인증서 검증은 단위 검수가 맡는다).
+    let tlsUp=true;const probed:string[]=[];
+    const probe=async(hostname:string)=>{
+      probed.push(hostname);if(!tlsUp)return {ok:false as const,reason:'certificate_untrusted' as const};
+      const response=await health(hostname);
+      return response.statusCode===200?{ok:true as const,proof:response.json().proof as string,certificateExpiresAt:new Date(Date.now()+86_400_000).toISOString()}
+        :{ok:false as const,reason:'health_status' as const};
+    };
+    const caddy={...f.context,edge:createCaddyDomainEdge({secret,probe})};
+    const read=async()=>(await f.pool.query('select state,tls_state,last_error,checked_at from field.site_domains where id=$1',[opened.id])).rows[0];
+    const statusEvents=async()=>(await f.pool.query("select count(*)::integer as count from field.outbox where event_type='field.site.domain.status' and aggregate_id=$1",[opened.id])).rows[0].count;
+    const opened=(await f.create()).json();
+    assert.equal((await health('shop.example.com')).statusCode,404);
+    // 첫 점검 중에는 아직 ask 허용 전(verifying)이라 상태 경로가 거부한다. 이 실패는 유예를 시작하지 않는다.
+    assert.equal(await f.run(caddy),'tls_pending');assert.deepEqual(probed,['shop.example.com']);
+    assert.equal((await read()).last_error,'domain_tls_pending');
+    const allowed=await health('SHOP.example.com');assert.equal(allowed.statusCode,200);assert.equal(allowed.headers['cache-control'],'no-store');
+    // 공개 조회로 알 수 있는 조직 ID 대신 서버 비밀값 HMAC(도메인:조직)을 증명으로 준다.
+    assert.deepEqual(allowed.json(),{ok:true,proof:siteHealthProof(secret,'shop.example.com',f.org)});
+    // tls_pending 점검 중에도 ask·상태 경로 허용을 유지해 인증서 발급과 확인이 가능하다.
+    await f.due();assert.equal(await f.run(caddy),'connected');
+    assert.equal((await f.app.inject({url:'/v1/public/site-hosts/shop.example.com'})).statusCode,200);
+    for(const host of ['other.example.com',`${f.slug}.sites.platform.com`,'127.0.0.1','shop.example.com:8443'])
+      assert.equal((await health(host)).statusCode,404,host);
+    // 연결된 도메인의 TLS 확인 실패는 마지막 확정 점검 뒤 유예 시간 안에서는 연결을 유지한다.
+    tlsUp=false;await f.due();assert.equal(await f.run(caddy),'connected');
+    assert.equal((await read()).last_error,'domain_tls_unconfirmed');
+    // 유예가 지나면 tls_pending으로 내리고 그 실패 시각(checked_at)부터 TLS 유예를 센다.
+    await f.pool.query("update field.site_domains set checked_at=now()-interval '16 minutes'");
+    await f.due();assert.equal(await f.run(caddy),'tls_pending');
+    const graceStart=await read();assert.equal(graceStart.last_error,'domain_tls_unconfirmed');
+    assert.equal((await f.app.inject({url:'/v1/public/site-hosts/shop.example.com'})).statusCode,404);
+    // 유예 안의 실패는 시작 시각을 바꾸지 않는다. 메모리가 없는 새 어댑터(다른 작업자·재시작)도 같은 시각을 본다.
+    const restarted={...f.context,edge:createCaddyDomainEdge({secret,probe})};
+    await f.due();assert.equal(await f.run(restarted),'tls_pending');
+    assert.equal((await read()).checked_at.getTime(),graceStart.checked_at.getTime());
+    // 유예를 넘기면 error/domain_tls_failed로 기록한다.
+    await f.pool.query("update field.site_domains set checked_at=now()-interval '16 minutes'");
+    await f.due();assert.equal(await f.run(restarted),'error');
+    const failed=await read();assert.deepEqual({tls_state:failed.tls_state,last_error:failed.last_error},{tls_state:'error',last_error:'domain_tls_failed'});
+    const eventsAfterFailure=await statusEvents();
+    // error는 확인이 성공할 때까지 유지하고(tls_pending과 왕복하지 않음), 상태가 바뀌지 않으면 사건을 더 남기지 않는다.
+    // 그동안 ask·상태 경로는 열어 두어 재발급·재확인이 가능하다(사이트 연결은 connected만).
+    await f.due();assert.equal(await f.run(caddy),'error');
+    await f.due();assert.equal(await f.run(caddy),'error');
+    assert.equal(await statusEvents(),eventsAfterFailure);
+    assert.equal((await health('shop.example.com')).statusCode,200);
+    assert.equal((await f.app.inject({url:'/v1/public/site-hosts/allow?domain=shop.example.com'})).statusCode,200);
+    assert.equal((await f.app.inject({url:'/v1/public/site-hosts/shop.example.com'})).statusCode,404);
+    // 사업자 상태 API는 원인(last_error)을 보여 준다.
+    assert.equal((await f.call('GET',`/v1/sites/domains/${opened.id}`)).json().error,'domain_tls_failed');
+    // TLS가 복구되면 다음 점검에서 바로 연결된다.
+    tlsUp=true;await f.due();assert.equal(await f.run(caddy),'connected');
+    assert.equal(await statusEvents(),eventsAfterFailure+1);
+    // 연결 해제 뒤에는 상태 경로가 증명하지 않는다.
+    assert.equal((await f.call('POST',`/v1/sites/domains/${opened.id}/disconnect`,{})).statusCode,200);
+    assert.equal((await health('shop.example.com')).statusCode,404);
+    await f.due();assert.equal(await f.run(caddy),'disconnected');
+  }finally{await f.close();}
+});
+
 test('Field missing edge authority stays blocked, unknown result does not bind, and expired evidence is rejected',async()=>{
   const f=await fixture();try{
     await f.create();const missing={...f.context,edge:undefined};

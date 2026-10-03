@@ -1,12 +1,18 @@
 import type { Pool, PoolClient } from 'pg';
 import { createDomainDnsInspector, normalizeCustomHostname, type DomainDnsInspector } from './custom-domain-dns.js';
+import { domainEdgeFromEnvironment } from './custom-domain-edge-caddy.js';
 
 export type DomainEdgeProvider = {
   // The adapter must enforce monotonically increasing generation on bind/remove, attest the exact
   // hostname -> Field site binding and validate its trusted TLS certificate. Revisions are scoped to domainId;
   // retained tombstones reject old operations, and remove never changes another domainId/site binding.
-  ensureBinding: (input: { hostname: string; siteId: string; requestKey: string; domainId: string; generation: number }) => Promise<{
-    hostname: string; siteId: string; generation: number; state: 'pending' | 'ready'; certificateExpiresAt: string | null;
+  // organizationId(추가)는 edge 응답이 같은 조직의 사이트를 가리키는지 대조할 때 쓴다.
+  // failed(추가)는 어댑터가 확정한 TLS 실패다(작업자는 error/domain_tls_failed로 기록하고 다시 점검한다).
+  // pending이 tls_pending에서 유예(15분) 넘게 이어져도 작업자가 error/domain_tls_failed로 기록한다.
+  // Caddy 어댑터(추가)는 바인딩 원본이 Field DB라 위 tombstone 조건 대신 ask·site-hosts 조회 거부로 해제를 대신한다
+  // (이미 발급된 인증서는 만료까지 Caddy 저장소에 남는다).
+  ensureBinding: (input: { hostname: string; siteId: string; organizationId: string; requestKey: string; domainId: string; generation: number }) => Promise<{
+    hostname: string; siteId: string; generation: number; state: 'pending' | 'ready' | 'failed'; certificateExpiresAt: string | null;
   }>;
   removeBinding: (input: { hostname: string; siteId: string; requestKey: string; domainId: string; generation: number }) => Promise<boolean>;
 };
@@ -21,7 +27,7 @@ export function customDomainContextFromEnvironment(): CustomDomainContext {
     throw new Error('Field custom domain owner web origin is invalid');
   const target = process.env.FIELD_CUSTOM_DOMAIN_CNAME_TARGET;
   return { webOrigin: origin.origin, baseDomain: process.env.FIELD_SITE_BASE_DOMAIN, target,
-    dns: target ? createDomainDnsInspector(target) : undefined };
+    dns: target ? createDomainDnsInspector(target) : undefined, edge: domainEdgeFromEnvironment() };
 }
 export type SiteDomain = {
   id: string; organization_id: string; site_id: string; hostname: string; request_key: string; created_by: string;

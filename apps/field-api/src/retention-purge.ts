@@ -37,6 +37,26 @@ export async function purgeExpiredInboundRecords(pool: Pool) {
   };
 }
 
+// 인증 메일 outbox 보존(추가). 보존 작업자의 짧은 보존 정리 주기(10분)에 함께 실행한다.
+// - 7일이 지난 발송 완료(sent) 인증 메일(verify_email·reset_password)은 수신 주소를 고정 익명 주소로 바꾼다.
+//   발송 결과·시각·목적은 감사용으로 남긴다.
+// - 30일이 지난 행은 지운다. 단 blocked_integration·failed 행은 공급사 장애 확인을 위해 90일까지 둔다.
+// - 한 번에 각 1000행씩만 처리하고 남은 행은 다음 주기에 이어서 처리한다.
+export const FIELD_EMAIL_OUTBOX_ANONYMIZED_TO = 'redacted@retention.invalid';
+export async function purgeFieldEmailOutbox(pool: Pool) {
+  // 지울 행을 먼저 지워 곧 삭제될 행을 익명화하지 않는다.
+  const deleted = (await pool.query(
+    `delete from field.email_outbox where id in (select id from field.email_outbox
+       where created_at < now() - interval '30 days'
+         and (state not in ('blocked_integration','failed') or created_at < now() - interval '90 days')
+       order by created_at limit 1000)`)).rowCount ?? 0;
+  const anonymized = (await pool.query(
+    `update field.email_outbox set "to"=$1 where id in (select id from field.email_outbox
+       where state='sent' and purpose in ('verify_email','reset_password') and created_at < now() - interval '7 days'
+         and "to"<>$1 order by created_at limit 1000)`, [FIELD_EMAIL_OUTBOX_ANONYMIZED_TO])).rowCount ?? 0;
+  return { emailOutboxAnonymized: anonymized, emailOutboxDeleted: deleted };
+}
+
 export async function runFieldRetentionJobOnce(runtime: { pool: Pool; media?: FieldSiteMediaStore; journal?: Pick<FieldRetentionJournal, 'read' | 'append'> }): Promise<'empty' | 'completed' | 'blocked' | 'retry' | 'receipt_pending'> {
   if (runtime.journal) await verifyFieldRetentionJournal(runtime.pool,runtime.journal);
   const db = await runtime.pool.connect(); let job: RetentionJob | undefined;

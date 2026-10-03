@@ -11,7 +11,7 @@ import { HEIC_UNSUPPORTED_MESSAGE, IMAGE_UPLOAD_ACCEPT, unsupportedImageMessage 
 type Step = "business" | "design" | "pages" | "contact" | "publish";
 type Release = { id: string; revision: number; catalog_revision: number; published_at: string };
 type GenerationJob = { id: string; status: "queued" | "running" | "proposed" | "applied_to_draft" | "failed" | "canceled" | "stale"; prompt: string; baseRevision: number; catalogRevision: number; proposal: Pick<SiteDraft, "template" | "palette" | "font" | "pages"> | null; inputTokens: number | null; outputTokens: number | null; costStatus: "pending" | "unpriced"; errorCode: string | null };
-type SiteAsset = { id: string; state: "ready"; width: number; height: number; byteSize: number; createdAt: string };
+type SiteAsset = { id: string; state: "ready"; width: number; height: number; byteSize: number; createdAt: string; inUse: boolean };
 const steps: { id: Step; label: string }[] = [
   { id: "business", label: "1 사업 정보" }, { id: "design", label: "2 디자인" },
   { id: "pages", label: "3 편집" }, { id: "contact", label: "4 연락·예약" }, { id: "publish", label: "5 확인·공개" },
@@ -48,6 +48,18 @@ export function sitePublishGuidance(state: { restricted: boolean; busy: boolean;
   if (state.publishedRevision === state.revision && state.publishedCatalogRevision !== null && state.approvedRevision > state.publishedCatalogRevision)
     return { reason: "새로 승인한 사업 정보를 반영하려면 사이트 초안을 다시 저장해 주세요.", href: null, label: null };
   if (state.publishedRevision === state.revision) return { reason: "현재 저장본은 이미 공개되었습니다.", href: null, label: null };
+  return null;
+}
+// 사진 보관함 삭제 (추가) 버튼의 비활성 사유. null이면 삭제를 요청할 수 있다(최종 판정은 서버가 잠금 아래에서 다시 한다).
+export function sitePhotoDeleteBlockReason(asset: Pick<SiteAsset, "id" | "inUse">,
+  state: { draft: Pick<SiteDraft, "pages"> | null; dirty: boolean; busy: boolean; canManage: boolean | null }): string | null {
+  if (state.canManage === null) return "삭제 권한을 확인하지 못했습니다. 권한 상태를 다시 확인해 주세요.";
+  if (!state.canManage) return "조직 소유자만 사진을 삭제할 수 있습니다.";
+  if (state.draft?.pages.some(page => page.sections.some(section => section.assetId === asset.id)))
+    return "현재 초안의 섹션에서 쓰는 사진입니다. 섹션에서 사진을 빼고 저장한 뒤 삭제할 수 있습니다.";
+  if (state.dirty) return "변경 내용을 먼저 서버에 저장해 주세요.";
+  if (asset.inUse) return "공개 버전 기록에 포함됐거나 저장된 초안에서 쓰는 사진이라 삭제할 수 없습니다.";
+  if (state.busy) return "진행 중인 작업이 끝나면 삭제할 수 있습니다.";
   return null;
 }
 export function siteTestAccessFromSubscription(value: unknown, organizationId: string): boolean | null {
@@ -259,6 +271,13 @@ export function SiteEditor() {
     }
   }, [loadTestAccess]);
   useEffect(() => { void load(); }, [load]);
+  // 저장·공개 뒤 사진 사용 여부(inUse)가 바뀌므로 보관함 목록만 다시 읽는다. 실패하면 기존 목록을 유지한다.
+  const refreshAssets = useCallback(async () => {
+    try {
+      const result = await requestJson("/v1/sites/assets");
+      if (result.status === 200) setAssets((result.data as { assets: SiteAsset[] }).assets);
+    } catch { /* 목록 갱신 실패는 다음 저장·새로고침 때 다시 시도한다 */ }
+  }, []);
   useEffect(() => {
     if (!site || loadState !== "ready") return;
     const url = new URL(window.location.href);
@@ -343,15 +362,36 @@ export function SiteEditor() {
         headers: { "content-type": "application/octet-stream" }, body: file });
       const data = await response.json().catch(() => ({})) as SiteAsset & { error?: string };
       if (response.status === 201) {
-        setAssets(current => [data, ...current]);
+        setAssets(current => [{ ...data, inUse: false }, ...current]);
         assignPhoto(pageId, sectionId, data.id);
         setStatus("사진이 서버 보관함에 저장됐습니다. 사진 설명을 입력하고 사이트 초안을 저장해 주세요.");
       } else if (response.status === 415) setStatus(unsupportedImageMessage(data));
       else if (response.status === 503) setStatus("사진 저장소에 연결할 수 없습니다. 현재 입력은 유지되며 다시 첨부할 수 있습니다.");
-      else if (response.status === 429) setStatus("사진 보관 한도에 도달했습니다. 운영 지원이 필요합니다.");
+      else if (response.status === 429) setStatus("사진 보관 한도(50장)에 도달했습니다. 사진 보관함에서 쓰지 않는 사진을 삭제한 뒤 다시 올려 주세요.");
       else setStatus(`사진 업로드에 실패했습니다 (${response.status}). 다시 첨부해 주세요.`);
     } catch { setStatus("사진 업로드 요청이 전달되지 않았습니다. 다시 첨부해 주세요."); }
     finally { setBusy(false); setUploadingSectionId(null); }
+  }
+  async function deletePhoto(asset: SiteAsset) {
+    // 소유자 권한을 확인한 조직(catalog.organizationId)을 명시해 서버의 암묵 조직 선택에 기대지 않는다.
+    if (!catalog || sitePhotoDeleteBlockReason(asset, { draft: site, dirty, busy, canManage: publishCanManage })) return;
+    if (!window.confirm("이 사진을 서버 사진 보관함에서 영구 삭제하시겠습니까? 삭제한 사진은 되돌릴 수 없습니다.")) return;
+    setBusy(true); setStatus("사진을 삭제하고 있습니다.");
+    try {
+      const result = await requestJson(`/v1/sites/assets/${asset.id}`, "DELETE", undefined, undefined,
+        { "x-organization-id": catalog.organizationId });
+      const error = (result.data as { error?: string }).error;
+      if (result.status === 200 || (result.status === 404 && error === "asset_not_found")) {
+        setAssets(current => current.filter(item => item.id !== asset.id));
+        setStatus(result.status === 200 ? "사진을 서버 보관함과 저장소에서 삭제했습니다." : "이미 삭제된 사진입니다. 목록에서 뺐습니다.");
+      } else if (result.status === 409) {
+        await refreshAssets();
+        setStatus("현재 초안이나 공개 버전 기록에서 쓰는 사진이라 삭제하지 않았습니다.");
+      } else if (result.status === 404) setStatus("조직 소유자만 사진을 삭제할 수 있습니다.");
+      else if (result.status === 503) setStatus("사진 저장소에서 삭제를 확인하지 못해 사진을 그대로 두었습니다. 잠시 뒤 다시 시도해 주세요.");
+      else setStatus(`사진을 삭제하지 못했습니다 (${result.status}).`);
+    } catch { setStatus("사진 삭제 요청이 전달되지 않았습니다. 목록을 다시 불러와 상태를 확인해 주세요."); }
+    finally { setBusy(false); }
   }
   const save = useCallback(async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
@@ -395,6 +435,7 @@ export function SiteEditor() {
         setStatus(hasNewerEdits
           ? `사이트 초안 ${saved.revision}번 저장 후 추가 입력을 다시 저장합니다.`
           : `사이트 초안 ${saved.revision}번이 저장되었습니다. 공개 상태는 바뀌지 않았습니다.`);
+        void refreshAssets();
       } else {
         setSaveState("failed");
         setStatus(`저장에 실패했습니다 (${result.status}). 입력 내용은 이 화면에 남아 있습니다. 초안 저장으로 재시도해 주세요.`);
@@ -403,7 +444,7 @@ export function SiteEditor() {
       setSaveState("failed");
       setStatus("저장 요청이 전달되지 않았습니다. 입력 내용은 이 화면에 남아 있습니다. 초안 저장으로 재시도해 주세요.");
     } finally { saveInFlight.current = false; setBusy(false); }
-  }, [site]);
+  }, [site, refreshAssets]);
   useEffect(() => {
     if (!site || !dirty || busy || !online || saveState !== "idle") return;
     const timer = window.setTimeout(() => { void save(); }, 1000);
@@ -463,6 +504,7 @@ export function SiteEditor() {
           return;
         }
         setReleases((history.data as { releases: Release[] }).releases);
+        void refreshAssets();
         setStatus(`사이트 ${site.revision}번이 공개되었습니다. 카탈로그 ${(result.data as { catalogRevision: number }).catalogRevision}번을 사용합니다.`);
       } else if (result.status === 409) setStatus((result.data as { error?: string }).error === "booking_schedule_not_ready"
         ? "시간표 예약에 신청 가능한 영업시간이 없어 공개하지 못했습니다. 예약 정책을 확인해 주세요."
@@ -541,7 +583,7 @@ export function SiteEditor() {
       {step === "business" && <section className="special-panel"><h2>1 사업 정보</h2><p>상호·서비스·가격·예약 방식은 사업 정보에서 관리합니다. 과거 디자인을 복구해도 현재 사업 정보는 유지됩니다.</p><p>현재 승인한 사업 정보: {approvedCatalog ? `${approvedCatalog.revision}번` : "없음"}</p><a href="/workspace?section=services&edit=business&returnTo=site" aria-disabled={dirty || busy} onClick={event => { if (dirty || busy) event.preventDefault(); }}>사업 정보 편집 열기</a>{(dirty || busy) && <p>사이트 변경 내용을 먼저 저장하고 저장 완료를 확인한 뒤 이동해 주세요.</p>}</section>}
       {step === "design" && <section className="special-panel"><h2>2 디자인 선택</h2><p>세 배치는 페이지·섹션 구성이 같고 색·제목 글꼴·섹션 모양만 다릅니다. Essential은 흰 바탕에 첫 소개 섹션을 2단으로, Editorial은 넓은 2단과 세리프 제목으로, Warm은 둥근 카드로 섹션을 보여 줍니다.</p><SiteTemplateCards template={site.template} businessName={catalog?.businessName ?? ""} onChange={template => change({ template })} /><div className="site-editor-design-controls"><label>강조 색상 <input type="color" value={site.palette} onChange={event => change({ palette: event.target.value })} /></label><SiteFontSelect font={site.font} onChange={font => change({ font })} /></div><div className="knowledge-source site-editor-ai"><h3>AI로 배치 제안받기</h3><p>AI는 승인된 사업 정보로 템플릿·색·페이지 구성을 제안합니다. 제안은 확인 후 초안에만 반영됩니다.</p><label>원하는 분위기와 구성<textarea value={aiPrompt} maxLength={1000} onChange={event => setAiPrompt(event.target.value)} placeholder="예: 따뜻한 분위기의 한 페이지 소개와 서비스 목록" /></label><button type="button" disabled={busy || dirty || !approvedCatalog || !aiPrompt.trim() || aiJob?.status === "queued" || aiJob?.status === "running" || aiJob?.status === "proposed"} onClick={() => void generateSite()}>AI 제안 생성</button>{dirty && <p>현재 변경을 먼저 저장한 뒤 생성해 주세요.</p>}{!approvedCatalog && <p>먼저 사업 정보를 승인해 주세요. 템플릿 편집은 계속할 수 있습니다.</p>}{aiJob && <div className="state-message" role="status"><strong>AI 작업: {aiJob.status === "queued" ? "대기" : aiJob.status === "running" ? "생성 중" : aiJob.status === "proposed" ? "제안 검토" : aiJob.status === "applied_to_draft" ? "초안 반영" : aiJob.status === "stale" ? "최신 초안과 충돌" : aiJob.status === "canceled" ? "취소" : "실패"}</strong>{aiJob.errorCode && <p>상태 코드: {aiJob.errorCode}</p>}{aiJob.inputTokens !== null && <p>모델 사용량: 입력 {aiJob.inputTokens}·출력 {aiJob.outputTokens} 토큰. 실제 비용은 공급사 정산 전입니다.</p>}{(["queued", "running", "proposed"] as const).includes(aiJob.status as "queued" | "running" | "proposed") && <button type="button" disabled={busy} onClick={() => void cancelGeneration()}>작업 취소</button>}{aiJob.status === "proposed" && aiJob.proposal && <><p>제안: {aiJob.proposal.template} · {aiJob.proposal.pages.length}개 페이지. 현재 초안은 아직 바뀌지 않았습니다.</p><SiteRenderer site={{ ...site, ...aiJob.proposal }} catalog={approvedCatalog ?? catalog!} preview /><button type="button" disabled={busy || dirty} onClick={() => void applyGeneration()}>검토한 제안을 초안에 반영</button></>}{(aiJob.status === "failed" || aiJob.status === "canceled" || aiJob.status === "stale") && <p>설명은 유지됩니다. 필요하면 새 작업을 만들거나 템플릿을 직접 편집하세요.</p>}</div>}</div></section>}
       {step === "pages" && <div className="editor-switch" role="group" aria-label="페이지 편집 화면"><button type="button" aria-pressed={mobileView === "edit"} onClick={() => setMobileView("edit")}>편집</button><button type="button" aria-pressed={mobileView === "preview"} onClick={() => setMobileView("preview")}>미리보기</button></div>}
-      {step === "pages" && <section className="special-panel site-editor-inputs"><h2>3 페이지와 내용 편집</h2><p>소개 페이지는 최대 5개입니다. 문의 화면은 별도로 제공됩니다.</p><div className="deployment-options">{site.pages.map(page => <button key={page.id} type="button" aria-pressed={currentPage?.id === page.id} onClick={() => setActivePageId(page.id)}>{page.title}</button>)}<button type="button" disabled={site.pages.length >= 5} onClick={() => { let next = site.pages.length + 1; while (site.pages.some(existing => existing.slug === `page-${next}`)) next += 1; const page = { id: crypto.randomUUID(), slug: `page-${next}`, title: `페이지 ${next}`, sections: [] }; change({ pages: [...site.pages, page] }); setActivePageId(page.id); }}>페이지 추가</button></div>{currentPage && <div className="knowledge-source"><label>페이지 이름<input value={currentPage.title} maxLength={100} onChange={event => updatePage(currentPage.id, { title: event.target.value })} /></label><label>페이지 주소 경로<input value={currentPage.slug} readOnly={currentPage.slug === "home"} pattern="[a-z0-9][a-z0-9-]{0,39}" maxLength={40} onChange={event => updatePage(currentPage.id, { slug: event.target.value })} /></label>{currentPage.slug !== "home" && <button type="button" onClick={() => { change({ pages: site.pages.filter(page => page.id !== currentPage.id) }); setActivePageId(null); }}>페이지 삭제</button>}<h3>섹션</h3>{currentPage.sections.map((section, index) => <div key={section.id} className="knowledge-source" role="group" aria-label={`${index + 1}번 섹션`}><label>구성<select value={section.kind} onChange={event => updateSection(currentPage.id, section.id, { kind: event.target.value as SiteSection["kind"] })}>{kinds.map(kind => <option key={kind.id} value={kind.id}>{kind.label}</option>)}</select></label><label>제목<input value={section.heading} maxLength={200} onChange={event => updateSection(currentPage.id, section.id, { heading: event.target.value })} /></label><label>본문<textarea value={section.body} maxLength={5000} onChange={event => updateSection(currentPage.id, section.id, { body: event.target.value })} /></label><div className="site-photo-controls"><h4>섹션 사진</h4><label>서버 사진 보관함<select value={section.assetId ?? ""} disabled={busy} onChange={event => assignPhoto(currentPage.id, section.id, event.target.value)}><option value="">사진 없음</option>{assets.map((asset, assetIndex) => <option key={asset.id} value={asset.id}>사진 {assets.length - assetIndex} · {asset.width}×{asset.height} · 서버 저장 완료</option>)}</select></label><label>새 사진 업로드<input type="file" accept={IMAGE_UPLOAD_ACCEPT} disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void uploadPhoto(currentPage.id, section.id, file); }} /></label><p>{HEIC_UNSUPPORTED_MESSAGE}</p>{uploadingSectionId === section.id && <p role="status">사진을 변환해 저장하고 있습니다.</p>}{section.assetId && <><img className="site-editor-photo-preview" src={`/v1/sites/assets/${section.assetId}`} alt={section.alt ?? ""} /><label>사진 설명(alt)<input required maxLength={300} value={section.alt ?? ""} onChange={event => updateSection(currentPage.id, section.id, { alt: event.target.value })} placeholder="사진에 보이는 내용을 구체적으로 적어 주세요" /></label><button type="button" disabled={busy} onClick={() => assignPhoto(currentPage.id, section.id, "")}>이 섹션에서 사진 빼기</button><p>초안에서 빼도 이미 공개된 사진은 새 공개본으로 교체할 때까지 유지됩니다.</p></>}</div><div className="preview-action"><button type="button" aria-label={`${index + 1}번 섹션 위로 이동`} disabled={index === 0} onClick={() => { const next = [...currentPage.sections]; [next[index - 1], next[index]] = [next[index]!, next[index - 1]!]; updatePage(currentPage.id, { sections: next }); }}>위로</button><button type="button" aria-label={`${index + 1}번 섹션 아래로 이동`} disabled={index === currentPage.sections.length - 1} onClick={() => { const next = [...currentPage.sections]; [next[index + 1], next[index]] = [next[index]!, next[index + 1]!]; updatePage(currentPage.id, { sections: next }); }}>아래로</button><button type="button" aria-label={`${index + 1}번 섹션 삭제`} onClick={() => updatePage(currentPage.id, { sections: currentPage.sections.filter(item => item.id !== section.id) })}>섹션 삭제</button></div></div>)}<button type="button" disabled={currentPage.sections.length >= 20} onClick={() => updatePage(currentPage.id, { sections: [...currentPage.sections, { id: crypto.randomUUID(), kind: "text", heading: "", body: "" }] })}>섹션 추가</button></div>}</section>}
+      {step === "pages" && <section className="special-panel site-editor-inputs"><h2>3 페이지와 내용 편집</h2><p>소개 페이지는 최대 5개입니다. 문의 화면은 별도로 제공됩니다.</p><div className="deployment-options">{site.pages.map(page => <button key={page.id} type="button" aria-pressed={currentPage?.id === page.id} onClick={() => setActivePageId(page.id)}>{page.title}</button>)}<button type="button" disabled={site.pages.length >= 5} onClick={() => { let next = site.pages.length + 1; while (site.pages.some(existing => existing.slug === `page-${next}`)) next += 1; const page = { id: crypto.randomUUID(), slug: `page-${next}`, title: `페이지 ${next}`, sections: [] }; change({ pages: [...site.pages, page] }); setActivePageId(page.id); }}>페이지 추가</button></div>{currentPage && <div className="knowledge-source"><label>페이지 이름<input value={currentPage.title} maxLength={100} onChange={event => updatePage(currentPage.id, { title: event.target.value })} /></label><label>페이지 주소 경로<input value={currentPage.slug} readOnly={currentPage.slug === "home"} pattern="[a-z0-9][a-z0-9-]{0,39}" maxLength={40} onChange={event => updatePage(currentPage.id, { slug: event.target.value })} /></label>{currentPage.slug !== "home" && <button type="button" onClick={() => { change({ pages: site.pages.filter(page => page.id !== currentPage.id) }); setActivePageId(null); }}>페이지 삭제</button>}<h3>섹션</h3>{currentPage.sections.map((section, index) => <div key={section.id} className="knowledge-source" role="group" aria-label={`${index + 1}번 섹션`}><label>구성<select value={section.kind} onChange={event => updateSection(currentPage.id, section.id, { kind: event.target.value as SiteSection["kind"] })}>{kinds.map(kind => <option key={kind.id} value={kind.id}>{kind.label}</option>)}</select></label><label>제목<input value={section.heading} maxLength={200} onChange={event => updateSection(currentPage.id, section.id, { heading: event.target.value })} /></label><label>본문<textarea value={section.body} maxLength={5000} onChange={event => updateSection(currentPage.id, section.id, { body: event.target.value })} /></label><div className="site-photo-controls"><h4>섹션 사진</h4><label>서버 사진 보관함<select value={section.assetId ?? ""} disabled={busy} onChange={event => assignPhoto(currentPage.id, section.id, event.target.value)}><option value="">사진 없음</option>{assets.map((asset, assetIndex) => <option key={asset.id} value={asset.id}>사진 {assets.length - assetIndex} · {asset.width}×{asset.height} · 서버 저장 완료</option>)}</select></label><label>새 사진 업로드<input type="file" accept={IMAGE_UPLOAD_ACCEPT} disabled={busy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void uploadPhoto(currentPage.id, section.id, file); }} /></label><p>{HEIC_UNSUPPORTED_MESSAGE}</p>{uploadingSectionId === section.id && <p role="status">사진을 변환해 저장하고 있습니다.</p>}{section.assetId && <><img className="site-editor-photo-preview" src={`/v1/sites/assets/${section.assetId}`} alt={section.alt ?? ""} /><label>사진 설명(alt)<input required maxLength={300} value={section.alt ?? ""} onChange={event => updateSection(currentPage.id, section.id, { alt: event.target.value })} placeholder="사진에 보이는 내용을 구체적으로 적어 주세요" /></label><button type="button" disabled={busy} onClick={() => assignPhoto(currentPage.id, section.id, "")}>이 섹션에서 사진 빼기</button><p>초안에서 빼도 이미 공개된 사진은 새 공개본으로 교체할 때까지 유지됩니다.</p></>}</div><div className="preview-action"><button type="button" aria-label={`${index + 1}번 섹션 위로 이동`} disabled={index === 0} onClick={() => { const next = [...currentPage.sections]; [next[index - 1], next[index]] = [next[index]!, next[index - 1]!]; updatePage(currentPage.id, { sections: next }); }}>위로</button><button type="button" aria-label={`${index + 1}번 섹션 아래로 이동`} disabled={index === currentPage.sections.length - 1} onClick={() => { const next = [...currentPage.sections]; [next[index + 1], next[index]] = [next[index]!, next[index + 1]!]; updatePage(currentPage.id, { sections: next }); }}>아래로</button><button type="button" aria-label={`${index + 1}번 섹션 삭제`} onClick={() => updatePage(currentPage.id, { sections: currentPage.sections.filter(item => item.id !== section.id) })}>섹션 삭제</button></div></div>)}<button type="button" disabled={currentPage.sections.length >= 20} onClick={() => updatePage(currentPage.id, { sections: [...currentPage.sections, { id: crypto.randomUUID(), kind: "text", heading: "", body: "" }] })}>섹션 추가</button></div>}<div className="site-photo-controls site-photo-library" role="region" aria-label="사진 보관함 (추가)"><h4>사진 보관함 (추가)</h4><p>서버에 보관된 사진 {assets.length}/50장입니다. 현재 초안이나 공개 버전 기록에서 쓰는 사진은 삭제할 수 없습니다.</p>{assets.length ? <ul>{assets.map((asset, assetIndex) => { const reason = sitePhotoDeleteBlockReason(asset, { draft: site, dirty, busy, canManage: publishCanManage }); return <li key={asset.id}><img src={`/v1/sites/assets/${asset.id}`} alt="" loading="lazy" /><span>사진 {assets.length - assetIndex} · {asset.width}×{asset.height}</span><button type="button" disabled={reason !== null} aria-describedby={reason ? `site-photo-delete-${asset.id}` : undefined} onClick={() => void deletePhoto(asset)}>삭제 (추가)</button>{reason && <p id={`site-photo-delete-${asset.id}`}>{reason}</p>}</li>; })}</ul> : <p>보관된 사진이 없습니다.</p>}</div></section>}
       {step === "contact" && <section className="special-panel"><h2>4 연락·예약</h2><p>고객은 Field 직접 문의를 사용할 수 있습니다. 승인된 카탈로그의 서비스별 예약 방식은 유지됩니다.</p>{approvedCatalog ? <><p>승인된 기본 방식: {approvedCatalog.defaultBookingMode === "slot" ? "시간표 선택" : "희망 시간 제출"}. 아래는 서비스별로 확정된 방식입니다.</p><ul>{approvedCatalog.services.map(service => <li key={service.id}>{service.name} · {service.bookingMode === "slot" ? "시간표 선택" : "희망 시간 제출"}</li>)}</ul>{bookingReadiness && <p role="status">{bookingReadiness.message} <a href="/workspace?section=calendar">영업시간·예약 정책 열기(추가)</a></p>}</> : <p>먼저 사업 정보와 서비스를 승인해 주세요.</p>}<p>고객이 직접 문의·예약 요청을 남길 수 있고, 사업자가 관리실에서 최종 확정합니다.</p></section>}
       {step === "publish" && <section className="special-panel">
         <h2>5 확인·공개</h2>

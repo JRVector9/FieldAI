@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
 import { fieldResourceForCustomer, type CustomerFieldResource } from './field-connector.js';
+import { registerFieldCustomerDecisionRoutes } from './field-customer-decisions.js';
 import { rejectExpiredTrial } from './trial-access.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -104,7 +105,7 @@ async function currentTerms(grant: Extract<CustomerFieldResource, { ok: true }>,
     service: availability.service, timezone: availability.timezone, request: details });
   return { availability, conditionsHash } as const;
 }
-type Action = { id: string; organization_id: string; inquiry_id: string; state: string;
+export type Action = { id: string; organization_id: string; inquiry_id: string; state: string;
   kind: 'inquiry' | 'reservation_request';
   input_hash: string; external_request_id: string | null;
   reservation_id: string | null; error_code: string | null; connection_id: string;
@@ -122,17 +123,55 @@ export type ReservationEvent = { eventId: string; revision: number; eventType: s
 const customerNoticeEvents = new Set(['field.reservation.proposed', 'field.reservation.confirmed',
   'field.reservation.changed', 'field.reservation.canceled', 'field.reservation.reject',
   'field.reservation.expire', 'field.reservation.decline_cancel', 'field.reservation.decline_change']);
+// Field 알림 경로 조회 결과. owner/allowed/reason은 Field 계약 값이고, 조회 실패는 route_unknown이다.
+// transient는 일시 장애(시간 초과·5xx·/me 확인 불가)로 확인하지 못한 경우이며, 이때는 생략을 기록하지 않고 다음 동기화에서 다시 확인한다.
+export type FieldNotificationRoute = { owner: 'ap' | 'field' | null; allowed: boolean;
+  reason: 'ap_route_generation_1' | 'route_transfer_pending' | 'field_route_active'
+    | 'field_route_suspended' | 'route_unknown'; transient?: true };
+const unknownRoute: FieldNotificationRoute = { owner: null, allowed: false, reason: 'route_unknown' };
+const transientRoute: FieldNotificationRoute = { ...unknownRoute, transient: true };
+const routeReasons = new Set(['ap_route_generation_1', 'route_transfer_pending',
+  'field_route_active', 'field_route_suspended']);
+// 고객 알림을 만들기 직전에 Field 알림 경로를 확인한다. scope가 없는 연결은 확인할 수 없으므로 null(기존 세대 1 AP 규칙)을,
+// 확인 시도가 실패하면 이중 발송을 막기 위해 route_unknown을 돌려준다.
+export async function readFieldNotificationRoute(runtime: BusinessRuntime, inquiryId: string,
+  secretHash: string, action: Pick<Action, 'connection_id' | 'external_request_id' | 'reservation_id'>):
+  Promise<FieldNotificationRoute | null> {
+  const grant = await fieldResourceForCustomer(runtime, inquiryId, secretHash,
+    action.connection_id, 'field.notification_route.read');
+  if (!grant.ok) return grant.statusCode === 403 ? null : grant.statusCode === 503 ? transientRoute : unknownRoute;
+  let response: Response;
+  try {
+    response = await grant.transport(
+      `${grant.apiUrl}/external-requests/${action.external_request_id}/notification-route`,
+      { headers: { authorization: `Bearer ${grant.access}` }, signal: AbortSignal.timeout(8000) });
+  } catch { return transientRoute; }
+  if (response.status >= 500 || response.status === 429) return transientRoute;
+  try {
+    const data = response.ok ? object(await response.json()) : null;
+    if (!data || data.externalRequestId !== action.external_request_id
+      || data.reservationId !== action.reservation_id
+      || (data.owner !== 'ap' && data.owner !== 'field') || ![1, 2].includes(Number(data.generation))
+      || typeof data.allowed !== 'boolean' || !routeReasons.has(String(data.reason))
+      || (data.owner === 'field' && data.allowed)) return unknownRoute;
+    return { owner: data.owner, allowed: data.allowed,
+      reason: data.reason as FieldNotificationRoute['reason'] };
+  } catch { return unknownRoute; }
+}
 export async function recordFieldReservationEvent(db: PoolClient,
   action: Pick<Action, 'id' | 'organization_id' | 'inquiry_id' | 'connection_id' | 'reservation_id'>,
-  event: ReservationEvent) {
+  event: ReservationEvent, route?: FieldNotificationRoute | null) {
   const eventId = randomUUID();
   const outboxId = randomUUID();
+  // 경로를 확인했고 AP 발송이 허용되지 않으면(Field 담당·전환 대기·확인 불가) AP 고객 알림을 만들지 않는다
+  const skipReason = route && !(route.owner === 'ap' && route.allowed) ? route.reason : null;
   await db.query(`insert into ap.outbox(id,organization_id,event_type,aggregate_id,payload)
     values ($1,$2,'ap.field_reservation.event_recorded',$3,$4::jsonb)`,
   [outboxId, action.organization_id, action.id, JSON.stringify({ actionRequestId: action.id,
     fieldEventId: event.eventId, connectionId: action.connection_id,
     reservationId: action.reservation_id, revision: event.revision,
     eventType: event.eventType, state: event.state, routeGeneration: event.routeGeneration,
+    // field_reservation_events 행과 같은 값(Field 사건이 선언한 담당 제품). 실제 생략 여부는 notification_events.suppression_reason에 남긴다
     notificationOwnerProduct: 'ap' })]);
   await db.query(`insert into ap.field_reservation_events
     (id,organization_id,action_request_id,field_event_id,reservation_id,revision,
@@ -144,9 +183,11 @@ export async function recordFieldReservationEvent(db: PoolClient,
     event.startAt ?? null, event.endAt ?? null, outboxId]);
   if (customerNoticeEvents.has(event.eventType))
     await db.query(`insert into ap.notification_events
-      (id,organization_id,outbox_id,inquiry_id,field_reservation_event_id,audience,channel,state)
-      values ($1,$2,$3,$4,$5,'customer','kakao','blocked_integration')`,
-    [randomUUID(), action.organization_id, outboxId, action.inquiry_id, eventId]);
+      (id,organization_id,outbox_id,inquiry_id,field_reservation_event_id,audience,channel,state,
+       suppression_reason)
+      values ($1,$2,$3,$4,$5,'customer','kakao',$6,$7)`,
+    [randomUUID(), action.organization_id, outboxId, action.inquiry_id, eventId,
+      skipReason ? 'not_applicable' : 'blocked_integration', skipReason]);
 }
 function reservationFeed(value: unknown, action: Action, fieldOrganizationId: string):
   { state: string; revision: number; events: ReservationEvent[] } | null {
@@ -184,7 +225,8 @@ function reservationFeed(value: unknown, action: Action, fieldOrganizationId: st
 }
 
 async function mirrorReservationEvents(runtime: BusinessRuntime, action: Action,
-  feed: { state: string; revision: number; events: ReservationEvent[] }) {
+  feed: { state: string; revision: number; events: ReservationEvent[] },
+  route?: FieldNotificationRoute | null) {
   const db = await runtime.pool.connect();
   try {
     await db.query('begin');
@@ -210,7 +252,7 @@ async function mirrorReservationEvents(runtime: BusinessRuntime, action: Action,
         || row.end_at?.getTime() !== (current.endAt ? Date.parse(current.endAt) : undefined);
     })) { await db.query('rollback'); return { error: 'field_event_conflict' } as const; }
     for (const event of feed.events.slice(previous.rows.length))
-      await recordFieldReservationEvent(db, action, event);
+      await recordFieldReservationEvent(db, action, event, route);
     await db.query('commit');
     return { ok: true } as const;
   } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
@@ -372,7 +414,15 @@ export function registerFieldActionRoutes(app: FastifyInstance, runtime: Busines
       try { feed = reservationFeed(await response.json(), action, grant.fieldOrganizationId); }
       catch { feed = null; }
       if (!feed) return reply.code(502).send({ error: 'invalid_field_events' });
-      const mirrored = await mirrorReservationEvents(runtime, action, feed);
+      // 새로 기록할 고객 알림 사건이 있을 때만 Field 알림 경로를 트랜잭션 밖에서 미리 확인한다
+      const mirroredCount = Number((await runtime.pool.query<{ count: string }>(
+        'select count(*)::text as count from ap.field_reservation_events where action_request_id = $1',
+        [action.id])).rows[0]?.count ?? 0);
+      const route = feed.events.slice(mirroredCount).some(event => customerNoticeEvents.has(event.eventType))
+        ? await readFieldNotificationRoute(runtime, inquiry.id, secretHash, action) : null;
+      // 일시 장애로 경로를 확인하지 못하면 사건을 미러링하지 않는다(생략 영구 기록 금지). 다음 동기화가 경로를 다시 확인한다
+      if (route?.transient) return reply.code(503).send({ error: 'route_unknown' });
+      const mirrored = await mirrorReservationEvents(runtime, action, feed, route);
       if ('error' in mirrored) return reply.code(409).send({ error: mirrored.error });
       const stored = await runtime.pool.query<{ field_event_id: string; revision: number;
         event_type: string; state: string; occurred_at: Date; start_at: Date | null;
@@ -655,4 +705,7 @@ export function registerFieldActionRoutes(app: FastifyInstance, runtime: Busines
         external.externalRequestId, external.reservationId);
       return reply.header('Cache-Control', 'private, no-store').send(status(updated));
     });
+
+  // 고객의 Field 제안 조회·결정 경로(preview.9 소비)는 같은 확인키 규칙으로 함께 등록한다
+  registerFieldCustomerDecisionRoutes(app, runtime);
 }

@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import { processFieldEventInboxOnce } from './field-event-inbox.js';
 import { fieldConnectorFromEnvironment } from './field-connector.js';
 import { deliverFieldConnectionRevokeOnce } from './field-connection-revoke-worker.js';
+import { deliverFieldAgentEventOnce } from './field-webhook-sender.js';
 import { processFieldSourceRefreshOnce } from './source-refresh-worker.js';
 import { processFieldFactsEventOnce } from './field-facts-events.js';
 import { assertProductionProfile } from './production-profile.js';
@@ -24,6 +25,7 @@ try {
   while (!stopping) {
     try {
       if (fieldConnector && await deliverFieldConnectionRevokeOnce(pool, fieldConnector) !== 'empty') continue;
+      if (fieldConnector && await deliverFieldAgentEventOnce(pool, fieldConnector) !== 'empty') continue;
       if (await processFieldFactsEventOnce(pool) !== 'empty') continue;
       if (fieldConnector && await processFieldSourceRefreshOnce({ pool,
         resolveUserId: async () => null, fieldConnector }) !== 'empty') continue;

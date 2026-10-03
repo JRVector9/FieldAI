@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { requestJson } from "./field-api";
+import { domainErrorLabel } from "./field-domain-errors";
 import "./field-domain-settings.css";
 
 type Domain = {
   id: string; hostname: string; state: string; desiredState: string;
   ownership: string; dns: string; tls: string; binding: string; isPrimary: boolean;
-  origin: string | null; checkedAt: string | null;
+  origin: string | null; checkedAt: string | null; error?: string | null;
   verification: { txtName: string; txtValue: string; cnameName: string; cnameTarget: string | null };
 };
 type Domains = { domains: Domain[]; providerState: string };
@@ -160,6 +161,7 @@ export function FieldDomainSettings({ organizationId, onNavigate }: {
           <div className="row wrap mt24"><button type="button" className="btn btn-secondary" disabled={busy || !snapshotFresh || domain.state !== "connected" || !domain.origin || domain.isPrimary} onClick={() => void act("primary")}>{primaryActive ? "대표 주소 사용 중 (추가)" : domain.isPrimary ? "대표 주소 확인 필요 (추가)" : "대표 주소로 사용 (추가)"}</button>
             {domain.desiredState === "active" ? <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void act("disconnect")}>연결 해제 (추가)</button> : <button type="button" className="btn btn-secondary" disabled={busy || domain.state !== "disconnected"} onClick={() => void act("reconnect")}>재연결 (추가)</button>}</div>
           {domain.checkedAt && <p className="field-note mt24">마지막 확인: {new Date(domain.checkedAt).toLocaleString("ko-KR")}</p>}
+          {typeof domain.error === "string" && <p className="field-note mt24">확인 결과 (추가): {domainErrorLabel(domain.error)}</p>}
         </>}
         <div className="notice mt24">{data?.providerState === "blocked_integration" ? "도메인 연결 공급사가 설정되지 않았습니다. 주소 등록은 가능하며 연결 완료로 표시하지 않습니다." : "소유권·DNS·인증서와 사이트 연결이 모두 확인되어야 주소가 활성화됩니다."}</div>
         {domain?.origin && <p className="field-note mt24">새 주소의 AI 상담은 별도 AP 설치 승인이 필요합니다. <a href="/workspace/integrations">AI 상담 연결</a></p>}

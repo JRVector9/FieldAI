@@ -255,14 +255,30 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
     assert.equal(retried.statusCode, 201);
     const retryState = new URL(retried.json().authorizationUrl as string).searchParams.get('state');
     assert.ok(retryState);
-    const completed = await callback(new URLSearchParams({ state: retryState, code: 'approved-code', iss: fieldIssuer }));
+    // Field client 등록에 preview.9 scope가 없으면 authorize가 invalid_scope로 돌아온다. 기본 scope로 한 번만 다시 시작한다
+    const scopeRefused = await callback(new URLSearchParams({ state: retryState, error: 'invalid_scope', iss: fieldIssuer }));
+    assert.equal(scopeRefused.statusCode, 303, scopeRefused.body);
+    const fallback = new URL(scopeRefused.headers.location ?? 'http://invalid.local');
+    assert.equal(fallback.origin, 'http://127.0.0.1:4321');
+    assert.equal(fallback.pathname, '/api/auth/oauth2/authorize');
+    const fallbackScopes = fallback.searchParams.get('scope')?.split(' ') ?? [];
+    assert.deepEqual(fallbackScopes, ['openid', 'offline_access', 'field.facts.read', 'field.availability.read',
+      'field.requests.create', 'field.requests.read', 'field.customer_access.create']);
+    const fallbackState = fallback.searchParams.get('state');
+    assert.ok(fallbackState);
+    assert.notEqual(fallbackState, retryState);
+    // 기본 scope 동의도 invalid_scope면 다시 시작하지 않는다(무한 재시작 금지)
+    assert.equal((await callback(new URLSearchParams({ state: fallbackState, error: 'invalid_scope',
+      iss: fieldIssuer }))).statusCode, 400);
+    assert.equal(tokenCalls, 0);
+    const completed = await callback(new URLSearchParams({ state: fallbackState, code: 'approved-code', iss: fieldIssuer }));
     assert.equal(completed.statusCode, 303, completed.body);
     const destination = new URL(completed.headers.location ?? 'http://invalid.local');
     assert.equal(destination.searchParams.get('result'), 'review_required');
     assert.equal(destination.searchParams.get('connectionId'), fieldConnectionId);
     assert.equal(tokenCalls, 1);
     assert.equal(bindCalls, 1);
-    const replay = await callback(new URLSearchParams({ state: retryState, code: 'approved-code', iss: fieldIssuer }));
+    const replay = await callback(new URLSearchParams({ state: fallbackState, code: 'approved-code', iss: fieldIssuer }));
     assert.equal(replay.headers.location, completed.headers.location);
     assert.equal(tokenCalls, 1);
     assert.equal(bindCalls, 1);
@@ -270,6 +286,10 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
     assert.equal(listing.statusCode, 200);
     assert.equal(listing.json().connections[0].fieldOrganizationId, fieldOrganizationId);
     assert.equal(listing.json().connections[0].status, 'review_required');
+    // 기본 scope로 만든 연결은 제안 응답·알림 경로 scope가 없음을 표시한다
+    assert.equal(listing.json().connections[0].scopeState, 'scope_missing');
+    assert.deepEqual(listing.json().connections[0].missingScopes,
+      ['field.proposals.respond', 'field.notification_route.read']);
     const capabilitiesPath = `/v1/connections/field/${fieldConnectionId}/capabilities`;
     assert.equal((await app.inject({ url: capabilitiesPath,
       headers: { cookie: outsider.cookie } })).statusCode, 404);

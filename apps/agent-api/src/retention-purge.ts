@@ -88,3 +88,22 @@ export async function runAgentRetentionJobOnce(runtime: { pool: Pool; media?: Ag
     return 'retry';
   } finally { db.release(); }
 }
+
+// 인증 메일 outbox 보존 규칙(추가):
+// - 7일이 지난 발송 완료(sent) 인증 메일(verify_email·reset_password)은 수신 주소를 고정 익명 주소로 바꾼다.
+//   발송 결과·시각·목적은 감사용으로 남긴다.
+// - 30일이 지난 행은 지운다. 단 blocked_integration·failed 행은 운영자가 공급사 장애를 확인할 수 있도록 90일까지 둔다.
+// - 한 주기에 각 1000행씩만 처리하고 남은 행은 다음 주기에 이어서 처리한다.
+export const EMAIL_OUTBOX_ANONYMIZED_TO = 'redacted@retention.invalid';
+export async function purgeAgentEmailOutbox(pool: Pool) {
+  const anonymized = (await pool.query(
+    `update ap.email_outbox set "to"=$1 where id in (select id from ap.email_outbox
+       where state='sent' and purpose in ('verify_email','reset_password') and created_at < now() - interval '7 days'
+         and "to"<>$1 order by created_at limit 1000)`, [EMAIL_OUTBOX_ANONYMIZED_TO])).rowCount ?? 0;
+  const deleted = (await pool.query(
+    `delete from ap.email_outbox where id in (select id from ap.email_outbox
+       where created_at < now() - interval '30 days'
+         and (state not in ('blocked_integration','failed') or created_at < now() - interval '90 days')
+       order by created_at limit 1000)`)).rowCount ?? 0;
+  return { anonymized, deleted };
+}

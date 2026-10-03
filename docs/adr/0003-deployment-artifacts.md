@@ -24,9 +24,17 @@
 - 실제 도메인·TLS·DNS-01, 레지스트리 push·서명, 운영 서버 ACL·백업은 검수하지 않았다.
 - live OAuth 수명주기 baseline을 만드는 CLI(`oauth-lifecycle-cli`)는 현재 mock 전용이다. live에서 공개 OAuth 연결 제공은 이 절차가 생길 때까지 `blocked_integration`이다.
 - 사업자 자체 도메인 on-demand TLS는 Caddy `ask` 형식(`?domain=`) 허용 endpoint가 없어 구성하지 않았다.
-- `better-auth`의 선택 peer 해석으로 API 이미지에 `next`(약 290MB)가 포함된다. lockfile/peer 규칙 변경이 필요하며 이 ADR 범위 밖이다.
+- ~~`better-auth`의 선택 peer 해석으로 API 이미지에 `next`(약 290MB)가 포함된다.~~ 아래 추가 기록 A1로 해소.
 - 이 ADR은 출시 게이트(G-A*, G-F*) 통과나 공급사 승인이 아니다.
 
 ## 되돌림
 
 이미지·compose·Caddy·CI 파일은 앱 소스와 독립이라 삭제·교체로 되돌릴 수 있다. 운영 DB 볼륨·저널 볼륨은 compose `down -v`로 지우지 않는다(저널 키 분실 시 기존 저널을 읽을 수 없음). 다른 edge나 오케스트레이터로 바꿀 때도 제품별 분리·127.0.0.1 노출·XFF 재작성·`*_TRUST_PROXY` 대역 일치 조건을 유지한다.
+
+## 추가 기록 A1 (2026-10-03) — API 이미지에서 Next 제외
+
+- 원인: `better-auth`의 선택 peer `next`·`react`·`react-dom`을 pnpm이 workspace 그래프(웹 앱의 `next`)에서 찾아 연결했다. lockfile의 API importer가 `better-auth@1.7.5(next@16.3.6…)`로 기록되어 `pnpm deploy --prod`가 `next`·`@next/swc-*`(약 285MB)를 함께 담았다.
+- 결정: 루트 `pnpm-workspace.yaml`에 `overrides: better-auth>next|react|react-dom: '-'`를 두어 이 peer 연결만 제거한다. API·루트 `auth` CLI는 `better-auth/next-js`·`better-auth/react` 진입점을 쓰지 않는다(웹 앱은 `better-auth`에 의존하지 않음). lockfile 변경은 `better-auth`·`@better-auth/oauth-provider`·`auth` snapshot의 peer 접미사와 `overrides` 기록뿐이며 다른 패키지 버전은 바뀌지 않는다. Dockerfile은 바꾸지 않는다.
+- 기각: `autoInstallPeers=false`+`dedupePeerDependents=false`는 lockfile 전체 재해석이 필요하고 `@better-auth/oauth-provider`의 필수 peer(`@better-auth/core` 등) 자동 설치까지 끊는다. 이미지 안에서 `next`를 지우는 방식은 lockfile과 실제 설치가 어긋난다.
+- 측정(로컬 Docker, linux/arm64): AP API 868MB→460MB(압축 176MB→97.5MB, `node_modules` 404MB→90MB), Field API 869MB→462MB(176MB→97.6MB, 405MB→91MB). 두 이미지 모두 `node_modules`에 `next`·`@next/*`·`react*`가 없고 `node dist/server.js`는 모듈 누락 없이 `*_PROFILE must be live` 오류로 부팅을 거부한다.
+- 되돌림: `overrides` 블록을 지우고 `pnpm install --lockfile-only`로 lockfile을 다시 만든다.

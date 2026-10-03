@@ -379,8 +379,10 @@ test('local AP OAuth code crosses HTTP into Field encrypted pending connection',
     assert.equal(reverseUrl.origin, field);
     const fieldSelection = await json(`${field}/integrations/v1/authorization/selections`, 'POST', {
       clientId: process.env.AP_FIELD_CLIENT_ID, organizationId: fieldOrganizationId,
+      // 2026-10-03: AP가 preview.9 제안 응답·알림 경로 scope도 요청하므로 선택도 같은 7개여야 재선택 화면으로 가지 않는다
       scopes: ['field.facts.read', 'field.availability.read',
-        'field.requests.create', 'field.requests.read', 'field.customer_access.create'],
+        'field.requests.create', 'field.requests.read', 'field.customer_access.create',
+        'field.proposals.respond', 'field.notification_route.read'],
     }, fieldOwner.cookie);
     assert.equal(fieldSelection.response.status, 201, JSON.stringify(fieldSelection.value));
     const fieldAuthorize = await json(reverseUrl.toString(), 'GET', undefined, fieldOwner.cookie, 'manual');
@@ -561,7 +563,7 @@ test('local AP OAuth code crosses HTTP into Field encrypted pending connection',
     assert.equal(capabilities.value.schemaVersion, '1.0');
     assert.deepEqual(capabilities.value.capabilities, { 'facts.read': true,
       'availability.read': true, 'request.create': true,
-      'customer_access.create': true, 'proposal.respond': false });
+      'customer_access.create': true, 'proposal.respond': true });
     const inquiryId = randomUUID();
     const customerReceipt = randomBytes(32).toString('base64url');
     const { createHash } = await import('node:crypto');

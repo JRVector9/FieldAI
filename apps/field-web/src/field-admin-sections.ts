@@ -10,3 +10,26 @@ export type FieldAdminSection = typeof fieldAdminSections[number]["id"];
 export function isFieldAdminSection(value: string): value is FieldAdminSection {
   return fieldAdminSections.some(item => item.id === value);
 }
+
+const STOPPED_REASON_LABELS: Record<string, string> = {
+  execution_failed: "실행 오류",
+  media_permission: "사진 저장소 권한 부족",
+  execution_attempts_stopped: "자동 실행 중지",
+};
+// 멈춘 삭제 요청의 last_error(쉼표 구분 코드, 예: execution_failed:PAN01)를 운영자용 한국어로 바꾼다. 모르는 코드는 그대로 보인다.
+export function stoppedDeletionReason(lastError: string | null) {
+  if (!lastError) return "사유 기록 없음";
+  return lastError.split(",").map(code => {
+    const [base, detail] = code.split(":");
+    const label = STOPPED_REASON_LABELS[base ?? ""] ?? code;
+    return detail && label !== code ? `${label}(${detail})` : label;
+  }).join(" · ");
+}
+
+// 멈춘 삭제 요청 "다시 실행" 버튼의 비활성 사유(추가). null이면 누를 수 있다.
+export function deletionResumeBlockReason(input: { role: "operator" | "auditor"; reason: string; busy: boolean }) {
+  if (input.role !== "operator") return "다시 실행은 operator 권한이 필요합니다. 감사자는 목록만 확인할 수 있습니다.";
+  if (input.busy) return "진행 중인 요청이 끝나면 다시 실행할 수 있습니다.";
+  if (input.reason.trim().length < 10) return "다시 실행 사유를 10자 이상 입력해 주세요.";
+  return null;
+}

@@ -1,6 +1,7 @@
 import { recordAgentRevocation } from './revocation-journal.js';
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import type { PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
 
 export type FieldConnectorConfig = {
@@ -16,8 +17,13 @@ export type FieldConnectorConfig = {
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const fieldScopes = ['field.facts.read', 'field.availability.read',
   'field.requests.create', 'field.requests.read', 'field.customer_access.create'];
+// preview.9 제안 응답·알림 경로 scope. 새 동의에서 요청하지만 연결 필수 조건은 아니다.
+// 없는 연결은 해당 기능만 scope_missing으로 막고 기존 조회·전달은 그대로 둔다.
+export const fieldDecisionScopes = ['field.proposals.respond', 'field.notification_route.read'];
 const baseFieldScopes = ['field.facts.read'];
-const scopes = ['openid', 'offline_access', ...fieldScopes];
+const scopes = ['openid', 'offline_access', ...fieldScopes, ...fieldDecisionScopes];
+// Field OAuth client 등록에 preview.9 scope가 아직 없으면 authorize가 invalid_scope로 돌아온다. 이때 한 번만 기본 scope로 다시 동의를 시작한다
+const baseConsentScopes = ['openid', 'offline_access', ...fieldScopes];
 const tokenScopes = ['offline_access', ...baseFieldScopes];
 function hash(value: string) { return createHash('sha256').update(value).digest('hex'); }
 function seal(value: string, key: Buffer) {
@@ -342,6 +348,28 @@ export async function inspectFieldFacts(runtime: BusinessRuntime, userId: string
   } catch { return { ok: false, statusCode: 502, error: 'field_facts_unavailable' }; }
 }
 
+// 동의 시도(state·PKCE)를 저장하고 Field authorize URL을 만든다. base는 preview.9 scope 없이 기본 scope만 요청한다
+async function startFieldConsent(db: Pick<PoolClient, 'query'>, config: FieldConnectorConfig,
+  input: { fieldConnectionId: string; apGrantId: string; apOrganizationId: string; apAgentId: string;
+    userId: string }, scopeSet: 'full' | 'base') {
+  const state = randomBytes(32).toString('base64url');
+  const verifier = randomBytes(32).toString('base64url');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  await db.query(
+    `insert into ap.field_oauth_attempts(id,field_connection_id,ap_grant_id,ap_organization_id,
+      ap_agent_id,initiator_user_id,state_hash,verifier_cipher,expires_at,scope_set)
+      values ($1,$2,$3,$4,$5,$6,$7,$8,now() + interval '10 minutes',$9)`,
+    [randomUUID(), input.fieldConnectionId, input.apGrantId, input.apOrganizationId,
+      input.apAgentId, input.userId, hash(state), seal(verifier, config.tokenKey), scopeSet]);
+  const authorization = new URL(`${config.issuer.replace(/\/$/, '')}/oauth2/authorize`);
+  for (const [key, value] of Object.entries({ response_type: 'code', client_id: config.clientId,
+    redirect_uri: config.redirectUri, scope: (scopeSet === 'full' ? scopes : baseConsentScopes).join(' '), state,
+    code_challenge: challenge, code_challenge_method: 'S256', resource: resource(config) })) {
+    authorization.searchParams.set(key, value);
+  }
+  return authorization.toString();
+}
+
 export function registerFieldConnectorRoutes(app: FastifyInstance, runtime: BusinessRuntime) {
   app.get('/v1/connections/field', async (request, reply) => {
     const userId = await runtime.resolveUserId(request.headers);
@@ -355,12 +383,15 @@ export function registerFieldConnectorRoutes(app: FastifyInstance, runtime: Busi
         join ap.memberships m on m.organization_id = c.ap_organization_id
         left join ap.field_remote_revocations r on r.connection_id = c.id
         where m.user_id = $1 and m.role = 'owner' order by c.created_at desc`, [userId]);
-    return reply.header('Cache-Control', 'private, no-store').send({ connections: rows.rows.map(row => ({
-      id: row.id, apOrganizationId: row.ap_organization_id, apAgentId: row.ap_agent_id,
-      fieldOrganizationId: row.field_organization_id, scopes: row.scopes,
-      status: row.status, remoteRevokeState: row.remote_revoke_state,
-      createdAt: row.created_at,
-    })) });
+    return reply.header('Cache-Control', 'private, no-store').send({ connections: rows.rows.map(row => {
+      const missingScopes = fieldDecisionScopes.filter(scope => !row.scopes.includes(scope));
+      return { id: row.id, apOrganizationId: row.ap_organization_id, apAgentId: row.ap_agent_id,
+        fieldOrganizationId: row.field_organization_id, scopes: row.scopes,
+        status: row.status, remoteRevokeState: row.remote_revoke_state,
+        // 제안 응답·알림 경로 권한 동의 여부. 없으면 해당 기능만 쓸 수 없다
+        scopeState: missingScopes.length ? 'scope_missing' : 'complete', missingScopes,
+        createdAt: row.created_at };
+    }) });
   });
 
   app.post<{ Params: { id: string } }>('/v1/connections/field/:id/revoke', async (request, reply) => {
@@ -487,22 +518,9 @@ export function registerFieldConnectorRoutes(app: FastifyInstance, runtime: Busi
     if (!config || !valid(config)) return reply.code(503).send({ error: 'blocked_integration' });
     const existing = await runtime.pool.query('select 1 from ap.field_connections where id = $1', [fieldConnectionId]);
     if (existing.rowCount) return reply.code(409).send({ error: 'connection_already_bound' });
-    const state = randomBytes(32).toString('base64url');
-    const verifier = randomBytes(32).toString('base64url');
-    const challenge = createHash('sha256').update(verifier).digest('base64url');
-    await runtime.pool.query(
-      `insert into ap.field_oauth_attempts(id,field_connection_id,ap_grant_id,ap_organization_id,
-        ap_agent_id,initiator_user_id,state_hash,verifier_cipher,expires_at)
-        values ($1,$2,$3,$4,$5,$6,$7,$8,now() + interval '10 minutes')`,
-      [randomUUID(), fieldConnectionId, apGrantId, selection.organization_id,
-        selection.agent_id, userId, hash(state), seal(verifier, config.tokenKey)]);
-    const authorization = new URL(`${config.issuer.replace(/\/$/, '')}/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code', client_id: config.clientId,
-      redirect_uri: config.redirectUri, scope: scopes.join(' '), state,
-      code_challenge: challenge, code_challenge_method: 'S256', resource: resource(config) })) {
-      authorization.searchParams.set(key, value);
-    }
-    return reply.code(201).header('Cache-Control', 'no-store').send({ authorizationUrl: authorization.toString() });
+    const authorization = await startFieldConsent(runtime.pool, config, { fieldConnectionId, apGrantId,
+      apOrganizationId: selection.organization_id, apAgentId: selection.agent_id, userId }, 'full');
+    return reply.code(201).header('Cache-Control', 'no-store').send({ authorizationUrl: authorization });
   });
 
   app.get('/v1/connections/field/callback', async (request, reply) => {
@@ -526,7 +544,7 @@ export function registerFieldConnectorRoutes(app: FastifyInstance, runtime: Busi
       await db.query('begin');
       const found = await db.query<{ id: string; field_connection_id: string; ap_grant_id: string;
         ap_organization_id: string; ap_agent_id: string; initiator_user_id: string;
-        verifier_cipher: Buffer; status: string; expires_at: Date }>(
+        verifier_cipher: Buffer; status: string; expires_at: Date; scope_set: 'full' | 'base' }>(
         'select * from ap.field_oauth_attempts where state_hash = $1 for update', [hash(state)]);
       const attempt = found.rows[0];
       if (!attempt || attempt.expires_at.getTime() <= Date.now()) {
@@ -540,6 +558,16 @@ export function registerFieldConnectorRoutes(app: FastifyInstance, runtime: Busi
             'select status from ap.field_connections where id = $1', [attempt.field_connection_id]))
               .rows[0]?.status ?? 'binding_unknown';
         return reply.redirect(target(config, result, attempt.field_connection_id), 303);
+      }
+      // Field client 등록에 preview.9 scope가 없어 거절됐다. 이 시도를 닫고 기본 scope로 한 번만 다시 시작한다.
+      // 이렇게 만든 연결은 제안 응답·알림 경로 scope가 없어 scopeState='scope_missing'으로 보인다
+      if (query.error === 'invalid_scope' && attempt.scope_set === 'full') {
+        await db.query("update ap.field_oauth_attempts set status = 'denied' where id = $1", [attempt.id]);
+        const authorization = await startFieldConsent(db, config, { fieldConnectionId: attempt.field_connection_id,
+          apGrantId: attempt.ap_grant_id, apOrganizationId: attempt.ap_organization_id,
+          apAgentId: attempt.ap_agent_id, userId: attempt.initiator_user_id }, 'base');
+        await db.query('commit');
+        return reply.redirect(authorization, 303);
       }
       if (query.error === 'access_denied') {
         await db.query("update ap.field_oauth_attempts set status = 'denied' where id = $1", [attempt.id]);

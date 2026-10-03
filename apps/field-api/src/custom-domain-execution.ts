@@ -4,10 +4,12 @@ import type { CustomDomainContext, SiteDomain } from './custom-domains.js';
 
 // 일시적 DNS·edge 오류나 TXT 1회 미검출은 마지막 확정 점검(checked_at) 뒤 이 시간 안이면 판정을 미룬다.
 // 그동안 기존 상태·valid_until을 유지하고 오류만 기록한 뒤 짧게 재점검한다(유효기간은 그대로 만료될 수 있다).
+// TLS 확인 유예(추가)도 같은 값을 쓴다: tls_pending에서 처음 실패한 시각을 checked_at, 표시를 last_error='domain_tls_unconfirmed'로
+// DB에 남겨 여러 작업자·재시작이 같은 유예 시작 시각을 본다(프로세스 메모리에 두지 않는다).
 const INCONCLUSIVE_GRACE='15 minutes', INCONCLUSIVE_RETRY='1 minute';
 
 export async function runCustomDomainOnce({ pool, context }: { pool: Pool; context: CustomDomainContext }): Promise<string> {
-  const db=await pool.connect();let row: (SiteDomain & { recently_checked: boolean }) | undefined;
+  const db=await pool.connect();let row: (SiteDomain & { recently_checked: boolean }) | undefined;let claimedState='';
   try {
     await db.query('begin');
     const candidate=await db.query<SiteDomain & { recently_checked: boolean }>(`select *,
@@ -17,9 +19,11 @@ export async function runCustomDomainOnce({ pool, context }: { pool: Pool; conte
     row=candidate.rows[0];
     if(!row){await db.query('commit');return 'empty';}
     row.claim_token=randomUUID();
-    await db.query(`update field.site_domains set claim_token=$2,lease_expires_at=now()+interval '90 seconds',
-      state=case when desired_state='active' then case when state='connected' then state else 'verifying' end else 'release_pending' end,updated_at=now()
-      where id=$1`,[row.id,row.claim_token]);
+    // TLS 실패(error/domain_tls_failed)도 점검 중 상태를 유지해 ask·상태 경로가 열린 채 재확인할 수 있게 한다.
+    claimedState=(await db.query<{state:string}>(`update field.site_domains set claim_token=$2,lease_expires_at=now()+interval '90 seconds',
+      state=case when desired_state='active' then case when state in ('connected','tls_pending') or (state='error' and last_error='domain_tls_failed')
+        then state else 'verifying' end else 'release_pending' end,updated_at=now()
+      where id=$1 returning state`,[row.id,row.claim_token])).rows[0]!.state;
     await db.query('commit');
   }catch(error){await db.query('rollback');throw error;}finally{db.release();}
   async function claimHostname():Promise<'claimed'|'taken'|'superseded'>{
@@ -85,8 +89,20 @@ export async function runCustomDomainOnce({ pool, context }: { pool: Pool; conte
       else if(!evidence.ownership){state='ownership_pending';tls='pending';binding='pending';error='ownership_txt_missing';}
       else if(!evidence.routing){state='dns_pending';tls='pending';binding='pending';error='routing_dns_mismatch';}
       else if(context.edge){
-        const result=await context.edge.ensureBinding({hostname:row.hostname,siteId:row.site_id,domainId:row.id,requestKey:`${row.id}:${row.generation}:bind`,generation:row.generation});
+        const result=await context.edge.ensureBinding({hostname:row.hostname,siteId:row.site_id,organizationId:row.organization_id,domainId:row.id,requestKey:`${row.id}:${row.generation}:bind`,generation:row.generation});
         if(result.hostname!==row.hostname||result.siteId!==row.site_id||result.generation!==row.generation){state='error';tls='error';binding='error';error='domain_binding_mismatch';}
+        // 연결된 도메인의 TLS 확인 실패는 일시 오류와 같이 마지막 확정 점검 뒤 유예 시간 안에서는 판정을 미룬다.
+        else if(result.state!=='ready'&&row.state==='connected'&&row.ownership_release_generation===null&&row.recently_checked){inconclusive=true;error='domain_tls_unconfirmed';}
+        // 어댑터가 확정 실패(failed)를 보고했거나, 이미 TLS 실패로 기록된 도메인이 아직 확인되지 않으면 error를 유지한다(왕복 방지).
+        else if(result.state==='failed'||result.state==='pending'&&row.state==='error'&&row.last_error==='domain_tls_failed'){state='error';tls='error';binding='pending';error='domain_tls_failed';}
+        // tls_pending에서 이미 유예를 시작했으면 유예 안에서는 checked_at(유예 시작)을 그대로 두고, 넘으면 error로 기록한다.
+        else if(result.state==='pending'&&row.state==='tls_pending'&&row.last_error==='domain_tls_unconfirmed'){
+          if(row.recently_checked){inconclusive=true;error='domain_tls_unconfirmed';}
+          else {state='error';tls='error';binding='pending';error='domain_tls_failed';}
+        }
+        // tls_pending(또는 유예가 지난 connected)에서의 첫 실패부터 유예를 센다. verifying 등에서 막 넘어온 첫 확인은
+        // ask·상태 경로가 아직 닫혀 있어 반드시 실패하므로 유예에 넣지 않는다.
+        else if(result.state==='pending'&&(row.state==='tls_pending'||row.state==='connected')){state='tls_pending';tls='pending';binding='pending';error='domain_tls_unconfirmed';}
         else if(result.state==='pending'){state='tls_pending';tls='pending';binding='pending';error='domain_tls_pending';}
         else {
           certificate=result.certificateExpiresAt?new Date(result.certificateExpiresAt):null;
@@ -119,7 +135,10 @@ export async function runCustomDomainOnce({ pool, context }: { pool: Pool; conte
       checked_at=now(),valid_until=$7,certificate_expires_at=$8,last_error=$9,claim_token=null,lease_expires_at=null,
       next_check_at=now()+interval '5 minutes',updated_at=now() where id=$1`,
       [row.id,state,ownership,dns,tls,binding,validUntil,certificate,error,releaseCompleted]);
-    if(current.rows[0]?.state!==state)await finish.query(`insert into field.outbox(id,organization_id,event_type,aggregate_id,payload)
+    // 점검 중 임시 상태(verifying 등)가 아닌 점검 전 상태와 비교해 실제로 바뀐 때만 사건을 남긴다.
+    // 점검 중 다른 단계(소유권 해제 시작)가 상태를 바꿨다면 그 상태와 비교한다.
+    const previous=current.rows[0]?.state===claimedState?row.state:current.rows[0]?.state;
+    if(previous!==state)await finish.query(`insert into field.outbox(id,organization_id,event_type,aggregate_id,payload)
       values($1,$2,'field.site.domain.status',$3,$4::jsonb)`,[randomUUID(),row.organization_id,row.id,JSON.stringify({domainId:row.id,siteId:row.site_id,state})]);
     await finish.query('commit');return state;
   }catch(failure){await finish.query('rollback');throw failure;}finally{finish.release();}

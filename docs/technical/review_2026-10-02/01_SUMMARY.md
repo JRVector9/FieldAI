@@ -213,3 +213,37 @@ AP P2/P3·Field 중간/낮음 항목 전체는 `03_AP_CODE_REVIEW.md`, `04_FIELD
 | `test:security` | 0 | 351/351 |
 
 실 카카오·토스·S3·SMTP·Caddy 공급사, 독립성 검사(`test:independence:*`), 사용자 최종 화면 테스트는 미실행.
+
+## 11. 4단계 — 남은 작업 구현 + 리뷰 반영 — 2026-10-03
+
+5개 구현 에이전트 병렬 → 제품별 코드 리뷰(`09_PHASE4_AP_CODE_REVIEW.md`, `10_PHASE4_FIELD_CODE_REVIEW.md`) → 제품별 수정 에이전트 순서.
+
+| 항목 | 구현 | 주요 파일 | 비고 |
+|---|---|---|---|
+| 조직 삭제 예약 재인증·조직 선택·운영자 복구(양 제품) | 예약 시 비밀번호(5회/15분 공유 창) 또는 카카오 5분 재로그인, `x-organization-id`로 삭제 대상 선택(여러 조직 owner), eligibility에 보유 조직 목록, `GET /v1/admin/organization-deletions?status=stopped`·`POST .../:id/resume`(operator, 사유 필수, `steps.operatorResumes` 감사), AP 12회 실패 정지, owner 발송 기록 암호문 정리(AP migration 000089) | `account-deletion.ts`, `admin.ts`, `*-account.tsx`, `*-admin.tsx` | 관리자 화면 "삭제 요청 복구 (추가)" |
+| 직접 응대 행위자 기록 | `inquiry_resolution_events`에 `human_takeover`/`human_release`(AP migration 000088) | `inquiries.ts` | |
+| 연결(OAuth) 로그인 2FA | `agent-connect.tsx`/`field-connect.tsx`가 `twoFactorRedirect`를 처리하고 동의 흐름을 이어감 | | 연결 화면 카카오 버튼은 서버 2FA 이동 주소가 OAuth 쿼리를 잃어 미적용(남김) |
+| AP의 Field 공개 API 소비 | 새 동의 scope 2개, 연결 `scopeState`, `GET /v1/inquiries/:id/field-actions/:actionId`(제안 읽기·30초 캐시·readState), `POST .../customer-decisions`(멱등 키 저장, unknown 처리), 알림 경로 확인 후 생략 사유 기록, 서명 웹훅 발신 outbox(`agent.action.delivery_updated`), AP migration 000090, 고객 화면 "Field 제안 확인/수락/철회 (추가)" | `field-connector.ts`, `field-actions.ts`, `field-customer-decisions.ts`, `field-webhook-sender.ts`, `agent-field-action.tsx` | 같은 연결에 scope를 더하는 재동의 흐름 없음 → 해제 후 재연결 안내 |
+| 사이트 사진 삭제 | `DELETE /v1/sites/assets/:id`(초안·모든 릴리스 사용 중이면 409, 저장소 삭제·부재 확인 후 행 삭제), 목록 `inUse`, 편집기 "삭제 (추가)" | `sites.ts`, `site-editor.tsx` | |
+| Caddy edge 어댑터 | `FIELD_DOMAIN_EDGE=caddy`: `https://<domain>/.well-known/field-site-health` HTTPS 탐침(SNI·체인 검증), 15분 유예, 공개 health 경로, Caddyfile에 health 경로 프록시 | `custom-domain-edge-caddy.ts`, `custom-domain-*.ts`, `infra/edge/Caddyfile.example` | 실 Caddy·ACME 미검증 |
+| 인증 메일 outbox 보존(양 제품) | 30일 삭제(blocked/failed 90일), 7일 지난 sent 인증 메일 수신 주소 익명화 | `retention-purge.ts` | |
+| lifecycle 저널 요청당 전체 스캔 제거(양 제품) | 파일 stamp 캐시·인스턴스 재사용·적용 확인 캐시, IMMUTABLE `oauth_token_sha256` 식 인덱스(AP 000091 / Field 000081). 측정: 요청당 파일 읽기 28→0, DB 쿼리 72→1 | `oauth-lifecycle-journal.ts` | |
+| API 이미지 슬림화 | `pnpm-workspace.yaml` overrides로 better-auth의 선택 peer `next/react/react-dom` 제외. 이미지 868→460MB | `pnpm-workspace.yaml`, lockfile, ADR 0003 A1 | |
+| `.well-known/ap-site-verification` Host 소문자 | | field-web route | |
+
+**리뷰에서 나와 반영한 것:** AP — 고객 결정 결과 미상 영구 차단(서버가 pending 결정을 저장된 키로 먼저 재전송, 401/403/404는 rejected로 종결, 웹 "결과 다시 확인 (추가)"), 알림 경로 일시 장애 시 생략 대신 503으로 다음 sync 재시도, Field client에 새 scope가 없을 때 `invalid_scope` → 기본 scope로 재시도(`scope_set`, migration 000092), lifecycle 캐시 식별값에 `pg_postmaster_start_time`·timeline·60초 상한·readdir 상시, TRUNCATE 가드(POL04), 운영자 재실행 감사의 owner 응답 노출 제거, 웹훅 401 재시도 5회·acked 정리, 연결 2FA 재시도 버튼. Field — 사진 삭제 교착(조직 행 `for key share` 선점, 공개 경로도 동일), Caddy health 응답을 HMAC 증명으로(조직 ID 비노출), TLS 실패 상태 왕복 제거·유예를 DB `checked_at` 기준으로·`last_error` 화면 표시 "(추가)", `site_release_assets(asset_id)` 인덱스+TRUNCATE 가드(migration 000082), lifecycle 캐시 동일 보강, 운영자 감사 노출 제거, UI "(추가)"·비활성 사유·`x-organization-id`, outbox 보존 문서화.
+
+검수(2026-10-03, Mac local mock, Node 24.18.0, PG17 격리 DB, Playwright venv):
+
+| 명령 | exit | 결과 |
+|---|---|---|
+| `lint` / `typecheck` / `test:unit` | 0 | tools 35, agent-api 32, field-api 48, agent-web 83, field-web 132 |
+| `build:agent` / `build:field` / `build:web:agent` / `build:web:field` | 0 | |
+| `test:db:agent` | 0 | 41파일 169/169 (migration 000088~000092 포함) |
+| `test:db:field` | 0 | 36파일 192/192 (migration 000081~000082 포함) |
+| `test:contracts`, `test:integration:faults` | 0 | 10/10 |
+| `test:e2e:agent` / `field` / `distribution` | 0 | 9/9, 7/7, 2/2 |
+| `test:security` | 0 | 364/364 |
+| Docker `Dockerfile.api` 양 제품 | 0 | R5 보고: 이미지 868→460MB, next 미포함, 부팅 거부 정상 |
+
+첫 실행에서 `test:e2e:distribution`·`test:integration:faults`가 `tools/spikes/ap-field-connection-http.test.mjs`의 Field 선택 scope(5개)와 AP 요청 scope(7개) 불일치로 재선택 화면에 가 실패 → spike의 선택 scope와 capabilities 기대값(`proposal.respond: true`)을 갱신해 재실행 통과. 실 Caddy/ACME·카카오·토스·S3·SMTP, 독립성 검사, 사용자 최종 화면 테스트는 미실행.

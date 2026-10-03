@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { customHostMapping } from "../../../custom-domain-host";
 
 async function siteAddress(request: NextRequest) {
-  const host = request.headers.get("host") ?? "";
+  // Host 헤더는 대소문자를 구분하지 않으므로 tenant 정규식·origin·custom host 비교 전에 소문자로 맞춘다.
+  const host = (request.headers.get("host") ?? "").toLowerCase();
   const mock = process.env.APP_PROFILE !== "live";
   const domain = mock ? "localhost:3002" : process.env.FIELD_SITE_BASE_DOMAIN;
   const expectedProtocol = mock ? "http:" : "https:";

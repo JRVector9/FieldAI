@@ -8,8 +8,10 @@ type DeletionRequest = { id: string; status: "scheduled" | "canceled" | "execute
   scheduledAt: string; canceledAt: string | null; executedAt: string | null; lastError: string | null };
 type OrganizationDeletion = { product: "field"; organization: { id: string; name: string; deleted: boolean }; canManage: boolean;
   coolingDays: number; preconditions: Precondition[]; request: DeletionRequest | null };
+type OwnedOrganization = { id: string; name: string; deleted: boolean; deletionStatus: "none" | "scheduled" | "canceled" | "executed";
+  scheduledAt: string | null; executedAt: string | null };
 type Eligibility = { product: "field"; email: string; eligible: boolean; blockers: string[];
-  reauthentication: "password" | "recent_sign_in"; recentSignInMinutes: number };
+  reauthentication: "password" | "recent_sign_in"; recentSignInMinutes: number; organizations?: OwnedOrganization[] };
 
 // 서버 오류·차단 코드를 사용자 안내 문구로 바꾼다. 알 수 없는 코드는 그대로 숨기지 않고 코드와 함께 알린다.
 const MESSAGES: Record<string, string> = {
@@ -31,12 +33,24 @@ const MESSAGES: Record<string, string> = {
   owner_required: "조직 owner만 삭제를 요청하거나 취소할 수 있습니다.",
   organization_deleted: "이미 삭제가 실행된 조직입니다.",
   deletion_request_not_found: "취소할 삭제 예약이 없습니다.",
+  password_required: "본인 확인을 위해 비밀번호를 입력해 주세요.",
 };
 export const deletionMessage = (code: string) => MESSAGES[code] ?? `요청이 거절됐습니다 (${code}).`;
 const PRECONDITION_LABELS: Record<string, string> = {
   paid_subscription_active: "유료 구독 해지", connections_active: "AP 연결 해제", open_reservations: "진행 중 예약 마무리",
 };
 const date = (value: string) => new Date(value).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+const DELETION_STATUS_LABELS: Record<OwnedOrganization["deletionStatus"], string> = {
+  none: "", scheduled: " · 삭제 예약됨", canceled: " · 예약 취소됨", executed: " · 삭제 완료",
+};
+// 여러 조직의 owner일 때만 삭제 대상 조직 선택지를 보여 준다(추가). 하나뿐이면 선택 없이 그 조직을 쓴다.
+export function organizationChoices(eligibility: Pick<Eligibility, "organizations"> | null) {
+  const list = eligibility?.organizations ?? [];
+  return list.length > 1 ? list : [];
+}
+// 선택한 조직은 다른 owner 화면과 같은 x-organization-id 헤더로 보낸다.
+const organizationHeader = (organizationId: string | null): Record<string, string> =>
+  organizationId ? { "x-organization-id": organizationId } : {};
 
 export function FieldAccount() {
   const [organization, setOrganization] = useState<OrganizationDeletion | null>(null);
@@ -47,16 +61,18 @@ export function FieldAccount() {
   const [ack, setAck] = useState({ retention: false, subscriptions: false, connections: false });
   const [reason, setReason] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  const [selectedOrganization, setSelectedOrganization] = useState<string | null>(null);
+  const [organizationPassword, setOrganizationPassword] = useState("");
   const [password, setPassword] = useState("");
   const [emailConfirm, setEmailConfirm] = useState("");
   const [accountAck, setAccountAck] = useState(false);
   const [accountDeleted, setAccountDeleted] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (organizationId: string | null = null) => {
     setBusy(true);
     try {
       const [orgResponse, accountResponse] = await Promise.all([
-        fetch("/v1/organizations/current/deletion-requests/current", { credentials: "same-origin" }),
+        fetch("/v1/organizations/current/deletion-requests/current", { credentials: "same-origin", headers: organizationHeader(organizationId) }),
         fetch("/v1/account/deletion-eligibility", { credentials: "same-origin" }),
       ]);
       if (accountResponse.status === 401) { setOrganization(null); setEligibility(null); setNotice("Field에 로그인해 주세요."); return; }
@@ -69,11 +85,12 @@ export function FieldAccount() {
   }, []);
   useEffect(() => { void load(); }, [load]);
 
-  async function send(method: "POST" | "DELETE", url: string, body?: object) {
+  async function send(method: "POST" | "DELETE", url: string, body?: object, organizationId: string | null = null) {
     setBusy(true);
     try {
       const response = await fetch(url, { method, credentials: "same-origin",
-        headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
+        headers: { ...organizationHeader(organizationId), ...(body ? { "Content-Type": "application/json" } : {}) },
+        body: body ? JSON.stringify(body) : undefined });
       const value = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) { setNotice(deletionMessage(value.error ?? String(response.status))); return false; }
       return true;
@@ -81,14 +98,25 @@ export function FieldAccount() {
     finally { setBusy(false); }
   }
 
+  // 조직을 바꾸면 이전 조직에 입력한 확인 문구·동의를 비우고 그 조직의 삭제 상태를 다시 불러온다.
+  async function selectOrganization(organizationId: string) {
+    setSelectedOrganization(organizationId); setConfirmText(""); setAck({ retention: false, subscriptions: false, connections: false });
+    setReviewing(false); setOrganizationPassword(""); await load(organizationId);
+  }
   async function schedule() {
-    if (await send("POST", "/v1/organizations/current/deletion-requests", { confirmText, acknowledgements: ack, reason: reason.trim() || undefined })) {
-      setReviewing(false); await load(); setNotice("조직 삭제를 예약했습니다. 유예 기간 동안 언제든 취소할 수 있습니다.");
+    // 조직 삭제 예약도 계정 삭제와 같은 본인 확인(비밀번호 재입력 또는 최근 카카오 로그인)을 거친다(추가).
+    const needsPassword = eligibility?.reauthentication !== "recent_sign_in";
+    const scheduled = await send("POST", "/v1/organizations/current/deletion-requests", { confirmText, acknowledgements: ack,
+      reason: reason.trim() || undefined, ...(needsPassword ? { password: organizationPassword } : {}) }, selectedOrganization);
+    // 성공·실패 모두 입력한 비밀번호는 지우고 확인 단계를 닫는다(실패 시 다시 입력).
+    setOrganizationPassword(""); setReviewing(false);
+    if (scheduled) {
+      await load(selectedOrganization); setNotice("조직 삭제를 예약했습니다. 유예 기간 동안 언제든 취소할 수 있습니다.");
     }
   }
   async function cancel() {
-    if (await send("DELETE", "/v1/organizations/current/deletion-requests/current")) {
-      await load(); setNotice("조직 삭제 예약을 취소했습니다. 공개 사이트가 다시 보이고 새 문의·예약을 받을 수 있습니다.");
+    if (await send("DELETE", "/v1/organizations/current/deletion-requests/current", undefined, selectedOrganization)) {
+      await load(selectedOrganization); setNotice("조직 삭제 예약을 취소했습니다. 공개 사이트가 다시 보이고 새 문의·예약을 받을 수 있습니다.");
     }
   }
   async function deleteAccount() {
@@ -103,14 +131,23 @@ export function FieldAccount() {
   const scheduled = request?.status === "scheduled";
   const executed = request?.status === "executed" || organization?.organization.deleted;
   const ready = organization?.preconditions.every(item => item.ok) ?? false;
-  const formComplete = organization ? confirmText === organization.organization.name && ack.retention && ack.subscriptions && ack.connections : false;
+  const choices = organizationChoices(eligibility);
+  // 비밀번호가 없는 계정은 최근 로그인 세션이 있어야 하고, 비밀번호 계정은 비밀번호를 입력해야 예약할 수 있다.
+  const organizationReauthMissing = eligibility?.reauthentication === "recent_sign_in" && eligibility.blockers.includes("reauth_required");
+  const organizationReauthReady = eligibility?.reauthentication === "recent_sign_in" ? !organizationReauthMissing : organizationPassword.length > 0;
+  const formComplete = organization ? confirmText === organization.organization.name && ack.retention && ack.subscriptions && ack.connections
+    && organizationReauthReady : false;
 
   return <div className="site-shell"><header className="site-header"><a href="/"><Brand product="Field" /></a><nav aria-label="작업 메뉴"><a href="/workspace">사업 운영</a><a href="/workspace/subscription">구독·데이터 관리</a></nav></header>
     <main className="feature-section field-account-page"><div className="feature-heading"><p className="eyebrow">Field · 계정</p><h1>계정·조직 삭제 (추가)</h1><p>Field 조직과 계정만 삭제합니다. AP 계정·독립 AI·구독은 별도 제품에서 관리하며 자동으로 삭제되지 않습니다.</p></div>
-      <button className="field-account-button" type="button" disabled={busy} onClick={() => void load()}>상태 새로고침</button>
+      <button className="field-account-button" type="button" disabled={busy} onClick={() => void load(selectedOrganization)}>상태 새로고침</button>
       {notice && <p role="status" className="state-message">{notice} {accountDeleted ? <a href="/">처음 화면으로</a> : null}</p>}
       {!accountDeleted && <div className="special-grid">
         <section className="special-panel"><h2>조직 삭제 (추가)</h2>
+          {choices.length > 0 && <label>삭제할 조직 선택 (추가)<select value={selectedOrganization ?? organization?.organization.id ?? ""} disabled={busy}
+            onChange={event => void selectOrganization(event.target.value)}>
+            {choices.map(item => <option key={item.id} value={item.id}>{item.name}{DELETION_STATUS_LABELS[item.deletionStatus] ?? ""}</option>)}
+          </select></label>}
           {!organization && eligibility && <p>삭제할 Field 조직이 없습니다.</p>}
           {organization && <>
             <p>조직: <strong>{organization.organization.name}</strong></p>
@@ -131,6 +168,9 @@ export function FieldAccount() {
                 <label className="field-account-consent"><input type="checkbox" checked={ack.subscriptions} onChange={event => setAck({ ...ack, subscriptions: event.target.checked })} /> 유료 구독을 해지했고, 삭제 후 환불·재개가 자동으로 이뤄지지 않는다는 것을 이해했습니다.</label>
                 <label className="field-account-consent"><input type="checkbox" checked={ack.connections} onChange={event => setAck({ ...ack, connections: event.target.checked })} /> AP 등 외부 연결을 해제했고, 다른 제품의 계정은 따로 삭제해야 한다는 것을 이해했습니다.</label>
                 <label>삭제 사유(선택)<textarea value={reason} maxLength={1000} onChange={event => setReason(event.target.value)} /></label>
+                {eligibility?.reauthentication === "recent_sign_in"
+                  ? <p>본인 확인 (추가): 비밀번호가 없는 계정은 최근 {eligibility.recentSignInMinutes}분 이내 로그인으로 본인 확인을 대신합니다.{organizationReauthMissing ? " 시간이 지났습니다. 카카오로 다시 로그인한 뒤 진행해 주세요." : ""}</p>
+                  : <label>본인 확인 비밀번호 재입력 (추가)<input type="password" value={organizationPassword} autoComplete="current-password" onChange={event => setOrganizationPassword(event.target.value)} /></label>}
                 {!reviewing ? <p><button className="field-account-button" type="button" disabled={busy || !ready || !formComplete} onClick={() => setReviewing(true)}>삭제 예약 내용 확인</button></p>
                   : <div role="alert"><p>{organization.coolingDays}일 뒤 <strong>{organization.organization.name}</strong> 조직을 삭제합니다. 그 전까지는 취소할 수 있습니다.</p>
                     <button className="field-account-button" type="button" disabled={busy} onClick={() => void schedule()}>삭제 예약 확정</button> <button className="field-account-button" type="button" disabled={busy} onClick={() => setReviewing(false)}>돌아가기</button></div>}

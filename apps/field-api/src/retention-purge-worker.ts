@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 import { createFieldInquiryMediaStore } from './inquiry-media.js';
 import { FieldRetentionJournal } from './retention-journal.js';
 import { verifyFieldRetentionJournal } from './retention-journal-integrity.js';
-import { purgeExpiredInboundRecords, runFieldRetentionJobOnce } from './retention-purge.js';
+import { purgeExpiredInboundRecords, purgeFieldEmailOutbox, runFieldRetentionJobOnce } from './retention-purge.js';
 import { assertProductionProfile } from './production-profile.js';
 import { runOrganizationDeletionOnce } from './account-deletion.js';
 import { createFieldSiteMediaStore } from './site-media.js';
@@ -38,7 +38,8 @@ try {
       const deletion = await runOrganizationDeletionOnce({ pool, siteMedia });
       if (deletion !== 'empty') process.stdout.write(`field organization deletion: ${deletion}\n`);
       if (Date.now() - lastInboundCleanup >= INBOUND_CLEANUP_INTERVAL_MS) {
-        const purged = await purgeExpiredInboundRecords(pool);
+        // 인증 메일 outbox 익명화·삭제(추가)도 같은 주기에 실행한다.
+        const purged = { ...await purgeExpiredInboundRecords(pool), ...await purgeFieldEmailOutbox(pool) };
         lastInboundCleanup = Date.now();
         if (Object.values(purged).some(value => value > 0)) process.stdout.write(`field inbound cleanup: ${JSON.stringify(purged)}\n`);
       }

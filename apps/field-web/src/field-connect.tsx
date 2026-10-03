@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
+import { signInOutcome } from "./auth-flow";
+import { TwoFactorChallenge } from "./field-auth-pages";
 import { scopeLabel } from "./connect-scope-label";
 import "./field-connect.css";
 
@@ -37,6 +39,7 @@ export function FieldConnectSignIn() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
+  const [twoFactorPending, setTwoFactorPending] = useState(false);
   useEffect(() => {
     void request("/api/auth/get-session").then(result => {
       if (result.status === 200 && result.data?.user)
@@ -49,16 +52,27 @@ export function FieldConnectSignIn() {
     try {
       const result = await request("/api/auth/sign-in/email", "POST", { email, password });
       if (result.status !== 200) { setStatus("로그인에 실패했습니다. 계정과 비밀번호를 확인해 주세요."); return; }
-      follow(await request("/api/auth/oauth2/continue", "POST", { postLogin: true, oauth_query: oauthQuery() }));
+      // 2단계 인증 계정은 세션이 아직 없으므로 코드 확인 뒤에 원래 연결 동의 흐름을 이어 간다.
+      if (signInOutcome(result.status, result.data) === "two_factor") { setStatus(""); setTwoFactorPending(true); return; }
+      await continueConnect();
     } catch (error) { setStatus(error instanceof Error ? error.message : "연결을 계속하지 못했습니다."); }
     finally { setBusy(false); }
   }
+  async function continueConnect() {
+    follow(await request("/api/auth/oauth2/continue", "POST", { postLogin: true, oauth_query: oauthQuery() }));
+  }
+  async function verified() {
+    setStatus("연결을 계속하고 있습니다.");
+    try { await continueConnect(); }
+    catch (error) { setStatus(error instanceof Error ? error.message : "연결을 계속하지 못했습니다."); }
+  }
   return <Shell title="Field 계정으로 로그인" status={status}>
     <p>공유할 Field 사업장을 소유한 계정으로 로그인하세요. 계정과 사업장 생성은 Field 작업 공간에서 진행합니다.</p>
-    <form className="form-fields field-connect-form" onSubmit={event => void signIn(event)}>
+    {twoFactorPending ? <TwoFactorChallenge onVerified={verified} onCancel={() => { setTwoFactorPending(false); setPassword(""); }} />
+      : <form className="form-fields field-connect-form" onSubmit={event => void signIn(event)}>
       <label>이메일<input type="email" required autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} /></label>
       <label>비밀번호<input type="password" required autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} /></label>
-      <button type="submit" disabled={busy}>로그인하고 연결 계속</button></form>
+      <button type="submit" disabled={busy}>로그인하고 연결 계속</button></form>}
     <p><a href="/workspace">Field 작업 공간에서 계정 확인</a></p></Shell>;
 }
 

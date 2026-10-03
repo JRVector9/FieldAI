@@ -9,6 +9,13 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
+## 남은 작업 일괄 구현(4단계) — 2026-10-03
+
+- **Current objective / state:** 3단계 뒤 남겼던 항목을 모두 구현하고 리뷰 반영까지 마쳤다(`docs/technical/review_2026-10-02/01_SUMMARY.md` §11, 리뷰 원문 `09`·`10`). 로컬 mock 서버는 커밋 후 재기동했다(AP http://localhost:3001/workspace, Field http://127.0.0.1:3002/workspace).
+- **Key design decisions:** 고객 결정의 결과 미상은 같은 키로만 해소하고 새 키로 우회하지 않는다. 알림 경로 확인 일시 장애는 생략이 아니라 재시도다. Caddy health는 서버 비밀값 HMAC 증명을 쓴다. 사진 삭제는 조직 행 → advisory → sites → asset 순서로 잠근다. lifecycle 캐시는 트리거 불변식(POL01~04)과 DB 식별값에 기댄다.
+- **New env:** `FIELD_DOMAIN_EDGE`, `FIELD_DOMAIN_EDGE_PROBE_TIMEOUT_MS`. 배포 순서: Field client scope 갱신 → AP 배포(docs/04).
+- **Remaining work:** `01_SUMMARY.md` §11 "남긴 것"과 §3·§9·§10의 결정 필요 항목. mock DB에 새 마이그레이션은 `mock:run`이 적용한다.
+
 ## 착수 순서 9~11 구현(3단계) — 2026-10-03
 
 - **Current objective / state:** 카카오 로그인, human_active, Toss 웹훅, 계정·조직 삭제, Field 공개 API 4개, OAuth cascade 수리, TLS allow, HEIC, 로깅을 구현하고 리뷰 반영까지 마쳤다. 상세·결정 필요 사항은 `docs/technical/review_2026-10-02/01_SUMMARY.md` §10, 리뷰 원문은 `07`·`08`.

@@ -4,10 +4,11 @@ import { Pool } from 'pg';
 import { createAgentInquiryMediaStore } from './inquiry-media.js';
 import { AgentRetentionJournal } from './retention-journal.js';
 import { verifyAgentRetentionJournal } from './retention-journal-integrity.js';
-import { runAgentRetentionJobOnce } from './retention-purge.js';
+import { purgeAgentEmailOutbox, runAgentRetentionJobOnce } from './retention-purge.js';
 import { assertProductionProfile } from './production-profile.js';
 import { purgeAccountDeletionPasswordWindows, runOrganizationDeletionOnce } from './account-deletion.js';
 import { purgeBillingWebhookRecords } from './billing-webhook.js';
+import { purgeAckedFieldAgentEvents } from './field-webhook-sender.js';
 
 assertProductionProfile();
 const databaseUrl = process.env.AP_DATABASE_URL;
@@ -37,6 +38,13 @@ try {
       const passwordWindows = await purgeAccountDeletionPasswordWindows(pool);
       if (webhook.events || webhook.windows || passwordWindows)
         process.stdout.write(`agent webhook/attempt cleanup: events=${webhook.events} windows=${webhook.windows} passwordWindows=${passwordWindows}\n`);
+      // 인증 메일 outbox 보존 규칙(retention-purge.ts 주석)을 같은 주기에 적용한다.
+      const emailOutbox = await purgeAgentEmailOutbox(pool);
+      if (emailOutbox.anonymized || emailOutbox.deleted)
+        process.stdout.write(`agent email outbox cleanup: anonymized=${emailOutbox.anonymized} deleted=${emailOutbox.deleted}\n`);
+      // AP→Field 서명 사건 발신함의 수신 확인 행은 30일 뒤 지운다
+      const ackedEvents = await purgeAckedFieldAgentEvents(pool);
+      if (ackedEvents) process.stdout.write(`agent field event outbox cleanup: deleted=${ackedEvents}\n`);
       const result = await runAgentRetentionJobOnce({ pool, media, journal });
       if (result !== 'empty' || process.argv.includes('--once')) process.stdout.write(`agent retention: ${result}\n`);
       if (process.argv.includes('--once')) break;

@@ -25,10 +25,14 @@ type DeletionRow = { id: string; organization_id: string; requested_by: string; 
 const object = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
+// owner·구성원 응답에는 플랫폼 운영자 감사 기록(steps.operatorResumes: 운영자 사용자 ID·사유)을 넣지 않는다.
+// 이 기록은 관리자 목록(/v1/admin/organization-deletions)에서만 본다.
 function view(row: DeletionRow) {
+  const steps = { ...row.steps };
+  delete steps.operatorResumes;
   return { id: row.id, status: row.status, reason: row.reason, requestedAt: row.requested_at.toISOString(),
     scheduledAt: row.scheduled_at.toISOString(), canceledAt: row.canceled_at?.toISOString() ?? null,
-    executedAt: row.executed_at?.toISOString() ?? null, steps: row.steps, lastError: row.last_error };
+    executedAt: row.executed_at?.toISOString() ?? null, steps, lastError: row.last_error };
 }
 
 // 조직 삭제 전제 조건. 하나라도 남아 있으면 예약도 실행도 하지 않는다.
@@ -82,6 +86,41 @@ async function consumePasswordAttempt(pool: Pool, userId: string): Promise<numbe
   return row.attempts > PASSWORD_ATTEMPT_LIMIT ? row.retry_after : null;
 }
 
+type ReauthFailure = { status: 400 | 403 | 429; error: string; retryAfter?: number; recentSignInMinutes?: number };
+// 조직 삭제 예약의 본인 재확인(추가, L8). 계정 삭제와 같은 기준이다: 비밀번호 계정은 재입력(시도 창 15분 5회를 계정 삭제와 공유),
+// 비밀번호가 없는 카카오 전용 계정은 RECENT_SIGN_IN_MINUTES분 이내 새로 로그인한 현재 세션.
+async function reauthenticate(runtime: FieldBusinessRuntime, request: FastifyRequest, userId: string,
+  password: unknown): Promise<ReauthFailure | null> {
+  const hash = (await runtime.pool.query<{ password: string }>(
+    `select password from "account" where "userId"=$1 and "providerId"='credential' and password is not null limit 1`,
+    [userId])).rows[0]?.password;
+  if (hash) {
+    if (typeof password !== 'string' || !password || password.length > 1024) return { status: 400, error: 'password_required' };
+    const retryAfter = await consumePasswordAttempt(runtime.pool, userId);
+    if (retryAfter !== null) return { status: 429, error: 'password_attempts_exceeded', retryAfter };
+    return await verifyPassword({ hash, password }) ? null : { status: 403, error: 'invalid_password' };
+  }
+  const session = await runtime.resolveSession?.(request.headers);
+  const recent = session?.userId === userId && (await runtime.pool.query(
+    `select 1 from "session" where id=$1 and "userId"=$2 and "expiresAt">now() and "createdAt">now()-make_interval(mins => $3::int)`,
+    [session.id, userId, RECENT_SIGN_IN_MINUTES])).rowCount !== 0;
+  return recent ? null : { status: 403, error: 'reauth_required', recentSignInMinutes: RECENT_SIGN_IN_MINUTES };
+}
+
+// 사용자가 owner인 조직 전부(삭제 실행된 본인 소유 조직 포함)와 최근 삭제 요청 상태. 여러 조직 owner의 삭제 대상 선택용(추가).
+export async function ownedOrganizations(db: Db, userId: string) {
+  const rows = (await db.query<{ id: string; name: string; deleted: boolean; status: string | null;
+    scheduled_at: Date | null; executed_at: Date | null }>(
+    `select o.id,o.name,o.deleted_at is not null as deleted,r.status,r.scheduled_at,r.executed_at from field.organizations o
+     left join lateral (select status,scheduled_at,executed_at from field.organization_deletion_requests d
+       where d.organization_id=o.id order by d.requested_at desc,d.id desc limit 1) r on true
+     where o.owner_user_id=$1 or (o.deleted_at is null and exists(select 1 from field.memberships m
+       where m.organization_id=o.id and m.user_id=$1 and m.role='owner'))
+     order by o.created_at,o.id`, [userId])).rows;
+  return rows.map(row => ({ id: row.id, name: row.name, deleted: row.deleted, deletionStatus: row.status ?? 'none',
+    scheduledAt: row.scheduled_at?.toISOString() ?? null, executedAt: row.executed_at?.toISOString() ?? null }));
+}
+
 export function registerFieldAccountDeletionRoutes(app: FastifyInstance, runtime: FieldBusinessRuntime) {
   async function memberFor(request: FastifyRequest, reply: FastifyReply) {
     reply.header('Cache-Control', 'private, no-store');
@@ -96,7 +135,8 @@ export function registerFieldAccountDeletionRoutes(app: FastifyInstance, runtime
       `select m.organization_id,m.role,o.name from field.memberships m join field.organizations o on o.id=m.organization_id
        where m.user_id=$1 and o.deleted_at is null and ($2::uuid is null or m.organization_id=$2::uuid)
        order by (m.role='owner') desc,m.created_at limit 1`, [userId, header ?? null])).rows[0];
-    return { userId, organization: row ? { id: row.organization_id, name: row.name, canManage: row.role === 'owner' } : null };
+    return { userId, selectedId: header ?? null,
+      organization: row ? { id: row.organization_id, name: row.name, canManage: row.role === 'owner' } : null };
   }
 
   app.get('/v1/organizations/current/deletion-requests/current', async (request, reply) => {
@@ -106,7 +146,8 @@ export function registerFieldAccountDeletionRoutes(app: FastifyInstance, runtime
       // 삭제가 끝난 본인 조직은 구성원이 없으므로 owner 기준 실행 기록만 보여 준다.
       const done = (await runtime.pool.query<DeletionRow & { name: string }>(
         `select r.*,o.name from field.organization_deletion_requests r join field.organizations o on o.id=r.organization_id
-         where o.owner_user_id=$1 and r.status='executed' order by r.executed_at desc limit 1`, [member.userId])).rows[0];
+         where o.owner_user_id=$1 and r.status='executed' and ($2::uuid is null or r.organization_id=$2::uuid)
+         order by r.executed_at desc limit 1`, [member.userId, member.selectedId])).rows[0];
       if (!done) return reply.code(404).send({ error: 'organization_not_found' });
       return { product: 'field', organization: { id: done.organization_id, name: done.name, deleted: true }, canManage: false,
         coolingDays: DELETION_COOLING_DAYS, preconditions: [], request: view(done) };
@@ -135,6 +176,13 @@ export function registerFieldAccountDeletionRoutes(app: FastifyInstance, runtime
       return reply.code(400).send({ error: 'acknowledgements_required' });
     if (typeof body?.confirmText !== 'string' || body.confirmText !== member.organization.name)
       return reply.code(400).send({ error: 'confirmation_mismatch' });
+    // 조직 삭제 예약도 계정 삭제와 같은 본인 재확인을 거친다(추가, L8).
+    const reauth = await reauthenticate(runtime, request, member.userId, body.password);
+    if (reauth) {
+      const { status, retryAfter, ...failure } = reauth;
+      if (retryAfter !== undefined) reply.header('Retry-After', retryAfter);
+      return reply.code(status).send(failure);
+    }
     const organizationId = member.organization.id;
     const db = await runtime.pool.connect();
     try {
@@ -200,7 +248,7 @@ export function registerFieldAccountDeletionRoutes(app: FastifyInstance, runtime
     const { blockers, reauthentication } = await accountDeletionBlockers(runtime.pool, userId,
       session?.userId === userId ? session.id : null);
     return { product: 'field', email: user.email, eligible: blockers.length === 0, blockers, reauthentication,
-      recentSignInMinutes: RECENT_SIGN_IN_MINUTES };
+      recentSignInMinutes: RECENT_SIGN_IN_MINUTES, organizations: await ownedOrganizations(runtime.pool, userId) };
   });
 
   app.post('/v1/account/deletion-requests', async (request, reply) => {

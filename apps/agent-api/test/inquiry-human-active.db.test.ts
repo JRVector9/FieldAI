@@ -46,11 +46,16 @@ test('AP owner take-over keeps human_active on customer follow-up without AI and
   const assistantMessages = (id: string) => count("select count(*)::text as count from ap.inquiry_messages where inquiry_id = $1 and actor = 'assistant'", id);
   const handling = (id: string, action: 'take-over' | 'release', expectedRevision: number) =>
     app.inject({ method: 'POST', url: `/v1/owner/inquiries/${id}/${action}`, headers: owner, payload: { expectedRevision } });
+  // 직접 응대 시작·종료 행위자 기록(추가): 사건 종류·revision·행위자를 revision 순으로 읽는다.
+  const humanEvents = async (id: string) => (await pool.query<{ event_type: string; revision: number; actor_user_id: string | null }>(
+    `select event_type, revision, actor_user_id from ap.inquiry_resolution_events
+     where inquiry_id = $1 and event_type in ('human_takeover', 'human_release') order by revision`, [id])).rows;
   const reply = (id: string, body: string) => app.inject({ method: 'POST', url: `/v1/owner/inquiries/${id}/replies`, headers: owner, payload: { body } });
   try {
     const organization = await app.inject({ method: 'POST', url: '/v1/organizations', headers: owner, payload: { name: '직접 응대 검수' } });
     assert.equal(organization.statusCode, 201);
     const organizationId = organization.json().id as string;
+    const ownerUserId = (await pool.query<{ id: string }>('select id from "user" where email = $1', [email])).rows[0]!.id;
     assert.equal((await app.inject({ method: 'PUT', url: '/v1/knowledge/draft', headers: owner, payload: {
       expectedRevision: 0, businessName: '직접 응대 검수', introduction: '', services: [{ name: '상담 서비스', description: '방문' }], faqs: [],
     } })).statusCode, 200);
@@ -88,6 +93,9 @@ test('AP owner take-over keeps human_active on customer follow-up without AI and
     assert.equal(tookOver.statusCode, 200, tookOver.body);
     assert.deepEqual(tookOver.json(), { id, state: 'human_active', revision: before.revision + 1 });
     assert.deepEqual((await handling(id, 'take-over', before.revision)).json(), tookOver.json());
+    // 시작 사건은 상태 변경과 함께 정확히 1건, 재전송·409 거절은 사건을 남기지 않는다.
+    assert.deepEqual(await humanEvents(id),
+      [{ event_type: 'human_takeover', revision: before.revision + 1, actor_user_id: ownerUserId }]);
     assert.deepEqual(await state(id), { state: 'human_active', mode: 'human', automation_paused: true, revision: before.revision + 1 });
     assert.equal((await app.inject({ url: `/v1/owner/inquiries/${id}`, headers: owner })).json().state, 'human_active');
 
@@ -121,6 +129,10 @@ test('AP owner take-over keeps human_active on customer follow-up without AI and
     assert.deepEqual(released.json(), { id, state: 'needs_owner', revision: releasing + 1 });
     assert.deepEqual((await handling(id, 'release', releasing)).json(), released.json());
     assert.equal((await handling(id, 'release', releasing + 1)).statusCode, 409);
+    assert.deepEqual(await humanEvents(id), [
+      { event_type: 'human_takeover', revision: before.revision + 1, actor_user_id: ownerUserId },
+      { event_type: 'human_release', revision: releasing + 1, actor_user_id: ownerUserId },
+    ]);
 
     // 직접 응대 없이 답변하는 기존 흐름: needs_owner → waiting_customer, 고객 후속 질문은 다시 needs_owner
     const plainReply = await reply(id, '직접 응대 없이 답변합니다.');

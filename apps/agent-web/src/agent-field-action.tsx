@@ -18,6 +18,16 @@ type ReservationFeed = { state: string; revision: number; events: Array<{
   eventId: string; eventType: string; state: string; occurredAt: string;
   notificationState: "blocked_integration" | "not_applicable";
   startAt?: string }> };
+type FieldProposal = { revision: number; startAt: string; endAt: string;
+  state: "awaiting_customer" | "customer_accepted" };
+type FieldReadState = "current" | "not_found" | "scope_missing" | "connection_invalid"
+  | "remote_unavailable" | "not_applicable";
+type CustomerDecision = { decision: "accept" | "withdraw"; proposalRevision: number;
+  decisionState: "recorded" | "rejected" | "decision_unknown"; error: string | null };
+// 결과 미상인 이전 고객 결정(서버 409 prior_decision_unknown 본문 또는 조회 결과)
+type PendingDecision = Pick<CustomerDecision, "decision" | "proposalRevision">;
+type FieldStateView = { field: { readState: FieldReadState; state: string | null; revision: number | null;
+  proposal: FieldProposal | null; checkedAt: string | null }; decisions: CustomerDecision[] };
 type RequestDetails = { mode: "inquiry"; timezone: string }
   | { mode: "preferred"; preferredTimeText: string; timezone: string }
   | { mode: "slot"; startAt: string; timezone: string };
@@ -43,6 +53,28 @@ function actionLabel(state: string, error?: string | null, kind?: Action["kind"]
     default: return state;
   }
 }
+// Field 현재 상태 읽기 결과를 고객 문구로 바꾼다. 실패해도 AP 전달 기록 상태는 바뀌지 않는다
+function fieldReadLabel(readState: FieldReadState) {
+  switch (readState) {
+    case "scope_missing": return "사업자의 Field 연결에 제안 응답 권한 동의가 없어 여기서 제안에 응답할 수 없습니다. 사업자에게 문의해 주세요.";
+    case "connection_invalid": return "Field 연결이 유효하지 않아 현재 상태를 확인할 수 없습니다. 마지막 확인 상태만 표시합니다.";
+    case "remote_unavailable": return "Field 응답을 받지 못했습니다. 마지막 확인 상태만 표시합니다.";
+    case "not_found": return "Field에서 이 요청을 찾지 못했습니다. 마지막 확인 상태를 유지합니다.";
+    default: return "";
+  }
+}
+function decisionErrorLabel(error?: string | null) {
+  switch (error) {
+    case "proposal_mismatch": return "제안이 바뀌었습니다. 새로 고침해 주세요";
+    case "decision_not_supported": return "변경 제안은 여기서 철회할 수 없습니다. 사업자에게 문의해 주세요.";
+    case "customer_proof_expired": return "결정 확인 시간이 지났습니다. 제안을 새로 고친 뒤 다시 눌러 주세요.";
+    case "prior_decision_unknown": return "이전 응답 결과 확인 중입니다. '결과 다시 확인 (추가)'를 눌러 이전 응답을 같은 요청으로 확인해 주세요.";
+    case "scope_missing": return "사업자의 Field 연결에 제안 응답 권한 동의가 없습니다. 사업자에게 문의해 주세요.";
+    case "connection_invalid": return "Field 연결이 유효하지 않아 결정을 전달하지 못했습니다.";
+    case "field_reservation_mismatch": return "Field 예약 연결을 확인하지 못해 결정을 전달하지 못했습니다.";
+    default: return `Field가 결정을 받지 않았습니다${error ? ` (${error})` : ""}.`;
+  }
+}
 function reservationLabel(state: string) {
   const labels: Record<string, string> = { requested: "요청 접수", proposed: "시간 제안",
     customer_accepted: "고객 제안 수락", confirmed: "예약 확정", change_requested: "변경 요청",
@@ -50,6 +82,38 @@ function reservationLabel(state: string) {
     cancel_requested: "취소 요청", canceled: "취소됨", rejected: "거절됨",
     expired: "기한 만료", completed: "방문 완료", no_show: "미방문" };
   return labels[state] ?? state;
+}
+
+// Field 사업자 제안 확인과 고객 결정(수락·철회). 확정은 Field 사업자가 하며 AP는 예약을 확정하지 않는다
+export function FieldProposalPanel({ view, busy, pending, onRefresh, onDecide }: { view?: FieldStateView; busy: boolean;
+  pending?: PendingDecision; onRefresh: () => void; onDecide: (decision: "accept" | "withdraw", revision: number) => void }) {
+  const field = view?.field;
+  const proposal = field?.proposal ?? null;
+  const unknown = pending ?? view?.decisions.find(item => item.decisionState === "decision_unknown");
+  const fresh = field?.readState === "current";
+  const acceptBlocked = !proposal ? "현재 응답할 제안이 없습니다."
+    : !fresh ? "Field 현재 상태를 확인한 뒤 응답할 수 있습니다."
+      : proposal.state !== "awaiting_customer" ? "이미 제안을 수락했습니다. 예약 확정은 사업자가 합니다." : "";
+  const withdrawBlocked = acceptBlocked || (field?.state !== "proposed"
+    ? "변경 제안은 여기서 철회할 수 없습니다. 사업자에게 문의해 주세요." : "");
+  const time = (value: string) => new Date(value).toLocaleString("ko-KR");
+  return <div className="customer-banner"><h3>Field 제안 확인 (추가)</h3>
+    {field && field.readState !== "current" && field.readState !== "not_applicable" &&
+      <p role="status">{fieldReadLabel(field.readState)}</p>}
+    {field?.state && <p>Field 현재 상태: {reservationLabel(field.state)}{field.checkedAt ? ` · ${time(field.checkedAt)} 확인` : ""}</p>}
+    {proposal ? <p>사업자 제안 시간: {time(proposal.startAt)} ~ {time(proposal.endAt)}
+      {proposal.state === "customer_accepted" ? " · 고객 수락 완료, 사업자 확정 대기" : " · 고객 응답 대기"}</p>
+      : field ? <p>현재 응답할 사업자 제안이 없습니다.</p> : <p>Field 상태를 아직 확인하지 않았습니다.</p>}
+    <p>수락해도 예약이 바로 확정되지 않습니다. 사업자가 확정합니다.</p>
+    {unknown && <><p role="status">이전 응답 결과 확인 중: {unknown.decision === "accept" ? "제안 시간 수락" : "요청 철회"} (제안 {unknown.proposalRevision}번). 결과를 확인한 뒤 새 응답을 보낼 수 있습니다.</p>
+      <button type="button" disabled={busy} onClick={() => onDecide(unknown.decision, unknown.proposalRevision)}>결과 다시 확인 (추가)</button></>}
+    <button type="button" disabled={busy} onClick={onRefresh}>제안 새로 고침 (추가)</button>
+    <button type="button" disabled={busy || !!acceptBlocked}
+      onClick={() => proposal && onDecide("accept", proposal.revision)}>제안 시간 수락 (추가)</button>
+    <button type="button" disabled={busy || !!withdrawBlocked}
+      onClick={() => proposal && onDecide("withdraw", proposal.revision)}>요청 철회 (추가)</button>
+    {(acceptBlocked || withdrawBlocked) && <p>{acceptBlocked || `요청 철회: ${withdrawBlocked}`}</p>}
+  </div>;
 }
 
 export function AgentFieldAction({ inquiryId, receiptKey, initialSummary = '', externalReady = false }: {
@@ -77,6 +141,8 @@ export function AgentFieldAction({ inquiryId, receiptKey, initialSummary = '', e
   const [reloadVersion, setReloadVersion] = useState(0);
   const [handoff, setHandoff] = useState<Handoff | null>(null);
   const [reservationFeeds, setReservationFeeds] = useState<Record<string, ReservationFeed>>({});
+  const [fieldStates, setFieldStates] = useState<Record<string, FieldStateView>>({});
+  const [pendingDecisions, setPendingDecisions] = useState<Record<string, PendingDecision>>({});
   const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const loadedInquiry = useRef<{ inquiryId: string; receiptKey: string } | null>(null);
   const connection = connections.find(item => item.connectionId === connectionId);
@@ -93,6 +159,7 @@ export function AgentFieldAction({ inquiryId, receiptKey, initialSummary = '', e
     if (inquiryChanged) { setAttachments([]); setSelectedAttachmentIds([]); }
     setHandoff(null);
     setReservationFeeds({});
+    if (inquiryChanged) setFieldStates({});
     setLoadError("");
     void Promise.allSettled([
       api(`/v1/inquiries/${inquiryId}/field-services`, receiptKey),
@@ -125,6 +192,64 @@ export function AgentFieldAction({ inquiryId, receiptKey, initialSummary = '', e
     return () => { active = false; };
   }, [inquiryId, receiptKey, reloadVersion]);
 
+  // Field 최신 상태·제안을 30초 간격으로 다시 읽는다(서버도 30초 캐시). 읽기만 하며 결정은 고객이 버튼으로 한다
+  const proposalActionIds = actions.filter(action => action.state === "accepted_external"
+    && action.kind === "reservation_request" && action.reservationId).map(action => action.actionRequestId).join(",");
+  useEffect(() => {
+    if (!proposalActionIds) return;
+    let active = true;
+    const load = () => { for (const actionId of proposalActionIds.split(","))
+      void api(`/v1/inquiries/${inquiryId}/field-actions/${actionId}`, receiptKey).then(result => {
+        if (active && result.status === 200)
+          setFieldStates(previous => ({ ...previous, [actionId]: result.data as FieldStateView }));
+      }).catch(() => undefined); };
+    load();
+    const timer = setInterval(load, 30_000);
+    return () => { active = false; clearInterval(timer); };
+  }, [inquiryId, receiptKey, proposalActionIds]);
+  async function refreshFieldState(actionId: string) {
+    setBusy(true); setNotice("Field의 현재 상태와 제안을 확인합니다.");
+    try {
+      const result = await api(`/v1/inquiries/${inquiryId}/field-actions/${actionId}`, receiptKey);
+      if (result.status === 200) {
+        const view = result.data as FieldStateView;
+        setFieldStates(previous => ({ ...previous, [actionId]: view }));
+        setNotice(view.field.readState === "current" ? "Field 현재 상태를 확인했습니다." : fieldReadLabel(view.field.readState));
+      } else setNotice(`Field 상태를 확인하지 못했습니다 (${result.status}). 이전 확인 상태를 유지합니다.`);
+    } catch { setNotice("Field 상태 응답을 받지 못했습니다. 이전 확인 상태를 유지합니다."); }
+    finally { setBusy(false); }
+  }
+  async function decide(actionId: string, decision: "accept" | "withdraw", proposalRevision: number) {
+    setBusy(true); setNotice(decision === "accept" ? "제안 시간 수락을 Field에 전달합니다." : "요청 철회를 Field에 전달합니다.");
+    try {
+      const result = await api(`/v1/inquiries/${inquiryId}/field-actions/${actionId}/customer-decisions`,
+        receiptKey, "POST", { decision, proposalRevision });
+      const data = result.data as Partial<CustomerDecision> & { error?: string | null };
+      const settle = (pending?: PendingDecision) => setPendingDecisions(previous => {
+        const next = { ...previous };
+        if (pending) next[actionId] = pending; else delete next[actionId];
+        return next;
+      });
+      // 서버가 이전 결과 미상 결정을 먼저 확인했는데도 미상이면 그 결정을 알려 준다. 같은 결정·revision으로 다시 확인한다
+      if (result.status === 409 && data.error === "prior_decision_unknown"
+        && (data.decision === "accept" || data.decision === "withdraw") && Number.isSafeInteger(data.proposalRevision)) {
+        settle({ decision: data.decision, proposalRevision: data.proposalRevision as number });
+        setNotice(decisionErrorLabel(data.error));
+        return;
+      }
+      if (result.status === 202) settle({ decision, proposalRevision });
+      else if (data.decisionState === "recorded" || data.decisionState === "rejected") settle();
+      if ((result.status === 200 || result.status === 201) && data.decisionState === "recorded") {
+        setNotice(decision === "accept"
+          ? "제안 시간 수락을 Field에 전달했습니다. 예약 확정은 사업자가 합니다."
+          : "요청 철회를 Field에 전달했습니다. 사업자가 최종 처리합니다.");
+        await refreshFieldState(actionId);
+      } else if (result.status === 202) setNotice("결정 전달 결과를 확인하지 못했습니다. '결과 다시 확인 (추가)'를 누르면 같은 요청으로 확인합니다.");
+      else if (result.status === 503) setNotice("Field 권한을 확인하지 못했습니다. 잠시 뒤 같은 버튼을 다시 눌러 주세요.");
+      else setNotice(decisionErrorLabel(data.error));
+    } catch { setNotice("결정 전달 응답을 받지 못했습니다. 같은 버튼을 다시 누르면 같은 요청으로 확인합니다."); }
+    finally { setBusy(false); }
+  }
   function resetPreview() { setPreview(null); setRequestDetails(null); setConsent(false); attempt.current = null; }
   async function refreshAttachments() {
     try {
@@ -283,7 +408,11 @@ export function AgentFieldAction({ inquiryId, receiptKey, initialSummary = '', e
           ? <><button type="button" disabled={busy} onClick={() => void syncReservation(action.actionRequestId)}>
               Field 예약 상태 확인</button>
             <button type="button" disabled={busy} onClick={() => void issueHandoff(action.actionRequestId)}>
-              Field 예약 접근 코드 발급</button></> : null}
+              Field 예약 접근 코드 발급</button>
+            <FieldProposalPanel view={fieldStates[action.actionRequestId]} busy={busy}
+              pending={pendingDecisions[action.actionRequestId]}
+              onRefresh={() => void refreshFieldState(action.actionRequestId)}
+              onDecide={(decision, revision) => void decide(action.actionRequestId, decision, revision)} /></> : null}
       </li>)}</ul></div>}
     {handoff && <div className="customer-banner"><h3>Field 예약 접근 코드</h3>
       <p>이 코드는 5분 동안 한 번만 사용할 수 있습니다. 전화번호나 예약 ID만으로는 예약을 열 수 없습니다.</p>

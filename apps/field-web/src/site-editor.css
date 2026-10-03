@@ -112,3 +112,9 @@
   .site-editor-stage>.preview-action{padding:13px 18px}
   .site-editor-stage>.preview-action>button{width:100%}
 }
+/* 사진 보관함 삭제 (추가): 기존 사진 입력 상자(.site-photo-controls) 안에 사진별 한 줄로 둔다. */
+.site-photo-library ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.site-photo-library li{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;min-width:0}
+.site-photo-library li img{width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0}
+.site-photo-library li span{font-size:14px;flex:1 1 120px;min-width:0}
+.site-photo-library li p{flex-basis:100%}

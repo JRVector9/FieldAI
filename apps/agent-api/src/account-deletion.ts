@@ -11,6 +11,8 @@ export const DELETION_COOLING_DAYS = 14;
 export const REAUTH_WINDOW_MINUTES = 5;
 // 계정 삭제 비밀번호 재입력은 사용자별 15분에 5회까지만 시도할 수 있다.
 const PASSWORD_ATTEMPT_LIMIT = 5;
+// 실행 실패 재시도 상한(Field와 동일). 넘으면 next_attempt_at을 infinity로 두어 운영자가 다시 실행할 때까지 멈춘다.
+const MAX_EXECUTION_ATTEMPTS = 12;
 const DELETED_TEXT = '[삭제됨]';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type Db = Pool | PoolClient;
@@ -21,10 +23,18 @@ type DeletionRow = { id: string; organization_id: string; requested_by: string; 
 const object = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
+// 조직 구성원용 보기. 운영자 재실행 기록(steps.operatorResumes)은 운영자 ID·사유를 빼고 시각·직전 오류·실패 횟수만 보인다.
+// 전체 기록은 관리자 목록(admin.ts)에서만 보인다.
 function view(row: DeletionRow) {
+  const resumes = Array.isArray(row.steps.operatorResumes) ? row.steps.operatorResumes : null;
+  const steps = resumes ? { ...row.steps, operatorResumes: resumes.map(item => {
+    const entry = object(item);
+    return { at: entry?.at ?? null, previousError: entry?.previousError ?? null,
+      previousExecutionFailures: entry?.previousExecutionFailures ?? null };
+  }) } : row.steps;
   return { id: row.id, status: row.status, reason: row.reason, requestedAt: row.requested_at.toISOString(),
     scheduledAt: row.scheduled_at.toISOString(), canceledAt: row.canceled_at?.toISOString() ?? null,
-    executedAt: row.executed_at?.toISOString() ?? null, steps: row.steps, lastError: row.last_error };
+    executedAt: row.executed_at?.toISOString() ?? null, steps, lastError: row.last_error };
 }
 
 // 조직 삭제 전제 조건. 하나라도 남아 있으면 예약도 실행도 하지 않는다.
@@ -39,6 +49,20 @@ export async function organizationDeletionPreconditions(db: Db, organizationId: 
     { code: 'connections_active', count: row.connections },
     { code: 'pending_action_requests', count: row.actions },
   ].map(item => ({ ...item, ok: item.count === 0 }));
+}
+
+// 사용자가 owner인 조직 전부(삭제 실행된 본인 소유 조직 포함)와 최근 삭제 요청 상태. 여러 조직 owner의 삭제 대상 선택용(추가).
+export async function ownedOrganizations(db: Db, userId: string) {
+  const rows = (await db.query<{ id: string; name: string; deleted: boolean; status: string | null;
+    scheduled_at: Date | null; executed_at: Date | null }>(
+    `select o.id,o.name,o.deleted_at is not null as deleted,r.status,r.scheduled_at,r.executed_at from ap.organizations o
+     left join lateral (select status,scheduled_at,executed_at from ap.organization_deletion_requests d
+       where d.organization_id=o.id order by d.requested_at desc,d.id desc limit 1) r on true
+     where o.owner_user_id=$1 or (o.deleted_at is null and exists(select 1 from ap.memberships m
+       where m.organization_id=o.id and m.user_id=$1 and m.role='owner'))
+     order by o.created_at,o.id`, [userId])).rows;
+  return rows.map(row => ({ id: row.id, name: row.name, deleted: row.deleted, deletionStatus: row.status ?? 'none',
+    scheduledAt: row.scheduled_at?.toISOString() ?? null, executedAt: row.executed_at?.toISOString() ?? null }));
 }
 
 // 계정 삭제 차단 사유. 삭제되지 않은 조직의 owner·플랫폼 관리자·살아 있는 OAuth 연결은 먼저 정리해야 한다.
@@ -91,6 +115,35 @@ async function consumePasswordAttempt(pool: Pool, userId: string): Promise<numbe
   return row.attempts > PASSWORD_ATTEMPT_LIMIT ? row.retry_after : null;
 }
 
+type ReauthFailure = { status: 400 | 403 | 429; error: string; retryAfter?: number; reauthWindowMinutes?: number };
+// 계정 삭제와 조직 삭제 예약(추가)이 함께 쓰는 본인 재확인. 비밀번호 계정은 재입력(시도 창 15분 5회를 두 경로가 공유),
+// 비밀번호가 없는 카카오 전용 계정은 REAUTH_WINDOW_MINUTES분 이내 새로 로그인한 현재 세션으로 확인한다.
+async function reauthenticate(runtime: BusinessRuntime, db: Db, request: FastifyRequest, userId: string,
+  password: unknown): Promise<ReauthFailure | null> {
+  const hash = await credentialPasswordHash(db, userId);
+  if (hash) {
+    if (typeof password !== 'string') return { status: 400, error: 'password_required' };
+    // 실패 시도도 남도록 검증 전에 별도 커밋으로 시도 창을 소비한다(15분 5회).
+    const retryAfter = await consumePasswordAttempt(runtime.pool, userId);
+    if (retryAfter !== null) return { status: 429, error: 'password_attempts_exceeded', retryAfter };
+    // better-auth 기본 비밀번호 검증(ctx.password.verify와 같은 scrypt 구현)으로 재입력을 확인한다.
+    return await verifyPassword({ hash, password }) ? null : { status: 403, error: 'invalid_password' };
+  }
+  // 카카오 전용 계정: 최근 REAUTH_WINDOW_MINUTES분 이내 카카오로 다시 로그인한 세션에서만 진행한다.
+  return await recentlySignedIn(runtime, db, request, userId) ? null
+    : { status: 403, error: 'reauth_required', reauthWindowMinutes: REAUTH_WINDOW_MINUTES };
+}
+
+function sendReauthFailure(reply: FastifyReply, failure: ReauthFailure) {
+  const { status, retryAfter, ...body } = failure;
+  if (retryAfter !== undefined) reply.header('Retry-After', retryAfter);
+  return reply.code(status).send(body);
+}
+
+// 재입력 비밀번호 형식: 없거나(카카오 전용 계정) 1~1024자 문자열이어야 한다.
+const invalidPasswordField = (password: unknown) =>
+  password !== undefined && (typeof password !== 'string' || !password || password.length > 1024);
+
 // 보존 작업자 단계: 15분 창이 끝난 비밀번호 시도 창을 지운다.
 export async function purgeAccountDeletionPasswordWindows(pool: Pool) {
   return (await pool.query(
@@ -113,7 +166,8 @@ export function registerAgentAccountDeletionRoutes(app: FastifyInstance, runtime
       `select m.organization_id,m.role,o.name from ap.memberships m join ap.organizations o on o.id=m.organization_id
        where m.user_id=$1 and o.deleted_at is null and ($2::uuid is null or m.organization_id=$2::uuid)
        order by (m.role='owner') desc,m.created_at limit 1`, [userId, header ?? null])).rows[0];
-    return { userId, organization: row ? { id: row.organization_id, name: row.name, canManage: row.role === 'owner' } : null };
+    return { userId, selectedId: header ?? null,
+      organization: row ? { id: row.organization_id, name: row.name, canManage: row.role === 'owner' } : null };
   }
 
   app.get('/v1/organizations/current/deletion-requests/current', async (request, reply) => {
@@ -123,7 +177,8 @@ export function registerAgentAccountDeletionRoutes(app: FastifyInstance, runtime
       // 삭제가 끝난 본인 조직은 구성원이 없으므로 owner 기준 실행 기록만 보여 준다.
       const done = (await runtime.pool.query<DeletionRow & { name: string }>(
         `select r.*,o.name from ap.organization_deletion_requests r join ap.organizations o on o.id=r.organization_id
-         where o.owner_user_id=$1 and r.status='executed' order by r.executed_at desc limit 1`, [member.userId])).rows[0];
+         where o.owner_user_id=$1 and r.status='executed' and ($2::uuid is null or r.organization_id=$2::uuid)
+         order by r.executed_at desc limit 1`, [member.userId, member.selectedId])).rows[0];
       if (!done) return reply.code(404).send({ error: 'organization_not_found' });
       return { product: 'agent', organization: { id: done.organization_id, name: done.name, deleted: true }, canManage: false,
         coolingDays: DELETION_COOLING_DAYS, preconditions: [], request: view(done) };
@@ -152,6 +207,10 @@ export function registerAgentAccountDeletionRoutes(app: FastifyInstance, runtime
       return reply.code(400).send({ error: 'acknowledgements_required' });
     if (typeof body?.confirmText !== 'string' || body.confirmText !== member.organization.name)
       return reply.code(400).send({ error: 'confirmation_mismatch' });
+    // 조직 삭제 예약도 계정 삭제와 같은 본인 재확인을 거친다(추가, L8).
+    if (invalidPasswordField(body.password)) return reply.code(400).send({ error: 'password_required' });
+    const reauth = await reauthenticate(runtime, runtime.pool, request, member.userId, body.password);
+    if (reauth) return sendReauthFailure(reply, reauth);
     const organizationId = member.organization.id;
     const db = await runtime.pool.connect();
     try {
@@ -229,7 +288,7 @@ export function registerAgentAccountDeletionRoutes(app: FastifyInstance, runtime
     if (verification === 'recent_sign_in' && !await recentlySignedIn(runtime, runtime.pool, request, userId))
       blockers.push('reauth_required');
     return { product: 'agent', email: user.email, eligible: blockers.length === 0, blockers, verification,
-      reauthWindowMinutes: REAUTH_WINDOW_MINUTES };
+      reauthWindowMinutes: REAUTH_WINDOW_MINUTES, organizations: await ownedOrganizations(runtime.pool, userId) };
   });
 
   app.post('/v1/account/deletion-requests', async (request, reply) => {
@@ -237,9 +296,7 @@ export function registerAgentAccountDeletionRoutes(app: FastifyInstance, runtime
     const userId = await runtime.resolveUserId(request.headers);
     if (!userId) return reply.code(401).send({ error: 'authentication_required' });
     const body = object(request.body);
-    const password = body?.password;
-    if (password !== undefined && (typeof password !== 'string' || !password || password.length > 1024))
-      return reply.code(400).send({ error: 'password_required' });
+    if (invalidPasswordField(body?.password)) return reply.code(400).send({ error: 'password_required' });
     if (body?.acknowledgement !== true) return reply.code(400).send({ error: 'acknowledgements_required' });
     const db = await runtime.pool.connect();
     try {
@@ -251,24 +308,8 @@ export function registerAgentAccountDeletionRoutes(app: FastifyInstance, runtime
       }
       const blockers = await accountDeletionBlockers(db, userId);
       if (blockers.length) { await db.query('rollback'); return reply.code(409).send({ error: blockers[0], blockers }); }
-      const hash = await credentialPasswordHash(db, userId);
-      if (hash) {
-        if (typeof password !== 'string') { await db.query('rollback'); return reply.code(400).send({ error: 'password_required' }); }
-        // 실패 시도도 남도록 검증 전에 별도 커밋으로 시도 창을 소비한다(15분 5회).
-        const retryAfter = await consumePasswordAttempt(runtime.pool, userId);
-        if (retryAfter !== null) {
-          await db.query('rollback');
-          return reply.header('Retry-After', retryAfter).code(429).send({ error: 'password_attempts_exceeded' });
-        }
-        // better-auth 기본 비밀번호 검증(ctx.password.verify와 같은 scrypt 구현)으로 재입력을 확인한다.
-        if (!await verifyPassword({ hash, password })) {
-          await db.query('rollback'); return reply.code(403).send({ error: 'invalid_password' });
-        }
-      } else if (!await recentlySignedIn(runtime, db, request, userId)) {
-        // 카카오 전용 계정: 최근 REAUTH_WINDOW_MINUTES분 이내 카카오로 다시 로그인한 세션에서만 진행한다.
-        await db.query('rollback');
-        return reply.code(403).send({ error: 'reauth_required', reauthWindowMinutes: REAUTH_WINDOW_MINUTES });
-      }
+      const reauth = await reauthenticate(runtime, db, request, userId, body.password);
+      if (reauth) { await db.query('rollback'); return sendReauthFailure(reply, reauth); }
       const anonymousEmail = `deleted-${randomUUID()}@deleted.invalid`;
       const removed = {
         memberships: (await db.query('delete from ap.memberships where user_id=$1', [userId])).rowCount ?? 0,
@@ -337,7 +378,14 @@ export async function runOrganizationDeletionOnce(runtime: { pool: Pool }): Prom
       campaignReleasesCleared: await count(`update ap.campaign_releases set content=content||jsonb_build_object('serviceName',$2::text,'description','')
         where organization_id=$1`, [organizationId, DELETED_TEXT]),
       ownerRecipientsRevoked: await count("update ap.notification_recipients set revoked_at=now() where organization_id=$1 and audience='owner' and revoked_at is null", [organizationId]),
-      // 철회만으로는 연락처 암호문이 남으므로 owner 수신처 암호문도 지운다(발송 이력의 암호문은 기존 보존 정책을 따른다).
+      // owner 발송 기록 암호문(추가, Field와 같은 규칙): 미시작 건은 suppressed로 닫고 지우며, 시작된 건은 sent/failed/suppressed
+      // 종료 건만 지운다. 결과 미상 등 진행 중 건은 공급사 대조를 위해 남긴다(000089 guard가 삭제된 조직 owner 건만 허용).
+      ownerDeliveriesPurged: await count(`update ap.notification_deliveries d set recipient_ciphertext=null,retention_purged_at=$2,
+        state=case when d.started_at is null then 'suppressed' else d.state end,
+        error_code=case when d.started_at is null then 'organization_deleted' else d.error_code end,claim_token=null,lease_expires_at=null
+        from ap.notification_recipients r where r.id=d.recipient_id and r.organization_id=$1 and r.target_kind='owner'
+          and d.retention_purged_at is null and (d.started_at is null or d.state in ('sent','failed','suppressed'))`, [organizationId, at]),
+      // 철회만으로는 연락처 암호문이 남으므로 owner 수신처 암호문도 지운다.
       ownerRecipientsCleared: await count(`update ap.notification_recipients set recipient_ciphertext=null,retention_purged_at=now()
         where organization_id=$1 and audience='owner' and retention_purged_at is null`, [organizationId]),
       // 다른 조직 구성원 자격이 남은 사용자는 그 조직 업무를 계속하므로 세션을 유지한다(이 조직 접근은 멤버십 삭제로 차단).
@@ -358,9 +406,18 @@ export async function runOrganizationDeletionOnce(runtime: { pool: Pool }): Prom
     const raw = (error as { code?: unknown; name?: unknown } | null);
     const code = typeof raw?.code === 'string' ? raw.code : typeof raw?.name === 'string' ? raw.name : 'unknown';
     const errorCode = /^[A-Za-z0-9_]{1,64}$/.test(code) ? code : 'unknown';
-    if (requestId) await runtime.pool.query(`update ap.organization_deletion_requests set attempt_count=attempt_count+1,
-      last_error=$2,next_attempt_at=clock_timestamp()+interval '5 minutes' where id=$1 and status='scheduled'`,
-    [requestId, `execution_failed:${errorCode}`]);
-    return 'retry';
+    if (!requestId) return 'retry';
+    // 실행 실패는 상한(MAX_EXECUTION_ATTEMPTS)까지만 5분 뒤 재시도하고, 넘으면 infinity로 멈춰 운영자 다시 실행을 기다린다(추가).
+    // 상한은 전제 조건 대기(blocked)와 섞이지 않도록 실행 실패 횟수(steps.executionFailures)만 센다.
+    const stopped = (await runtime.pool.query<{ stopped: boolean }>(`with failure as (
+        select id,coalesce((steps->>'executionFailures')::int,0)+1 as failures from ap.organization_deletion_requests
+        where id=$1 and status='scheduled')
+      update ap.organization_deletion_requests r set attempt_count=attempt_count+1,
+        steps=steps||jsonb_build_object('executionFailures',f.failures),
+        last_error=case when f.failures>=$3 then $2::text||',execution_attempts_stopped' else $2::text end,
+        next_attempt_at=case when f.failures>=$3 then 'infinity'::timestamptz else clock_timestamp()+interval '5 minutes' end
+      from failure f where r.id=f.id returning r.next_attempt_at='infinity'::timestamptz as stopped`,
+    [requestId, `execution_failed:${errorCode}`, MAX_EXECUTION_ATTEMPTS])).rows[0]?.stopped;
+    return stopped ? 'blocked' : 'retry';
   } finally { db.release(); }
 }

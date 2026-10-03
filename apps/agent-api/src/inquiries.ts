@@ -578,6 +578,11 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
       await client.query(
         `update ap.inquiries set state = $2, automation_paused = true, revision = revision + 1, updated_at = now()
          where id = $1`, [row.id, target]);
+      // 상태 변경과 같은 트랜잭션에서 행위자를 남긴다. 재전송은 위에서 rollback으로 끝나므로 중복 기록이 없다.
+      await client.query(
+        `insert into ap.inquiry_resolution_events(id, inquiry_id, event_type, revision, actor_user_id)
+         values ($1, $2, $3, $4, $5)`,
+        [randomUUID(), row.id, action === 'take_over' ? 'human_takeover' : 'human_release', row.revision + 1, userId]);
       await client.query('commit');
       return { id: row.id, state: target, revision: row.revision + 1 };
     } catch (error) { await client.query('rollback'); throw error; } finally { client.release(); }

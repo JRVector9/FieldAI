@@ -27,16 +27,18 @@ if (present.length === fields.length) {
     const client = result.rows[0];
     const before = ['openid', 'offline_access', 'field.facts.read'];
     const requests = [...before, 'field.availability.read', 'field.requests.create', 'field.requests.read'];
-    const after = [...requests, 'field.customer_access.create'];
+    const handoff = [...requests, 'field.customer_access.create'];
+    // preview.9 제안 응답·알림 경로 scope. 기존 동의는 그대로이며 owner가 다시 연결해야 새 scope를 받는다
+    const after = [...handoff, 'field.proposals.respond', 'field.notification_route.read'];
     if (!client || client.name !== 'Local AP BFF connector'
       || client.applicationType !== 'native'
       || JSON.stringify(client.redirectUris) !== JSON.stringify(['http://127.0.0.1:4311/v1/connections/field/callback'])
-      || (![before, requests, after].some(scopes => JSON.stringify(client.scopes) === JSON.stringify(scopes))))
+      || (![before, requests, handoff, after].some(scopes => JSON.stringify(client.scopes) === JSON.stringify(scopes))))
       throw new Error('Existing mock OAuth client differs from the expected registration');
     if (JSON.stringify(client.scopes) !== JSON.stringify(after)) {
       await db.query(`update "oauthClient" set scopes = $2::jsonb, "updatedAt" = now()
         where "clientId" = $1`, [values.AP_FIELD_CLIENT_ID, JSON.stringify(after)]);
-      process.stdout.write('Local AP mock client now permits reservation handoff scope. Existing grants remain unchanged; owners must consent again.\n');
+      process.stdout.write('Local AP mock client now permits reservation handoff, proposal response and notification route scopes. Existing grants remain unchanged; owners must consent again.\n');
     }
   } finally { await db.end(); }
   if (!/^FIELD_AP_REVERSE_CLIENT_ID=/m.test(fieldEnv))
@@ -68,7 +70,7 @@ const registration = await request('/oauth2/create-client', {
   token_endpoint_auth_method: 'client_secret_basic',
   grant_types: ['authorization_code', 'refresh_token'],
   response_types: ['code'],
-  scope: 'openid offline_access field.facts.read field.availability.read field.requests.create field.requests.read field.customer_access.create',
+  scope: 'openid offline_access field.facts.read field.availability.read field.requests.create field.requests.read field.customer_access.create field.proposals.respond field.notification_route.read',
 }, cookie);
 if (!registration.ok)
   throw new Error(`Field mock OAuth client registration failed (${registration.status}); restart Field API with current code`);

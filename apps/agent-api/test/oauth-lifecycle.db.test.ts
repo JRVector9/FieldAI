@@ -2,7 +2,7 @@ import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Pool } from 'pg';
 import assert from 'node:assert/strict';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -292,4 +292,93 @@ test('twelve concurrent token issuances finish without each request holding two 
     const issued=await Promise.race([pending,deadlock]);
     assert.deepEqual(issued.map(r=>r.status),Array(12).fill(200));
   }finally{clearTimeout(timer);if(!released)await held.query('rollback');held.release();await locker.end();}
+});
+
+test('lifecycle serving reuses verified journal files and applied proofs, rereading only new or changed entries',async t=>{
+  const f=await fixture(),g=await fixture();
+  assert.equal((await f.form('/oauth2/revoke',{token:f.access,token_type_hint:'access_token'})).status,200);
+  const {assertLifecycleServing,lifecycleJournalFromEnvironment,lifecycleJournalMetrics,LifecycleJournal}=await import('../src/oauth-lifecycle-journal.js');
+  const {tokenIntent}=await import('../src/oauth-lifecycle-provider.js');
+  const journal=lifecycleJournalFromEnvironment()!,secret=process.env.AP_REVOCATION_JOURNAL_SECRET!;
+  assert.equal(lifecycleJournalFromEnvironment(),journal,'요청마다 같은 검증 캐시 인스턴스를 써야 한다');
+  // 요청당 DB 왕복 수를 세는 pool 래퍼(실제 pool client를 그대로 쓴다)
+  let queries=0;
+  const counting={connect:async()=>{const client=await pool.connect();return new Proxy(client,{get(target,key){
+    if(key==='query')return (...args:unknown[])=>{queries++;return (target.query as (...values:unknown[])=>unknown).apply(target,args);};
+    const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});}} as unknown as Pool;
+  const measure=async(run:()=>Promise<unknown>)=>{lifecycleJournalMetrics.fileReads=0;queries=0;await run();return {reads:lifecycleJournalMetrics.fileReads,queries};};
+  const count=(await readdir(journal.root)).filter(n=>n.endsWith('.json')).length;assert.ok(count>0);
+  const cold=await measure(()=>assertLifecycleServing(counting,new LifecycleJournal(journal.root,secret)));
+  assert.equal(cold.reads,count,'재시작한 인스턴스는 모든 서명을 다시 확인한다');
+  await assertLifecycleServing(counting,journal);
+  for(let i=0;i<3;i++)assert.deepEqual(await measure(()=>assertLifecycleServing(counting,journal)),{reads:0,queries:1},'변경 없는 원장은 다시 읽지 않는다');
+  t.diagnostic(`entries=${count} cold(reads=${cold.reads},queries=${cold.queries}) warm(reads=0,queries=1)`);
+
+  // append: 새 파일 하나만 읽고, receipt 없는 항목은 즉시 서빙을 막는다
+  await journal.append(tokenIntent((await pool.query('select * from "oauthAccessToken" where id=$1',[g.accessId])).rows[0],'access'));
+  lifecycleJournalMetrics.fileReads=0;
+  await assert.rejects(assertLifecycleServing(counting,journal),/recovery required/);assert.equal(lifecycleJournalMetrics.fileReads,1);
+  assert.equal((await g.form('/oauth2/revoke',{token:g.access,token_type_hint:'access_token'})).status,200);
+  await assertLifecycleServing(counting,journal);
+  assert.deepEqual(await measure(()=>assertLifecycleServing(counting,journal)),{reads:0,queries:1});
+
+  // 같은 크기 변조: 서명이 맞는 다른 내용(같은 길이)도 stat 변화로 다시 읽고 검증된 해시와 달라 즉시 거부한다
+  const name=(await readdir(journal.root)).filter(n=>n.endsWith('.json')).sort()[0]!,path=resolve(journal.root,name),original=await readFile(path,'utf8');
+  const envelope=JSON.parse(original) as {data:string;signature:string},entry=JSON.parse(envelope.data) as {createdAt:string};
+  const digit=entry.createdAt.at(-2)==='1'?'2':'1';
+  const data=JSON.stringify({...entry,createdAt:entry.createdAt.slice(0,-2)+digit+'Z'});
+  const forged=JSON.stringify({data,signature:createHmac('sha256',secret).update('agent-oauth-lifecycle-v1\0').update(data).digest('hex')});
+  assert.equal(forged.length,original.length);
+  const flipped=original.replace(/"signature":"(.)/,(_,c:string)=>`"signature":"${c==='0'?'1':'0'}`);assert.equal(flipped.length,original.length);
+  try{
+    await writeFile(path,forged);
+    await assert.rejects(assertLifecycleServing(counting,journal),/continuity lost/);
+    await assert.rejects(journal.read(),/continuity lost/,'거부 후에도 검증된 해시를 기준으로 계속 거부한다');
+    await assert.rejects(assertLifecycleServing(counting,new LifecycleJournal(journal.root,secret)),/continuity lost/,'재시작 후에는 DB receipt 해시가 같은 변조를 거부한다');
+    await writeFile(path,flipped);
+    await assert.rejects(assertLifecycleServing(counting,journal),/signature mismatch/);
+  }finally{await writeFile(path,original);}
+  await assertLifecycleServing(counting,journal);
+
+  // 같은 oid의 물리 복원·failover: postmaster 시작 시각·timeline이 들어간 식별값이 바뀌면 캐시 없이 전체 확인한다
+  const entryCount=(await readdir(journal.root)).filter(n=>n.endsWith('.json')).length;
+  const full=(result:{queries:number})=>result.queries>=4+entryCount;
+  assert.deepEqual(await measure(()=>assertLifecycleServing(counting,journal)),{reads:0,queries:1});
+  let identitySeen='';
+  const failover={connect:async()=>{const client=await counting.connect();return new Proxy(client,{get(target,key){
+    if(key==='query')return async(...args:unknown[])=>{const result=await (target.query as (...values:unknown[])=>Promise<{rows:{identity?:string}[]}>).apply(target,args);
+      if(typeof args[0]==='string'&&args[0].includes('pg_postmaster_start_time()')){identitySeen=args[0];result.rows[0]!.identity+=':promoted';}
+      return result;};
+    const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});}} as unknown as Pool;
+  const promoted=await measure(()=>assertLifecycleServing(failover,journal));
+  assert.match(identitySeen,/pg_control_checkpoint\(\)/,'권한이 있으면 checkpoint timeline도 식별값에 넣는다');
+  assert.ok(full(promoted),`식별값이 바뀌면 전체 확인(queries=${promoted.queries})`);
+  assert.deepEqual(await measure(()=>assertLifecycleServing(counting,journal)),{reads:0,queries:1});
+  // 최대 유효 시간(60초)이 지나면 같은 식별값이어도 전체 확인을 다시 한다
+  const {SERVING_PROOF_MAX_AGE_MS}=await import('../src/oauth-lifecycle-journal.js');
+  const realNow=Date.now;
+  try{
+    Date.now=()=>realNow()+SERVING_PROOF_MAX_AGE_MS-5_000;
+    assert.deepEqual(await measure(()=>assertLifecycleServing(counting,journal)),{reads:0,queries:1},'유효 시간 안에서는 캐시를 쓴다');
+    Date.now=()=>realNow()+SERVING_PROOF_MAX_AGE_MS+1_000;
+    const expired=await measure(()=>assertLifecycleServing(counting,journal));
+    assert.ok(full(expired),`유효 시간이 지나면 전체 확인(queries=${expired.queries})`);
+    assert.deepEqual(await measure(()=>assertLifecycleServing(counting,journal)),{reads:0,queries:1});
+  }finally{Date.now=realNow;}
+  // TRUNCATE는 행 트리거를 거치지 않으므로 문장 트리거(POL04)로 거절한다
+  for(const table of ['ap.oauth_lifecycle_receipts','ap.oauth_lifecycle_tombstones']){
+    const client=await pool.connect();
+    try{
+      await client.query('begin');
+      await assert.rejects(client.query(`truncate ${table}`),(error:{code?:string})=>error.code==='POL04',table);
+    }finally{await client.query('rollback');client.release();}
+  }
+  await assertLifecycleServing(counting,journal);
+
+  // checkpoint/restore 검증은 항상 전체 서명을 다시 읽고, restore 검증 뒤 서빙은 처음부터 다시 확인한다
+  const total=(await readdir(journal.root)).filter(n=>n.endsWith('.json')).length;
+  const checkpoint=await measure(()=>journal.checkpoint());assert.equal(checkpoint.reads,total);
+  const exported=await journal.checkpoint();
+  assert.equal((await measure(()=>journal.verifiedEntries(exported))).reads,total);
+  assert.ok((await measure(()=>assertLifecycleServing(counting,journal))).queries>1,'restore 검증 뒤에는 적용 확인 캐시를 버린다');
 });

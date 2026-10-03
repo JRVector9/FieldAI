@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
-import { agentAdminSections as sections, type AgentAdminSection } from "./agent-admin-sections";
+import { agentAdminSections as sections, stoppedDeletionReason, type AgentAdminSection } from "./agent-admin-sections";
 import "./agent-admin.css";
 import { AgentModerationAdmin } from './AgentModerationAdmin';
 import { AgentCustomerSupport } from './AgentCustomerSupport';
@@ -47,6 +47,59 @@ async function request(path: string, method = "GET", body?: unknown) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return { status: response.status, data: await response.json().catch(() => ({})) };
+}
+
+type StoppedDeletion = { id: string; organizationId: string; organizationName: string; requestedAt: string; scheduledAt: string;
+  attemptCount: number; executionFailures: number; lastError: string | null };
+// 삭제 요청 복구 (추가): 실행 실패 상한·저장소 권한 부족으로 멈춘 조직 삭제 요청을 원인 확인 뒤 operator가 다시 실행한다.
+// 다시 실행하면 유예가 끝난 조직의 삭제가 곧바로 진행되므로 사유를 받고, 사유는 요청 행 감사 기록과 owner 삭제 기록에 남는다.
+function OrganizationDeletionRecovery({ role }: { role: "operator" | "auditor" }) {
+  const [items, setItems] = useState<StoppedDeletion[] | null>(null);
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("");
+  const load = useCallback(async () => {
+    setBusy(true);
+    try {
+      const result = await request("/v1/admin/organization-deletions?status=stopped");
+      const value = result.data as { deletions?: StoppedDeletion[] };
+      if (result.status !== 200 || !Array.isArray(value.deletions)) throw new Error(`조회 실패 (${result.status})`);
+      setItems(value.deletions); setStatus("");
+    } catch { setItems(null); setStatus("멈춘 삭제 요청을 불러오지 못했습니다. 다시 시도해 주세요."); }
+    finally { setBusy(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  async function resume(id: string) {
+    setBusy(true);
+    try {
+      const result = await request(`/v1/admin/organization-deletions/${id}/resume`, "POST", { reason: (reasons[id] ?? "").trim() });
+      if (result.status !== 200) {
+        const code = (result.data as { error?: string }).error ?? String(result.status);
+        setStatus(code === "invalid_reason" ? "다시 실행 사유를 10~500자로 입력해 주세요." : code === "deletion_not_stopped"
+          ? "이미 다시 실행됐거나 멈춘 상태가 아닙니다. 목록을 새로고침합니다." : `다시 실행하지 못했습니다 (${code}).`);
+        if (code === "deletion_not_stopped") await load();
+        return;
+      }
+      setReasons(current => { const next = { ...current }; delete next[id]; return next; });
+      await load(); setStatus("다시 실행을 예약했습니다. 삭제 작업자가 다음 주기에 실행합니다.");
+    } catch { setStatus("다시 실행 결과를 확인하지 못했습니다. 목록을 새로고침해 실제 상태를 확인해 주세요."); }
+    finally { setBusy(false); }
+  }
+  return <section className="special-panel" aria-label="삭제 요청 복구"><h2>삭제 요청 복구 (추가)</h2>
+    <p>자동 실행이 멈춘 AP 조직 삭제 요청입니다. 원인(저장소 권한·실행 오류)을 해결한 뒤에만 다시 실행하세요. 다시 실행 사유는 요청 감사 기록과 해당 조직 owner의 삭제 기록에 남습니다.</p>
+    {status && <p role="status" className="state-message">{status}</p>}
+    <button type="button" disabled={busy} onClick={() => void load()}>목록 새로고침</button>
+    {items && items.length === 0 && <p>멈춘 삭제 요청이 없습니다.</p>}
+    {items && items.length > 0 && <div className="agent-admin-list">{items.map(item => <article key={item.id}>
+      <h3>{item.organizationName}</h3>
+      <p>멈춘 사유 {stoppedDeletionReason(item.lastError)} · 실행 실패 {item.executionFailures}회 · 전체 시도 {item.attemptCount}회</p>
+      <p>실행 예정 {new Date(item.scheduledAt).toLocaleString("ko-KR")} · 요청 ID {item.id}</p>
+      {role === "operator" ? <>
+        <label>다시 실행 사유(10~500자)<input value={reasons[item.id] ?? ""} maxLength={500} onChange={event => setReasons({ ...reasons, [item.id]: event.target.value })} /></label>
+        <button type="button" disabled={busy || (reasons[item.id] ?? "").trim().length < 10} onClick={() => void resume(item.id)}>다시 실행</button>
+      </> : <p>다시 실행은 operator 권한이 필요합니다.</p>}
+    </article>)}</div>}
+  </section>;
 }
 
 export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSection }) {
@@ -158,6 +211,7 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
               <p>사건 ID {item.eventId}</p>
             </article>)}</div>}
         </section>}
+        {section === "organizations" && <OrganizationDeletionRecovery role={overview.role} />}
         {section === "audit" && <AgentModerationAdmin actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <AgentCustomerSupport actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <AgentRetentionAdmin actorUserId={overview.actorUserId} role={overview.role} />}

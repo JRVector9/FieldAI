@@ -6,7 +6,7 @@ import "./agent-field-connections.css";
 
 type Connection = { id: string; apOrganizationId: string; apAgentId: string;
   fieldOrganizationId: string; scopes: string[]; status: string; createdAt: string;
-  remoteRevokeState: string | null };
+  remoteRevokeState: string | null; scopeState?: "complete" | "scope_missing"; missingScopes?: string[] };
 type FieldFacts = { organizationId: string; revision: number; businessName: string;
   introduction?: string; region?: string; openingHours?: string;
   services: { id: string; name: string; description?: string; priceAmount?: number | null }[];
@@ -320,6 +320,11 @@ export function AgentFieldConnections() {
               : item.remoteRevokeState === "blocked" ? "전달 차단 · 관리자 확인 필요"
                 : item.remoteRevokeState === "pending" || item.remoteRevokeState === "retry" || item.remoteRevokeState === "sending"
                   ? "확인 대기 · 자동 재시도 중" : "Field 연결 상태 확인 필요"}. 기존 AP 문의와 Field 예약은 유지됩니다.</p>}
+            {item.status === "review_required" && item.scopeState === "scope_missing" && <div role="status">
+              <p>제안 응답·알림 경로 권한 미동의 (추가): 이 연결에서는 고객이 AP 화면에서 Field 제안에 응답할 수 없고,
+                AP는 Field 알림 담당 여부를 확인하지 못합니다. 기존 조회·요청 전달은 계속됩니다.</p>
+              <p>같은 연결에 권한을 더하는 경로는 아직 없습니다. 다시 동의하려면 이 연결을 해제한 뒤 Field 연결 화면에서 새로 연결해야 합니다.</p>
+              <p><a href={fieldWorkspaceUrl} target="_blank" rel="noopener noreferrer">Field 연결 화면에서 다시 동의 (추가)</a></p></div>}
             {item.status === "review_required" && <button type="button" disabled={busy}
               onClick={() => void inspect(item.id)}>Field 승인 정보 가져와 검토</button>}
             {item.status === "review_required" && <button type="button" disabled={busy}

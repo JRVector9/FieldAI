@@ -48,6 +48,8 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 | `infra/edge/Caddyfile.example` | TLS 종료·제품별 upstream 분리·X-Forwarded-For 재작성·Field 와일드카드(DNS-01)·Field 사업자 자체 도메인 on-demand TLS(`ask` → `GET /v1/public/site-hosts/allow?domain=`) |
 | `.github/workflows/ci.yml` | lint·typecheck·unit, 제품별 DB job, 계약 검사, 이미지 빌드(push 없음) |
 
+Field 사업자 자체 도메인의 TLS 준비 확인은 `FIELD_DOMAIN_EDGE=caddy`(선택 `FIELD_DOMAIN_EDGE_PROBE_TIMEOUT_MS`, 기본 5000ms)일 때만 켜진다. 도메인 작업자는 `https://<도메인>/.well-known/field-site-health`를 SNI로 요청해 기본 신뢰 저장소로 인증서 체인·이름을 검증하고(자체 서명 거절), Field API가 ask와 같은 조건(tls_pending·connected·TLS 실패 error)에서 돌려준 증명값 `proof`(= `FIELD_AUTH_SECRET` 하위 키로 만든 HMAC-SHA256(도메인 + ':' + 조직 ID), 공개 조직 ID만으로는 만들 수 없음)가 도메인 행으로 계산한 값과 같을 때만 connected로 바꾼다. 확인 실패는 tls_pending에서 처음 실패한 시각(`checked_at`, `last_error='domain_tls_unconfirmed'`, DB 기록이라 여러 작업자·재시작이 같은 시각을 봄)부터 15분 동안 tls_pending, 그 뒤 error(`domain_tls_failed`)로 남긴다. verifying 등에서 막 넘어온 첫 확인 실패는 유예에 넣지 않는다. error는 다음 확인이 성공할 때까지 유지하며(tls_pending과 왕복하지 않음) 상태가 실제로 바뀔 때만 `field.site.domain.status` 사건을 남긴다. 사업자 도메인 설정 화면은 `last_error`를 한국어 원인 안내로 보여 준다. 연결된 도메인은 마지막 확정 점검 뒤 15분 안의 실패에서 연결을 유지한다. Caddy는 이 경로만 Host를 유지해 Field API로 넘겨야 한다(`infra/edge/Caddyfile.example`). 값이 없으면 기존처럼 `blocked_integration`이며, 실제 Caddy·ACME·공인 DNS 환경의 발급·갱신 검수는 아직 수행하지 않았다.
+
 production 이미지는 `NODE_ENV=production`이며 `AP_PROFILE`/`FIELD_PROFILE`이 `live`가 아니면 부팅하지 않는다. 각 compose는 상대 제품의 서비스·DB·환경변수를 참조하지 않는다. E2E·보안·독립성·장애 주입 검사, 실제 TLS·레지스트리 push·운영 서버 검수는 이 산출물로 통과 처리하지 않는다.
 
 ## 5.2 agent용 런타임 의존 금지선
@@ -100,6 +102,8 @@ AP 회원·Field 회원·AP 상담·Field 직접 상담·고객이 Field에 제�
 | 백업 | 제품별 순환30일 제안 | 복원 후 삭제·revoke 원장 재적용 |
 | 연결 비밀값 | 해제 즉시 사용 차단·폐기 | 최소 감사메타·분쟁 증빙만 별도 보존 |
 
+Field 인증 메일 outbox(`field.email_outbox`)는 발송 완료(`sent`) 인증 메일만 7일 뒤 수신 주소를 익명화한다. `pending` 행은 30일, `failed`·`blocked_integration` 행은 90일 동안 운영자 장애·재발송 확인을 위해 수신 주소를 그대로 보관한 뒤 행째 삭제한다(본문에는 주소가 없다).
+
 법정 거래 기록은 해당 제품의 구독·청구 원장으로 분리 보존한다. 전체 채팅을 무조건 법정 기간 동안 보관하는 방식으로 확대하지 않는다. 상대가 적법하게 수신한 데이터의 삭제 결과는 별도 작업과 증빙으로 관리한다.
 
 ## 5.6 운영 목표와 관측
@@ -142,6 +146,8 @@ AP API와 Field API는 각자 `apps/agent-api/src/logging.ts`, `apps/field-api/s
 | G-D2 | 성과·프라이버시 | AP만으로 집계, 작은 집단/차분 완화·PII 차단 |
 | G-L1 | 실제 운영 계약 | 두 제품 약관/데이터 책임/국외 처리/AI고지·PG·메시지 계약 검수 |
 | G-S1 | 전체 최종 인수 | 변경 추적표·모든 적용 QA·제품별 독립/연결 회귀·책임자 승인 |
+
+G-I1 배포 순서: Field에 등록된 AP OAuth client의 scope에 `field.proposals.respond`·`field.notification_route.read`를 먼저 추가한 뒤 AP를 배포한다(미갱신 시 AP는 `invalid_scope`를 받으면 기본 scope로 한 번 다시 동의하고 연결을 `scope_missing`으로 표시한다).
 
 각 독립 릴리스는 자기 게이트와 공통 법무·보안 적용 항목만으로 판단한다. 예를 들어 AP Core가 G-D1을 기다릴 필요는 없지만 Distribution을 완료했다고 주장할 수는 없다. 전체 Suite 완료는 모든 적용 게이트를 요구한다. credential 없음·법무 검수 미완료·테스트 skip은 통과가 아니다.
 

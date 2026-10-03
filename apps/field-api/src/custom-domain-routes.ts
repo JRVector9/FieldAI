@@ -4,6 +4,7 @@ import type { PoolClient } from 'pg';
 import type { FieldBusinessRuntime } from './business.js';
 import { rejectExpiredTrial } from './trial-access.js';
 import { normalizeCustomHostname } from './custom-domain-dns.js';
+import { siteHealthProof, siteHealthSecret } from './custom-domain-edge-caddy.js';
 import { customDomainContextFromEnvironment, disconnectSiteDomain, domainView, resolvedCustomHost, type CustomDomainContext, type SiteDomain } from './custom-domains.js';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -100,19 +101,34 @@ export function registerCustomDomainRoutes(app: FastifyInstance, runtime: FieldB
     });
   }
   // Caddy on-demand TLS `ask` 확인용. 소유권 TXT와 라우팅 DNS가 검증된 활성 도메인(tls_pending·connected)만 200을 준다.
+  // TLS 확인 실패로 error/domain_tls_failed에 머문 도메인도 재발급·재확인이 가능하도록 허용한다(사이트 연결은 connected만).
   // 인증서는 이 응답 뒤에 발급되므로 TLS ready를 요구하지 않는다. 조회 전용이며 DB에 쓰지 않는다.
   // 삭제 예약·실행된 조직의 도메인은 발급·갱신을 허용하지 않는다(F-O16).
-  app.get<{Querystring:{domain?:unknown}}>('/v1/public/site-hosts/allow',async(request,reply)=>{
-    reply.header('Cache-Control','no-store');
-    const hostname=normalizeCustomHostname(request.query.domain,context.baseDomain);
-    if(!hostname)return reply.code(404).send({error:'site_host_not_allowed'});
+  async function allowedHost(value:unknown){
+    const hostname=normalizeCustomHostname(value,context.baseDomain);
+    if(!hostname)return null;
     const found=await runtime.pool.query<{organization_id:string}>(`select d.organization_id from field.site_domains d
       join field.organizations o on o.id=d.organization_id and o.deleted_at is null
       where d.hostname=$1 and d.hostname_claimed and d.desired_state='active' and d.ownership_release_generation is null
-        and d.ownership_state='verified' and d.dns_state='verified' and d.state in ('tls_pending','connected')
+        and d.ownership_state='verified' and d.dns_state='verified' and (d.state in ('tls_pending','connected') or (d.state='error' and d.last_error='domain_tls_failed'))
         and not exists(select 1 from field.organization_deletion_requests r where r.organization_id=d.organization_id
           and r.status in ('scheduled','executed')) limit 1`,[hostname]);
-    return found.rows[0]?{domain:hostname,organizationId:found.rows[0].organization_id}:reply.code(404).send({error:'site_host_not_allowed'});
+    return found.rows[0]?{hostname,organizationId:found.rows[0].organization_id}:null;
+  }
+  app.get<{Querystring:{domain?:unknown}}>('/v1/public/site-hosts/allow',async(request,reply)=>{
+    reply.header('Cache-Control','no-store');
+    const allowed=await allowedHost(request.query.domain);
+    return allowed?{domain:allowed.hostname,organizationId:allowed.organizationId}:reply.code(404).send({error:'site_host_not_allowed'});
+  });
+  // edge TLS 준비 확인(추가). Caddy가 사업자 도메인 HTTPS 요청 중 이 경로만 Field API로 넘긴다(Host 유지).
+  // ask와 같은 허용 조건의 도메인에만 증명값을 돌려주고, 조회 전용이며 DB에 쓰지 않는다.
+  // 조직 ID는 공개 조회로 누구나 알 수 있으므로, 서버 비밀값에서 나온 HMAC(도메인:조직)을 증명으로 준다.
+  // Caddy edge 어댑터는 인증서 체인 검증을 통과한 응답의 proof가 도메인 행으로 계산한 값과 같을 때만 TLS ready로 본다.
+  app.get('/.well-known/field-site-health',async(request,reply)=>{
+    reply.header('Cache-Control','no-store');
+    const allowed=await allowedHost(request.headers.host);
+    return allowed?{ok:true,proof:siteHealthProof(siteHealthSecret(),allowed.hostname,allowed.organizationId)}
+      :reply.code(404).send({error:'site_host_not_allowed'});
   });
   app.get<{Params:{hostname:string;kind:string;id:string}}>('/v1/public/site-hosts/:hostname/resources/:kind/:id',async(request,reply)=>{
     reply.header('Cache-Control','no-store');

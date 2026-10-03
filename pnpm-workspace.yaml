@@ -1,3 +1,10 @@
 packages:
   - apps/*
   - packages/*
+
+# better-auth의 선택 peer(next·react·react-dom)는 웹 통합용이다. pnpm은 선택 peer를 workspace 그래프(웹 앱의 next)에서
+# 찾아 연결하므로 API deploy 결과에 Next(~285MB)가 들어간다. API·auth CLI는 이 진입점을 쓰지 않아 peer 연결만 제거한다.
+overrides:
+  better-auth>next: '-'
+  better-auth>react: '-'
+  better-auth>react-dom: '-'
