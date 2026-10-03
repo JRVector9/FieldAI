@@ -89,8 +89,5 @@ export function registerAgentRetentionConsumers(app: FastifyInstance, runtime: B
       return endedPayload(payload,retention,readyPhotos);
     } finally {if(!retained){try{await db.query('rollback');}finally{db.release();}}}
   });
-  app.setErrorHandler((error, _request, reply) => {
-    if ((error as { code?: string }).code === 'PAP01') return reply.header('Cache-Control', 'private, no-store').code(410).send({ error: 'retention_work_ended' });
-    return reply.send(error);
-  });
+  // 보존 종료 가드(PAP01) 오류의 410 응답은 app.ts 전역 오류 처리기가 맡는다(5xx 원문 비노출과 함께).
 }

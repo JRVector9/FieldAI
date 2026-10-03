@@ -127,7 +127,8 @@ test('Field on-demand TLS ask allows only a verified active custom domain and ne
     const before=await f.pool.query("select (select count(*) from field.outbox)::int as outbox,(select max(updated_at) from field.site_domains) as updated");
     const allowed=await ask('?domain=SHOP.Example.COM');
     assert.equal(allowed.statusCode,200);assert.equal(allowed.headers['cache-control'],'no-store');
-    assert.deepEqual(allowed.json(),{domain:'shop.example.com',organizationId:f.org});
+    // Caddy는 200/404만 보므로 조직 ID는 돌려주지 않는다(Security #4).
+    assert.deepEqual(allowed.json(),{domain:'shop.example.com'});
     const after=await f.pool.query("select (select count(*) from field.outbox)::int as outbox,(select max(updated_at) from field.site_domains) as updated");
     assert.deepEqual(after.rows[0],before.rows[0]);
     await f.due();f.mode('ready');assert.equal(await f.run(),'connected');
@@ -139,6 +140,13 @@ test('Field on-demand TLS ask allows only a verified active custom domain and ne
     // 연결 해제 후에는 새 인증서 발급·갱신을 허용하지 않는다.
     assert.equal((await f.call('POST',`/v1/sites/domains/${opened.id}/disconnect`,{})).statusCode,200);
     assert.equal((await ask('?domain=shop.example.com')).statusCode,404);
+    // 공개 ask·site-health는 접속 IP별 1분 60회까지 받는다(Security #4). IPv6는 /64로 묶고, 다른 IP는 영향이 없다.
+    const from=(remoteAddress:string,url='/v1/public/site-hosts/allow?domain=shop.example.com')=>f.app.inject({url,remoteAddress});
+    const used=(await Promise.all(Array.from({length:60},(_,index)=>from(`2001:db8:7:9::${index+1}`)))).map(response=>response.statusCode);
+    assert.equal(used.every(status=>status===404),true);
+    const limited=await from('2001:db8:7:9:ffff::1','/.well-known/field-site-health');
+    assert.equal(limited.statusCode,429);assert.ok(Number(limited.headers['retry-after'])>=1);
+    assert.equal((await from('2001:db8:7:a::1')).statusCode,404);
   }finally{await f.close();}
 });
 
@@ -153,8 +161,11 @@ test('Field organization deletion denies TLS ask and releases the custom domain 
     await f.pool.query(`insert into field.organization_deletion_requests(id,organization_id,requested_by,confirmation,status,requested_at,scheduled_at,next_attempt_at)
       values($1,$2,$3,'{}'::jsonb,'scheduled',now()-interval '15 days',now()+interval '1 day',now()+interval '1 day')`,[requestId,f.org,f.owner]);
     assert.equal((await ask()).statusCode,404);
+    // L9: 공개 조회(site-hosts/:hostname)도 삭제 예약 조직의 도메인을 찾지 않는다.
+    assert.equal((await f.app.inject({url:'/v1/public/site-hosts/shop.example.com'})).statusCode,404);
     await f.pool.query("update field.organization_deletion_requests set status='canceled',canceled_at=now(),canceled_by=$2 where id=$1",[requestId,f.owner]);
     assert.equal((await ask()).statusCode,200);
+    assert.equal((await f.app.inject({url:'/v1/public/site-hosts/shop.example.com'})).statusCode,200);
     const again=randomUUID();
     await f.pool.query(`insert into field.organization_deletion_requests(id,organization_id,requested_by,confirmation,status,requested_at,scheduled_at,next_attempt_at)
       values($1,$2,$3,'{}'::jsonb,'scheduled',now()-interval '15 days',now()-interval '1 minute',now()-interval '1 minute')`,[again,f.org,f.owner]);

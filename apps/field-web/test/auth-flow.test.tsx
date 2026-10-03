@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { adminMfaState, emailDeliveryNotice, emailDeliveryStateFrom, resetPasswordProblem, signInOutcome,
-  tokenFromSearch, totpSecretFromUri, twoFactorEndpoint, verifyEmailResult } from '../src/auth-flow';
+  tokenFromSearch, totpSecretFromUri, twoFactorEndpoint, verificationNoticeCopy, verifyEmailResult } from '../src/auth-flow';
 
 test('Field email delivery state is honest: blocked_integration never claims a sent mail', () => {
   assert.equal(emailDeliveryStateFrom(200, { product: 'field', state: 'blocked_integration' }), 'blocked_integration');
@@ -12,7 +12,10 @@ test('Field email delivery state is honest: blocked_integration never claims a s
     assert.doesNotMatch(emailDeliveryNotice('blocked_integration', purpose), /보냈습니다/);
     assert.match(emailDeliveryNotice('mock', purpose), /실제로 발송되지 않/);
   }
-  assert.match(emailDeliveryNotice('configured', 'verify_email'), /확인 메일을 보냈습니다/);
+  // 공급사 발송 결과는 화면에서 확인할 수 없으므로 '보냈습니다'로 단정하지 않는다
+  assert.match(emailDeliveryNotice('configured', 'verify_email'), /확인 메일 발송을 요청했습니다/);
+  for (const purpose of ['verify_email', 'reset_password'] as const)
+    assert.doesNotMatch(emailDeliveryNotice('configured', purpose), /보냈습니다/);
 });
 
 test('Field sign-in outcome distinguishes 2FA challenge, unverified email and failures', () => {
@@ -48,4 +51,16 @@ test('Field verify-email, reset-password and admin MFA state helpers', () => {
   assert.equal(adminMfaState({ user: { twoFactorEnabled: false }, session: {} }), 'not_enrolled');
   assert.equal(adminMfaState({ user: { twoFactorEnabled: true }, session: { twoFactorVerified: false } }), 'session_not_verified');
   assert.equal(adminMfaState({ user: { twoFactorEnabled: true }, session: { twoFactorVerified: true } }), 'verified');
+});
+
+// 로그인 경로(email_not_verified)는 그 순간 메일을 보내지 않으므로 발송을 단정하지 않는다
+test('Field verification notice copy does not claim a sent mail on the sign-in path', () => {
+  const signIn = verificationNoticeCopy('configured', 'sign_in');
+  assert.equal(signIn.title, '이메일 주소 확인이 필요합니다');
+  assert.doesNotMatch(signIn.body, /보냈습니다|요청했습니다/);
+  const signUp = verificationNoticeCopy('configured', 'sign_up');
+  assert.equal(signUp.title, '확인 메일 발송을 요청했습니다');
+  assert.match(signUp.body, /메일이 오지 않으면 다시 보내기/);
+  assert.equal(verificationNoticeCopy('blocked_integration', 'sign_in').title, '메일 발송 환경이 연결되지 않았습니다');
+  assert.equal(verificationNoticeCopy(null, 'sign_up').title, '이메일 주소 확인이 필요합니다');
 });

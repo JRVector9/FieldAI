@@ -4,7 +4,8 @@
 # 운영 이미지는 APP_PROFILE=live(기본값)로 빌드한다. live에서는 /preview 시안이 404다.
 # 법적 고지(NEXT_PUBLIC_LEGAL_*)와 제품 간 이동 링크는 빌드 시 인라인되므로 --build-arg로 넘긴다.
 # next.config.ts에 output: "standalone"이 없어 일반 `next start` 이미지로 만든다(standalone이면 더 작아진다).
-ARG NODE_IMAGE=node:24-bookworm-slim
+# .node-version과 같은 패치 버전으로 고정한다(바꿀 때 두 곳을 함께 수정).
+ARG NODE_IMAGE=node:24.18.0-bookworm-slim
 
 FROM ${NODE_IMAGE} AS base
 ENV PNPM_HOME=/pnpm \

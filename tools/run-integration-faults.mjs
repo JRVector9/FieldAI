@@ -57,15 +57,21 @@ try {
     'tools/test/agent-integrator-contract.test.mjs',
     'tools/test/field-integrator-contract.test.mjs']);
   for (const [product, files] of [
-    ['agent', ['field-actions.db.test.ts', 'field-connection.db.test.ts', 'integrator.db.test.ts']],
-    ['field', ['ap-connection.db.test.ts', 'integrator.db.test.ts']],
+    ['agent', ['field-actions.db.test.ts', 'field-connection.db.test.ts', 'integrator.db.test.ts',
+      'field-customer-decisions.db.test.ts', 'revocation-restore.db.test.ts']],
+    ['field', ['ap-connection.db.test.ts', 'integrator.db.test.ts', 'revocation-restore.db.test.ts']],
   ]) {
     run(`${product} provider/consumer fault assertions`, process.execPath,
       ['tools/run-db-suite.mjs', product, ...files.map(name => `test/${name}`)]);
   }
+  // 브라우저 단계는 Python 경로가 있을 때만 실행되므로 호출자가 준 경로를 그대로 넘긴다.
+  const browserEnv = Object.fromEntries(['AP_BROWSER_PYTHON', 'FIELD_BROWSER_PYTHON', 'FIELD_SAME_PAGE_BROWSER_PYTHON']
+    .filter(name => process.env[name]).map(name => [name, process.env[name]]));
+  if (!browserEnv.FIELD_BROWSER_PYTHON)
+    process.stdout.write('fault suite: FIELD_BROWSER_PYTHON unset; two-product browser steps are skipped (not verified)\n');
   run('two-product HTTP and worker delivery', process.execPath,
     ['--test', 'tools/spikes/ap-field-connection-http.test.mjs'],
-    { ...systemEnv, FIELD_EVENT_WORKERS_RUNNING: '1' });
+    { ...systemEnv, ...browserEnv, FIELD_EVENT_WORKERS_RUNNING: '1' });
   process.stdout.write('fault suite: local mock checks passed; operational fault and release gates remain open\n');
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

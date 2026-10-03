@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
 import { signInOutcome } from "./auth-flow";
+import { DELETION_SCHEDULED_OWNER_MESSAGE, isDeletionScheduledError } from "./deletion-scheduled-copy";
 import { TwoFactorChallenge } from "./field-auth-pages";
 import { FieldKakaoSignIn } from "./field-kakao-sign-in";
 import { scopeLabel } from "./connect-scope-label";
@@ -41,6 +42,8 @@ export function FieldConnectSignIn() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [twoFactorPending, setTwoFactorPending] = useState(false);
+  // 2단계 인증은 끝났지만 연결 이어 가기에 실패한 상태. 이미 쓴 코드 입력 대신 다시 시도 버튼을 보인다
+  const [continueFailed, setContinueFailed] = useState(false);
   useEffect(() => {
     void request("/api/auth/get-session").then(result => {
       if (result.status === 200 && result.data?.user)
@@ -63,13 +66,19 @@ export function FieldConnectSignIn() {
     follow(await request("/api/auth/oauth2/continue", "POST", { postLogin: true, oauth_query: oauthQuery() }));
   }
   async function verified() {
-    setStatus("연결을 계속하고 있습니다.");
+    setBusy(true); setContinueFailed(false); setStatus("연결을 계속하고 있습니다.");
     try { await continueConnect(); }
-    catch (error) { setStatus(error instanceof Error ? error.message : "연결을 계속하지 못했습니다."); }
+    catch (error) {
+      setContinueFailed(true);
+      setStatus(error instanceof Error ? error.message : "연결을 계속하지 못했습니다.");
+    }
+    finally { setBusy(false); }
   }
   return <Shell title="Field 계정으로 로그인" status={status}>
     <p>공유할 Field 사업장을 소유한 계정으로 로그인하세요. 계정과 사업장 생성은 Field 작업 공간에서 진행합니다.</p>
-    {twoFactorPending ? <TwoFactorChallenge onVerified={verified} onCancel={() => { setTwoFactorPending(false); setPassword(""); }} />
+    {continueFailed ? <div className="field-connect-actions">
+      <button type="button" disabled={busy} onClick={() => void verified()}>다시 시도 (추가)</button></div>
+      : twoFactorPending ? <TwoFactorChallenge onVerified={verified} onCancel={() => { setTwoFactorPending(false); setPassword(""); }} />
       : <>{/* 카카오 로그인도 이 연결 화면(서명된 연결 요청 쿼리 포함)으로 돌아와 2단계 인증·연결 이어 가기를 같은 흐름으로 처리한다 */}
       <FieldKakaoSignIn callbackPath="/connect/sign-in" label="카카오로 로그인" onTwoFactor={() => { setStatus(""); setTwoFactorPending(true); }} />
       <p>카카오로 로그인해도 연결할 Field 계정과 사업장은 Field 작업 공간에서 먼저 만들어 두어야 합니다.</p>
@@ -111,6 +120,7 @@ export function FieldConnectSelect() {
       const saved = await request("/integrations/v1/authorization/selections", "POST", {
         clientId: options.client.id, organizationId, scopes: requestedScopes(),
       });
+      if (isDeletionScheduledError(saved.status, saved.data)) { setStatus(DELETION_SCHEDULED_OWNER_MESSAGE); return; }
       if (saved.status !== 201) { setStatus(`사업장 선택을 저장하지 못했습니다 (${saved.status}).`); return; }
       follow(await request("/api/auth/oauth2/continue", "POST", { postLogin: true, oauth_query: oauthQuery() }));
     } catch (error) { setStatus(error instanceof Error ? error.message : "동의 화면으로 이동하지 못했습니다."); }

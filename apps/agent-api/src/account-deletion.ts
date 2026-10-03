@@ -3,6 +3,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
 import { verifyPassword } from 'better-auth/crypto';
 import type { BusinessRuntime } from './business.js';
+import { revokeIntegratorSelection } from './integrator-routes.js';
+import { UNRECONCILABLE_ACTION_SQL } from './work-retention.js';
 
 // AP-O09 조직·계정 삭제(추가). 조직 삭제는 owner 명시 확인 → 14일 유예 → 작업자 실행 순서이며,
 // 문의·상담 원본·청구 원장·감사 기록은 지우지 않고 기존 보존 정책 경로에 맡긴다.
@@ -37,18 +39,33 @@ function view(row: DeletionRow) {
     executedAt: row.executed_at?.toISOString() ?? null, steps, lastError: row.last_error };
 }
 
-// 조직 삭제 전제 조건. 하나라도 남아 있으면 예약도 실행도 하지 않는다.
+// 조직이 외부 통합에 내준 살아 있는 권한 선택(동의·refresh token이 있거나 아직 선택 유효 시간 안). 조직 삭제 실행이 회수한다(추가, P2-1).
+const OPEN_INTEGRATOR_SELECTION_SQL = `s.organization_id=$1 and s.revoked_at is null and (s.selection_expires_at>clock_timestamp()
+  or exists(select 1 from "oauthConsent" oc where oc."referenceId"=s.id::text)
+  or exists(select 1 from "oauthRefreshToken" t where t."referenceId"=s.id::text and t.revoked is null))`;
+
+// 조직 삭제 전제 조건. ok=false 항목이 하나라도 남아 있으면 예약도 실행도 하지 않는다.
+// integrator_grants_active는 막지 않는 안내 항목이다(실행 때 회수, 회수 저널이 없으면 실행만 보류).
 export async function organizationDeletionPreconditions(db: Db, organizationId: string) {
-  const row = (await db.query<{ paid: number; connections: number; actions: number }>(`select
+  const row = (await db.query<{ paid: number; connections: number; actions: number; grants: number }>(`select
     (select count(*)::int from ap.paid_subscriptions where organization_id=$1 and terminated_at is null) as paid,
     (select count(*)::int from ap.field_connections where ap_organization_id=$1 and status<>'revoked') as connections,
-    (select count(*)::int from ap.field_action_requests where organization_id=$1 and state in ('sending','delivery_unknown')) as actions`,
+    (select count(*)::int from ap.field_action_requests r where r.organization_id=$1 and r.state in ('sending','delivery_unknown')
+      and not (${UNRECONCILABLE_ACTION_SQL})) as actions,
+    (select count(*)::int from ap.oauth_selections s where ${OPEN_INTEGRATOR_SELECTION_SQL}) as grants`,
   [organizationId])).rows[0]!;
   return [
-    { code: 'paid_subscription_active', count: row.paid },
-    { code: 'connections_active', count: row.connections },
-    { code: 'pending_action_requests', count: row.actions },
-  ].map(item => ({ ...item, ok: item.count === 0 }));
+    { code: 'paid_subscription_active', count: row.paid, ok: row.paid === 0 },
+    { code: 'connections_active', count: row.connections, ok: row.connections === 0 },
+    { code: 'pending_action_requests', count: row.actions, ok: row.actions === 0 },
+    { code: 'integrator_grants_active', count: row.grants, ok: true },
+  ];
+}
+
+// 전제 조건에서 뺀(다시 확인할 수 없는) 결과 미상 전달 건수.
+async function unreconcilableActionCount(db: Db, organizationId: string) {
+  return (await db.query<{ count: number }>(`select count(*)::int as count from ap.field_action_requests r
+    where r.organization_id=$1 and ${UNRECONCILABLE_ACTION_SQL}`, [organizationId])).rows[0]!.count;
 }
 
 // 사용자가 owner인 조직 전부(삭제 실행된 본인 소유 조직 포함)와 최근 삭제 요청 상태. 여러 조직 owner의 삭제 대상 선택용(추가).
@@ -66,16 +83,22 @@ export async function ownedOrganizations(db: Db, userId: string) {
 }
 
 // 계정 삭제 차단 사유. 삭제되지 않은 조직의 owner·플랫폼 관리자·살아 있는 OAuth 연결은 먼저 정리해야 한다.
+// 매체(Distribution) owner·구성원과, 본인이 등록한 활성 OAuth client도 먼저 정리해야 한다(추가, P2-2·보안 #6).
+// client는 다른 조직 권한으로 계속 토큰을 발급받을 수 있으므로 정책이 정해질 때까지 막는 쪽을 기본으로 둔다.
 export async function accountDeletionBlockers(db: Db, userId: string) {
-  const row = (await db.query<{ owned: boolean; admin: boolean; grants: boolean }>(`select
+  const row = (await db.query<{ owned: boolean; admin: boolean; grants: boolean; publisher: boolean; clients: boolean }>(`select
     exists(select 1 from ap.organizations where owner_user_id=$1 and deleted_at is null)
       or exists(select 1 from ap.memberships m join ap.organizations o on o.id=m.organization_id
         where m.user_id=$1 and m.role='owner' and o.deleted_at is null) as owned,
     exists(select 1 from ap.platform_admin_memberships where user_id=$1) as admin,
-    exists(select 1 from "oauthRefreshToken" where "userId"=$1 and revoked is null and "expiresAt">now()) as grants`,
+    exists(select 1 from "oauthRefreshToken" where "userId"=$1 and revoked is null and "expiresAt">now()) as grants,
+    exists(select 1 from ap.publishers where owner_user_id=$1)
+      or exists(select 1 from ap.publisher_memberships where user_id=$1) as publisher,
+    exists(select 1 from "oauthClient" where "userId"=$1 and coalesce(disabled,false)=false) as clients`,
   [userId])).rows[0]!;
   return [row.owned && 'organization_deletion_required', row.admin && 'admin_membership_required_removal',
-    row.grants && 'oauth_grants_active']
+    row.grants && 'oauth_grants_active', row.publisher && 'publisher_membership_required_removal',
+    row.clients && 'oauth_clients_active']
     .filter((code): code is string => typeof code === 'string');
 }
 
@@ -200,6 +223,8 @@ export function registerAgentAccountDeletionRoutes(app: FastifyInstance, runtime
     const body = object(request.body);
     const ack = object(body?.acknowledgements);
     const rawReason = body?.reason;
+    // NUL 문자는 DB가 거부하므로 저장 전에 400으로 막는다(추가)
+    if (typeof rawReason === 'string' && rawReason.includes('\u0000')) return reply.code(400).send({ error: 'invalid_text' });
     const reason = rawReason === undefined || rawReason === null || rawReason === '' ? null
       : typeof rawReason === 'string' && rawReason.trim().length > 0 && rawReason.trim().length <= 1000 ? rawReason.trim() : undefined;
     if (reason === undefined) return reply.code(400).send({ error: 'invalid_reason' });
@@ -247,7 +272,8 @@ export function registerAgentAccountDeletionRoutes(app: FastifyInstance, runtime
          returning *`,
         [randomUUID(), organizationId, member.userId, reason,
           JSON.stringify({ organizationName: org.name, acknowledgements: { retention: true, subscriptions: true, connections: true } }),
-          DELETION_COOLING_DAYS, JSON.stringify({ scheduled: { deploymentsPaused: deployments, campaignsPaused: campaigns.map(row => row.id) } })])).rows[0]!;
+          DELETION_COOLING_DAYS, JSON.stringify({ scheduled: { deploymentsPaused: deployments, campaignsPaused: campaigns.map(row => row.id),
+            unresolvableActionRequestsSkipped: await unreconcilableActionCount(db, organizationId) } })])).rows[0]!;
       await db.query('commit');
       return reply.code(201).send({ request: view(created) });
     } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
@@ -334,7 +360,8 @@ export function registerAgentAccountDeletionRoutes(app: FastifyInstance, runtime
 }
 
 // 유예가 끝난 조직 삭제 요청 하나를 실행한다. 전체를 한 트랜잭션으로 처리하므로 실패 시 아무것도 반영되지 않고 재시도한다.
-export async function runOrganizationDeletionOnce(runtime: { pool: Pool }): Promise<'empty' | 'executed' | 'blocked' | 'retry'> {
+export async function runOrganizationDeletionOnce(runtime: { pool: Pool;
+  revocationJournal?: BusinessRuntime['revocationJournal'] }): Promise<'empty' | 'executed' | 'blocked' | 'retry'> {
   const db = await runtime.pool.connect();
   let requestId: string | undefined;
   try {
@@ -347,13 +374,24 @@ export async function runOrganizationDeletionOnce(runtime: { pool: Pool }): Prom
     const organizationId = row.organization_id;
     await db.query('select id from ap.organizations where id=$1 for update', [organizationId]);
     const failed = (await organizationDeletionPreconditions(db, organizationId)).filter(item => !item.ok);
-    if (failed.length) {
+    // 외부 통합 권한 회수는 복원 재적용 저널이 있어야 한다. 저널이 없으면 회수 없이 삭제하지 않고 실행을 보류한다(추가)
+    const selections = (await db.query<{ id: string }>(
+      `select s.id from ap.oauth_selections s where ${OPEN_INTEGRATOR_SELECTION_SQL} order by s.id for update`,
+      [organizationId])).rows.map(selection => selection.id);
+    const blockedCodes = [...failed.map(item => item.code),
+      ...(selections.length && !runtime.revocationJournal ? ['revocation_journal_unavailable'] : [])];
+    if (blockedCodes.length) {
       await db.query(`update ap.organization_deletion_requests set last_error=$2,attempt_count=attempt_count+1,
-        next_attempt_at=clock_timestamp()+interval '1 hour' where id=$1`, [row.id, failed.map(item => item.code).join(',')]);
+        next_attempt_at=clock_timestamp()+interval '1 hour' where id=$1`, [row.id, blockedCodes.join(',')]);
       await db.query('commit'); return 'blocked';
     }
     const at = (await db.query<{ now: Date }>('select clock_timestamp() as now')).rows[0]!.now;
     const count = async (sql: string, params: unknown[]) => (await db.query(sql, params)).rowCount ?? 0;
+    // 조직이 외부 통합에 내준 권한 선택·토큰·동의를 owner 회수와 같은 규칙으로 닫는다(멤버십 삭제 뒤에는 owner가 회수할 수 없음)
+    let integratorSelectionsRevoked = 0;
+    for (const selectionId of selections)
+      if (await revokeIntegratorSelection(db, runtime.revocationJournal, organizationId, selectionId)) integratorSelectionsRevoked++;
+    const unresolvableActionRequestsSkipped = await unreconcilableActionCount(db, organizationId);
     const members = (await db.query<{ user_id: string }>('select user_id from ap.memberships where organization_id=$1',
       [organizationId])).rows.map(member => member.user_id);
     // 조직을 먼저 삭제 표시한다(같은 트랜잭션). owner 수신처 연락처 정리 가드가 deleted_at을 확인한다.
@@ -394,6 +432,9 @@ export async function runOrganizationDeletionOnce(runtime: { pool: Pool }): Prom
         and s."expiresAt">now() and not exists(select 1 from ap.memberships m where m.user_id=s."userId" and m.organization_id<>$2)`,
       [members, organizationId]),
       membershipsRemoved: await count('delete from ap.memberships where organization_id=$1', [organizationId]),
+      integratorSelectionsRevoked,
+      // 연결 해제·동의 24시간 경과로 다시 확인할 수 없어 전제 조건에서 뺀 결과 미상 전달 건수(원본은 보존 정책이 정리)
+      unresolvableActionRequestsSkipped,
       retained: ['inquiries_and_consultations_under_retention_policy', 'billing_ledger', 'audit_logs', 'business_name'],
     };
     await db.query(`update ap.organization_deletion_requests set status='executed',executed_at=$2,steps=steps||jsonb_build_object('executed',$3::jsonb),

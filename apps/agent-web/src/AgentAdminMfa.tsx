@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
 import { adminMfaState, totpSecretFromUri } from "./auth-flow";
 
@@ -23,6 +23,11 @@ export function AgentAdminMfa() {
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  // 등록 정보가 나타나면 코드 입력란으로, 오류 문구가 나타나면 그 문구로 포커스를 옮긴다
+  const codeRef = useRef<HTMLInputElement>(null);
+  const messageRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (enrollment) codeRef.current?.focus(); }, [enrollment]);
+  useEffect(() => { if (message) messageRef.current?.focus(); }, [message]);
 
   const load = useCallback(async () => {
     try {
@@ -39,7 +44,7 @@ export function AgentAdminMfa() {
       const value = result.data as { totpURI?: unknown; backupCodes?: unknown };
       const secret = typeof value.totpURI === "string" ? totpSecretFromUri(value.totpURI) : null;
       if (result.status !== 200 || !secret || !Array.isArray(value.backupCodes)) {
-        setMessage(result.status === 400 ? "비밀번호가 맞지 않거나 이미 2단계 인증을 사용 중입니다." : `2단계 인증을 시작하지 못했습니다 (${result.status}).`);
+        setMessage(result.status === 400 ? "비밀번호가 맞지 않거나 이미 2단계 인증을 사용 중입니다." : result.status === 401 ? "로그인이 만료됐습니다. 관리자 계정으로 다시 로그인해 주세요." : "2단계 인증을 시작하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
         return;
       }
       setPassword("");
@@ -55,7 +60,7 @@ export function AgentAdminMfa() {
     event.preventDefault(); setBusy(true); setMessage("");
     try {
       const result = await request("/api/auth/two-factor/verify-totp", "POST", { code: code.trim() });
-      if (result.status !== 200) { setMessage(result.status === 401 ? "인증 코드가 맞지 않습니다. 인증 앱의 현재 코드를 입력해 주세요." : `인증하지 못했습니다 (${result.status}).`); return; }
+      if (result.status !== 200) { setMessage(result.status === 401 ? "인증 코드가 맞지 않습니다. 인증 앱의 현재 코드를 입력해 주세요." : result.status === 429 ? "시도 횟수를 초과했습니다. 잠시 뒤 다시 시도해 주세요." : "인증하지 못했습니다. 잠시 뒤 다시 시도해 주세요."); return; }
       setCode(""); setEnrollment(null); await load();
     } catch { setMessage("요청이 전달되지 않았습니다."); }
     finally { setBusy(false); }
@@ -65,7 +70,7 @@ export function AgentAdminMfa() {
     setBusy(true); setMessage("");
     try {
       const result = await request("/api/auth/sign-out", "POST", {});
-      if (result.status !== 200) { setMessage(`로그아웃하지 못했습니다 (${result.status}).`); return; }
+      if (result.status !== 200) { setMessage("로그아웃하지 못했습니다. 잠시 뒤 다시 시도해 주세요."); return; }
       window.location.replace("/admin");
     } catch { setMessage("로그아웃 요청이 전달되지 않았습니다."); }
     finally { setBusy(false); }
@@ -90,8 +95,8 @@ export function AgentAdminMfa() {
         <p>설정 키 <code>{enrollment.secret}</code></p>
         <h3>백업 코드</h3><p>휴대전화를 잃어버렸을 때 한 번씩 쓸 수 있습니다. 안전한 곳에 보관해 주세요.</p>
         <ul>{enrollment.backupCodes.map(item => <li key={item}><code>{item}</code></li>)}</ul>
-        <form className="form-fields" onSubmit={event => void verify(event)}><label>인증 앱의 6자리 코드<input required inputMode="numeric" pattern="[0-9]{6}" autoComplete="one-time-code" maxLength={6} value={code} onChange={event => setCode(event.target.value)} /></label>
+        <form className="form-fields" onSubmit={event => void verify(event)}><label>인증 앱의 6자리 코드<input ref={codeRef} required inputMode="numeric" pattern="[0-9]{6}" autoComplete="one-time-code" maxLength={6} value={code} onChange={event => setCode(event.target.value)} /></label>
           <button type="submit" disabled={busy}>코드 확인하고 사용 시작</button></form></section>}
-      {message && <p role="status" className="state-message">{message}</p>}
+      {message && <p ref={messageRef} tabIndex={-1} role="status" className="state-message">{message}</p>}
     </main></div>;
 }

@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { isIPv4, isIPv6 } from 'node:net';
 import type { FastifyInstance } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
@@ -28,11 +29,24 @@ export function parseTossWebhook(body: unknown): TossWebhookHint | null {
     orderId: typeof orderId === 'string' ? orderId : null };
 }
 
+// IP 창의 묶음 단위(추가, 보안 #4). IPv6는 한 가입자가 /64 안의 주소를 마음대로 바꿀 수 있으므로 /64 접두로 묶고,
+// IPv4 매핑 IPv6(::ffff:a.b.c.d)는 IPv4 주소로 본다. 그 밖의 값은 그대로 쓴다.
+export function webhookIpBucket(ip: string) {
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip)?.[1];
+  if (mapped && isIPv4(mapped)) return mapped;
+  if (!isIPv6(ip)) return ip;
+  const [head = '', tail = ''] = ip.toLowerCase().split('::');
+  const left = head ? head.split(':') : [], right = tail ? tail.split(':') : [];
+  // IPv4 꼬리(::1.2.3.4 등)는 /64 접두에 영향이 없으므로 그룹 수만 맞춘다
+  const groups = ip.includes('::') ? [...left, ...Array(8 - left.length - right.length).fill('0'), ...right] : left;
+  return `${groups.slice(0, 4).map(group => group.padStart(4, '0')).join(':')}::/64`;
+}
+
 // IP 창을 1 증가시키고 한도를 넘으면 남은 초를 돌려준다. 원문 IP는 저장하지 않는다.
 async function consumeWebhookWindow(db: PoolClient, ip: string): Promise<number | null> {
   const secret = process.env.AP_AUTH_SECRET;
   if (!secret) throw new Error('AP_AUTH_SECRET is required for billing webhook limits');
-  const subject = createHmac('sha256', secret).update('ap-billing-webhook-ip-v1\0').update(ip).digest('hex');
+  const subject = createHmac('sha256', secret).update('ap-billing-webhook-ip-v1\0').update(webhookIpBucket(ip)).digest('hex');
   const row = (await db.query<{ attempts: number; retry_after: number }>(
     `insert into ap.billing_webhook_ip_windows(subject_hash, attempts, window_started_at, updated_at)
      values ($1, 1, clock_timestamp(), clock_timestamp())

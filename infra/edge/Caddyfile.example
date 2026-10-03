@@ -6,7 +6,8 @@
 # - Caddy는 같은 호스트에서 실행한다(패키지 설치 또는 network_mode: host 컨테이너).
 #   AP와 Field를 서로 다른 서버에 배포하면 각 서버의 Caddyfile에는 자기 제품 블록만 남긴다.
 # - 호스트 이름은 환경변수로 넣는다(Caddy가 기동 시 {$VAR}를 치환).
-#   ACME_EMAIL, AP_WEB_HOST, AP_API_HOST, FIELD_WEB_HOST, FIELD_API_HOST, FIELD_SITE_BASE_DOMAIN
+#   ACME_EMAIL, AP_WEB_HOST, AP_API_HOST, FIELD_WEB_HOST, FIELD_API_HOST, FIELD_SITE_BASE_DOMAIN, CLOUDFLARE_API_TOKEN
+#   값 목록 예시: infra/edge/.env.example (caddy run --envfile 로 넘길 수 있다)
 #
 # X-Forwarded-For
 # - 앱은 *_TRUST_PROXY 대역(기본: 각 compose 네트워크 대역)에서 온 XFF만 신뢰해 고객 IP를 구한다.

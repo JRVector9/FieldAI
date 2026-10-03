@@ -1,9 +1,11 @@
 import { recordAgentRevocation } from './revocation-journal.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
 import { integratorGrant } from './integrator-auth.js';
 import { insertMessage, messageReplay, recordInquiryEvent } from './inquiries.js';
+import { rejectDeletionScheduled } from './trial-access.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const allowedScopes = new Set(['ap.agent.read', 'ap.conversations.read',
@@ -32,6 +34,28 @@ async function client(runtime: BusinessRuntime, clientId: unknown): Promise<Clie
       process.env.AP_PROFILE === 'mock'],
   );
   return result.rows[0] ?? null;
+}
+
+// 외부 통합 권한 선택 하나를 회수한다(owner 회수·조직 삭제 실행이 함께 쓴다). 호출자 트랜잭션 안에서 실행하며,
+// 복원 재적용을 위해 회수 의도를 먼저 저널에 남긴 뒤 선택·토큰·동의를 닫고 회수 사건을 outbox에 넣는다.
+export async function revokeIntegratorSelection(db: PoolClient,
+  journal: BusinessRuntime['revocationJournal'], organizationId: string, selectionId: string) {
+  await recordAgentRevocation(db, journal, { organizationId,
+    targetKind: 'selection', targetId: selectionId, selectionId, source: 'owner', revocationId: null });
+  const changed = await db.query(
+    'update ap.oauth_selections set revoked_at = now() where id = $1 and revoked_at is null returning id',
+    [selectionId]);
+  if (!changed.rowCount) return false;
+  await db.query('update "oauthAccessToken" set revoked = now() where "referenceId" = $1 and revoked is null',
+    [selectionId]);
+  await db.query('update "oauthRefreshToken" set revoked = now() where "referenceId" = $1 and revoked is null',
+    [selectionId]);
+  await db.query('delete from "oauthConsent" where "referenceId" = $1', [selectionId]);
+  await db.query(
+    `insert into ap.outbox(id, organization_id, event_type, aggregate_id, payload)
+     values ($1,$2,'integration.selection.revoked',$3,$4::jsonb)`,
+    [randomUUID(), organizationId, selectionId, JSON.stringify({ selectionId })]);
+  return true;
 }
 
 export function registerIntegratorRoutes(app: FastifyInstance, runtime: BusinessRuntime) {
@@ -92,6 +116,8 @@ export function registerIntegratorRoutes(app: FastifyInstance, runtime: Business
     const db = await runtime.pool.connect();
     try {
       await db.query('begin');
+      // 조직 삭제 유예·실행 중에는 새 외부 통합 권한 선택을 만들지 않는다. 삭제 예약·실행과 같은 조직 행을 먼저 잠근다(추가)
+      await db.query('select id from ap.organizations where id = $1 for share', [organizationId]);
       const owned = await db.query(
         `select 1 from ap.memberships m join ap.agent_releases a on a.organization_id = m.organization_id
          where m.organization_id = $1 and m.user_id = $2 and m.role = 'owner'
@@ -102,6 +128,7 @@ export function registerIntegratorRoutes(app: FastifyInstance, runtime: Business
          for share of m`, [organizationId, actor.userId, agentId],
       );
       if (!owned.rows[0]) { await db.query('rollback'); return reply.code(404).send({ error: 'organization_not_found' }); }
+      if (await rejectDeletionScheduled(reply, db, String(organizationId))) { await db.query('rollback'); return reply; }
       if (deploymentIds.length) {
         const deployments = await db.query<{ id: string }>(
           `select id from ap.deployments where organization_id = $1 and id = any($2::uuid[])
@@ -166,23 +193,7 @@ export function registerIntegratorRoutes(app: FastifyInstance, runtime: Business
          where s.id = $1 and s.actor_user_id = $2 and m.user_id = $2 and m.role = 'owner'
          for update of s`, [request.params.id, actor.userId]);
       if (!selected.rows[0]) { await db.query('rollback'); return reply.code(404).send({ error: 'selection_not_found' }); }
-      await recordAgentRevocation(db, runtime.revocationJournal, { organizationId: selected.rows[0].organization_id,
-        targetKind: 'selection', targetId: request.params.id, selectionId: request.params.id, source: 'owner', revocationId: null });
-      const changed = await db.query(
-        'update ap.oauth_selections set revoked_at = now() where id = $1 and revoked_at is null returning id',
-        [request.params.id]);
-      if (changed.rowCount) {
-        await db.query('update "oauthAccessToken" set revoked = now() where "referenceId" = $1 and revoked is null',
-          [request.params.id]);
-        await db.query('update "oauthRefreshToken" set revoked = now() where "referenceId" = $1 and revoked is null',
-          [request.params.id]);
-        await db.query('delete from "oauthConsent" where "referenceId" = $1', [request.params.id]);
-        await db.query(
-          `insert into ap.outbox(id, organization_id, event_type, aggregate_id, payload)
-           values ($1,$2,'integration.selection.revoked',$3,$4::jsonb)`,
-          [randomUUID(), selected.rows[0].organization_id, request.params.id,
-            JSON.stringify({ selectionId: request.params.id })]);
-      }
+      await revokeIntegratorSelection(db, runtime.revocationJournal, selected.rows[0].organization_id, request.params.id);
       await db.query('commit');
       return reply.header('Cache-Control', 'no-store').send({ revoked: true });
     } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }

@@ -4,6 +4,7 @@ import type { PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
 import { sealBilling, unsealBilling, type BillingContext } from './billing-context.js';
 import type { BillingPlan } from './billing.js';
+import { rejectDeletionScheduled } from './trial-access.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -84,6 +85,8 @@ export function registerAgentBillingConsentRoutes(app: FastifyInstance, runtime:
     const db = await runtime.pool.connect();
     try {
       await db.query('begin'); if (!await lockOwner(db,a)) { await db.query('rollback'); return fail(reply,403,'owner_required'); }
+      // 조직 삭제 유예·실행 중에는 새 유료 결제를 시작하지 않는다(조직 행 잠금 뒤 확인, 추가)
+      if (await rejectDeletionScheduled(reply,db,a.org)) { await db.query('rollback'); return reply; }
       const old = await replay(db,a,key,digest);
       if (old) {
         if (old.conflict) { await db.query('rollback'); return fail(reply,409,'idempotency_conflict'); }

@@ -63,10 +63,20 @@ export function registerFieldSubscriptionRoutes(app: FastifyInstance, runtime: F
     const body = request.body as Record<string, unknown> | null;
     if (!body || body.consentVersion !== policy.consentVersion || body.termsAccepted !== true)
       return reply.code(400).send({ error: 'explicit_trial_consent_required' });
+    // H1: 삭제 예약·완료 조직은 조직당 1회인 체험을 시작하지 않는다. 런타임 pool이 트랜잭션 client일 수도 있어(테스트)
+    // 한 문장에서 조직 행 FOR SHARE와 삭제 요청 부재를 함께 확인하며 넣는다. 0행이면 삭제 예약인지 기존 체험인지 다시 확인한다.
     const inserted = await runtime.pool.query(
-      `insert into field.trial_subscriptions(id,organization_id,consent_version,started_by,ends_at)
-       values ($1,$2,$3,$4,now()+make_interval(days => $5::int)) on conflict (organization_id) do nothing returning id`,
+      `with org as (select id from field.organizations where id=$2 and deleted_at is null for share)
+       insert into field.trial_subscriptions(id,organization_id,consent_version,started_by,ends_at)
+       select $1,org.id,$3,$4,now()+make_interval(days => $5::int) from org
+       where not exists(select 1 from field.organization_deletion_requests d where d.organization_id=org.id
+         and d.status in ('scheduled','executed'))
+       on conflict (organization_id) do nothing returning id`,
       [randomUUID(), member.organizationId, policy.consentVersion, member.userId, policy.days]);
+    if (!inserted.rowCount && (await runtime.pool.query(`select 1 from field.organizations o where o.id=$1 and (o.deleted_at is not null
+        or exists(select 1 from field.organization_deletion_requests d where d.organization_id=o.id and d.status in ('scheduled','executed')))`,
+      [member.organizationId])).rowCount)
+      return reply.code(409).send({ error: 'deletion_scheduled' });
     return reply.code(inserted.rowCount ? 201 : 200)
       .send(result(member.organizationId, await getTrial(member.organizationId), policy, true));
   });

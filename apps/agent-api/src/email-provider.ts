@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 // AP 인증 메일 포트. Field 메일 설정·DB·비밀값과 공유하지 않는다.
 export type EmailMessage = { to: string; subject: string; text: string; html?: string };
 export type EmailSendResult = {
-  outcome: 'sent' | 'blocked_integration' | 'failed';
+  outcome: 'sent' | 'blocked_integration' | 'failed' | 'suppressed_duplicate';
   providerMessageId?: string;
   errorCode?: string;
 };
@@ -89,14 +89,22 @@ export function authEmailMessage(purpose: EmailPurpose, to: string, link: string
 
 // 모든 인증 메일은 공급사와 무관하게 ap.email_outbox에 감사 행을 남긴다.
 // mock이 아니면 저장본에서 일회용 토큰을 가려 DB 열람만으로 계정을 넘겨받지 못하게 한다.
+// 같은 주소·목적으로 10분 안에 보냈거나 보내는 중인 메일이 있으면 공급사를 부르지 않고 suppressed_duplicate로만 남긴다
+// (추가, 보안 #5: 분산 IP로 한 주소에 메일을 반복 발송하는 것을 막는다. 화면 응답은 better-auth 동작 그대로 같다).
+export const EMAIL_DEDUPE_MINUTES = 10;
 export async function deliverAuthEmail(pool: Pool, provider: EmailProvider, input: {
   purpose: EmailPurpose; message: EmailMessage; secret: string;
 }): Promise<EmailSendResult> {
   const redact = (value: string) => provider.kind === 'mock' ? value : value.replaceAll(input.secret, '[redacted]');
-  const row = (await pool.query<{ id: string }>(
-    `insert into ap.email_outbox("to",subject,text,html,purpose) values($1,$2,$3,$4,$5) returning id`,
+  const row = (await pool.query<{ id: string; state?: string }>(
+    `insert into ap.email_outbox("to",subject,text,html,purpose,state)
+     select $1,$2,$3,$4,$5,case when exists(select 1 from ap.email_outbox o where lower(o."to")=lower($1) and o.purpose=$5
+       and o.state in ('pending','sent') and o.created_at>now()-make_interval(mins => $6::int))
+       then 'suppressed_duplicate' else 'pending' end
+     returning id,state`,
     [input.message.to, input.message.subject, redact(input.message.text),
-      input.message.html === undefined ? null : redact(input.message.html), input.purpose])).rows[0]!;
+      input.message.html === undefined ? null : redact(input.message.html), input.purpose, EMAIL_DEDUPE_MINUTES])).rows[0]!;
+  if (row.state === 'suppressed_duplicate') return { outcome: 'suppressed_duplicate' };
   let result: EmailSendResult;
   try { result = await provider.send(input.message); }
   catch { result = { outcome: 'failed', errorCode: 'email_provider_error' }; }

@@ -26,8 +26,10 @@ const holdView = (h: Hold) => ({ id: h.id, organizationId: h.organization_id, ta
   createdAt: h.created_at, releasedBy: h.released_by, releasedAt: h.released_at, state: h.released_at ? 'released' : 'active' });
 export async function retentionAdminFor(request: FastifyRequest, reply: FastifyReply, runtime: BusinessRuntime, edit = true) {
   reply.headers({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' });
+  // 로컬 웹 주소(localhost·127.0.0.1:3001)는 mock 프로필에서만 추가로 허용한다(추가).
   if (request.method !== 'GET' && request.headers.origin !== undefined && ![
-    process.env.AP_PUBLIC_WEB_ORIGIN ?? 'http://localhost:3001', 'http://localhost:3001', 'http://127.0.0.1:3001',
+    process.env.AP_PUBLIC_WEB_ORIGIN ?? 'http://localhost:3001',
+    ...process.env.AP_PROFILE === 'mock' ? ['http://localhost:3001', 'http://127.0.0.1:3001'] : [],
   ].includes(request.headers.origin)) { fail(reply, 403, 'origin_denied'); return null; }
   return (await requireAdmin(request, reply, runtime, edit ? { role: 'operator' } : {}))?.userId ?? null;
 }

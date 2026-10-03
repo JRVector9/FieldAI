@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
-import { deletionResumeBlockReason, fieldAdminSections as sections, stoppedDeletionReason, type FieldAdminSection } from "./field-admin-sections";
+import { deletionResumeBlockReason, fieldAdminSections as sections, stoppedAssetDeletionReason, stoppedDeletionReason, type FieldAdminSection } from "./field-admin-sections";
 import "./field-admin.css";
 import { FieldModerationAdmin } from './FieldModerationAdmin';
 import { FieldCustomerSupport } from './FieldCustomerSupport';
@@ -105,6 +105,65 @@ function OrganizationDeletionRecovery({ role }: { role: "operator" | "auditor" }
   </section>;
 }
 
+type StoppedAssetDeletion = { id: string; siteId: string; organizationId: string; requestedAt: string; attempts: number;
+  error: string | null; stoppedAt: string | null };
+// 사진 삭제 복구 (추가): 재시도 상한·저장소 권한 부족으로 멈춘 사이트 사진 삭제를 원인 확인 뒤 operator가 다시 실행한다.
+function SiteAssetDeletionRecovery({ role }: { role: "operator" | "auditor" }) {
+  const [items, setItems] = useState<StoppedAssetDeletion[] | null>(null);
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("");
+  const load = useCallback(async () => {
+    setBusy(true);
+    try {
+      const result = await request("/v1/admin/site-asset-deletions?status=stopped");
+      const value = result.data as { items?: StoppedAssetDeletion[] };
+      if (result.status !== 200 || !Array.isArray(value.items)) throw new Error("unavailable");
+      setItems(value.items); setStatus("");
+    } catch { setItems(null); setStatus("멈춘 사진 삭제를 불러오지 못했습니다. 다시 시도해 주세요."); }
+    finally { setBusy(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  async function resume(id: string) {
+    setBusy(true);
+    try {
+      const result = await request(`/v1/admin/site-asset-deletions/${id}/resume`, "POST", { reason: (reasons[id] ?? "").trim() });
+      if (result.status !== 200 && result.status !== 202) {
+        const code = (result.data as { error?: string }).error;
+        // 이미 다시 실행됐거나 삭제가 끝난 행은 목록을 새로 읽는다
+        const stale = result.status === 404 || result.status === 409;
+        setStatus(code === "invalid_reason" || code === "invalid_text" ? "다시 실행 사유를 10~500자로 입력해 주세요."
+          : result.status === 403 ? "operator 권한이나 2단계 인증 상태를 확인하지 못해 다시 실행하지 않았습니다. 운영 상태를 새로고침해 주세요."
+            : stale ? "이미 다시 실행됐거나 멈춘 상태가 아닙니다. 목록을 새로고침합니다."
+              : "다시 실행하지 못했습니다. 목록을 새로고침해 실제 상태를 확인해 주세요.");
+        if (stale) await load();
+        return;
+      }
+      setReasons(current => { const next = { ...current }; delete next[id]; return next; });
+      await load(); setStatus("사진 삭제 다시 실행을 예약했습니다. 삭제 작업자가 다음 주기에 실행합니다.");
+    } catch { setStatus("다시 실행 결과를 확인하지 못했습니다. 목록을 새로고침해 실제 상태를 확인해 주세요."); }
+    finally { setBusy(false); }
+  }
+  return <section className="special-panel" aria-label="사진 삭제 복구"><h2>사진 삭제 복구 (추가)</h2>
+    <p>자동 삭제가 멈춘 사이트 사진입니다. 사업자 편집기에는 &quot;삭제 지연&quot;으로 표시됩니다. 원인(저장소 권한·응답 실패)을 해결한 뒤에만 다시 실행하세요. 사진 원본은 표시하지 않습니다.</p>
+    {status && <p role="status" className="state-message">{status}</p>}
+    <button type="button" disabled={busy} onClick={() => void load()}>목록 새로고침</button>
+    {items && items.length === 0 && <p>멈춘 사진 삭제가 없습니다.</p>}
+    {items && items.length > 0 && <div className="field-admin-list">{items.map(item => <article key={item.id}>
+      <h3>사진 ID {item.id}</h3>
+      <p>멈춘 사유 {stoppedAssetDeletionReason(item.error)} · 시도 {item.attempts}회</p>
+      <p>삭제 요청 {new Date(item.requestedAt).toLocaleString("ko-KR")}{item.stoppedAt ? ` · 멈춤 ${new Date(item.stoppedAt).toLocaleString("ko-KR")}` : ""}</p>
+      <p>사이트 ID {item.siteId} · 조직 ID {item.organizationId}</p>
+      {role === "operator" && <label>다시 실행 사유(10~500자)<input value={reasons[item.id] ?? ""} maxLength={500} onChange={event => setReasons({ ...reasons, [item.id]: event.target.value })} /></label>}
+      {(() => {
+        const blocked = deletionResumeBlockReason({ role, reason: reasons[item.id] ?? "", busy });
+        return <><button type="button" disabled={blocked !== null} aria-describedby={blocked ? `asset-resume-block-${item.id}` : undefined} onClick={() => void resume(item.id)}>다시 실행</button>
+          {blocked && <p id={`asset-resume-block-${item.id}`}>{blocked}</p>}</>;
+      })()}
+    </article>)}</div>}
+  </section>;
+}
+
 export function FieldAdmin({ section = "operations" }: { section?: FieldAdminSection }) {
   const [phase, setPhase] = useState<"loading" | "auth" | "totp" | "forbidden" | "mfa" | "failed" | "ready">("loading");
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -139,7 +198,8 @@ export function FieldAdmin({ section = "operations" }: { section?: FieldAdminSec
       const result = await request("/api/auth/sign-in/email", "POST", { email, password });
       const outcome = signInOutcome(result.status, result.data);
       if (outcome === "email_not_verified") { setStatus("이메일 주소 확인이 필요합니다. 가입 확인 메일의 링크를 먼저 열어 주세요."); return; }
-      if (outcome !== "signed_in" && outcome !== "two_factor") { setStatus(`로그인하지 못했습니다 (${result.status}).`); return; }
+      if (outcome === "invalid_credentials") { setStatus("이메일 또는 비밀번호가 맞지 않습니다."); return; }
+      if (outcome !== "signed_in" && outcome !== "two_factor") { setStatus("로그인하지 못했습니다. 잠시 뒤 다시 시도해 주세요."); return; }
       setPassword("");
       if (outcome === "two_factor") { setPhase("totp"); return; }
       await load();
@@ -215,6 +275,7 @@ export function FieldAdmin({ section = "operations" }: { section?: FieldAdminSec
             </article>)}</div>}
         </section>}
         {section === "organizations" && <OrganizationDeletionRecovery role={overview.role} />}
+        {section === "organizations" && <SiteAssetDeletionRecovery role={overview.role} />}
         {section === "audit" && <FieldModerationAdmin actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <FieldCustomerSupport actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <FieldRetentionAdmin actorUserId={overview.actorUserId} role={overview.role} />}

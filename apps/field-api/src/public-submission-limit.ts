@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { PoolClient } from 'pg';
+import { ipLimitBucket } from './ip-bucket.js';
 
 type SubmissionLimit = { retryAfter: number; scope: 'ip' | 'phone' | 'organization' };
 
@@ -31,7 +32,8 @@ function limitSecret(): string {
 // (조직, IP) 창을 1 증가시키고 한도를 넘으면 남은 시간을 돌려준다. 원문 IP는 저장하지 않는다.
 async function consumeIpWindow(client: PoolClient, organizationId: string, domain: string, ip: string,
   limit: number): Promise<SubmissionLimit | null> {
-  const subject = createHmac('sha256', limitSecret()).update(`${domain}\0`).update(ip).digest('hex');
+  // IPv6는 /64로 묶어 주소만 바꿔 조직 공용 한도를 소진하지 못하게 한다(ip-bucket.ts).
+  const subject = createHmac('sha256', limitSecret()).update(`${domain}\0`).update(ipLimitBucket(ip)).digest('hex');
   const result = await client.query<{ attempts: number; retry_after: number }>(
     `insert into field.public_submission_ip_windows
        (organization_id, subject_hash, attempts, window_started_at, updated_at)

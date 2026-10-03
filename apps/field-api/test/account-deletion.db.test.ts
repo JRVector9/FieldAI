@@ -6,7 +6,7 @@ import { hashPassword } from 'better-auth/crypto';
 import { Pool } from 'pg';
 import { createFieldApp } from '../src/app.js';
 import { runOrganizationDeletionOnce } from '../src/account-deletion.js';
-import { MediaPermissionError, type FieldSiteMediaStore } from '../src/site-media.js';
+import { MediaPermissionError, runSiteAssetDeletionOnce, type FieldSiteMediaStore } from '../src/site-media.js';
 
 const user = (headers: IncomingHttpHeaders) =>
   typeof headers['x-test-user'] === 'string' ? headers['x-test-user'] : null;
@@ -68,8 +68,8 @@ test('Field organization deletion unpublishes, cools, cancels, removes site data
     await pool.query(`insert into field.site_assets(id,organization_id,object_key,content_type,byte_size,width,height,sha256,uploaded_by)
       values ($1,$2,$3,'image/webp',15,10,10,$4,$5)`, [asset, org, objectKey, hash('synthetic-image'), owner]);
     await pool.query('insert into field.site_release_assets(release_id,asset_id) values ($1,$2)', [release, asset]);
-    // 삭제 요청 중(state='deleting', 추가)인 사진도 조직 삭제 실행기가 같은 잠금 아래에서 저장소 객체와 행을 함께 지운다.
-    // 작업자가 멈춘 행('infinity')이어도 남지 않는다.
+    // 삭제 요청 중(state='deleting', 추가)인 사진도 조직 삭제가 2단계 삭제 경로로 다시 넘겨 지운다(M3).
+    // 작업자가 멈춘 행('infinity')도 처음 넘길 때 다시 시작하므로 남지 않는다.
     const deletingAsset = randomUUID(), deletingKey = `${org}/${deletingAsset}.webp`;
     await siteMedia.put(deletingKey, Buffer.from('deleting-image'));
     await pool.query(`insert into field.site_assets(id,organization_id,object_key,content_type,byte_size,width,height,sha256,uploaded_by,
@@ -149,6 +149,19 @@ test('Field organization deletion unpublishes, cools, cancels, removes site data
     assert.equal((await pool.query('select count(*)::int as n from field.site_releases where site_id=$1', [site])).rows[0].n, 1);
     await pool.query("update field.organization_deletion_requests set next_attempt_at=now()-interval '1 minute' where id=$1", [requestId]);
 
+    // M3: 실행기는 잠금을 잡은 채 저장소 I/O를 하지 않는다. 첫 주기는 공개본·초안을 지우고 남은 사진을 2단계 삭제 경로로
+    // 넘긴 뒤 'blocked'(assets_pending, 실패로 세지 않음)로 5분 뒤를 기다린다. 이때부터 owner 취소는 막힌다.
+    assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'blocked');
+    const pending = (await pool.query(`select last_error,steps,next_attempt_at>now() as later from field.organization_deletion_requests where id=$1`,
+      [requestId])).rows[0];
+    assert.deepEqual([pending.last_error, pending.later, pending.steps.executionStarted.siteAssetsQueued, pending.steps.executionFailures],
+      ['assets_pending', true, 2, undefined]);
+    assert.equal((await pool.query("select count(*)::int as n from field.site_assets where organization_id=$1 and state='deleting' and deletion_next_attempt_at<=now()", [org])).rows[0].n, 2);
+    const inProgress = await call('DELETE', '/v1/organizations/current/deletion-requests/current', owner);
+    assert.deepEqual([inProgress.statusCode, inProgress.json().error], [409, 'deletion_in_progress']);
+    // 사진 작업자가 잠금 밖에서 저장소 삭제·부재 확인·행 삭제를 한다.
+    assert.deepEqual(await runSiteAssetDeletionOnce({ pool, siteMedia }), { deleted: 2, retried: 0, stopped: 0, blocked: 0 });
+    await pool.query("update field.organization_deletion_requests set next_attempt_at=now()-interval '1 minute' where id=$1", [requestId]);
     // 실행: 사이트 초안·공개본·사진 삭제, 사업 정보 비움, 구성원·세션 제거. 문의·예약 원본과 청구 원장은 보존.
     assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'executed');
     assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'empty');
@@ -236,8 +249,9 @@ test('Field account deletion: Kakao-only reauth window, password attempt limit a
     const stale = (await call('GET', '/v1/account/deletion-eligibility', kakao, oldSession)).json();
     assert.deepEqual([stale.eligible, stale.blockers, stale.reauthentication], [false, ['reauth_required'], 'recent_sign_in']);
     const refused = await call('POST', '/v1/account/deletion-requests', kakao, oldSession, { confirmText: kakaoEmail, acknowledgement: true });
-    assert.equal(refused.statusCode, 409);
-    assert.equal(refused.json().error, 'reauth_required');
+    // L2: 재인증 부족은 조직 삭제와 같은 403 reauth_required다.
+    assert.equal(refused.statusCode, 403);
+    assert.deepEqual(refused.json(), { error: 'reauth_required', recentSignInMinutes: 5, blockers: ['reauth_required'] });
     const fresh = (await call('GET', '/v1/account/deletion-eligibility', kakao, freshSession)).json();
     assert.deepEqual([fresh.eligible, fresh.reauthentication, fresh.recentSignInMinutes], [true, 'recent_sign_in', 5]);
     const deleted = await call('POST', '/v1/account/deletion-requests', kakao, freshSession, { confirmText: kakaoEmail, acknowledgement: true });
@@ -270,15 +284,17 @@ test('Field account deletion: Kakao-only reauth window, password attempt limit a
   }
 });
 
-// 사진 저장소 권한 부족(HeadObject 403)은 재시도로 풀리지 않으므로 무한 재시도 대신 즉시 멈추고 사유를 남긴다.
-test('Field organization deletion stops on media permission errors and caps other execution failures', async () => {
+// M3: 실행기는 저장소 I/O를 하지 않는다. 사진 저장소 권한 부족(HeadObject 403)은 2단계 사진 삭제가 멈추고(운영자 재개 대상),
+// 조직 삭제는 실패로 세지 않고 asset_deletion_stopped로 기다린다. DB 실행 실패만 상한(12회)까지 재시도한 뒤 멈춘다.
+// (이전에는 실행기 안의 저장소 호출 실패로 상한을 시험했으나, 저장소 호출이 사진 작업자로 옮겨져 DB 실패로 시험한다.)
+test('Field organization deletion waits on stopped photo deletions without counting failures and caps execution failures', async () => {
   const pool = new Pool({ connectionString: process.env.FIELD_DATABASE_URL });
   const owner = randomUUID(), org = randomUUID(), asset = randomUUID(), requestId = randomUUID();
   const objectKey = `${org}/${asset}.webp`;
-  let failure: 'permission' | 'other' = 'permission';
+  const trigger = `field_test_fail_${org.replaceAll('-', '')}`;
   const siteMedia: FieldSiteMediaStore = {
     put: async () => undefined, get: async () => null, delete: async () => undefined,
-    exists: async () => { if (failure === 'permission') throw new MediaPermissionError(); throw new Error('transient'); },
+    exists: async () => { throw new MediaPermissionError(); },
   };
   try {
     await pool.query('insert into "user"("id","name","email","emailVerified") values ($1,$1,$2,true)', [owner, `${owner}@example.invalid`]);
@@ -288,24 +304,41 @@ test('Field organization deletion stops on media permission errors and caps othe
       values ($1,$2,$3,'image/webp',15,10,10,$4,$5)`, [asset, org, objectKey, hash('x'), owner]);
     await pool.query(`insert into field.organization_deletion_requests(id,organization_id,requested_by,confirmation,status,requested_at,scheduled_at,next_attempt_at)
       values ($1,$2,$3,'{}'::jsonb,'scheduled',now()-interval '15 days',now()-interval '1 minute',now()-interval '1 minute')`, [requestId, org, owner]);
-    const state = async () => (await pool.query<{ status: string; last_error: string; stopped: boolean }>(
-      `select status,last_error,next_attempt_at='infinity'::timestamptz as stopped from field.organization_deletion_requests where id=$1`,
-      [requestId])).rows[0]!;
+    const state = async () => (await pool.query<{ status: string; last_error: string; stopped: boolean; failures: number | null }>(
+      `select status,last_error,next_attempt_at='infinity'::timestamptz as stopped,(steps->>'executionFailures')::int as failures
+       from field.organization_deletion_requests where id=$1`, [requestId])).rows[0]!;
+    const due = () => pool.query("update field.organization_deletion_requests set next_attempt_at=now()-interval '1 minute' where id=$1", [requestId]);
     assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'blocked');
-    assert.deepEqual(await state(), { status: 'scheduled', last_error: 'media_permission,execution_attempts_stopped', stopped: true });
-    assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'empty');
-    assert.equal((await pool.query('select count(*)::int as n from field.site_assets where id=$1', [asset])).rows[0].n, 1);
-    // 그 밖의 실패는 5분 뒤 재시도하고, 실행 실패 12회째에 멈춘다.
-    failure = 'other';
-    await pool.query("update field.organization_deletion_requests set next_attempt_at=now()-interval '1 minute',steps='{}'::jsonb where id=$1", [requestId]);
+    assert.deepEqual(await state(), { status: 'scheduled', last_error: 'assets_pending', stopped: false, failures: null });
+    // 사진 작업자: 권한 부족은 즉시 멈추고 멈춘 시각을 남긴다.
+    assert.deepEqual(await runSiteAssetDeletionOnce({ pool, siteMedia }), { deleted: 0, retried: 0, stopped: 1, blocked: 0 });
+    const photo = (await pool.query(`select deletion_error,deletion_next_attempt_at='infinity'::timestamptz as stopped,deletion_stopped_at is not null as stamped
+      from field.site_assets where id=$1`, [asset])).rows[0];
+    assert.deepEqual(photo, { deletion_error: 'media_permission', stopped: true, stamped: true });
+    await due();
+    assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'blocked');
+    assert.deepEqual(await state(), { status: 'scheduled', last_error: 'asset_deletion_stopped', stopped: false, failures: null });
+    // 두 번째 주기부터는 멈춘 사진을 다시 시작하지 않는다(운영자 재개 대상).
+    assert.equal((await pool.query("select count(*)::int as n from field.site_assets where id=$1 and deletion_next_attempt_at='infinity'", [asset])).rows[0].n, 1);
+
+    // 사진이 없어진 뒤 DB 실행 실패: 5분 뒤 재시도하고, 실행 실패 12회째에 멈춘다.
+    await pool.query('delete from field.site_assets where id=$1', [asset]);
+    await pool.query(`create function field.${trigger}() returns trigger language plpgsql as $$
+      begin raise exception 'synthetic execution failure'; end $$`);
+    await pool.query(`create trigger ${trigger} before update of deleted_at on field.organizations for each row
+      when (new.id = '${org}'::uuid) execute function field.${trigger}()`);
+    await pool.query("update field.organization_deletion_requests set steps=steps-'executionFailures' where id=$1", [requestId]);
     for (let index = 1; index < 12; index += 1) {
+      await due();
       assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'retry', String(index));
-      assert.deepEqual(await state(), { status: 'scheduled', last_error: 'execution_failed', stopped: false });
-      await pool.query("update field.organization_deletion_requests set next_attempt_at=now()-interval '1 minute' where id=$1", [requestId]);
+      assert.deepEqual(await state(), { status: 'scheduled', last_error: 'execution_failed', stopped: false, failures: index });
     }
+    await due();
     assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'blocked');
-    assert.deepEqual(await state(), { status: 'scheduled', last_error: 'execution_failed,execution_attempts_stopped', stopped: true });
+    assert.deepEqual(await state(), { status: 'scheduled', last_error: 'execution_failed,execution_attempts_stopped', stopped: true, failures: 12 });
   } finally {
+    await pool.query(`drop trigger if exists ${trigger} on field.organizations`);
+    await pool.query(`drop function if exists field.${trigger}()`);
     await pool.query('delete from field.organization_deletion_requests where id=$1', [requestId]);
     await pool.end();
   }
@@ -355,6 +388,8 @@ test('Field organization deletion scheduling re-authenticates and targets the x-
 
     // 재인증: 비밀번호 누락·오류는 예약하지 않는다.
     assert.equal((await scheduleB({})).json().error, 'password_required');
+    // 자유 입력의 NUL은 PG 오류(500) 대신 400 invalid_text다(Security #1).
+    assert.deepEqual((await scheduleB({ password, reason: 'bad\u0000reason' })).json(), { error: 'invalid_text' });
     const wrong = await scheduleB({ password: 'wrong-password' });
     assert.equal(wrong.statusCode, 403);
     assert.equal(wrong.json().error, 'invalid_password');
@@ -418,8 +453,8 @@ test('Field stopped organization deletions are listed for admins and resumed onl
   const app = createFieldApp(async () => undefined, undefined, undefined, { pool, resolveUserId: async headers => user(headers), siteMedia });
   const owner = randomUUID(), operator = randomUUID(), auditor = randomUUID(), org = randomUUID(), asset = randomUUID(), requestId = randomUUID();
   const objectKey = `${org}/${asset}.webp`;
-  const call = (method: 'GET' | 'POST', url: string, actor: string, payload?: object) =>
-    app.inject({ method, url, headers: { 'x-test-user': actor }, payload });
+  const call = (method: 'GET' | 'POST', url: string, actor: string, payload?: object, headers: Record<string, string> = {}) =>
+    app.inject({ method, url, headers: { 'x-test-user': actor, ...headers }, payload });
   const resumeUrl = `/v1/admin/organization-deletions/${requestId}/resume`;
   const reason = '저장소 권한을 확인해 다시 실행합니다';
   try {
@@ -433,7 +468,9 @@ test('Field stopped organization deletions are listed for admins and resumed onl
       values ($1,$2,$3,'image/webp',1,10,10,$4,$5)`, [asset, org, objectKey, hash('x'), owner]);
     await pool.query(`insert into field.organization_deletion_requests(id,organization_id,requested_by,confirmation,status,requested_at,scheduled_at,next_attempt_at)
       values ($1,$2,$3,'{}'::jsonb,'scheduled',now()-interval '15 days',now()-interval '1 minute',now()-interval '1 minute')`, [requestId, org, owner]);
-    assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'blocked');
+    // M3 이후 실행기는 저장소를 호출하지 않으므로, 실행 실패 상한(12회)에 걸려 멈춘 요청을 직접 만든다.
+    await pool.query(`update field.organization_deletion_requests set next_attempt_at='infinity',
+      last_error='execution_failed,execution_attempts_stopped',steps=jsonb_build_object('executionFailures',12) where id=$1`, [requestId]);
 
     // 목록: 관리자(감사자 포함)만, status=stopped만 받는다.
     assert.equal((await call('GET', '/v1/admin/organization-deletions?status=stopped', owner)).statusCode, 403);
@@ -441,18 +478,28 @@ test('Field stopped organization deletions are listed for admins and resumed onl
     const listed = await call('GET', '/v1/admin/organization-deletions?status=stopped', auditor);
     assert.equal(listed.statusCode, 200, listed.body);
     const item = listed.json().deletions.find((row: { id: string }) => row.id === requestId);
-    assert.deepEqual([item.organizationId, item.executionFailures, item.lastError], [org, 1, 'media_permission,execution_attempts_stopped']);
+    assert.deepEqual([item.organizationId, item.executionFailures, item.lastError], [org, 12, 'execution_failed,execution_attempts_stopped']);
 
     // 다시 실행: 감사자·사유 누락은 거절, operator는 사유와 함께 실행 시각·오류·실패 횟수를 되돌린다.
     assert.equal((await call('POST', resumeUrl, auditor, { reason })).statusCode, 403);
     assert.equal((await call('POST', resumeUrl, operator, {})).json().error, 'invalid_reason');
+    // L3: 다른 origin에서 온 브라우저 요청은 관리자 세션이 있어도 거절한다. 사유의 NUL은 400 invalid_text(Security #1).
+    for (const headers of [{ origin: 'https://evil.example' }, { 'sec-fetch-site': 'cross-site' }] as Record<string, string>[]) {
+      const crossOrigin = await call('POST', resumeUrl, operator, { reason }, headers);
+      assert.deepEqual([crossOrigin.statusCode, crossOrigin.json().error], [403, 'origin_denied']);
+    }
+    assert.equal((await call('POST', resumeUrl, operator, { reason }, { origin: 'http://localhost:3002' })).statusCode !== 403, true);
+    assert.deepEqual((await call('POST', resumeUrl, operator, { reason: `${reason}\u0000` })).json(), { error: 'invalid_text' });
+    assert.equal((await pool.query("select next_attempt_at='infinity'::timestamptz as stopped from field.organization_deletion_requests where id=$1",
+      [requestId])).rows[0].stopped, false, 'the same-origin call above resumed it');
+    await pool.query("update field.organization_deletion_requests set next_attempt_at='infinity',last_error='execution_failed,execution_attempts_stopped',steps=jsonb_build_object('executionFailures',12) where id=$1", [requestId]);
     assert.equal((await call('POST', `/v1/admin/organization-deletions/${randomUUID()}/resume`, operator, { reason })).statusCode, 404);
     const resumed = await call('POST', resumeUrl, operator, { reason });
     assert.equal(resumed.statusCode, 200, resumed.body);
     const row = (await pool.query(`select status,last_error,next_attempt_at<=now() as due,steps from field.organization_deletion_requests where id=$1`, [requestId])).rows[0];
     assert.deepEqual([row.status, row.last_error, row.due, row.steps.executionFailures], ['scheduled', null, true, 0]);
     assert.deepEqual([row.steps.operatorResumes[0].actorUserId, row.steps.operatorResumes[0].reason, row.steps.operatorResumes[0].previousError,
-      row.steps.operatorResumes[0].previousExecutionFailures], [operator, reason, 'media_permission,execution_attempts_stopped', 1]);
+      row.steps.operatorResumes[0].previousExecutionFailures], [operator, reason, 'execution_failed,execution_attempts_stopped', 12]);
     assert.equal((await call('POST', resumeUrl, operator, { reason })).json().error, 'deletion_not_stopped');
     assert.equal((await call('GET', '/v1/admin/organization-deletions?status=stopped', operator)).json().deletions
       .some((entry: { id: string }) => entry.id === requestId), false);
@@ -469,12 +516,217 @@ test('Field stopped organization deletions are listed for admins and resumed onl
       .find((entry: { id: string }) => entry.id === requestId);
     assert.deepEqual([again.operatorResumes[0].actorUserId, again.operatorResumes[0].reason], [operator, reason]);
     await pool.query('update field.organization_deletion_requests set next_attempt_at=now() where id=$1', [requestId]);
-    // 저장소 권한이 복구된 뒤 작업자가 실제로 실행한다.
+    // 원인이 풀린 뒤 실행기가 사진을 2단계 삭제로 넘기고, 사진 작업자가 지운 다음 실행을 끝낸다.
     permissionDenied = false;
+    assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'blocked');
+    assert.equal((await runSiteAssetDeletionOnce({ pool, siteMedia })).deleted, 1);
+    await pool.query('update field.organization_deletion_requests set next_attempt_at=now() where id=$1', [requestId]);
     assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'executed');
     assert.equal(files.size, 0);
   } finally {
     await pool.query("update field.organization_deletion_requests set status='canceled',canceled_at=now(),canceled_by=$2 where id=$1 and status='scheduled'", [requestId, owner]);
+    await app.close();
+    await pool.end();
+    if (previousProfile === undefined) delete process.env.FIELD_PROFILE;
+    else process.env.FIELD_PROFILE = previousProfile;
+  }
+});
+
+// H1: 삭제 예약(또는 실행) 조직은 새 유료 구독·체험·AP 연결·통합 선택(grant)을 만들지 않는다(409 deletion_scheduled).
+// 취소하면 같은 요청이 삭제 검사를 통과한다(대조군).
+test('Field deletion-scheduled organizations cannot start checkout, trial, AP connection or an integration selection', async () => {
+  const previousProfile = process.env.FIELD_PROFILE;
+  process.env.FIELD_PROFILE = 'mock';
+  const pool = new Pool({ connectionString: process.env.FIELD_DATABASE_URL });
+  const owner = randomUUID(), org = randomUUID(), requestId = randomUUID(), session = randomUUID();
+  const clientId = `field-h1-${randomUUID()}`;
+  const app = createFieldApp(async () => undefined, undefined, undefined, { pool, resolveUserId: async headers => user(headers),
+    resolveSession: async headers => user(headers) ? { id: session, userId: user(headers)! } : null,
+    billing: { credentialKey: randomBytes(32), webOrigin: 'http://localhost:3002', provider: {
+      mode: 'test' as const, clientKey: 'test_ck_synthetic', mid: 'synthetic-mid',
+      issue: async () => { throw new Error('provider must not run in request'); },
+      charge: async () => { throw new Error('provider must not run in request'); }, lookup: async () => null } },
+    apConnector: { issuer: 'https://ap.example.invalid/api/auth', clientId: 'synthetic-ap-client', clientSecret: 'synthetic-secret',
+      tokenKey: randomBytes(32), redirectUri: 'http://127.0.0.1:4321/v1/connections/ap/callback', webOrigin: 'http://localhost:3002',
+      reverseClientId: '', fetcher: async () => { throw new Error('AP must not be called'); } } });
+  const post = (url: string, payload: object, headers: Record<string, string> = {}) =>
+    app.inject({ method: 'POST', url, headers: { 'x-test-user': owner, ...headers }, payload });
+  const consent = { planId: randomUUID(), termsVersion: 'synthetic-terms', refundVersion: 'synthetic-refund', totalAmount: 11000,
+    supplyAmount: 10000, vatAmount: 1000, currency: 'KRW', includedAiUnits: 10, graceDays: 3, termsAccepted: true, autoRenew: true,
+    firstChargePolicy: 'after_authorization' };
+  const attempts = () => Promise.all([
+    post('/v1/subscription/checkout', consent, { 'idempotency-key': randomUUID() }),
+    post('/v1/subscription/trial', { consentVersion: 'mock-trial-v1', termsAccepted: true }),
+    post('/v1/connections/ap/start', { organizationId: org }),
+    post('/integrations/v1/authorization/selections', { clientId, organizationId: org, scopes: ['field.facts.read'] }),
+  ]);
+  try {
+    await pool.query('insert into "user"("id","name","email","emailVerified") values ($1,$1,$2,true)', [owner, `${owner}@example.invalid`]);
+    await pool.query('insert into field.organizations(id,owner_user_id,name) values ($1,$2,$3)', [org, owner, 'Field Scheduled Org']);
+    await pool.query("insert into field.memberships(organization_id,user_id,role) values ($1,$2,'owner')", [org, owner]);
+    await pool.query(`insert into "session"("id","expiresAt","token","createdAt","updatedAt","userId")
+      values ($1,now()+interval '1 day',$2,now(),now(),$3)`, [session, randomBytes(16).toString('hex'), owner]);
+    const resource = new URL('/integrations/v1', process.env.FIELD_AUTH_BASE_URL).toString();
+    await pool.query(`insert into "oauthResource"(id,identifier,name,"createdAt","updatedAt") values ($1,$2,'Field',now(),now())
+      on conflict (identifier) do nothing`, [randomUUID(), resource]);
+    await pool.query(`insert into "oauthClient"(id,"clientId","clientSecret",name,scopes,"applicationType","redirectUris","createdAt","updatedAt")
+      values ($1,$2,'synthetic-secret-hash','Synthetic integrator','["field.facts.read"]'::jsonb,'web','["https://integrator.example.invalid/cb"]'::jsonb,now(),now())`,
+    [randomUUID(), clientId]);
+    await pool.query(`insert into "oauthClientResource"(id,"clientId","resourceId","createdAt") values ($1,$2,$3,now())`, [randomUUID(), clientId, resource]);
+    await pool.query(`insert into field.organization_deletion_requests(id,organization_id,requested_by,confirmation,status,requested_at,scheduled_at,next_attempt_at)
+      values ($1,$2,$3,'{}'::jsonb,'scheduled',now(),now()+interval '14 days',now()+interval '14 days')`, [requestId, org, owner]);
+
+    const blocked = await attempts();
+    for (const response of blocked) assert.deepEqual([response.statusCode, response.json()], [409, { error: 'deletion_scheduled' }], response.body);
+    for (const table of ['paid_subscriptions', 'trial_subscriptions', 'ap_oauth_attempts', 'oauth_selections'])
+      assert.equal((await pool.query(`select count(*)::int as n from field.${table} where organization_id=$1`, [org])).rows[0].n, 0, table);
+
+    // 대조군: 취소하면 삭제 검사를 통과한다(checkout은 합성 요금제가 없어 다음 단계인 요금제 확인에서 멈춘다).
+    await pool.query("update field.organization_deletion_requests set status='canceled',canceled_at=now(),canceled_by=$2 where id=$1", [requestId, owner]);
+    const allowed = await attempts();
+    assert.deepEqual(allowed.map(response => response.statusCode), [409, 201, 201, 201], allowed.map(response => response.body).join('\n'));
+    assert.equal(allowed[0]!.json().error, 'billing_plan_conditions_changed');
+  } finally {
+    await app.close();
+    await pool.end();
+    if (previousProfile === undefined) delete process.env.FIELD_PROFILE;
+    else process.env.FIELD_PROFILE = previousProfile;
+  }
+});
+
+// M1: 조직 삭제 실행은 조직이 통합자에게 준 선택(grant)·토큰·동의를 회수 원장에 남기고 회수한다. 원장이 없으면 실행하지 않는다.
+// 이어서 계정 삭제 차단 사유(oauth_grants_active·oauth_clients_active·admin_membership_required_removal)와 전제 조건 connections_active를 확인한다.
+test('Field organization deletion revokes integration grants and account deletion reports OAuth client, grant and admin blockers', async () => {
+  const previousProfile = process.env.FIELD_PROFILE;
+  process.env.FIELD_PROFILE = 'mock';
+  const pool = new Pool({ connectionString: process.env.FIELD_DATABASE_URL });
+  const app = createFieldApp(async () => undefined, undefined, undefined, { pool, resolveUserId: async headers => user(headers) });
+  const owner = randomUUID(), org = randomUUID(), requestId = randomUUID(), selection = randomUUID(), revokedSelection = randomUUID();
+  const clientId = `field-m1-${randomUUID()}`, ownClientId = `field-m1-own-${randomUUID()}`, connection = randomUUID();
+  const journal: unknown[] = [];
+  const revocationJournal = { append: async (intent: object) => {
+    journal.push(intent);
+    return { version: 1, product: 'field', id: randomUUID(), createdAt: new Date().toISOString(), ...intent } as never;
+  } };
+  const eligibility = async () => (await app.inject({ url: '/v1/account/deletion-eligibility', headers: { 'x-test-user': owner } })).json();
+  try {
+    await pool.query('insert into "user"("id","name","email","emailVerified") values ($1,$1,$2,true)', [owner, `${owner}@example.invalid`]);
+    await pool.query('insert into field.organizations(id,owner_user_id,name) values ($1,$2,$3)', [org, owner, 'Field Grant Org']);
+    await pool.query("insert into field.memberships(organization_id,user_id,role) values ($1,$2,'owner')", [org, owner]);
+    for (const [id, userId] of [[clientId, null], [ownClientId, owner]])
+      await pool.query(`insert into "oauthClient"(id,"clientId","clientSecret",name,scopes,"applicationType","redirectUris","userId","createdAt","updatedAt")
+        values ($1,$2,'synthetic-secret-hash','Synthetic','["field.facts.read"]'::jsonb,'web','[]'::jsonb,$3,now(),now())`, [randomUUID(), id, userId]);
+    for (const [id, revoked] of [[selection, false], [revokedSelection, true]])
+      await pool.query(`insert into field.oauth_selections(id,session_id,actor_user_id,client_id,organization_id,requested_scopes,selection_expires_at,revoked_at)
+        values ($1,null,$2,$3,$4,'{field.facts.read}',now()+interval '5 minutes',case when $5 then now() else null end)`,
+      [id, owner, clientId, org, revoked]);
+    const refresh = randomUUID(), access = randomUUID(), stray = randomUUID();
+    await pool.query(`insert into "oauthRefreshToken"(id,token,"clientId","userId","referenceId","expiresAt","createdAt",scopes)
+      values ($1,$2,$3,$4,$5,now()+interval '30 days',now(),'["field.facts.read"]'::jsonb)`, [refresh, randomUUID(), clientId, owner, selection]);
+    await pool.query(`insert into "oauthAccessToken"(id,token,"clientId","userId","referenceId","expiresAt","createdAt",scopes) values
+      ($1,$2,$3,$4,$5,now()+interval '10 minutes',now(),'["field.facts.read"]'::jsonb),($6,$7,$3,$4,$8,now()+interval '10 minutes',now(),'["field.facts.read"]'::jsonb)`,
+    [access, randomUUID(), clientId, owner, selection, stray, randomUUID(), revokedSelection]);
+    await pool.query(`insert into "oauthConsent"(id,"clientId","userId","referenceId",scopes,"createdAt","updatedAt")
+      values ($1,$2,$3,$4,'["field.facts.read"]'::jsonb,now(),now())`, [randomUUID(), clientId, owner, selection]);
+
+    // 계정 삭제 차단: owner 조직·살아 있는 refresh token·본인이 등록한 활성 client·플랫폼 관리자 자격.
+    await pool.query("insert into field.platform_admin_memberships(user_id,role) values ($1,'auditor')", [owner]);
+    assert.deepEqual((await eligibility()).blockers, ['organization_deletion_required', 'admin_membership_required_removal',
+      'oauth_grants_active', 'oauth_clients_active', 'reauth_required']);
+    await pool.query('delete from field.platform_admin_memberships where user_id=$1', [owner]);
+
+    // 전제 조건: 살아 있는 AP 연결은 예약을 막고, 통합 grant는 막지 않고 실행 때 회수한다고 알린다.
+    await pool.query(`insert into field.ap_connections(id,organization_id,initiator_user_id,ap_issuer,ap_client_id,ap_grant_id,ap_organization_id,ap_agent_id,ap_agent_name,
+      ap_agent_revision,allowed_deployment_ids,scopes,access_token_cipher,refresh_token_cipher,access_expires_at,status)
+      values ($1,$2,$3,'https://ap.example.invalid/api/auth','synthetic-client',$4,$5,$6,'Synthetic',1,'{}','{ap.agent.read}','\\x00'::bytea,'\\x00'::bytea,now()+interval '1 hour','active')`,
+    [connection, org, owner, randomUUID(), randomUUID(), randomUUID()]);
+    const current = (await app.inject({ url: '/v1/organizations/current/deletion-requests/current', headers: { 'x-test-user': owner } })).json();
+    assert.deepEqual(current.preconditions.map((item: { code: string; count: number; ok: boolean }) => [item.code, item.count, item.ok]),
+      [['paid_subscription_active', 0, true], ['connections_active', 1, false], ['open_reservations', 0, true], ['integration_grants_active', 1, true]]);
+    await pool.query(`insert into field.organization_deletion_requests(id,organization_id,requested_by,confirmation,status,requested_at,scheduled_at,next_attempt_at)
+      values ($1,$2,$3,'{}'::jsonb,'scheduled',now()-interval '15 days',now()-interval '1 minute',now()-interval '1 minute')`, [requestId, org, owner]);
+    assert.equal(await runOrganizationDeletionOnce({ pool, revocationJournal }), 'blocked');
+    assert.equal((await pool.query('select last_error from field.organization_deletion_requests where id=$1', [requestId])).rows[0].last_error, 'connections_active');
+    await pool.query("update field.ap_connections set status='revoked' where id=$1", [connection]);
+
+    // 회수 원장이 없으면 grant를 남긴 채 blocked_integration으로 기다린다.
+    await pool.query("update field.organization_deletion_requests set next_attempt_at=now()-interval '1 minute' where id=$1", [requestId]);
+    assert.equal(await runOrganizationDeletionOnce({ pool }), 'blocked');
+    assert.equal((await pool.query('select last_error from field.organization_deletion_requests where id=$1', [requestId])).rows[0].last_error, 'blocked_integration');
+    assert.equal((await pool.query('select revoked_at from field.oauth_selections where id=$1', [selection])).rows[0].revoked_at, null);
+
+    await pool.query("update field.organization_deletion_requests set next_attempt_at=now()-interval '1 minute' where id=$1", [requestId]);
+    assert.equal(await runOrganizationDeletionOnce({ pool, revocationJournal }), 'executed');
+    assert.deepEqual(journal, [{ targetKind: 'selection', targetId: selection, organizationId: org, selectionId: selection, source: 'owner', revocationId: null }]);
+    const executed = (await pool.query('select steps from field.organization_deletion_requests where id=$1', [requestId])).rows[0].steps.executed;
+    // 이미 회수된 선택에 붙은 토큰은 000061 guard가 저장 때 바로 회수하므로 여기서 회수되는 access token은 1개다.
+    assert.deepEqual(executed.integrationGrantsRevoked, { selections: 1, accessTokens: 1, refreshTokens: 1, consents: 1 });
+    assert.equal((await pool.query('select count(*)::int as n from field.oauth_selections where organization_id=$1 and revoked_at is null', [org])).rows[0].n, 0);
+    assert.equal((await pool.query('select count(*)::int as n from "oauthAccessToken" where id=any($1::text[]) and revoked is null', [[access, stray]])).rows[0].n, 0);
+    assert.ok((await pool.query('select revoked from "oauthRefreshToken" where id=$1', [refresh])).rows[0].revoked);
+    assert.equal((await pool.query('select count(*)::int as n from "oauthConsent" where "referenceId"=$1', [selection])).rows[0].n, 0);
+
+    // 조직 삭제 뒤 계정 삭제: grant 차단은 풀리고, 본인이 등록한 client는 비활성화해야 풀린다(Security #6 안전 기본값).
+    assert.deepEqual((await eligibility()).blockers, ['oauth_clients_active', 'reauth_required']);
+    await pool.query(`update "oauthClient" set disabled=true where "clientId"=$1`, [ownClientId]);
+    assert.deepEqual((await eligibility()).blockers, ['reauth_required']);
+  } finally {
+    await app.close();
+    await pool.end();
+    if (previousProfile === undefined) delete process.env.FIELD_PROFILE;
+    else process.env.FIELD_PROFILE = previousProfile;
+  }
+});
+
+// L10: 멈춘 사진 2단계 삭제는 관리자 목록에서 보고 operator만 사유와 함께 다시 시작한다(감사 행 기록).
+test('Field stopped site photo deletions are listed for admins and resumed only by operators with an audit row', async () => {
+  const previousProfile = process.env.FIELD_PROFILE;
+  process.env.FIELD_PROFILE = 'mock';
+  const pool = new Pool({ connectionString: process.env.FIELD_DATABASE_URL });
+  const app = createFieldApp(async () => undefined, undefined, undefined, { pool, resolveUserId: async headers => user(headers) });
+  const owner = randomUUID(), operator = randomUUID(), auditor = randomUUID(), org = randomUUID(), site = randomUUID(), asset = randomUUID();
+  const call = (method: 'GET' | 'POST', url: string, actor: string, payload?: object, headers: Record<string, string> = {}) =>
+    app.inject({ method, url, headers: { 'x-test-user': actor, ...headers }, payload });
+  const resumeUrl = `/v1/admin/site-asset-deletions/${asset}/resume`;
+  const reason = '저장소 권한을 복구해 사진 삭제를 다시 시작합니다';
+  try {
+    for (const id of [owner, operator, auditor])
+      await pool.query('insert into "user"("id","name","email","emailVerified") values ($1,$1,$2,true)', [id, `${id}@example.invalid`]);
+    await pool.query("insert into field.platform_admin_memberships(user_id,role) values ($1,'operator'),($2,'auditor')", [operator, auditor]);
+    await pool.query('insert into field.organizations(id,owner_user_id,name) values ($1,$2,$3)', [org, owner, 'Field Photo Org']);
+    await pool.query('insert into field.sites(id,organization_id,slug) values ($1,$2,$3)', [site, org, `field-${randomBytes(6).toString('hex')}`]);
+    await pool.query(`insert into field.site_assets(id,organization_id,object_key,content_type,byte_size,width,height,sha256,uploaded_by,
+      state,deletion_requested_at,deletion_next_attempt_at,deletion_attempts,deletion_error,deletion_stopped_at)
+      values ($1,$2,$3,'image/webp',1,10,10,$4,$5,'deleting',now()-interval '1 hour','infinity',12,'media_unavailable,attempts_stopped',now())`,
+    [asset, org, `${org}/${asset}.webp`, hash('x'), owner]);
+
+    assert.equal((await call('GET', '/v1/admin/site-asset-deletions?status=stopped', owner)).statusCode, 403);
+    assert.equal((await call('GET', '/v1/admin/site-asset-deletions', auditor)).statusCode, 400);
+    const listed = await call('GET', '/v1/admin/site-asset-deletions?status=stopped', auditor);
+    assert.equal(listed.statusCode, 200, listed.body);
+    const item = listed.json().deletions.find((row: { id: string }) => row.id === asset);
+    assert.deepEqual(Object.keys(item).sort(), ['attempts', 'error', 'id', 'organizationId', 'requestedAt', 'siteId', 'stoppedAt']);
+    assert.deepEqual([item.siteId, item.organizationId, item.attempts, item.error, typeof item.requestedAt, typeof item.stoppedAt],
+      [site, org, 12, 'media_unavailable,attempts_stopped', 'string', 'string']);
+
+    assert.equal((await call('POST', resumeUrl, auditor, { reason })).statusCode, 403);
+    assert.deepEqual((await call('POST', resumeUrl, operator, { reason: '짧음' })).json(), { error: 'invalid_reason' });
+    assert.deepEqual((await call('POST', resumeUrl, operator, { reason: `${reason}\u0000` })).json(), { error: 'invalid_text' });
+    assert.deepEqual((await call('POST', resumeUrl, operator, { reason }, { origin: 'https://evil.example' })).json(), { error: 'origin_denied' });
+    assert.equal((await call('POST', `/v1/admin/site-asset-deletions/${randomUUID()}/resume`, operator, { reason })).statusCode, 404);
+    const resumed = await call('POST', resumeUrl, operator, { reason });
+    assert.equal(resumed.statusCode, 200, resumed.body);
+    assert.deepEqual([resumed.json().id, resumed.json().state], [asset, 'deleting']);
+    const row = (await pool.query(`select deletion_attempts,deletion_error,deletion_stopped_at,deletion_next_attempt_at<=now() as due
+      from field.site_assets where id=$1`, [asset])).rows[0];
+    assert.deepEqual(row, { deletion_attempts: 0, deletion_error: null, deletion_stopped_at: null, due: true });
+    const audit = (await pool.query('select actor_user_id,reason,previous_error,previous_attempts from field.site_asset_deletion_resumes where asset_id=$1', [asset])).rows;
+    assert.deepEqual(audit, [{ actor_user_id: operator, reason, previous_error: 'media_unavailable,attempts_stopped', previous_attempts: 12 }]);
+    assert.equal((await call('POST', resumeUrl, operator, { reason })).json().error, 'deletion_not_stopped');
+    assert.equal((await call('GET', '/v1/admin/site-asset-deletions?status=stopped', operator)).json().deletions
+      .some((entry: { id: string }) => entry.id === asset), false);
+  } finally {
+    await pool.query('delete from field.site_assets where id=$1', [asset]);
     await app.close();
     await pool.end();
     if (previousProfile === undefined) delete process.env.FIELD_PROFILE;

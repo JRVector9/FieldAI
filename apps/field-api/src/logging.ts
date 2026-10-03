@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { LogController, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from 'fastify';
+import { LogController, type FastifyError, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from 'fastify';
 
 // Field 구조화 로그 설정. 요청 본문·헤더·쿼리 문자열은 남기지 않고, 메시지와 객체의 전화번호·이메일은 가린다.
 // 로그 보관 기간·접근 권한은 로그를 수집하는 호스트(컨테이너 런타임·수집기)의 책임이다.
@@ -97,4 +97,13 @@ export function loggingOptionsFromEnvironment(): Pick<FastifyServerOptions, 'log
     logController: new CompactLogController({ requestIdLogLabel: 'requestId' }),
     genReqId: request => requestIdFromHeaders(request.headers),
   };
+}
+
+// 오류 응답(Security #1). 5xx는 DB 오류 문구·SQLSTATE·내부 메시지를 숨기고 고정 코드만 준다. 원문은 서버 로그에만 남긴다.
+// 4xx(본문 형식·크기 등 Fastify 검증 오류)는 기본 직렬화를 그대로 쓴다.
+export function sendPublicError(error: FastifyError, request: FastifyRequest, reply: FastifyReply) {
+  const status = typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode <= 599 ? error.statusCode : 500;
+  if (status < 500) return reply.send(error);
+  request.log.error({ err: error }, 'request failed');
+  return reply.code(status).send({ error: 'internal_error' });
 }

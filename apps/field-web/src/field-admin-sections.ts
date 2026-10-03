@@ -33,3 +33,16 @@ export function deletionResumeBlockReason(input: { role: "operator" | "auditor";
   if (input.reason.trim().length < 10) return "다시 실행 사유를 10자 이상 입력해 주세요.";
   return null;
 }
+
+const ASSET_DELETION_REASON_LABELS: Record<string, string> = {
+  media_permission: "사진 저장소 권한 부족",
+  media_unavailable: "사진 저장소 응답 실패",
+  file_delete_unconfirmed: "파일 삭제 확인 실패",
+  blocked_integration: "사진 저장소 미연결",
+  attempts_stopped: "자동 재시도 중지",
+};
+// 멈춘 사이트 사진 삭제의 error(쉼표 구분 코드, 예: media_unavailable,attempts_stopped)를 운영자용 한국어로 바꾼다(추가). 모르는 코드는 그대로 보인다.
+export function stoppedAssetDeletionReason(error: string | null) {
+  if (!error) return "사유 기록 없음";
+  return error.split(",").map(code => ASSET_DELETION_REASON_LABELS[code] ?? code).join(" · ");
+}

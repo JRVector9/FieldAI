@@ -9,11 +9,47 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
+## 종합 리뷰 비앱 영역 반영(CI·infra·도구·문서) — 2026-10-03
+
+- **Current objective / state:** `docs/technical/review_2026-10-02/16_HOLISTIC_INFRA_DOCS.md`의 H1·H2·M1~M8과 Low 일부를 앱 코드 밖에서 반영했다. 앱(`apps/**`) 변경은 같은 시기 API·웹 담당 작업이며 이 절 범위가 아니다. 커밋 전(작업 트리) 상태다.
+- **Changed:** CI DB job을 GitHub `services:`에서 로컬과 같은 `compose.mock.yaml`(`fieldai-<p>-mock`)로 전환하고 `e2e` job(Playwright+`mock:run`, e2e 3종·security·faults)을 추가했다. live compose의 retention worker를 기본 서비스로 바꾸고 worker healthcheck(프로세스 생존)·Node `24.18.0` 고정·`infra/edge/.env.example`·`*_LOG_LEVEL`/`*_REQUEST_TIMEOUT_MS` 예시를 넣었다. `test:contracts`·`run-integration-faults.mjs`에 AP `field-customer-decisions`·양쪽 `revocation-restore` DB 테스트를 추가했다. faults 실행기는 `AP_BROWSER_PYTHON`·`FIELD_BROWSER_PYTHON`·`FIELD_SAME_PAGE_BROWSER_PYTHON`을 넘긴다. `spike-independence.mjs`는 `*_PROFILE=mock`을 넘긴다. 새 spike `account-deletion-http.test.mjs`를 `run-e2e`의 agent·field에 넣었고, `field-tenant-host-http.test.mjs`에 TLS ask·site-health 404 검사를 더했다. 루트 `test:unit`에 Field `route-key-ui-fence`·`site-font` 단위 테스트를 연결했다. 마스터 문서·HTML을 `build_report.py`로 재생성했고 `SHA256SUMS.txt`를 갱신했다. TASKS 상단 commit 해시·AUTH.LIVE 분리·`AP-O09` 오타, `01_SUMMARY.md` §13 열린 결정 단일 목록, ADR 0003, docs/03 §4.12 표, docs/04 5.1.1, CONTRACT_NOTES도 고쳤다.
+- **Key design decisions:** retention worker 상시 기동은 API 쪽 변경(미디어 저장소 없이 부팅, 사진 단계만 `blocked_integration`)을 전제로 한다. 보존 저널 키는 여전히 필요하므로 `.env.live.example`에서 `[부팅]`으로 표시했다. worker healthcheck는 멈춘 루프를 감지하지 못한다(heartbeat 없음).
+- **New env (문서화):** `AP_LOG_LEVEL`/`FIELD_LOG_LEVEL`, `AP_REQUEST_TIMEOUT_MS`/`FIELD_REQUEST_TIMEOUT_MS`(API 쪽 추가분), `AP_EVENT_SIGNATURE_ACCEPT_V1`/`FIELD_EVENT_SIGNATURE_ACCEPT_V1`, `AP_EVENT_SIGNATURE_SEND_VERSION`/`FIELD_EVENT_SIGNATURE_SEND_VERSION`, edge `ACME_EMAIL`·`*_WEB_HOST`·`*_API_HOST`·`FIELD_SITE_BASE_DOMAIN`·`CLOUDFLARE_API_TOKEN`.
+- **실행 금지:** `tools/build_planning_tables.py`는 `TASKS.md`(완료 원장)·`contracts/task_graph.json`·docs/06·acceptance_catalog를 초기 계획 보드로 덮어쓴다. 마스터 문서 재생성은 `tools/build_report.py` → `tools/check_package.py`만 쓴다(필요 패키지 `tools/requirements-docs.txt`).
+- **Remaining work:** `01_SUMMARY.md` §13 결정, CI 실제 실행(GitHub Actions가 돈 기록 없음), `test:independence:*` CI job, M5의 나머지 spike(인증 메일·MFA·카카오는 mock에서 설계상 검증 불가, Toss 웹훅·사진 삭제·human_active·customer-decisions HTTP 단계), M9 응답 스키마 대조 확대.
+
+### Exact commands for next agent — 현재 실행기 사용법
+
+```bash
+cd /Users/jr/Desktop/projects/FieldAI
+sed -n '1,20p' TASKS.md
+git status --short --branch && git log -8 --oneline
+# mock 전체 스택(환경 파일·compose·migration·빌드·connector 등록 후 4서버+worker). 이미 떠 있으면 포트 점유로 거부한다.
+pnpm mock:run
+curl -fsS http://127.0.0.1:4311/health/ready && curl -fsS http://127.0.0.1:4321/health/ready
+# 브라우저 단계용 Playwright venv(경로는 자유, /tmp/fieldai-ui-venv 같은 고정 경로를 가정하지 않는다)
+python3 -m venv <dir> && <dir>/bin/pip install playwright && <dir>/bin/python -m playwright install chromium
+export AP_BROWSER_PYTHON=<dir>/bin/python FIELD_BROWSER_PYTHON=<dir>/bin/python FIELD_SAME_PAGE_BROWSER_PYTHON=<dir>/bin/python
+pnpm lint && pnpm typecheck && pnpm test:unit
+pnpm test:db:agent && pnpm test:db:field && pnpm test:contracts
+pnpm test:e2e:agent && pnpm test:e2e:field && pnpm test:e2e:distribution
+pnpm test:security && pnpm test:integration:faults
+# 독립성: 상대 제품 mock compose·서버를 먼저 멈춘 뒤에만 실행한다.
+pnpm test:independence:agent   # Field 정지 상태
+pnpm test:independence:field   # AP 정지 상태
+# 문서 패키지: 마스터 재생성과 검사(build_planning_tables.py 금지)
+python3 -m venv <docs-venv> && <docs-venv>/bin/pip install -r tools/requirements-docs.txt
+<docs-venv>/bin/python tools/build_report.py && <docs-venv>/bin/python tools/check_package.py
+actionlint .github/workflows/ci.yml
+# SHA256SUMS.txt: 전용 생성 도구는 없다. 목록 파일 전체를 커밋 직전에 다시 계산한다(README·TASKS 등이 바뀌면 다시 실행).
+shasum -a 256 $(awk '{print $2}' SHA256SUMS.txt) > /tmp/sums && mv /tmp/sums SHA256SUMS.txt && shasum -a 256 -c SHA256SUMS.txt
+```
+
 ## 남은 코드 작업 4건(5단계) — 2026-10-03
 
 - **Current objective / state:** 연결 화면 카카오 로그인+2FA 경로 보존, 사이트 사진 2단계 삭제(Field 000083, 저장소 삭제는 워커가 잠금 없이), Field→AP push 경로의 알림 경로 확인, 서명 사건 채널 v2 방향 접두사(계약 AP preview.11 / Field preview.10)를 구현하고 리뷰(`docs/technical/review_2026-10-02/11`, `12`)를 반영했다(`01_SUMMARY.md` §12).
 - **Key design decisions:** 사진 삭제 요청은 `deleting` 표시 후 202이며 저장소 I/O는 잠금 밖 워커가 한다(4단계의 "조직 행 → advisory → sites → asset" 동기 삭제 설명은 이 문단으로 대체). v2 서명은 수신 `*_EVENT_SIGNATURE_ACCEPT_V1`과 발신 `*_EVENT_SIGNATURE_SEND_VERSION`으로 전환하며 자동 다운그레이드는 없다. push 경로의 404는 확인키가 아예 없을 때만 영구 생략, 그 외는 24시간 한도로 미룬다.
-- **Remaining work:** 결정 필요 항목(§3·§9·§10)과 실 공급사·운영 검증.
+- **Remaining work:** 결정 필요 항목(`01_SUMMARY.md` §13 단일 목록)과 실 공급사·운영 검증.
 
 ## 남은 작업 일괄 구현(4단계) — 2026-10-03
 

@@ -66,7 +66,13 @@ export function emailProviderFromEnvironment(env: Record<string, string | undefi
   if (!['smtp:', 'smtps:'].includes(parsed.protocol) || profile === 'live' && parsed.protocol !== 'smtps:')
     throw new Error('invalid_FIELD_smtp_url');
   if (!mailFrom.test(from)) throw new Error('invalid_FIELD_mail_from');
-  return createSmtpEmailProvider({ from, transport: createTransport(url) });
+  return createSmtpEmailProvider({ from, transport: createTransport(smtpTransportOptions(url)) });
+}
+
+// M5: SMTP 연결·인사·소켓 대기는 각각 10초로 끊는다(nodemailer 기본 소켓 대기 10분). URL에 같은 값이 있으면 URL이 우선한다.
+export const SMTP_TIMEOUT_MS = 10_000;
+export function smtpTransportOptions(url: string) {
+  return { url, connectionTimeout: SMTP_TIMEOUT_MS, greetingTimeout: SMTP_TIMEOUT_MS, socketTimeout: SMTP_TIMEOUT_MS };
 }
 
 export function emailDeliveryState(provider: EmailProvider): EmailDeliveryState {
@@ -89,14 +95,21 @@ export function authEmailMessage(purpose: EmailPurpose, to: string, link: string
 
 // 모든 인증 메일은 공급사와 무관하게 field.email_outbox에 감사 행을 남긴다.
 // mock이 아니면 저장본에서 일회용 토큰을 가려 DB 열람만으로 계정을 넘겨받지 못하게 한다.
+// M5: 같은 주소·목적으로 10분 안에 대기·발송된 메일이 있으면 보내지 않고 suppressed_duplicate 행만 남긴다(메일 폭탄 방지).
+// 한 문장에서 확인·기록하므로 동시에 들어온 두 요청은 드물게 둘 다 보낼 수 있다(남용 억제 목적이라 허용한다).
+export const AUTH_EMAIL_DEDUPE_MINUTES = 10;
 export async function deliverAuthEmail(pool: Pool, provider: EmailProvider, input: {
   purpose: EmailPurpose; message: EmailMessage; secret: string;
-}): Promise<EmailSendResult> {
+}): Promise<Omit<EmailSendResult, 'outcome'> & { outcome: EmailSendResult['outcome'] | 'suppressed_duplicate' }> {
   const redact = (value: string) => provider.kind === 'mock' ? value : value.replaceAll(input.secret, '[redacted]');
-  const row = (await pool.query<{ id: string }>(
-    `insert into field.email_outbox("to",subject,text,html,purpose) values($1,$2,$3,$4,$5) returning id`,
+  const row = (await pool.query<{ id: string; state: string }>(
+    `insert into field.email_outbox("to",subject,text,html,purpose,state)
+     select $1,$2,$3,$4,$5,case when exists(select 1 from field.email_outbox where lower("to")=lower($1) and purpose=$5
+       and state in ('pending','sent') and created_at>now()-make_interval(mins => $6::int)) then 'suppressed_duplicate' else 'pending' end
+     returning id,state`,
     [input.message.to, input.message.subject, redact(input.message.text),
-      input.message.html === undefined ? null : redact(input.message.html), input.purpose])).rows[0]!;
+      input.message.html === undefined ? null : redact(input.message.html), input.purpose, AUTH_EMAIL_DEDUPE_MINUTES])).rows[0]!;
+  if (row.state === 'suppressed_duplicate') return { outcome: 'suppressed_duplicate' };
   let result: EmailSendResult;
   try { result = await provider.send(input.message); }
   catch { result = { outcome: 'failed', errorCode: 'email_provider_error' }; }
@@ -105,4 +118,13 @@ export async function deliverAuthEmail(pool: Pool, provider: EmailProvider, inpu
       sent_at=case when $2='sent' then now() else null end where id=$1`,
     [row.id, result.outcome, result.providerMessageId ?? null, result.errorCode ?? null]);
   return result;
+}
+
+// M5: 인증 요청 응답이 SMTP를 기다리지 않게 outbox 기록·발송을 요청 밖에서 진행한다(상태는 outbox 행에 남는다).
+// better-auth advanced.backgroundTasks는 /send-verification-email 경로(sendVerificationEmailFn)가 직접 await하므로 쓰지 않는다.
+// 계정 존재 여부에 따른 응답 시간 차이도 줄어든다. 실패는 고정 문구만 남기고 요청 결과에는 반영하지 않는다.
+export function deliverAuthEmailInBackground(pool: Pool, provider: EmailProvider, input: Parameters<typeof deliverAuthEmail>[2]) {
+  void deliverAuthEmail(pool, provider, input).catch(() => {
+    process.stderr.write(`field auth email ${input.purpose}: outbox unavailable; no delivery claimed\n`);
+  });
 }

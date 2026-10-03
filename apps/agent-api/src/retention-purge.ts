@@ -90,7 +90,7 @@ export async function runAgentRetentionJobOnce(runtime: { pool: Pool; media?: Ag
 }
 
 // 인증 메일 outbox 보존 규칙(추가):
-// - 7일이 지난 발송 완료(sent) 인증 메일(verify_email·reset_password)은 수신 주소를 고정 익명 주소로 바꾼다.
+// - 7일이 지난 발송 완료(sent)·중복 생략(suppressed_duplicate) 인증 메일(verify_email·reset_password)은 수신 주소를 고정 익명 주소로 바꾼다.
 //   발송 결과·시각·목적은 감사용으로 남긴다.
 // - 30일이 지난 행은 지운다. 단 blocked_integration·failed 행은 운영자가 공급사 장애를 확인할 수 있도록 90일까지 둔다.
 // - 한 주기에 각 1000행씩만 처리하고 남은 행은 다음 주기에 이어서 처리한다.
@@ -98,7 +98,7 @@ export const EMAIL_OUTBOX_ANONYMIZED_TO = 'redacted@retention.invalid';
 export async function purgeAgentEmailOutbox(pool: Pool) {
   const anonymized = (await pool.query(
     `update ap.email_outbox set "to"=$1 where id in (select id from ap.email_outbox
-       where state='sent' and purpose in ('verify_email','reset_password') and created_at < now() - interval '7 days'
+       where state in ('sent','suppressed_duplicate') and purpose in ('verify_email','reset_password') and created_at < now() - interval '7 days'
          and "to"<>$1 order by created_at limit 1000)`, [EMAIL_OUTBOX_ANONYMIZED_TO])).rowCount ?? 0;
   const deleted = (await pool.query(
     `delete from ap.email_outbox where id in (select id from ap.email_outbox
@@ -106,4 +106,40 @@ export async function purgeAgentEmailOutbox(pool: Pool) {
          and (state not in ('blocked_integration','failed') or created_at < now() - interval '90 days')
        order by created_at limit 1000)`)).rowCount ?? 0;
   return { anonymized, deleted };
+}
+
+// 미인증 가입 정리(추가, 보안 #2): 이메일 인증 없이 48시간이 지난 비밀번호(credential) 전용 계정 중 어떤 조직·매체·관리자
+// 소속도 없는 계정을 지워 주소 선점(다른 사람 주소로 가입만 해 두기)으로 실제 주인의 가입이 막히지 않게 한다.
+// 세션·credential·2FA·OAuth 행은 FK cascade로 함께 지워진다. 다른 기록이 FK로 참조하는 계정은 건너뛴다(그 행만 되돌림).
+// 한 주기에 100명까지 처리한다. mock 프로필은 메일 인증을 요구하지 않으므로 작업자가 호출하지 않는다.
+export async function purgeUnverifiedCredentialUsers(pool: Pool) {
+  const candidates = (await pool.query<{ id: string }>(`select u.id from "user" u
+    where u."emailVerified"=false and u."createdAt"<now()-interval '48 hours'
+      and exists(select 1 from "account" a where a."userId"=u.id and a."providerId"='credential')
+      and not exists(select 1 from "account" a where a."userId"=u.id and a."providerId"<>'credential')
+      and not exists(select 1 from ap.memberships m where m.user_id=u.id)
+      and not exists(select 1 from ap.organizations o where o.owner_user_id=u.id)
+      and not exists(select 1 from ap.publishers p where p.owner_user_id=u.id)
+      and not exists(select 1 from ap.publisher_memberships p where p.user_id=u.id)
+      and not exists(select 1 from ap.platform_admin_memberships p where p.user_id=u.id)
+    order by u."createdAt" limit 100`)).rows;
+  let deleted = 0;
+  for (const candidate of candidates) {
+    const db = await pool.connect();
+    try {
+      await db.query('begin');
+      // 고른 뒤 인증·소속이 생겼으면 지우지 않도록 같은 조건을 잠금 아래 다시 확인한다
+      const removed = (await db.query(`delete from "user" u where u.id=$1 and u."emailVerified"=false
+        and u."createdAt"<now()-interval '48 hours'
+        and not exists(select 1 from "account" a where a."userId"=u.id and a."providerId"<>'credential')
+        and not exists(select 1 from ap.memberships m where m.user_id=u.id)`, [candidate.id])).rowCount ?? 0;
+      await db.query('commit');
+      deleted += removed;
+    } catch (error) {
+      await db.query('rollback');
+      // FK 참조(23503)가 있는 계정은 감사 기록 보존을 위해 남긴다. 그 밖의 오류는 작업자에 알린다
+      if ((error as { code?: string }).code !== '23503') throw error;
+    } finally { db.release(); }
+  }
+  return deleted;
 }

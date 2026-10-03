@@ -5,6 +5,7 @@ import type { FieldBusinessRuntime } from './business.js';
 import { sealBilling, unsealBilling, type BillingContext } from './billing-context.js';
 import type { BillingPlan } from './billing.js';
 import { idempotencyWindowMs } from './billing-authorization-execution.js';
+import { organizationDeletionScheduled } from './subscription-access.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -86,6 +87,8 @@ export function registerFieldBillingConsentRoutes(app: FastifyInstance, runtime:
     const db = await runtime.pool.connect();
     try {
       await db.query('begin'); if (!await lockOwner(db,a)) { await db.query('rollback'); return fail(reply,403,'owner_required'); }
+      // H1: 삭제 예약·완료 조직은 새 유료 구독을 만들지 않는다(조직 FOR UPDATE 뒤라 삭제 예약 생성과 직렬화된다).
+      if (await organizationDeletionScheduled(db,a.org)) { await db.query('rollback'); return fail(reply,409,'deletion_scheduled'); }
       const old = await replay(db,a,key,digest);
       if (old) {
         if (old.conflict) { await db.query('rollback'); return fail(reply,409,'idempotency_conflict'); }

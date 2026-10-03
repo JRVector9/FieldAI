@@ -6,8 +6,9 @@
 # --env-file은 아래 ${...} 치환용이고, 앱 컨테이너는 AP_ENV_FILE(기본 .env.live)을 env_file로 읽는다.
 # 기동 순서: db(healthy) → migrate(1회 성공) → api(/health/ready) → web, worker.
 # 기본 worker는 공급사 자격증명이 없으면 blocked_integration 상태로 대기한다.
-# 아래 profile worker는 자격증명이 없으면 부팅을 거부하므로 준비된 뒤 명시적으로 켠다.
-#   retention: AP_INQUIRY_S3_*(비공개 문의 사진 저장소)와 보존 저널 키 필요 → --profile retention
+# retention-worker는 기본 서비스다. 계정·조직 삭제 실행, 인증 메일 outbox·웹훅 inbox·시도 창·ACK 사건 정리를 맡는다.
+#   보존 저널 키(AP_RETENTION_JOURNAL_SECRET)는 필요하다. AP_INQUIRY_S3_*가 없으면 사진 파일 삭제 단계만
+#   blocked_integration으로 건너뛰고 나머지 정리는 계속한다(사진 원본 정리는 S3 연결 전까지 미완료).
 # 고객 문의 사진은 live에서 S3 호환 저장소만 사용한다. AP_INQUIRY_MEDIA_DIRECTORY는 mock 전용이라 볼륨을 두지 않는다.
 
 name: fieldai-agent
@@ -40,6 +41,19 @@ x-app: &app
   init: true
   restart: unless-stopped
   networks: [agent_live]
+  # worker 기본 healthcheck: `node dist/*.js` 프로세스가 살아 있고 정지(T)·좀비(Z)가 아닌지만 본다(이미지에 pgrep 없음).
+  # 멈춘 처리 루프는 감지하지 못한다. api는 아래에서 /health/ready 검사로 덮어쓴다.
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - >-
+        const fs=require('node:fs');process.exit(fs.readdirSync('/proc').some(p=>{try{const a=fs.readFileSync('/proc/'+p+'/cmdline','utf8').split('\0');return a[0].endsWith('node')&&a[1].startsWith('dist/')&&!/\) [ZT] /.test(fs.readFileSync('/proc/'+p+'/stat','utf8'))}catch{return false}})?0:1)
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 20s
 
 services:
   db:
@@ -148,7 +162,6 @@ services:
   retention-worker:
     <<: *app
     command: ['node', 'dist/retention-purge-worker.js']
-    profiles: [retention]
 
 volumes:
   db_data:

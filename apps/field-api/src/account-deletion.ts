@@ -4,7 +4,8 @@ import type { Pool, PoolClient } from 'pg';
 import { verifyPassword } from 'better-auth/crypto';
 import type { FieldBusinessRuntime } from './business.js';
 import { disconnectSiteDomain } from './custom-domains.js';
-import { MediaPermissionError, type FieldSiteMediaStore } from './site-media.js';
+import type { FieldSiteMediaStore } from './site-media.js';
+import { recordFieldRevocation, type FieldRevocationJournal } from './revocation-journal.js';
 
 // F-O16 조직·계정 삭제(추가). 조직 삭제는 owner 명시 확인 → 14일 유예 → 작업자 실행 순서이며,
 // 문의·예약 원본·청구 원장·감사 기록은 지우지 않고 기존 보존 정책 경로에 맡긴다.
@@ -35,36 +36,43 @@ function view(row: DeletionRow) {
     executedAt: row.executed_at?.toISOString() ?? null, steps, lastError: row.last_error };
 }
 
-// 조직 삭제 전제 조건. 하나라도 남아 있으면 예약도 실행도 하지 않는다.
+// 조직 삭제 전제 조건. ok가 false인 항목이 하나라도 남아 있으면 예약도 실행도 하지 않는다.
 export async function organizationDeletionPreconditions(db: Db, organizationId: string) {
-  const row = (await db.query<{ paid: number; connections: number; reservations: number }>(`select
+  const row = (await db.query<{ paid: number; connections: number; reservations: number; grants: number }>(`select
     (select count(*)::int from field.paid_subscriptions where organization_id=$1 and terminated_at is null) as paid,
     (select count(*)::int from field.ap_connections where organization_id=$1 and status<>'revoked') as connections,
     (select count(*)::int from field.reservations where organization_id=$1
-      and state not in ('completed','canceled','rejected','expired','no_show')) as reservations`,
+      and state not in ('completed','canceled','rejected','expired','no_show')) as reservations,
+    (select count(*)::int from field.oauth_selections where organization_id=$1 and revoked_at is null) as grants`,
   [organizationId])).rows[0]!;
   return [
-    { code: 'paid_subscription_active', count: row.paid },
-    { code: 'connections_active', count: row.connections },
-    { code: 'open_reservations', count: row.reservations },
-  ].map(item => ({ ...item, ok: item.count === 0 }));
+    ...[
+      { code: 'paid_subscription_active', count: row.paid },
+      { code: 'connections_active', count: row.connections },
+      { code: 'open_reservations', count: row.reservations },
+    ].map(item => ({ ...item, ok: item.count === 0 })),
+    // M1: 외부·AP 통합자에게 준 선택(grant)은 예약을 막지 않고 실행 때 회수한다. 화면 안내용으로 건수만 알린다.
+    { code: 'integration_grants_active', count: row.grants, ok: true, revokedOnExecution: true },
+  ];
 }
 
-// 계정 삭제 차단 사유. 삭제되지 않은 조직의 owner·플랫폼 관리자·살아 있는 OAuth 연결은 먼저 정리해야 한다.
+// 계정 삭제 차단 사유. 삭제되지 않은 조직의 owner·플랫폼 관리자·살아 있는 OAuth 연결·본인이 등록한 활성 OAuth client는 먼저 정리해야 한다.
 // 비밀번호가 없는 계정은 현재 세션이 최근 로그인(5분 이내)일 때만 재인증된 것으로 본다.
 export async function accountDeletionBlockers(db: Db, userId: string, sessionId: string | null) {
-  const row = (await db.query<{ owned: boolean; admin: boolean; grants: boolean; password: boolean; recent: boolean }>(`select
+  const row = (await db.query<{ owned: boolean; admin: boolean; grants: boolean; clients: boolean; password: boolean; recent: boolean }>(`select
     exists(select 1 from field.organizations where owner_user_id=$1 and deleted_at is null)
       or exists(select 1 from field.memberships m join field.organizations o on o.id=m.organization_id
         where m.user_id=$1 and m.role='owner' and o.deleted_at is null) as owned,
     exists(select 1 from field.platform_admin_memberships where user_id=$1) as admin,
     exists(select 1 from "oauthRefreshToken" where "userId"=$1 and revoked is null and "expiresAt">now()) as grants,
+    -- Security #6: 등록자가 익명화되면 관리 주체 없는 client가 계속 토큰을 받으므로, 비활성화·이관 전에는 삭제하지 않는다.
+    exists(select 1 from "oauthClient" where "userId"=$1 and coalesce(disabled,false)=false) as clients,
     exists(select 1 from "account" where "userId"=$1 and "providerId"='credential' and password is not null) as password,
     exists(select 1 from "session" where id=$2 and "userId"=$1 and "expiresAt">now()
       and "createdAt">now()-make_interval(mins => $3::int)) as recent`,
   [userId, sessionId, RECENT_SIGN_IN_MINUTES])).rows[0]!;
   const blockers = [row.owned && 'organization_deletion_required', row.admin && 'admin_membership_required_removal',
-    row.grants && 'oauth_grants_active', !row.password && !row.recent && 'reauth_required']
+    row.grants && 'oauth_grants_active', row.clients && 'oauth_clients_active', !row.password && !row.recent && 'reauth_required']
     .filter((code): code is string => typeof code === 'string');
   return { blockers, reauthentication: row.password ? 'password' as const : 'recent_sign_in' as const };
 }
@@ -169,6 +177,8 @@ export function registerFieldAccountDeletionRoutes(app: FastifyInstance, runtime
     const body = object(request.body);
     const ack = object(body?.acknowledgements);
     const rawReason = body?.reason;
+    // 자유 입력에 NUL이 있으면 PG가 거부해 500이 되므로 먼저 400으로 막는다.
+    if (typeof rawReason === 'string' && rawReason.includes('\u0000')) return reply.code(400).send({ error: 'invalid_text' });
     const reason = rawReason === undefined || rawReason === null || rawReason === '' ? null
       : typeof rawReason === 'string' && rawReason.trim().length > 0 && rawReason.trim().length <= 1000 ? rawReason.trim() : undefined;
     if (reason === undefined) return reply.code(400).send({ error: 'invalid_reason' });
@@ -230,6 +240,10 @@ export function registerFieldAccountDeletionRoutes(app: FastifyInstance, runtime
         await db.query('rollback');
         return open ? reply.code(409).send({ error: 'organization_deleted' }) : reply.code(404).send({ error: 'deletion_request_not_found' });
       }
+      // M3: 유예가 끝나 실행이 시작되면(사이트 공개본 삭제·사진 삭제 이관) 되돌릴 수 없으므로 취소하지 않는다.
+      if (object(open.steps)?.executionStarted !== undefined) {
+        await db.query('rollback'); return reply.code(409).send({ error: 'deletion_in_progress' });
+      }
       const canceled = (await db.query<DeletionRow>(
         "update field.organization_deletion_requests set status='canceled',canceled_at=now(),canceled_by=$2 where id=$1 returning *",
         [open.id, member.userId])).rows[0]!;
@@ -278,7 +292,13 @@ export function registerFieldAccountDeletionRoutes(app: FastifyInstance, runtime
         await db.query('rollback'); return reply.code(400).send({ error: 'confirmation_mismatch' });
       }
       const { blockers } = await accountDeletionBlockers(db, userId, session?.userId === userId ? session.id : null);
-      if (blockers.length) { await db.query('rollback'); return reply.code(409).send({ error: blockers[0], blockers }); }
+      if (blockers.length) {
+        await db.query('rollback');
+        // L2: 재인증 부족만 남았으면 조직 삭제와 같은 403 reauth_required로 응답한다(reauth_required는 항상 마지막 사유다).
+        if (blockers[0] === 'reauth_required')
+          return reply.code(403).send({ error: 'reauth_required', recentSignInMinutes: RECENT_SIGN_IN_MINUTES, blockers });
+        return reply.code(409).send({ error: blockers[0], blockers });
+      }
       // better-auth 기본 비밀번호 검증(ctx.password.verify와 같은 scrypt 구현)으로 재입력을 확인한다.
       // 비밀번호가 없는 계정은 위 차단 검사의 최근 로그인 세션으로 재인증을 갈음한다.
       const hash = (await db.query<{ password: string }>(
@@ -313,9 +333,13 @@ export function registerFieldAccountDeletionRoutes(app: FastifyInstance, runtime
   });
 }
 
-// 유예가 끝난 조직 삭제 요청 하나를 실행한다. DB 변경은 한 트랜잭션이며, 사이트 사진 파일은 commit 전에 지우고
-// 부재를 확인한다. 실패하면 DB는 그대로 두고 재시도하며 파일 삭제는 반복해도 같은 결과다.
-export async function runOrganizationDeletionOnce(runtime: { pool: Pool; siteMedia?: FieldSiteMediaStore }): Promise<'empty' | 'executed' | 'blocked' | 'retry'> {
+// 유예가 끝난 조직 삭제 요청 하나를 진행한다. 저장소 I/O는 하지 않는다(M3: 잠금을 잡은 채 S3를 기다리지 않는다).
+// 1) 사진이 남아 있으면 사이트 공개본·초안을 지우고 남은 사진을 2단계 삭제 경로(state='deleting', site-media.ts
+//    runSiteAssetDeletionOnce)로 넘긴 뒤 5분 뒤 다시 확인한다. 이 대기는 실행 실패로 세지 않는다.
+//    이때부터 실행 중(steps.executionStarted)이라 owner 취소는 막힌다.
+// 2) 사진이 0건이면 통합 grant 회수·사업 정보 비움·구성원 제거 등 나머지 DB 정리를 한 트랜잭션으로 끝낸다.
+export async function runOrganizationDeletionOnce(runtime: { pool: Pool; siteMedia?: FieldSiteMediaStore;
+  revocationJournal?: Pick<FieldRevocationJournal, 'append'> }): Promise<'empty' | 'executed' | 'blocked' | 'retry'> {
   const db = await runtime.pool.connect();
   let requestId: string | undefined;
   try {
@@ -326,29 +350,56 @@ export async function runOrganizationDeletionOnce(runtime: { pool: Pool; siteMed
     if (!row) { await db.query('commit'); return 'empty'; }
     requestId = row.id;
     const organizationId = row.organization_id;
+    // 사진 업로드(sites.ts)와 같은 조직별 잠금을 조직 행보다 먼저 잡는다(업로드: 이 잠금 → 조직 KEY SHARE와 같은 순서).
+    // 사진 수를 센 뒤 commit까지 새 사진 행이 생기지 않는다.
+    await db.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [`field-site-assets:${organizationId}`]);
     await db.query('select id from field.organizations where id=$1 for update', [organizationId]);
-    const failed = (await organizationDeletionPreconditions(db, organizationId)).filter(item => !item.ok).map(item => item.code);
-    const assets = (await db.query<{ id: string; object_key: string }>(
-      'select id,object_key from field.site_assets where organization_id=$1 order by id for update', [organizationId])).rows;
-    if (assets.length && !runtime.siteMedia) failed.push('blocked_integration');
-    if (failed.length) {
+    const failed = new Set((await organizationDeletionPreconditions(db, organizationId)).filter(item => !item.ok).map(item => item.code));
+    const assets = (await db.query<{ total: number; stopped: number }>(`select count(*)::int as total,
+      count(*) filter (where state='deleting' and deletion_next_attempt_at='infinity'::timestamptz)::int as stopped
+      from field.site_assets where organization_id=$1`, [organizationId])).rows[0]!;
+    if (assets.total && !runtime.siteMedia) failed.add('blocked_integration');
+    // 통합 grant 회수는 복원 뒤 재적용을 위해 회수 원장에 먼저 남긴다. 원장이 없으면 실행하지 않는다.
+    const grants = (await db.query('select 1 from field.oauth_selections where organization_id=$1 and revoked_at is null limit 1',
+      [organizationId])).rowCount;
+    if (grants && !runtime.revocationJournal) failed.add('blocked_integration');
+    if (failed.size) {
       await db.query(`update field.organization_deletion_requests set last_error=$2,attempt_count=attempt_count+1,
-        next_attempt_at=clock_timestamp()+interval '1 hour' where id=$1`, [row.id, failed.join(',')]);
+        next_attempt_at=clock_timestamp()+interval '1 hour' where id=$1`, [row.id, [...failed].join(',')]);
+      await db.query('commit'); return 'blocked';
+    }
+    const count = async (sql: string, params: unknown[]) => (await db.query(sql, params)).rowCount ?? 0;
+    const sites = 'select id from field.sites where organization_id=$1';
+    const started = object(object(row.steps)?.executionStarted);
+    const startedCount = (key: string) => typeof started?.[key] === 'number' ? started[key] as number : 0;
+    if (assets.total) {
+      // 공개본이 사진을 FK로 참조하므로 공개본·초안을 먼저 지운다(사이트는 예약 때부터 비공개다).
+      const releases = await count(`delete from field.site_releases where site_id in (${sites})`, [organizationId]);
+      const drafts = await count(`delete from field.site_drafts where site_id in (${sites})`, [organizationId]);
+      // 처음 넘길 때는 이미 멈춘 사진 삭제도 다시 시작한다. 그 뒤 다시 멈추면 운영자 재개(/v1/admin/site-asset-deletions)로 푼다.
+      const queued = await count(`update field.site_assets set state='deleting',
+          deletion_requested_at=coalesce(deletion_requested_at,clock_timestamp()),deletion_next_attempt_at=clock_timestamp(),
+          deletion_attempts=0,deletion_error=null,deletion_stopped_at=null
+        where organization_id=$1 and (state='ready' or ($2::boolean and deletion_next_attempt_at='infinity'::timestamptz))`,
+      [organizationId, !started]);
+      const stopped = started ? assets.stopped : 0;
+      await db.query(`update field.organization_deletion_requests set attempt_count=attempt_count+1,last_error=$2,
+          next_attempt_at=clock_timestamp()+interval '5 minutes',
+          steps=steps||jsonb_build_object('executionStarted',jsonb_build_object(
+            'at',coalesce(steps->'executionStarted'->'at',to_jsonb(clock_timestamp())),
+            'siteReleasesDeleted',$3::int,'siteDraftsDeleted',$4::int,'siteAssetsQueued',$5::int))
+        where id=$1`, [row.id, stopped ? 'asset_deletion_stopped' : 'assets_pending', startedCount('siteReleasesDeleted') + releases,
+        startedCount('siteDraftsDeleted') + drafts, startedCount('siteAssetsQueued') + queued]);
       await db.query('commit'); return 'blocked';
     }
     const at = (await db.query<{ now: Date }>('select clock_timestamp() as now')).rows[0]!.now;
-    const count = async (sql: string, params: unknown[]) => (await db.query(sql, params)).rowCount ?? 0;
     const members = (await db.query<{ user_id: string }>('select user_id from field.memberships where organization_id=$1',
       [organizationId])).rows.map(member => member.user_id);
-    const sites = 'select id from field.sites where organization_id=$1';
-    const siteReleasesDeleted = await count(`delete from field.site_releases where site_id in (${sites})`, [organizationId]);
-    const siteDraftsDeleted = await count(`delete from field.site_drafts where site_id in (${sites})`, [organizationId]);
-    for (const asset of assets) {
-      await runtime.siteMedia!.delete(asset.object_key);
-      const present = runtime.siteMedia!.exists ? await runtime.siteMedia!.exists(asset.object_key)
-        : await runtime.siteMedia!.get(asset.object_key) !== null;
-      if (present) throw new Error('file_delete_unconfirmed');
-    }
+    const siteReleasesDeleted = startedCount('siteReleasesDeleted')
+      + await count(`delete from field.site_releases where site_id in (${sites})`, [organizationId]);
+    const siteDraftsDeleted = startedCount('siteDraftsDeleted')
+      + await count(`delete from field.site_drafts where site_id in (${sites})`, [organizationId]);
+    const integrationGrantsRevoked = await revokeIntegrationGrants(db, runtime.revocationJournal, organizationId);
     // 조직을 먼저 삭제됨으로 표시한다(같은 트랜잭션). owner 알림 연락처 정리 guard가 이 표시를 조건으로 쓴다.
     await db.query('update field.organizations set deleted_at=$2 where id=$1 and deleted_at is null', [organizationId, at]);
     const blankCatalog = `jsonb_build_object('businessName',coalesce(content->>'businessName',''),'industry','','introduction','',
@@ -357,7 +408,9 @@ export async function runOrganizationDeletionOnce(runtime: { pool: Pool; siteMed
       at: at.toISOString(),
       siteReleasesDeleted,
       siteDraftsDeleted,
-      siteAssetsDeleted: await count('delete from field.site_assets where organization_id=$1', [organizationId]),
+      // 사진 행·저장소 객체는 2단계 삭제 경로가 지웠다. 이관한 사진 수를 남긴다.
+      siteAssetsDeleted: startedCount('siteAssetsQueued'),
+      integrationGrantsRevoked,
       // AI 사용량 원장이 작업 행을 참조하므로 행은 두고 owner 입력 내용만 비운다.
       generationJobsCleared: await count(`update field.site_generation_jobs set prompt=$2,catalog_snapshot='{}'::jsonb,proposal=null,updated_at=now()
         where organization_id=$1`, [organizationId, DELETED_TEXT]),
@@ -387,25 +440,42 @@ export async function runOrganizationDeletionOnce(runtime: { pool: Pool; siteMed
       last_error=null,attempt_count=attempt_count+1 where id=$1`, [row.id, at, JSON.stringify(executed)]);
     await db.query('commit');
     return 'executed';
-  } catch (error) {
+  } catch {
     await db.query('rollback');
     if (!requestId) return 'retry';
-    // 저장소 권한 부족(media_permission)은 재시도로 풀리지 않으므로 즉시 멈추고, 그 밖의 실패는 상한까지만 재시도한다.
-    // 멈춘 요청은 status='scheduled'를 유지해 공개 차단·도메인 차단을 계속하며 운영자가 원인 해결 뒤 next_attempt_at을 되돌린다.
-    const code = error instanceof MediaPermissionError ? 'media_permission' : 'execution_failed';
-    // 상한은 전제 조건 대기(blocked)와 섞이지 않도록 실행 실패 횟수(steps.executionFailures)만 센다.
+    // 실행 실패는 상한까지만 재시도한다. 멈춘 요청은 status='scheduled'를 유지해 공개 차단·도메인 차단을 계속하며
+    // 운영자가 원인 해결 뒤 다시 실행한다(/v1/admin/organization-deletions/:id/resume).
+    // 상한은 전제 조건·사진 삭제 대기(blocked)와 섞이지 않도록 실행 실패 횟수(steps.executionFailures)만 센다.
     const stopped = (await runtime.pool.query<{ stopped: boolean }>(`with failure as (
         select id,coalesce((steps->>'executionFailures')::int,0)+1 as failures from field.organization_deletion_requests
         where id=$1 and status='scheduled')
       update field.organization_deletion_requests r set attempt_count=attempt_count+1,
         steps=steps||jsonb_build_object('executionFailures',f.failures),
-        last_error=case when $2='media_permission' or f.failures>=$3 then $2||',execution_attempts_stopped' else $2 end,
-        next_attempt_at=case when $2='media_permission' or f.failures>=$3 then 'infinity'::timestamptz
-          else clock_timestamp()+interval '5 minutes' end
+        last_error=case when f.failures>=$2 then 'execution_failed,execution_attempts_stopped' else 'execution_failed' end,
+        next_attempt_at=case when f.failures>=$2 then 'infinity'::timestamptz else clock_timestamp()+interval '5 minutes' end
       from failure f where r.id=f.id returning r.next_attempt_at='infinity'::timestamptz as stopped`,
-    [requestId, code, MAX_EXECUTION_ATTEMPTS])).rows[0]?.stopped;
+    [requestId, MAX_EXECUTION_ATTEMPTS])).rows[0]?.stopped;
     return stopped ? 'blocked' : 'retry';
   } finally { db.release(); }
+}
+
+// M1: 조직이 외부·AP 통합자에게 준 선택(grant)을 회수한다. owner 해제 경로(integrator-routes.ts)와 같이 회수 원장에 먼저 남긴 뒤
+// 선택·access/refresh 토큰·동의를 같은 트랜잭션에서 지운다. 이미 회수된 선택에 남은 토큰도 함께 회수한다.
+async function revokeIntegrationGrants(db: PoolClient, journal: Pick<FieldRevocationJournal, 'append'> | undefined, organizationId: string) {
+  const selections = (await db.query<{ id: string; revoked: boolean }>(
+    'select id,revoked_at is not null as revoked from field.oauth_selections where organization_id=$1 order by id for update',
+    [organizationId])).rows;
+  if (!selections.length) return { selections: 0, accessTokens: 0, refreshTokens: 0, consents: 0 };
+  for (const selection of selections) if (!selection.revoked) await recordFieldRevocation(journal, { targetKind: 'selection',
+    targetId: selection.id, organizationId, selectionId: selection.id, source: 'owner', revocationId: null });
+  const ids = selections.map(selection => selection.id);
+  const count = async (sql: string, params: unknown[]) => (await db.query(sql, params)).rowCount ?? 0;
+  return {
+    selections: await count('update field.oauth_selections set revoked_at=now() where organization_id=$1 and revoked_at is null', [organizationId]),
+    accessTokens: await count('update "oauthAccessToken" set revoked=now() where "referenceId"=any($1::text[]) and revoked is null', [ids]),
+    refreshTokens: await count('update "oauthRefreshToken" set revoked=now() where "referenceId"=any($1::text[]) and revoked is null', [ids]),
+    consents: await count('delete from "oauthConsent" where "referenceId"=any($1::text[])', [ids]),
+  };
 }
 
 async function disconnectDomains(db: PoolClient, organizationId: string) {

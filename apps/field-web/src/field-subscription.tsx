@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Brand } from "@fieldai/ui";
 import { FieldBillingSettings } from "./billing-settings";
+import { DELETION_SCHEDULED_OWNER_MESSAGE, isDeletionScheduledAccess, isDeletionScheduledError } from "./deletion-scheduled-copy";
 import { trialPolicyCopy, type TrialPolicy } from "./trial-policy-copy";
 
 type Subscription = {
@@ -15,6 +16,7 @@ type Subscription = {
   trial: { id: string; consentVersion: string; startedAt: string; endsAt: string;
     cancelRequestedAt: string | null } | null;
   paidCheckout: { state: "blocked_integration" };
+  access?: { mode: string; reason?: string };
 };
 
 const date = (value: string) => new Date(value).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
@@ -48,7 +50,10 @@ export function FieldSubscription() {
         body: JSON.stringify(path === "trial" ? { consentVersion: data?.policy.consentVersion, termsAccepted: consent } : {}),
       });
       if (!response.ok) {
+        const error = await response.json().catch(() => null) as unknown;
         setData(null);
+        // 삭제 예약 중 체험 시작 거절(403/409 deletion_scheduled)은 원인과 취소 위치를 안내한다
+        if (isDeletionScheduledError(response.status, error)) { setNotice(DELETION_SCHEDULED_OWNER_MESSAGE); return; }
         setNotice(`요청이 거절됐습니다 (${response.status}). 상태를 새로고침해 확인해 주세요.`);
         return;
       }
@@ -89,12 +94,14 @@ export function FieldSubscription() {
   return <div className="site-shell"><header className="site-header"><a href="/"><Brand product="Field" /></a><nav aria-label="작업 메뉴"><a href="/workspace">사업 운영</a><a href="/workspace/usage">사용량</a><a href="/workspace/account">계정·조직 삭제 (추가)</a></nav></header>
     <main className="feature-section field-account-page"><div className="feature-heading"><p className="eyebrow">Field · 체험과 구독</p><h1>Field 이용 상태</h1><p>Field 체험과 유료 구독은 AP와 별도로 관리합니다.</p></div>
       <button className="field-account-button" type="button" disabled={busy} onClick={() => void load()}>상태 새로고침</button>
-      {notice && <p role="status" className="state-message">{notice} {notice.includes("로그인") || notice.includes("조직") ? <a href="/workspace">사업 정보 화면 열기</a> : null}</p>}
+      {notice && <p role="status" className="state-message">{notice} {notice === DELETION_SCHEDULED_OWNER_MESSAGE ? <a href="/workspace/account">계정·조직 삭제 (추가)</a> : notice.includes("로그인") || notice.includes("조직") ? <a href="/workspace">사업 정보 화면 열기</a> : null}</p>}
+      {data && isDeletionScheduledAccess(data.access) && <p role="status" className="state-message">{DELETION_SCHEDULED_OWNER_MESSAGE} <a href="/workspace/account">계정·조직 삭제 (추가)</a></p>}
       {data && <FieldBillingSettings organizationId={data.organizationId} canManage={data.canManage} />}
       {data && <div className="special-grid"><section className="special-panel"><h2>카드 없는 체험</h2>
         {data.policy.source === "unavailable" && <p>{trialPolicyCopy(data.policy).offer}</p>}
-        {data.policy.source !== "unavailable" && data.state === "not_started" && <><p>{trialPolicyCopy(data.policy).offer}</p>
+        {data.policy.source !== "unavailable" && data.state === "not_started" && !isDeletionScheduledAccess(data.access) && <><p>{trialPolicyCopy(data.policy).offer}</p>
           {data.canManage ? <><label className="field-account-consent"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /> {trialPolicyCopy(data.policy).consent}</label><p><button className="field-account-button" type="button" disabled={busy || !consent} onClick={() => void post("trial")}>Field 체험 시작</button></p>{!consent && <p>시작하려면 위 조건에 동의해 주세요.</p>}</> : <p>시작 권한은 조직 owner에게 있습니다.</p>}</>}
+        {data.policy.source !== "unavailable" && data.state === "not_started" && isDeletionScheduledAccess(data.access) && <p>삭제 예정 사업장이라 체험을 시작할 수 없습니다.</p>}
         {data.trial && <><p>시작: {date(data.trial.startedAt)}</p><p>종료: {date(data.trial.endsAt)}</p>
           <p>상태: {data.state === "trialing" ? "체험 중" : "체험 종료"}</p>
           {data.state === "trial_ended" && <p>새 사이트 제작·문의·예약 요청은 중지됩니다. 기존 문의와 예약의 열람·답변·처리, 기록 내보내기 및 연결 해제는 계속할 수 있습니다.</p>}

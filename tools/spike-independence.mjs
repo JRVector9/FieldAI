@@ -24,6 +24,7 @@ const child = spawn(process.execPath, ['dist/server.js'], {
   cwd: resolve(`apps/${product}-api`),
   env: {
     PATH: process.env.PATH,
+    [`${upper}_PROFILE`]: 'mock',
     [`${upper}_DATABASE_URL`]: databaseUrl,
     [`${upper}_AUTH_SECRET`]: process.env[`${upper}_AUTH_SECRET`],
     [`${upper}_AUTH_BASE_URL`]: `http://127.0.0.1:${port}`,

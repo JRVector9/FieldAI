@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { deletionMessage, organizationChoices } from "../src/field-account";
-import { deletionResumeBlockReason, stoppedDeletionReason } from "../src/field-admin-sections";
+import { deletionResumeBlockReason, stoppedAssetDeletionReason, stoppedDeletionReason } from "../src/field-admin-sections";
 
 test("Field deletion blockers map to actionable Korean guidance and unknown codes stay visible", () => {
   assert.match(deletionMessage("open_reservations"), /예약/);
@@ -38,4 +38,20 @@ test("stopped deletion resume button names why it is disabled", () => {
   assert.match(deletionResumeBlockReason({ role: "operator", reason: "짧음", busy: false })!, /10자 이상/);
   assert.match(deletionResumeBlockReason({ role: "operator", reason: "충분히 긴 다시 실행 사유입니다", busy: true })!, /진행 중/);
   assert.equal(deletionResumeBlockReason({ role: "operator", reason: "  충분히 긴 다시 실행 사유입니다  ", busy: false }), null);
+});
+
+// 실행 대기 사유: 상세 코드가 붙은 execution_failed도 앞부분으로 조회한다(원시 코드 노출 금지).
+test("Field execution_failed with a detail code maps by prefix to a retry message", () => {
+  assert.equal(deletionMessage("execution_failed:PAN01"), "실행 중 오류가 나 다시 시도합니다 (코드 PAN01).");
+  assert.match(deletionMessage("execution_failed"), /다시 시도하고 있습니다/);
+  for (const code of ["organization_not_found", "invalid_organization_id", "account_not_found"])
+    assert.doesNotMatch(deletionMessage(code), /요청이 거절됐습니다|_/);
+});
+
+// 사진 삭제 복구(추가): 멈춘 사진 삭제 사유를 운영자용 한국어로 보이고, 모르는 코드는 숨기지 않는다.
+test("Field stopped site photo deletion reasons are shown in Korean", () => {
+  assert.equal(stoppedAssetDeletionReason("media_unavailable,attempts_stopped"), "사진 저장소 응답 실패 · 자동 재시도 중지");
+  assert.equal(stoppedAssetDeletionReason("media_permission"), "사진 저장소 권한 부족");
+  assert.equal(stoppedAssetDeletionReason("something_new"), "something_new");
+  assert.equal(stoppedAssetDeletionReason(null), "사유 기록 없음");
 });

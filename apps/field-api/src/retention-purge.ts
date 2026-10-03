@@ -31,7 +31,7 @@ export async function removeRetainedPayload(db: PoolClient, kind: RetentionKind,
 }
 
 // 짧은 보존 기간 정리(보존 작업자 주기 단계). 서명 없는 토스 웹훅 힌트·처리 작업자가 없는 AP recorded 사건은 30일,
-// IP·비밀번호 시도 창은 15분 창이 끝난 뒤 지운다. 원장·업무 원본은 건드리지 않는다.
+// IP·비밀번호·공개 접수(IP·전화번호 HMAC) 시도 창은 15분 창이 끝난 뒤 지운다. 원장·업무 원본은 건드리지 않는다.
 export async function purgeExpiredInboundRecords(pool: Pool) {
   const count = async (sql: string) => (await pool.query(sql)).rowCount ?? 0;
   return {
@@ -39,11 +39,14 @@ export async function purgeExpiredInboundRecords(pool: Pool) {
     billingWebhookIpWindows: await count("delete from field.billing_webhook_ip_windows where updated_at < now() - interval '15 minutes'"),
     passwordWindows: await count("delete from field.account_deletion_password_windows where updated_at < now() - interval '15 minutes'"),
     apWebhookInbox: await count("delete from field.ap_webhook_inbox where state = 'recorded' and received_at < now() - interval '30 days'"),
+    // M2: 공개 접수·고객 메시지 IP 창(000075)과 전화번호 창(000039)도 창이 끝나면 지운다(가명 처리된 IP·번호가 쌓이지 않게).
+    publicSubmissionIpWindows: await count("delete from field.public_submission_ip_windows where updated_at < now() - interval '15 minutes'"),
+    publicSubmissionWindows: await count("delete from field.public_submission_windows where updated_at < now() - interval '15 minutes'"),
   };
 }
 
 // 인증 메일 outbox 보존(추가). 보존 작업자의 짧은 보존 정리 주기(10분)에 함께 실행한다.
-// - 7일이 지난 발송 완료(sent) 인증 메일(verify_email·reset_password)은 수신 주소를 고정 익명 주소로 바꾼다.
+// - 7일이 지난 발송 완료(sent)·중복 억제(suppressed_duplicate) 인증 메일(verify_email·reset_password)은 수신 주소를 고정 익명 주소로 바꾼다.
 //   발송 결과·시각·목적은 감사용으로 남긴다.
 // - 30일이 지난 행은 지운다. 단 blocked_integration·failed 행은 공급사 장애 확인을 위해 90일까지 둔다.
 // - 한 번에 각 1000행씩만 처리하고 남은 행은 다음 주기에 이어서 처리한다.
@@ -57,9 +60,37 @@ export async function purgeFieldEmailOutbox(pool: Pool) {
        order by created_at limit 1000)`)).rowCount ?? 0;
   const anonymized = (await pool.query(
     `update field.email_outbox set "to"=$1 where id in (select id from field.email_outbox
-       where state='sent' and purpose in ('verify_email','reset_password') and created_at < now() - interval '7 days'
+       where state in ('sent','suppressed_duplicate') and purpose in ('verify_email','reset_password') and created_at < now() - interval '7 days'
          and "to"<>$1 order by created_at limit 1000)`, [FIELD_EMAIL_OUTBOX_ANONYMIZED_TO])).rowCount ?? 0;
   return { emailOutboxAnonymized: anonymized, emailOutboxDeleted: deleted };
+}
+
+// Security #2: 이메일 미인증·비밀번호(credential) 계정만 있고 조직·관리자 자격·OAuth client가 없는 사용자를 48시간 뒤 지운다.
+// 남의 주소로 가입만 해 두어 실제 주인의 카카오 가입을 막는 선점을 풀기 위함이다. 비mock 전용(작업자가 판단)이며,
+// 업무·감사 원장이 FK로 참조하는 사용자는 삭제가 거부되므로(23503) 건너뛰고 남긴다. 한 번에 100명까지 처리한다.
+export async function purgeUnverifiedCredentialUsers(pool: Pool) {
+  const candidates = (await pool.query<{ id: string }>(`select u.id from "user" u
+    where u."emailVerified" = false and u."createdAt" < now() - interval '48 hours'
+      and exists(select 1 from "account" a where a."userId" = u.id and a."providerId" = 'credential')
+      and not exists(select 1 from "account" a where a."userId" = u.id and a."providerId" <> 'credential')
+      and not exists(select 1 from field.memberships m where m.user_id = u.id)
+      and not exists(select 1 from field.organizations o where o.owner_user_id = u.id)
+      and not exists(select 1 from field.platform_admin_memberships p where p.user_id = u.id)
+      and not exists(select 1 from "oauthClient" c where c."userId" = u.id)
+    order by u."createdAt" limit 100`)).rows;
+  let deleted = 0, retained = 0;
+  for (const { id } of candidates) {
+    // 조회와 삭제 사이에 인증·조직 생성이 끝났으면 같은 조건을 다시 확인해 지우지 않는다.
+    try {
+      deleted += (await pool.query(`delete from "user" u where u.id = $1 and u."emailVerified" = false
+        and not exists(select 1 from field.memberships m where m.user_id = u.id)
+        and not exists(select 1 from "account" a where a."userId" = u.id and a."providerId" <> 'credential')`, [id])).rowCount ?? 0;
+    } catch (error) {
+      if ((error as { code?: string }).code !== '23503') throw error;
+      retained += 1;
+    }
+  }
+  return { unverifiedUsersDeleted: deleted, unverifiedUsersRetained: retained };
 }
 
 export async function runFieldRetentionJobOnce(runtime: { pool: Pool; media?: FieldSiteMediaStore; journal?: Pick<FieldRetentionJournal, 'read' | 'append'> }): Promise<'empty' | 'completed' | 'blocked' | 'retry' | 'receipt_pending'> {

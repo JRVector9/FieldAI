@@ -1,3 +1,4 @@
+import { DELETION_SCHEDULED_OWNER_MESSAGE } from './deletion-scheduled-copy';
 export const billingProduct = 'agent' as const;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const object = (v: unknown): Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
@@ -166,7 +167,7 @@ export function billingErrorNotice(error:unknown):string {
     billing_sdk_unavailable:'카드 등록창을 불러오지 못했습니다. 기존 인증 상태를 확인한 뒤 같은 요청으로 다시 열어 주세요.',
     owner_membership_required:'현재 조직 owner만 요청할 수 있습니다.',refund_amount_exceeded:'결제 금액과 진행 중인 환불을 확인해 주세요.',
     refund_in_progress:'결과를 확인 중인 환불이 있습니다. 기존 결과가 확정된 뒤 다시 요청해 주세요.',blocked_integration:'공급사 또는 보안 설정이 연결되지 않았습니다. 기존 기록은 유지됩니다.',
-    idempotency_conflict:'원래 요청과 내용이 다릅니다. 기존 요청 상태를 확인해 주세요.'} as Record<string,string>)[code]
+    idempotency_conflict:'원래 요청과 내용이 다릅니다. 기존 요청 상태를 확인해 주세요.',deletion_scheduled:DELETION_SCHEDULED_OWNER_MESSAGE} as Record<string,string>)[code]
     ??'요청 결과를 확인하지 못했습니다. 새 요청을 만들지 않고 기존 상태를 다시 확인해 주세요.';
 }
 export const checkoutStorageKey = 'agent:billing-checkout-attempt:v1';

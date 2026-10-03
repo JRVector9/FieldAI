@@ -11,6 +11,7 @@ import { agentRevocationJournalFromEnvironment } from './revocation-journal.js';
 import { assertLifecycleServing, lifecycleJournalFromEnvironment } from './oauth-lifecycle-journal.js';
 import { fieldConnectorFromEnvironment } from './field-connector.js';
 import { assertProductionProfile } from './production-profile.js';
+import { createGracefulShutdown } from './shutdown.js';
 
 assertProductionProfile();
 
@@ -55,8 +56,12 @@ try {
   process.exitCode = 1;
 }
 
+// 종료 순서는 Field와 같다: 앱을 먼저 닫아 처리 중 요청을 마친 뒤 풀을 닫고, 반복 신호는 한 번만, 최대 10초 안에 끝낸다(추가)
+const shutdown = createGracefulShutdown({
+  closeApp: () => app.close(),
+  closePools: [() => pool.end(), () => authPool.end()],
+  onError: (error) => app.log.error(error),
+});
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, () => {
-    void Promise.all([app.close(), pool.end(), authPool.end()]).then(() => process.exit(0));
-  });
+  process.on(signal, () => { void shutdown(); });
 }

@@ -55,6 +55,9 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
   const revokeSignatures: { version: string | null; valid: boolean }[] = [];
   let factsCalls = 0;
   let refreshFails = false;
+  // refresh 응답을 붙잡아 두는 관문. 갱신 중에 다른 요청이 같은 refresh token을 다시 쓰지 않는지(임대 CAS) 확인한다
+  let refreshGate: Promise<void> | null = null;
+  let refreshEntered: (() => void) | null = null;
   let wrongFactsOrganization = false;
   let factsUnavailable = false;
   let fieldProbeUnavailable = false;
@@ -88,6 +91,8 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
       tokenCalls++;
       if (new URLSearchParams(String(init?.body)).get('grant_type') === 'refresh_token') {
         if (refreshFails) return Response.json({ error: 'invalid_grant' }, { status: 400 });
+        refreshEntered?.();
+        if (refreshGate) await refreshGate;
         assert.equal(new URLSearchParams(String(init?.body)).get('refresh_token'),
           'field-refresh-synthetic-secret');
         return Response.json({ access_token: 'field-access-rotated-secret',
@@ -755,10 +760,25 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
       [fieldConnectionId]);
     const beforeRotation = await pool.query<{ refresh_token_cipher: Buffer }>(
       'select refresh_token_cipher from ap.field_connections where id = $1', [fieldConnectionId]);
-    // 동시에 만료 토큰을 확인해도 refresh token은 한 번만 사용한다(재사용 시 Field가 토큰 계열을 무효화함)
-    const [rotated, concurrentRotation] = await Promise.all([
+    // 동시에 만료 토큰을 확인해도 refresh token은 한 번만 사용한다(재사용 시 Field가 토큰 계열을 무효화함).
+    // 첫 갱신 응답을 붙잡은 동안 임대가 잡혀 있고, 두 번째 요청은 refresh를 다시 부르지 않고 기다린다
+    let releaseRefresh!: () => void;
+    refreshGate = new Promise<void>(resolveGate => { releaseRefresh = resolveGate; });
+    const refreshStarted = new Promise<void>(resolveStarted => { refreshEntered = resolveStarted; });
+    const tokenCallsBeforeRotation = tokenCalls;
+    const rotating = Promise.all([
       app.inject({ url: factsPath, headers: { cookie: owner.cookie } }),
       app.inject({ url: factsPath, headers: { cookie: owner.cookie } })]);
+    await refreshStarted;
+    await new Promise(resolveWait => setTimeout(resolveWait, 600));
+    assert.equal(tokenCalls, tokenCallsBeforeRotation + 1, 'only one request may spend the refresh token');
+    assert.ok((await pool.query<{ lease: Date | null }>('select token_refresh_lease_until as lease from ap.field_connections where id = $1',
+      [fieldConnectionId])).rows[0]?.lease, 'refresh lease is held during the Field call');
+    releaseRefresh();
+    refreshGate = null; refreshEntered = null;
+    const [rotated, concurrentRotation] = await rotating;
+    assert.equal((await pool.query<{ lease: Date | null }>('select token_refresh_lease_until as lease from ap.field_connections where id = $1',
+      [fieldConnectionId])).rows[0]?.lease, null, 'lease is cleared after the rotated token is saved');
     assert.equal(rotated.statusCode, 200, rotated.body);
     assert.equal(concurrentRotation.statusCode, 200, concurrentRotation.body);
     assert.equal(tokenCalls, 2);

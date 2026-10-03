@@ -8,3 +8,5 @@ create table field.public_submission_ip_windows (
   primary key (organization_id, subject_hash)
 );
 create index field_public_submission_ip_windows_cleanup_idx on field.public_submission_ip_windows(updated_at);
+-- 롤백(가역, 15분 창만 사라짐): drop table field.public_submission_ip_windows;
+--   공개 접수·고객 메시지 IP 한도 코드(public-submission-limit.ts consumeIpWindow)를 먼저 되돌린다.

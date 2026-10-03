@@ -6,6 +6,7 @@ import { SiteTemplateCards } from "./site-editor-design";
 import { requestJson, type BookingPolicy, type Catalog } from "./field-api";
 import { SiteRenderer, type SiteDraft, type SitePage, type SiteSection } from "./field-site";
 import { isSiteFont, siteFonts, type SiteFont } from './site-fonts';
+import { DELETION_SCHEDULED_OWNER_MESSAGE, isDeletionScheduledError } from "./deletion-scheduled-copy";
 import { HEIC_UNSUPPORTED_MESSAGE, IMAGE_UPLOAD_ACCEPT, unsupportedImageMessage } from "./image-upload-format";
 
 type Step = "business" | "design" | "pages" | "contact" | "publish";
@@ -199,6 +200,10 @@ export function SiteEditor() {
   const [conflictDraft, setConflictDraft] = useState<SiteDraft | null>(null);
   const [online, setOnline] = useState(true);
   const [status, setStatus] = useState("");
+  // 사진 삭제 확인창 뒤 눌렀던 버튼이 비활성화되면 포커스가 body로 빠지므로 결과 문구로 옮긴다
+  const statusRef = useRef<HTMLParagraphElement>(null);
+  const [statusFocusRequest, setStatusFocusRequest] = useState(0);
+  useEffect(() => { if (statusFocusRequest) statusRef.current?.focus(); }, [statusFocusRequest]);
   const editSequence = useRef(0);
   const saveInFlight = useRef(false);
   const [activePageId, setActivePageId] = useState<string | null>(null);
@@ -422,10 +427,11 @@ export function SiteEditor() {
         await refreshAssets();
         setStatus("현재 초안이나 공개 버전 기록에서 쓰는 사진이라 삭제하지 않았습니다.");
       } else if (result.status === 404) setStatus("조직 소유자만 사진을 삭제할 수 있습니다.");
+      else if (result.status === 400 && error === "invalid_organization_id") setStatus("사업장 정보를 확인하지 못했습니다. 화면을 새로고침한 뒤 다시 시도해 주세요.");
       else if (result.status === 503) setStatus("사진 저장소가 연결되지 않아 삭제를 요청하지 못했습니다. 사진은 그대로 있습니다.");
       else setStatus(`사진 삭제를 요청하지 못했습니다 (${result.status}).`);
     } catch { setStatus("사진 삭제 요청이 전달되지 않았습니다. 목록을 다시 불러와 상태를 확인해 주세요."); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setStatusFocusRequest(count => count + 1); }
   }
   const save = useCallback(async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
@@ -542,7 +548,8 @@ export function SiteEditor() {
         setReleases((history.data as { releases: Release[] }).releases);
         void refreshAssets();
         setStatus(`사이트 ${site.revision}번이 공개되었습니다. 카탈로그 ${(result.data as { catalogRevision: number }).catalogRevision}번을 사용합니다.`);
-      } else if (result.status === 409) setStatus(sitePublishConflictMessage(result.data));
+      } else if (isDeletionScheduledError(result.status, result.data)) setStatus(DELETION_SCHEDULED_OWNER_MESSAGE);
+      else if (result.status === 409) setStatus(sitePublishConflictMessage(result.data));
       else setStatus(`공개에 실패했습니다 (${result.status}).`);
     } catch {
       setLoadState("failed");
@@ -612,7 +619,7 @@ export function SiteEditor() {
     window.location.assign(href);
   }
   const currentPage = site?.pages.find(page => page.id === activePageId) ?? site?.pages[0];
-  return <SiteEditorFrame step={step} mobileView={mobileView} navigation={loadState === "ready" && site && !noSite ? <nav className="state-switch" aria-label="사이트 제작 단계">{steps.map((item, index) => <button key={item.id} type="button" aria-current={step === item.id ? "step" : undefined} onClick={() => setStep(item.id)}>{step === "pages" ? item.label : <><b aria-hidden="true">{index + 1}</b><span>{item.label.slice(2)}</span></>}</button>)}</nav> : undefined}><div className="feature-heading"><p className="eyebrow">STEP {String(steps.findIndex(item => item.id === step) + 1).padStart(2, "0")} / 05</p><h1>{step === "design" ? "어떤 모습으로 시작할까요?" : step === "business" ? "어떤 일을 하고 계신가요?" : step === "contact" ? "고객과 어떻게 연결할까요?" : step === "publish" ? "고객을 맞이할 준비가 됐어요." : "내 사이트 편집"}</h1><p>초안 저장, 내용 확인, 실제 공개를 순서대로 진행합니다.</p></div>{status && <p role="status" className="state-message">{status}</p>}{loadState === "loading" && <p role="status">사이트 상태를 불러오는 중입니다.</p>}{loadState === "failed" && <button type="button" disabled={busy} onClick={() => void load()}>다시 불러오기</button>}{loadState === "needs_setup" && <p><a href="/workspace">사업 운영에서 계정·조직 설정 열기</a></p>}
+  return <SiteEditorFrame step={step} mobileView={mobileView} navigation={loadState === "ready" && site && !noSite ? <nav className="state-switch" aria-label="사이트 제작 단계">{steps.map((item, index) => <button key={item.id} type="button" aria-current={step === item.id ? "step" : undefined} onClick={() => setStep(item.id)}>{step === "pages" ? item.label : <><b aria-hidden="true">{index + 1}</b><span>{item.label.slice(2)}</span></>}</button>)}</nav> : undefined}><div className="feature-heading"><p className="eyebrow">STEP {String(steps.findIndex(item => item.id === step) + 1).padStart(2, "0")} / 05</p><h1>{step === "design" ? "어떤 모습으로 시작할까요?" : step === "business" ? "어떤 일을 하고 계신가요?" : step === "contact" ? "고객과 어떻게 연결할까요?" : step === "publish" ? "고객을 맞이할 준비가 됐어요." : "내 사이트 편집"}</h1><p>초안 저장, 내용 확인, 실제 공개를 순서대로 진행합니다.</p></div>{status && <p ref={statusRef} tabIndex={-1} role="status" className="state-message">{status}</p>}{loadState === "loading" && <p role="status">사이트 상태를 불러오는 중입니다.</p>}{loadState === "failed" && <button type="button" disabled={busy} onClick={() => void load()}>다시 불러오기</button>}{loadState === "needs_setup" && <p><a href="/workspace">사업 운영에서 계정·조직 설정 열기</a></p>}
     {loadState === "ready" && (noSite ? <section className="special-panel"><h2>빈 시작 화면</h2><p>사업 정보를 입력한 뒤 기본 주소와 사이트 초안을 만들 수 있습니다.</p><button type="button" disabled={busy || publishCanManage !== true || testCanStartNew !== true} onClick={() => void startSite()}>사이트 시작하기</button>{(publishCanManage !== true || testCanStartNew !== true) && <p>{publishCanManage === false ? "조직 소유자만 사이트를 시작할 수 있습니다." : testCanStartNew === false ? "현재 이용 상태에서는 새 사이트를 시작할 수 없습니다." : "권한·이용 상태를 확인하고 있습니다."} <a href="/workspace/subscription">구독·권한 상태 확인(추가)</a>{catalog && (publishCanManage === null || testCanStartNew === null) && <button type="button" onClick={() => void loadTestAccess(catalog.organizationId)}>권한·이용 상태 다시 확인(추가)</button>}</p>}</section> : site && <><p>기본 주소: <code>{site.slug}</code> · 사이트 저장본 {site.revision}번{dirty ? " · 미저장 변경" : ""} · {saveState === "saving" ? "서버 저장 중" : saveState === "conflict" ? "저장 충돌" : !online && dirty ? "오프라인 · 미저장" : saveState === "failed" ? "저장 실패" : dirty ? "자동 저장 대기" : "서버 저장 완료"} · 공개 {publishedRevision === null ? "전" : `${publishedRevision}번`}</p>
       {step === "business" && <section className="special-panel"><h2>1 사업 정보</h2><p>상호·서비스·가격·예약 방식은 사업 정보에서 관리합니다. 과거 디자인을 복구해도 현재 사업 정보는 유지됩니다.</p><p>현재 승인한 사업 정보: {approvedCatalog ? `${approvedCatalog.revision}번` : "없음"}</p><a href="/workspace?section=services&edit=business&returnTo=site" aria-disabled={dirty || busy} onClick={event => { if (dirty || busy) event.preventDefault(); }}>사업 정보 편집 열기</a>{(dirty || busy) && <p>사이트 변경 내용을 먼저 저장하고 저장 완료를 확인한 뒤 이동해 주세요.</p>}</section>}
       {step === "design" && <section className="special-panel"><h2>2 디자인 선택</h2><p>세 배치는 페이지·섹션 구성이 같고 색·제목 글꼴·섹션 모양만 다릅니다. Essential은 흰 바탕에 첫 소개 섹션을 2단으로, Editorial은 넓은 2단과 세리프 제목으로, Warm은 둥근 카드로 섹션을 보여 줍니다.</p><SiteTemplateCards template={site.template} businessName={catalog?.businessName ?? ""} onChange={template => change({ template })} /><div className="site-editor-design-controls"><label>강조 색상 <input type="color" value={site.palette} onChange={event => change({ palette: event.target.value })} /></label><SiteFontSelect font={site.font} onChange={font => change({ font })} /></div><div className="knowledge-source site-editor-ai"><h3>AI로 배치 제안받기</h3><p>AI는 승인된 사업 정보로 템플릿·색·페이지 구성을 제안합니다. 제안은 확인 후 초안에만 반영됩니다.</p><label>원하는 분위기와 구성<textarea value={aiPrompt} maxLength={1000} onChange={event => setAiPrompt(event.target.value)} placeholder="예: 따뜻한 분위기의 한 페이지 소개와 서비스 목록" /></label><button type="button" disabled={busy || dirty || !approvedCatalog || !aiPrompt.trim() || aiJob?.status === "queued" || aiJob?.status === "running" || aiJob?.status === "proposed"} onClick={() => void generateSite()}>AI 제안 생성</button>{dirty && <p>현재 변경을 먼저 저장한 뒤 생성해 주세요.</p>}{!approvedCatalog && <p>먼저 사업 정보를 승인해 주세요. 템플릿 편집은 계속할 수 있습니다.</p>}{aiJob && <div className="state-message" role="status"><strong>AI 작업: {aiJob.status === "queued" ? "대기" : aiJob.status === "running" ? "생성 중" : aiJob.status === "proposed" ? "제안 검토" : aiJob.status === "applied_to_draft" ? "초안 반영" : aiJob.status === "stale" ? "최신 초안과 충돌" : aiJob.status === "canceled" ? "취소" : "실패"}</strong>{aiJob.errorCode && <p>상태 코드: {aiJob.errorCode}</p>}{aiJob.inputTokens !== null && <p>모델 사용량: 입력 {aiJob.inputTokens}·출력 {aiJob.outputTokens} 토큰. 실제 비용은 공급사 정산 전입니다.</p>}{(["queued", "running", "proposed"] as const).includes(aiJob.status as "queued" | "running" | "proposed") && <button type="button" disabled={busy} onClick={() => void cancelGeneration()}>작업 취소</button>}{aiJob.status === "proposed" && aiJob.proposal && <><p>제안: {aiJob.proposal.template} · {aiJob.proposal.pages.length}개 페이지. 현재 초안은 아직 바뀌지 않았습니다.</p><SiteRenderer site={{ ...site, ...aiJob.proposal }} catalog={approvedCatalog ?? catalog!} preview /><button type="button" disabled={busy || dirty} onClick={() => void applyGeneration()}>검토한 제안을 초안에 반영</button></>}{(aiJob.status === "failed" || aiJob.status === "canceled" || aiJob.status === "stale") && <p>설명은 유지됩니다. 필요하면 새 작업을 만들거나 템플릿을 직접 편집하세요.</p>}</div>}</div></section>}

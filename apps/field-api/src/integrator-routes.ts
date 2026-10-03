@@ -7,6 +7,7 @@ import { integratorAvailability } from './bookings.js';
 import { recordFieldRevocation } from './revocation-journal.js';
 import { registerExternalRequestPublicRoutes } from './external-request-public-routes.js';
 import { registerApWebhookInbox } from './ap-webhook-inbox.js';
+import { organizationDeletionScheduled } from './subscription-access.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const allowedScopes = new Set(['field.facts.read', 'field.availability.read',
@@ -96,6 +97,10 @@ export function registerFieldIntegratorRoutes(app: FastifyInstance, runtime: Fie
         `select 1 from field.memberships where organization_id = $1 and user_id = $2
            and role = 'owner' for share`, [organizationId, actor.userId]);
       if (!owned.rows[0]) { await db.query('rollback'); return reply.code(404).send({ error: 'organization_not_found' }); }
+      // H1: 삭제 예약·완료 조직은 새 통합 선택(grant)을 만들지 않는다.
+      if (await organizationDeletionScheduled(db, organizationId as string)) {
+        await db.query('rollback'); return reply.code(409).send({ error: 'deletion_scheduled' });
+      }
       const id = randomUUID();
       await db.query(
         `insert into field.oauth_selections(id, session_id, actor_user_id, client_id,

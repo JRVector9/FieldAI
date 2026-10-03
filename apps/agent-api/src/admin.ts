@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { BusinessRuntime } from './business.js';
 import { requireAdmin } from './admin-auth.js';
+import { retentionAdminFor } from './retention-routes.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -93,12 +95,13 @@ export function registerAgentAdminRoutes(app: FastifyInstance, runtime: Business
   // 멈춘 조직 삭제 요청 다시 실행(추가). operator만, 사유 필수. 다음 실행 시각을 지금으로 되돌리고 오류·실행 실패 횟수를 초기화한다.
   // 감사: 기존 admin_access_audit는 조회(resource='overview') 전용 check 제약이라, 요청 행 자체의 감사 기록(steps.operatorResumes)에
   // 운영자·시각·사유·직전 오류·직전 실패 횟수를 같은 트랜잭션으로 덧붙인다(전체 기록은 관리자 목록에서만, 조직 구성원 화면에는 시각·직전 오류·실패 횟수만 보인다).
+  // 다른 관리자 변경 경로와 같은 Origin 검사(retentionAdminFor)를 거친다(추가).
   app.post<{ Params: { id: string } }>('/v1/admin/organization-deletions/:id/resume', async (request, reply) => {
-    reply.header('Cache-Control', 'private, no-store');
-    const admin = await requireAdmin(request, reply, runtime, { role: 'operator' });
-    if (!admin) return reply;
+    const userId = await retentionAdminFor(request, reply, runtime);
+    if (!userId) return reply;
     if (!uuid.test(request.params.id)) return reply.code(404).send({ error: 'deletion_request_not_found' });
     const body = request.body !== null && typeof request.body === 'object' ? request.body as Record<string, unknown> : {};
+    if (typeof body.reason === 'string' && body.reason.includes('\u0000')) return reply.code(400).send({ error: 'invalid_text' });
     const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
     if (reason.length < 10 || reason.length > 500) return reply.code(400).send({ error: 'invalid_reason' });
     const db = await runtime.pool.connect();
@@ -114,9 +117,45 @@ export function registerAgentAdminRoutes(app: FastifyInstance, runtime: Business
           steps=steps||jsonb_build_object('executionFailures',0,'operatorResumes',coalesce(steps->'operatorResumes','[]'::jsonb)
             ||jsonb_build_array(jsonb_build_object('actorUserId',$2::text,'at',clock_timestamp(),'reason',$3::text,
               'previousError',last_error,'previousExecutionFailures',coalesce((steps->>'executionFailures')::int,0))))
-        where id=$1 returning id,next_attempt_at as "nextAttemptAt"`, [request.params.id, admin.userId, reason])).rows[0]!;
+        where id=$1 returning id,next_attempt_at as "nextAttemptAt"`, [request.params.id, userId, reason])).rows[0]!;
       await db.query('commit');
       return { product: 'agent', id: resumed.id, status: 'scheduled', nextAttemptAt: resumed.nextAttemptAt.toISOString() };
+    } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
+  });
+
+  // 결과 미상 Field 전달 운영자 종결(추가, P1-1). 동의 24시간이 지나 reconcile이 더 확인하지 않는 delivery_unknown만
+  // operator가 사유(10~500자)와 함께 unresolved(종결)로 닫는다. Field에 새 업무를 만들지 않고, 같은 문의·연결·서비스의
+  // 새 전달 금지는 unresolved에도 유지한다(000094 색인). 행위자·사유·시각은 행에, 상태 변경 사건은 outbox에 남긴다.
+  app.post<{ Params: { id: string } }>('/v1/admin/field-actions/:id/close-unknown', async (request, reply) => {
+    const userId = await retentionAdminFor(request, reply, runtime);
+    if (!userId) return reply;
+    if (!uuid.test(request.params.id)) return reply.code(404).send({ error: 'field_action_not_found' });
+    const body = request.body !== null && typeof request.body === 'object' ? request.body as Record<string, unknown> : {};
+    if (typeof body.reason === 'string' && body.reason.includes('\u0000')) return reply.code(400).send({ error: 'invalid_text' });
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+    if (reason.length < 10 || reason.length > 500) return reply.code(400).send({ error: 'invalid_reason' });
+    const db = await runtime.pool.connect();
+    try {
+      await db.query('begin');
+      const row = (await db.query<{ organization_id: string; inquiry_id: string; connection_id: string; state: string;
+        closable: boolean }>(
+        `select organization_id,inquiry_id,connection_id,state,
+           consent_confirmed_at<clock_timestamp()-interval '24 hours' as closable
+         from ap.field_action_requests where id=$1 for update`, [request.params.id])).rows[0];
+      if (!row) { await db.query('rollback'); return reply.code(404).send({ error: 'field_action_not_found' }); }
+      if (row.state !== 'delivery_unknown' || !row.closable) {
+        await db.query('rollback'); return reply.code(409).send({ error: 'field_action_not_closable', state: row.state });
+      }
+      const closed = (await db.query<{ closedAt: Date }>(`update ap.field_action_requests set state='unresolved',
+          error_code='operator_closed_unknown',closed_by=$2,closed_at=clock_timestamp(),close_reason=$3,updated_at=now()
+        where id=$1 returning closed_at as "closedAt"`, [request.params.id, userId, reason])).rows[0]!;
+      await db.query(`insert into ap.outbox(id,organization_id,event_type,aggregate_id,payload)
+        values ($1,$2,'ap.field_action.unresolved',$3,$4::jsonb)`,
+      [randomUUID(), row.organization_id, request.params.id, JSON.stringify({ actionRequestId: request.params.id,
+        inquiryId: row.inquiry_id, connectionId: row.connection_id, state: 'unresolved', closedBy: userId })]);
+      await db.query('commit');
+      return { product: 'agent', id: request.params.id, state: 'unresolved', error: 'operator_closed_unknown',
+        closedAt: closed.closedAt.toISOString() };
     } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
   });
 }

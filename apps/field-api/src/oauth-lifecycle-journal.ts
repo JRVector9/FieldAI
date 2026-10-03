@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto
 import { mkdir, open, readdir, readFile, rename, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { Pool, PoolClient } from 'pg';
+import { journalDirectoryFromEnvironment } from './revocation-journal.js';
 
 export type LifecycleIntent = { kind:'token'|'family'|'route-key'|'legacy-baseline'; targetKey:string;
   clientId:string|null; userId:string|null; referenceId:string|null; codeId:string|null;
@@ -116,7 +117,8 @@ export class LifecycleJournal {
 // 서버는 요청마다 이 함수를 부르므로 같은 설정이면 같은 인스턴스(검증 캐시)를 재사용한다. 재시작하면 캐시는 비워진다.
 const journals=new Map<string,LifecycleJournal>();
 export function lifecycleJournalFromEnvironment() {
-  const root=process.env.FIELD_REVOCATION_JOURNAL_DIRECTORY,secret=process.env.FIELD_REVOCATION_JOURNAL_SECRET;
+  // 원장 디렉터리는 절대 경로로 고정한다(상대 경로는 mock에서만, revocation-journal.ts journalDirectoryFromEnvironment).
+  const root=journalDirectoryFromEnvironment('FIELD_REVOCATION_JOURNAL_DIRECTORY'),secret=process.env.FIELD_REVOCATION_JOURNAL_SECRET;
   if(!root||!secret)return undefined;
   const path=resolve(root,'oauth-lifecycle'),key=`${path}\0${secret}`;
   let journal=journals.get(key);if(!journal){journal=new LifecycleJournal(path,secret);journals.set(key,journal);}

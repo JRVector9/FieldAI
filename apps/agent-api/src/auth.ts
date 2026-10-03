@@ -42,6 +42,9 @@ export const auth = betterAuth({
   socialProviders: kakaoSocialProviders(kakao, webOrigin),
   // 동일 이메일 자동 병합 금지(결정 19). 이미 이메일로 가입한 주소의 카카오 로그인은 account_not_linked로 거부된다.
   account: { accountLinking: { enabled: false } },
+  // better-auth 내장 요청 한도(추가, 보안 #5): mock 외 프로필(sandbox 포함)에서 켜고, 재시작·다중 인스턴스에도 유지되도록
+  // DB("rateLimit" 표, migration 000094)에 둔다. 기본 규칙: 로그인·가입 10초 3회, 재설정·인증 메일 60초 3회, 2FA 10초 3회(IP별).
+  rateLimit: { enabled: process.env.AP_PROFILE !== 'mock', storage: 'database' },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: process.env.AP_PROFILE !== 'mock',
@@ -54,7 +57,9 @@ export const auth = betterAuth({
   },
   emailVerification: {
     sendOnSignUp: true,
-    autoSignInAfterVerification: true,
+    // 인증 링크로 자동 로그인하지 않는다(추가, 보안 #3). 남의 인증 링크로 그 사람 계정에 로그인되는 login CSRF를 막고,
+    // 사용자는 인증을 마친 뒤 직접 로그인한다.
+    autoSignInAfterVerification: false,
     sendVerificationEmail: async ({ user, token }) => {
       await deliverAuthEmail(authPool, authEmail.provider, { purpose: 'verify_email', secret: token,
         message: authEmailMessage('verify_email', user.email, webLink('/verify-email', token)) });

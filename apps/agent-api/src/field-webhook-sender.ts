@@ -7,6 +7,8 @@ type Claim = { id: string; connection_id: string; body: string; attempts: number
 // Field 401은 시계 오차(±5분)·서명 버전 불일치(구버전 수신자)로도 날 수 있어 이 횟수까지는 백오프 재시도하고, 넘으면 blocked로 멈춘다.
 // v2 발신이 401을 받아도 v1로 자동 전환하지 않는다(운영자가 AP_EVENT_SIGNATURE_SEND_VERSION으로만 정한다)
 export const AUTH_REJECT_RETRY_LIMIT = 5;
+// degraded·결과 미상 연결의 사건은 복구를 기다려 재시도하되 이 횟수(백오프 최대 256초 기준 약 20시간)를 넘으면 blocked로 멈춘다(추가, P2-8)
+export const NOT_READY_RETRY_LIMIT = 288;
 type Route = { field_issuer: string; status: string; event_key_id: string | null;
   event_secret_cipher: Buffer | null };
 
@@ -76,8 +78,9 @@ export async function deliverFieldAgentEventOnce(pool: Pool, config: FieldConnec
   if (!connection || connection.status === 'revoked' || !connection.event_key_id
     || !connection.event_secret_cipher || connection.field_issuer !== config.issuer)
     return finish('blocked', null, 'route_unavailable');
-  // degraded·결과 미상 연결은 Field가 서명 경로를 닫아 두므로 복구까지 기다린다
-  if (connection.status !== 'review_required') return finish('retry', null, 'connection_not_ready');
+  // degraded·결과 미상 연결은 Field가 서명 경로를 닫아 두므로 복구까지 기다린다. 상한을 넘으면 blocked로 멈춘다
+  if (connection.status !== 'review_required') return claim.attempts >= NOT_READY_RETRY_LIMIT
+    ? finish('blocked', null, 'connection_not_ready_limit') : finish('retry', null, 'connection_not_ready');
   const target = new URL('/integrations/v1/webhooks/agent', config.issuer);
   if (target.protocol !== 'https:' && process.env.AP_PROFILE !== 'mock')
     return finish('blocked', null, 'insecure_event_route');
@@ -109,13 +112,14 @@ export async function deliverFieldAgentEventOnce(pool: Pool, config: FieldConnec
   return finish('retry', response.status, 'receiver_unavailable');
 }
 
-// 수신 확인(acked)된 발신함 행은 30일 뒤 지운다(본문은 ID·상태뿐이지만 보존 기간을 둔다). 한 주기에 1000행씩 처리한다.
-// 다음 사건 순번(max+1)이 이미 보낸 순번을 재사용하지 않도록 같은 대상의 최신 행은 남긴다.
+// 수신 확인(acked)된 발신함 행은 30일 뒤, 차단(blocked)된 행은 마지막 변경 30일 뒤 지운다(본문은 ID·상태뿐이지만 보존 기간을 둔다).
+// 한 주기에 1000행씩 처리한다. 다음 사건 순번(max+1)이 이미 보낸 순번을 재사용하지 않도록 같은 대상의 최신 행은 남긴다.
 export async function purgeAckedFieldAgentEvents(pool: Pool) {
   return (await pool.query(`delete from ap.field_agent_event_outbox where id in (
       select o.id from ap.field_agent_event_outbox o
-      where o.state = 'acked' and o.acknowledged_at < now() - interval '30 days'
+      where ((o.state = 'acked' and o.acknowledged_at < now() - interval '30 days')
+          or (o.state = 'blocked' and o.updated_at < now() - interval '30 days'))
         and exists (select 1 from ap.field_agent_event_outbox newer where newer.event_type = o.event_type
           and newer.aggregate_id = o.aggregate_id and newer.aggregate_version > o.aggregate_version)
-      order by o.acknowledged_at limit 1000)`)).rowCount ?? 0;
+      order by coalesce(o.acknowledged_at, o.updated_at) limit 1000)`)).rowCount ?? 0;
 }

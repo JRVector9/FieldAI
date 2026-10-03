@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
 import { PublicKnowledgePage } from "./agent-public";
 import { AgentConsultQr } from "./AgentConsultQr";
+import { DELETION_SCHEDULED_OWNER_MESSAGE, isDeletionScheduledError } from "./deletion-scheduled-copy";
 
 type Deployment = { id: string; publicId: string; kind: "link" | "owned_embed";
   origin: string | null; verificationProof: string | null; verifiedAt: string | null;
@@ -84,7 +85,8 @@ export function AgentDeployments() {
           ? kind === "verify" ? "사이트 소유 확인이 완료됐습니다." : kind === "activate" ? "상담 배포를 활성화했습니다." : "상담 배포를 중지했습니다."
           : kind === "activate" ? "상담 배포를 활성화했지만 목록을 다시 읽지 못했습니다. 다시 불러오기로 확인해 주세요."
             : "상태 변경은 완료됐지만 목록을 다시 읽지 못했습니다. 다시 불러오기로 확인해 주세요.");
-      } else if (result.status === 409 && (result.data as { error?: string }).error === 'deployment_moderation_restricted') {
+      } else if (isDeletionScheduledError(result.status, result.data)) setStatus(DELETION_SCHEDULED_OWNER_MESSAGE);
+      else if (result.status === 409 && (result.data as { error?: string }).error === 'deployment_moderation_restricted') {
         await load(); setStatus('신고 검토로 해당 상담 배포가 제한되었습니다. 신고·검토 결과를 확인해 주세요.');
       } else if (result.status === 409 && (result.data as { error?: string }).error === 'knowledge_stale') {
         // 지식만 재승인되고 AI 설정은 이전 지식에 묶여 있으면 재연결할 수 없다

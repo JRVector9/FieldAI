@@ -141,8 +141,42 @@ test('AP owner take-over keeps human_active on customer follow-up without AI and
     assert.equal((await followUp('답변 감사합니다. 하나 더 묻겠습니다.')).json().state, 'needs_owner');
 
     // human_active에서 답변하면 waiting_customer, 답변 뒤 다시 직접 응대 후 종료하면 고객 답변 대기로 돌아간다
-    assert.equal((await handling(id, 'take-over', (await state(id)).revision)).json().state, 'human_active');
+    const activeAgain = await handling(id, 'take-over', (await state(id)).revision);
+    assert.equal(activeAgain.json().state, 'human_active');
     assert.equal((await reply(id, '직접 응대로 답변합니다.')).json().state, 'waiting_customer');
+    // 직접 응대 중 답변은 직접 응대를 끝낸다: 답변(revision +1)과 같은 revision으로 답변자를 행위자로 한 human_release 사건을 남긴다
+    assert.equal((await state(id)).revision, activeAgain.json().revision + 1);
+    assert.deepEqual((await humanEvents(id)).at(-1),
+      { event_type: 'human_release', revision: activeAgain.json().revision + 1, actor_user_id: ownerUserId });
+    // 직접 응대가 아닐 때 답변은 직접 응대 사건을 남기지 않는다
+    const eventsBeforePlain = (await humanEvents(id)).length;
+    assert.equal((await reply(id, '추가 안내입니다.')).json().state, 'waiting_customer');
+    assert.equal((await humanEvents(id)).length, eventsBeforePlain);
+
+    // 거부 경로: 로그인 없음·고객 확인키만·다른 조직 사용자·viewer는 직접 응대를 시작·종료할 수 없고 사건도 남지 않는다
+    const outsiderEmail = `ap-human-outsider-${randomUUID()}@example.invalid`;
+    const outsiderPost = (path: string) => auth.handler(new Request(`${base}/api/auth${path}`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: base },
+      body: JSON.stringify({ email: outsiderEmail, password, name: 'Synthetic outsider' }) }));
+    assert.equal((await outsiderPost('/sign-up/email')).status, 200);
+    const outsider = { cookie: (await outsiderPost('/sign-in/email')).headers.getSetCookie().map(value => value.split(';')[0]).join('; ') };
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/organizations', headers: outsider, payload: { name: '다른 조직' } })).statusCode, 201);
+    const outsiderId = (await pool.query<{ id: string }>('select id from "user" where email = $1', [outsiderEmail])).rows[0]!.id;
+    const rejectedRevision = (await state(id)).revision;
+    const eventsBeforeRejected = (await humanEvents(id)).length;
+    const attempt = (headers: Record<string, string>, action: 'take-over' | 'release') =>
+      app.inject({ method: 'POST', url: `/v1/owner/inquiries/${id}/${action}`, headers, payload: { expectedRevision: rejectedRevision } });
+    assert.equal((await attempt({}, 'take-over')).statusCode, 401);
+    assert.equal((await attempt(receipt, 'take-over')).statusCode, 401);
+    assert.equal((await attempt(outsider, 'take-over')).statusCode, 404);
+    assert.equal((await attempt(outsider, 'release')).statusCode, 404);
+    assert.equal((await app.inject({ method: 'POST', url: `/v1/owner/inquiries/${id}/replies`, headers: outsider,
+      payload: { body: '다른 조직 답변' } })).statusCode, 404);
+    await pool.query("insert into ap.memberships(organization_id, user_id, role) values ($1, $2, 'viewer')", [organizationId, outsiderId]);
+    assert.equal((await attempt(outsider, 'take-over')).statusCode, 404);
+    assert.equal((await state(id)).revision, rejectedRevision);
+    assert.equal((await humanEvents(id)).length, eventsBeforeRejected);
+    await pool.query('delete from ap.memberships where organization_id = $1 and user_id = $2', [organizationId, outsiderId]);
     const fromWaiting = await handling(id, 'take-over', (await state(id)).revision);
     assert.equal(fromWaiting.json().state, 'human_active');
     assert.equal((await handling(id, 'release', fromWaiting.json().revision)).json().state, 'waiting_customer');

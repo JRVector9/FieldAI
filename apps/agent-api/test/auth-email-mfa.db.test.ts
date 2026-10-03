@@ -37,10 +37,15 @@ function store(jar: Jar, response: Response) {
   return response;
 }
 const cookie = (jar: Jar) => [...jar].map(([name, value]) => `${name}=${value}`).join('; ');
-async function call(jar: Jar, path: string, body?: unknown) {
+// 비mock 인증은 IP별 요청 한도(rateLimit, DB 저장)가 켜져 있다. 흐름 검사는 호출마다 다른 합성 클라이언트 IP(TEST-NET-2)로 보내고,
+// 한도 자체는 아래 별도 검사에서 같은 IP로 확인한다.
+let syntheticIp = 0;
+const nextIp = () => { syntheticIp += 1; return `198.51.100.${(syntheticIp % 250) + 1}`; };
+async function call(jar: Jar, path: string, body?: unknown, ip = nextIp()) {
   const response = await auth.handler(new Request(`${base}/api/auth${path}`, {
     method: body === undefined ? 'GET' : 'POST',
-    headers: { origin: base, cookie: cookie(jar), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    headers: { origin: base, cookie: cookie(jar), 'x-forwarded-for': ip,
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }));
   return store(jar, response);
@@ -104,8 +109,14 @@ test('AP sandbox verification and password reset go through the injected provide
   const verifyJar: Jar = new Map();
   const verified = await call(verifyJar, `/verify-email?token=${encodeURIComponent(link.searchParams.get('token')!)}`);
   assert.equal(verified.status, 200, await verified.clone().text());
-  assert.ok(verifyJar.size > 0, 'autoSignInAfterVerification sets a session cookie');
-  const session = await auth.api.getSession({ headers: new Headers({ cookie: cookie(verifyJar) }) });
+  // 인증 링크는 자동 로그인하지 않는다(login CSRF 방지). 인증 표시만 바뀌고 세션은 직접 로그인해서 만든다
+  assert.equal(await auth.api.getSession({ headers: new Headers({ cookie: cookie(verifyJar) }) }), null,
+    'verification link must not sign the browser in');
+  assert.equal((await pool.query<{ verified: boolean }>('select "emailVerified" as verified from "user" where email=$1',
+    [email])).rows[0]?.verified, true);
+  const signedJar: Jar = new Map();
+  assert.equal((await call(signedJar, '/sign-in/email', { email, password })).status, 200);
+  const session = await auth.api.getSession({ headers: new Headers({ cookie: cookie(signedJar) }) });
   assert.equal(session?.user.emailVerified, true);
   assert.equal((session?.session as { twoFactorVerified?: boolean } | undefined)?.twoFactorVerified, false);
 
@@ -119,7 +130,7 @@ test('AP sandbox verification and password reset go through the injected provide
   const newPassword = `${randomBytes(18).toString('base64url')}B2!`;
   const changed = await call(new Map(), '/reset-password', { newPassword, token: resetLink.searchParams.get('token') });
   assert.equal(changed.status, 200, await changed.clone().text());
-  assert.equal(await auth.api.getSession({ headers: new Headers({ cookie: cookie(verifyJar) }) }), null,
+  assert.equal(await auth.api.getSession({ headers: new Headers({ cookie: cookie(signedJar) }) }), null,
     'password reset revokes existing sessions');
   assert.equal((await call(new Map(), '/sign-in/email', { email, password })).status, 401);
   assert.equal((await call(new Map(), '/sign-in/email', { email, password: newPassword })).status, 200);
@@ -128,8 +139,31 @@ test('AP sandbox verification and password reset go through the injected provide
   assert.equal((await call(new Map(), '/request-password-reset', { email: unknown })).status, 200);
   assert.equal((await outbox(unknown)).length, 0);
   authEmail.provider = blockedProvider;
+  // 같은 주소·목적으로 10분 안의 재요청은 공급사를 부르지 않고 suppressed_duplicate로만 남긴다(응답은 같다)
+  const sentBefore = sent.length;
+  assert.equal((await call(new Map(), '/request-password-reset', { email })).status, 200);
+  assert.deepEqual((await outbox(email)).at(-1)?.state, 'suppressed_duplicate');
+  assert.equal(sent.length, sentBefore);
+  // 10분이 지나면 다시 보낸다(여기서는 미연결 공급사라 blocked_integration)
+  await pool.query(`update ap.email_outbox set created_at = created_at - interval '11 minutes' where "to"=$1`, [email]);
   assert.equal((await call(new Map(), '/request-password-reset', { email })).status, 200);
   assert.deepEqual((await outbox(email)).at(-1)?.state, 'blocked_integration');
+});
+
+test('AP sandbox auth requests are rate limited per client IP in the database store', async () => {
+  const ip = '203.0.113.77';
+  const email = `ap-auth-limit-${randomUUID()}@example.invalid`;
+  const statuses: number[] = [];
+  for (let attempt = 0; attempt < 4; attempt++)
+    statuses.push((await call(new Map(), '/sign-in/email', { email, password: 'wrong-password-A1!' }, ip)).status);
+  // better-auth 기본 규칙: 로그인 10초 3회. 4번째는 429다
+  assert.deepEqual(statuses, [401, 401, 401, 429]);
+  const stored = (await pool.query<{ count: number }>(`select "count" from "rateLimit" where "key" like $1`,
+    [`${ip}|%sign-in/email`])).rows;
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0]!.count, 3);
+  // 다른 IP는 영향받지 않는다
+  assert.equal((await call(new Map(), '/sign-in/email', { email, password: 'wrong-password-A1!' })).status, 401);
 });
 
 test('AP sandbox admin needs 2FA enrollment and a session established through TOTP; mock is unchanged', async () => {

@@ -154,11 +154,13 @@ export function registerPublisherRoutes(app: FastifyInstance, runtime: BusinessR
     const client = await runtime.pool.connect();
     try {
       await client.query('begin');
-      // 검증된 origin은 계속 점유하고, 다른 매체의 미검증 등록은 24시간 뒤 만료되어 실제 소유자가 등록할 수 있다.
+      // 검증 기간(verified_until) 안의 origin은 계속 점유하고, 다른 매체의 미검증 등록은 24시간 뒤 만료되어 실제 소유자가 등록할 수 있다.
+      // 검증 기간이 지난 다른 매체의 행은 더 이상 막지 않는다(추가, P2-2. 새 소유자가 검증하면 그 행의 검증 표시를 해제한다).
       await client.query("select pg_advisory_xact_lock(hashtextextended('ap-publisher-origin:' || $1, 0))", [input]);
       const claimed = await client.query(
         `select 1 from ap.publisher_domains where origin = $1 and publisher_id <> $2
-           and (verified_at is not null or created_at > now() - interval '24 hours') limit 1`, [input, actor.id]);
+           and ((verified_at is not null and verified_until > now())
+             or (verified_at is null and created_at > now() - interval '24 hours')) limit 1`, [input, actor.id]);
       if (claimed.rowCount) { await client.query('rollback'); return reply.code(409).send({ error: 'origin_already_registered' }); }
       const result = await client.query<DomainRow>(
         `insert into ap.publisher_domains(id, publisher_id, origin, verification_proof)
@@ -189,6 +191,10 @@ export function registerPublisherRoutes(app: FastifyInstance, runtime: BusinessR
     const client = await runtime.pool.connect();
     try {
       await client.query('begin');
+      // 같은 origin 등록과 직렬화하고, 다른 매체의 검증 기간이 지난 점유(verified_at만 남은 행)를 해제한 뒤 검증 표시를 옮긴다(추가)
+      await client.query("select pg_advisory_xact_lock(hashtextextended('ap-publisher-origin:' || $1, 0))", [row.origin]);
+      await client.query(`update ap.publisher_domains set verified_at = null, verified_until = null
+        where origin = $1 and publisher_id <> $2 and verified_at is not null and verified_until <= now()`, [row.origin, actor.id]);
       const updated = await client.query<DomainRow>(
         `update ap.publisher_domains set verified_at = now(), verified_until = now() + interval '7 days'
          where id = $1 and publisher_id = $2 returning *`, [row.id, actor.id],

@@ -24,3 +24,11 @@ export function stoppedDeletionReason(lastError: string | null) {
     return detail && label !== code ? `${label}(${detail})` : label;
   }).join(" · ");
 }
+
+// 멈춘 삭제 요청 "다시 실행" 버튼의 비활성 사유(추가). null이면 누를 수 있다.
+export function deletionResumeBlockReason(input: { role: "operator" | "auditor"; reason: string; busy: boolean }) {
+  if (input.role !== "operator") return "다시 실행은 operator 권한이 필요합니다. 감사자는 목록만 확인할 수 있습니다.";
+  if (input.busy) return "진행 중인 요청이 끝나면 다시 실행할 수 있습니다.";
+  if (input.reason.trim().length < 10) return "다시 실행 사유를 10자 이상 입력해 주세요.";
+  return null;
+}

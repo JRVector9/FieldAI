@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { requestJson } from "./field-api";
 import { domainErrorLabel } from "./field-domain-errors";
+import { DELETION_SCHEDULED_OWNER_MESSAGE } from "./deletion-scheduled-copy";
 import "./field-domain-settings.css";
 
 type Domain = {
@@ -38,6 +39,7 @@ function requestFailure(result: { status: number; data: { error?: string } }) {
     domain_not_ready: "연결 완료를 확인한 뒤 대표 주소로 선택해 주세요.",
     domain_release_not_completed: "연결 해제 확인이 끝난 뒤 재연결할 수 있습니다.",
     domain_disconnected: "해제된 주소입니다. 먼저 재연결을 요청해 주세요.",
+    deletion_scheduled: DELETION_SCHEDULED_OWNER_MESSAGE,
   };
   if (result.data.error && errors[result.data.error]) return errors[result.data.error]!;
   return result.status >= 400 && result.status < 500

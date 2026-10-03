@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { deletionMessage, organizationChoices } from "../src/agent-account";
-import { stoppedDeletionReason } from "../src/agent-admin-sections";
+import { deletionResumeBlockReason, stoppedDeletionReason } from "../src/agent-admin-sections";
 
 test("AP deletion blockers map to actionable Korean guidance and unknown codes stay visible", () => {
   assert.match(deletionMessage("paid_subscription_active"), /유료 구독/);
@@ -30,4 +30,22 @@ test("AP stopped deletion reasons are shown in Korean and unknown codes stay vis
   assert.equal(stoppedDeletionReason("execution_failed:PAN01,execution_attempts_stopped"), "실행 오류(PAN01) · 자동 실행 중지");
   assert.equal(stoppedDeletionReason("something_new"), "something_new");
   assert.equal(stoppedDeletionReason(null), "사유 기록 없음");
+});
+
+// 실행 대기 사유: execution_failed:<상세 코드>는 앞부분으로 조회해 한국어 문구와 코드만 보인다(원시 코드·"거절" 문구 금지).
+test("AP execution_failed with a detail code maps by prefix to a retry message", () => {
+  assert.equal(deletionMessage("execution_failed:PAN01"), "실행 중 오류가 나 다시 시도합니다 (코드 PAN01).");
+  assert.doesNotMatch(deletionMessage("execution_failed:PAN01"), /거절|execution_failed/);
+  assert.match(deletionMessage("execution_failed"), /다시 시도합니다/);
+  assert.equal("execution_failed:PAN01,execution_attempts_stopped".split(",").map(deletionMessage).join(" "),
+    "실행 중 오류가 나 다시 시도합니다 (코드 PAN01). 자동 실행을 멈췄습니다. 운영자 확인 뒤 다시 실행됩니다.");
+  for (const code of ["organization_not_found", "invalid_organization_id", "account_not_found"])
+    assert.doesNotMatch(deletionMessage(code), /요청이 거절됐습니다|_/);
+});
+
+test("AP stopped deletion resume button names why it is disabled", () => {
+  assert.match(deletionResumeBlockReason({ role: "auditor", reason: "충분히 긴 다시 실행 사유입니다", busy: false })!, /operator 권한/);
+  assert.match(deletionResumeBlockReason({ role: "operator", reason: "짧음", busy: false })!, /10자 이상/);
+  assert.match(deletionResumeBlockReason({ role: "operator", reason: "충분히 긴 다시 실행 사유입니다", busy: true })!, /진행 중/);
+  assert.equal(deletionResumeBlockReason({ role: "operator", reason: "  충분히 긴 다시 실행 사유입니다  ", busy: false }), null);
 });

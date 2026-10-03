@@ -55,10 +55,12 @@ function store(jar: Jar, response: Response) {
   return response;
 }
 const cookie = (jar: Jar) => [...jar].map(([name, value]) => `${name}=${value}`).join('; ');
+// 비mock에서는 better-auth 요청 한도가 접속 IP별로 켜져 있으므로(Security #5) 요청마다 합성 IP를 준다.
 async function call(jar: Jar, path: string, body?: unknown) {
   const response = await auth.handler(new Request(`${base}/api/auth${path}`, {
     method: body === undefined ? 'GET' : 'POST',
-    headers: { origin: base, cookie: cookie(jar), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    headers: { origin: base, cookie: cookie(jar), 'x-forwarded-for': `198.18.${randomBytes(1)[0]}.${randomBytes(1)[0]}`,
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }));
   return store(jar, response);

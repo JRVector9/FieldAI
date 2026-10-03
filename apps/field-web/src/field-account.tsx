@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Brand } from "@fieldai/ui";
+import { kakaoAuthorizeUrl } from "./field-kakao-sign-in";
 
 type Precondition = { code: string; count: number; ok: boolean };
 type DeletionRequest = { id: string; status: "scheduled" | "canceled" | "executed"; reason: string | null; requestedAt: string;
@@ -25,6 +26,10 @@ const MESSAGES: Record<string, string> = {
   organization_deletion_required: "삭제되지 않은 조직의 owner입니다. 조직 삭제가 끝난 뒤 계정을 삭제할 수 있습니다.",
   admin_membership_required_removal: "플랫폼 관리자 권한이 있는 계정입니다. 운영자에게 권한 해제를 먼저 요청해 주세요.",
   oauth_grants_active: "외부 서비스에 준 접근 권한이 남아 있습니다. 연결을 먼저 해제해 주세요.",
+  // 2026-10-03 종합 리뷰 반영: 계정 삭제 차단 사유·취소 불가 코드
+  oauth_clients_active: "이 계정이 등록한 외부 연동 client가 아직 활성 상태입니다. client를 먼저 비활성화하거나 운영자에게 요청해 주세요.",
+  publisher_membership_required_removal: "제휴 매체 소유자 또는 구성원인 계정입니다. 매체 권한을 먼저 정리해 주세요.",
+  deletion_in_progress: "유예 기간이 끝나 삭제가 이미 시작되어 취소할 수 없습니다.",
   reauth_required: "비밀번호 로그인 정보가 없는 계정입니다. 최근 5분 이내 카카오로 다시 로그인한 뒤 진행해 주세요.",
   password_attempts_exceeded: "비밀번호 확인 시도가 많아 15분 동안 제한됩니다. 잠시 뒤 다시 시도해 주세요.",
   confirmation_mismatch: "확인 문구가 일치하지 않습니다.",
@@ -34,10 +39,21 @@ const MESSAGES: Record<string, string> = {
   organization_deleted: "이미 삭제가 실행된 조직입니다.",
   deletion_request_not_found: "취소할 삭제 예약이 없습니다.",
   password_required: "본인 확인을 위해 비밀번호를 입력해 주세요.",
+  organization_not_found: "삭제할 조직을 찾지 못했습니다. 조직 owner 계정으로 로그인했는지 확인해 주세요.",
+  invalid_organization_id: "선택한 조직 정보를 확인하지 못했습니다. 상태를 새로고침해 조직을 다시 선택해 주세요.",
+  account_not_found: "계정 정보를 찾지 못했습니다. 다시 로그인해 주세요.",
+  authentication_required: "다시 로그인한 뒤 진행해 주세요.",
+  invalid_reason: "삭제 사유는 1,000자 이하로 입력해 주세요.",
 };
-export const deletionMessage = (code: string) => MESSAGES[code] ?? `요청이 거절됐습니다 (${code}).`;
+// execution_failed:<상세 코드>처럼 상세가 붙은 실행 오류는 앞부분으로 조회하고 상세 코드는 괄호로만 보인다.
+export const deletionMessage = (code: string) => {
+  const [head, detail] = code.split(":", 2);
+  if (head === "execution_failed" && detail) return `실행 중 오류가 나 다시 시도합니다 (코드 ${detail}).`;
+  return MESSAGES[code] ?? `요청이 거절됐습니다 (${code}).`;
+};
 const PRECONDITION_LABELS: Record<string, string> = {
   paid_subscription_active: "유료 구독 해지", connections_active: "AP 연결 해제", open_reservations: "진행 중 예약 마무리",
+  integration_grants_active: "외부 연동 접근 권한(실행 시 자동 회수)",
 };
 const date = (value: string) => new Date(value).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
 const DELETION_STATUS_LABELS: Record<OwnedOrganization["deletionStatus"], string> = {
@@ -67,6 +83,17 @@ export function FieldAccount() {
   const [emailConfirm, setEmailConfirm] = useState("");
   const [accountAck, setAccountAck] = useState(false);
   const [accountDeleted, setAccountDeleted] = useState(false);
+  // 확인 단계 전환·요청 처리 뒤 포커스를 확인 영역·원래 버튼·상태 메시지로 옮긴다(버튼이 사라지면 포커스가 body로 빠지는 문제 방지)
+  const reviewRef = useRef<HTMLDivElement>(null);
+  const reviewButtonRef = useRef<HTMLButtonElement>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  const [focusTarget, setFocusTarget] = useState<"review" | "reviewButton" | "notice" | null>(null);
+  useEffect(() => {
+    if (!focusTarget) return;
+    const target = { review: reviewRef, reviewButton: reviewButtonRef, notice: noticeRef }[focusTarget].current;
+    (target ?? noticeRef.current)?.focus();
+    setFocusTarget(null);
+  }, [focusTarget]);
 
   const load = useCallback(async (organizationId: string | null = null) => {
     setBusy(true);
@@ -109,7 +136,7 @@ export function FieldAccount() {
     const scheduled = await send("POST", "/v1/organizations/current/deletion-requests", { confirmText, acknowledgements: ack,
       reason: reason.trim() || undefined, ...(needsPassword ? { password: organizationPassword } : {}) }, selectedOrganization);
     // 성공·실패 모두 입력한 비밀번호는 지우고 확인 단계를 닫는다(실패 시 다시 입력).
-    setOrganizationPassword(""); setReviewing(false);
+    setOrganizationPassword(""); setReviewing(false); setFocusTarget("notice");
     if (scheduled) {
       await load(selectedOrganization); setNotice("조직 삭제를 예약했습니다. 유예 기간 동안 언제든 취소할 수 있습니다.");
     }
@@ -118,6 +145,21 @@ export function FieldAccount() {
     if (await send("DELETE", "/v1/organizations/current/deletion-requests/current", undefined, selectedOrganization)) {
       await load(selectedOrganization); setNotice("조직 삭제 예약을 취소했습니다. 공개 사이트가 다시 보이고 새 문의·예약을 받을 수 있습니다.");
     }
+    setFocusTarget("notice");
+  }
+  // 카카오 전용 계정의 본인 확인: 카카오로 다시 로그인해 새 세션을 만든 뒤 이 화면으로 돌아온다.
+  async function reauthWithKakao() {
+    setBusy(true);
+    try {
+      const response = await fetch("/api/auth/sign-in/social", {
+        method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: "kakao", callbackURL: "/workspace/account", errorCallbackURL: "/workspace/account?auth_error=kakao" }),
+      });
+      const target = response.status === 200 ? kakaoAuthorizeUrl(await response.json().catch(() => null)) : null;
+      if (target) { window.location.assign(target); return; }
+      setNotice("카카오 로그인을 시작하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+    } catch { setNotice("카카오 로그인 요청이 전달되지 않았습니다."); }
+    setBusy(false);
   }
   async function deleteAccount() {
     const needsPassword = eligibility?.reauthentication !== "recent_sign_in";
@@ -125,6 +167,7 @@ export function FieldAccount() {
       setPassword(""); setAccountDeleted(true); setOrganization(null); setEligibility(null);
       setNotice("계정을 삭제했습니다. 모든 기기에서 로그아웃되었습니다.");
     }
+    setFocusTarget("notice");
   }
 
   const request = organization?.request;
@@ -141,7 +184,7 @@ export function FieldAccount() {
   return <div className="site-shell"><header className="site-header"><a href="/"><Brand product="Field" /></a><nav aria-label="작업 메뉴"><a href="/workspace">사업 운영</a><a href="/workspace/subscription">구독·데이터 관리</a></nav></header>
     <main className="feature-section field-account-page"><div className="feature-heading"><p className="eyebrow">Field · 계정</p><h1>계정·조직 삭제 (추가)</h1><p>Field 조직과 계정만 삭제합니다. AP 계정·독립 AI·구독은 별도 제품에서 관리하며 자동으로 삭제되지 않습니다.</p></div>
       <button className="field-account-button" type="button" disabled={busy} onClick={() => void load(selectedOrganization)}>상태 새로고침</button>
-      {notice && <p role="status" className="state-message">{notice} {accountDeleted ? <a href="/">처음 화면으로</a> : null}</p>}
+      {notice && <p ref={noticeRef} tabIndex={-1} role="status" className="state-message">{notice} {accountDeleted ? <a href="/">처음 화면으로</a> : null}</p>}
       {!accountDeleted && <div className="special-grid">
         <section className="special-panel"><h2>조직 삭제 (추가)</h2>
           {choices.length > 0 && <label>삭제할 조직 선택 (추가)<select value={selectedOrganization ?? organization?.organization.id ?? ""} disabled={busy}
@@ -169,11 +212,12 @@ export function FieldAccount() {
                 <label className="field-account-consent"><input type="checkbox" checked={ack.connections} onChange={event => setAck({ ...ack, connections: event.target.checked })} /> AP 등 외부 연결을 해제했고, 다른 제품의 계정은 따로 삭제해야 한다는 것을 이해했습니다.</label>
                 <label>삭제 사유(선택)<textarea value={reason} maxLength={1000} onChange={event => setReason(event.target.value)} /></label>
                 {eligibility?.reauthentication === "recent_sign_in"
-                  ? <p>본인 확인 (추가): 비밀번호가 없는 계정은 최근 {eligibility.recentSignInMinutes}분 이내 로그인으로 본인 확인을 대신합니다.{organizationReauthMissing ? " 시간이 지났습니다. 카카오로 다시 로그인한 뒤 진행해 주세요." : ""}</p>
+                  ? <><p>본인 확인 (추가): 비밀번호가 없는 계정은 최근 {eligibility.recentSignInMinutes}분 이내 로그인으로 본인 확인을 대신합니다.{organizationReauthMissing ? " 시간이 지났습니다. 카카오로 다시 로그인한 뒤 진행해 주세요." : ""}</p>
+                    {organizationReauthMissing && <p><button className="field-account-button" type="button" disabled={busy} onClick={() => void reauthWithKakao()}>카카오로 다시 로그인</button></p>}</>
                   : <label>본인 확인 비밀번호 재입력 (추가)<input type="password" value={organizationPassword} autoComplete="current-password" onChange={event => setOrganizationPassword(event.target.value)} /></label>}
-                {!reviewing ? <p><button className="field-account-button" type="button" disabled={busy || !ready || !formComplete} onClick={() => setReviewing(true)}>삭제 예약 내용 확인</button></p>
-                  : <div role="alert"><p>{organization.coolingDays}일 뒤 <strong>{organization.organization.name}</strong> 조직을 삭제합니다. 그 전까지는 취소할 수 있습니다.</p>
-                    <button className="field-account-button" type="button" disabled={busy} onClick={() => void schedule()}>삭제 예약 확정</button> <button className="field-account-button" type="button" disabled={busy} onClick={() => setReviewing(false)}>돌아가기</button></div>}
+                {!reviewing ? <p><button ref={reviewButtonRef} className="field-account-button" type="button" disabled={busy || !ready || !formComplete} onClick={() => { setReviewing(true); setFocusTarget("review"); }}>삭제 예약 내용 확인</button></p>
+                  : <div ref={reviewRef} tabIndex={-1} role="alert"><p>{organization.coolingDays}일 뒤 <strong>{organization.organization.name}</strong> 조직을 삭제합니다. 그 전까지는 취소할 수 있습니다.</p>
+                    <button className="field-account-button" type="button" disabled={busy} onClick={() => void schedule()}>삭제 예약 확정</button> <button className="field-account-button" type="button" disabled={busy} onClick={() => { setReviewing(false); setFocusTarget("reviewButton"); }}>돌아가기</button></div>}
                 {!ready && <p>위 조건을 모두 충족해야 삭제를 예약할 수 있습니다.</p>}
               </>}
             </>}
@@ -182,7 +226,8 @@ export function FieldAccount() {
         <section className="special-panel"><h2>계정 삭제 (추가)</h2>
           {eligibility && <>
             <p>Field 로그인 계정을 삭제합니다. 로그인 정보·2단계 인증·세션을 지우고 이름과 이메일(인증 메일 발송 기록 포함)을 익명 처리합니다. 승인·청구 기록에 남은 계정 식별자는 법정 보존을 위해 익명 상태로 유지됩니다.</p>
-            {eligibility.blockers.length > 0 ? <ul>{eligibility.blockers.map(code => <li key={code}>{deletionMessage(code)}</li>)}</ul> : <>
+            {eligibility.blockers.length > 0 ? <><ul>{eligibility.blockers.map(code => <li key={code}>{deletionMessage(code)}</li>)}</ul>
+              {eligibility.blockers.length === 1 && eligibility.blockers[0] === "reauth_required" && <p><button className="field-account-button" type="button" disabled={busy} onClick={() => void reauthWithKakao()}>카카오로 다시 로그인</button></p>}</> : <>
               {eligibility.reauthentication === "recent_sign_in"
                 ? <p>비밀번호가 없는 계정은 최근 {eligibility.recentSignInMinutes}분 이내 로그인으로 본인 확인을 대신합니다. 시간이 지나면 카카오로 다시 로그인한 뒤 진행해 주세요.</p>
                 : <label>비밀번호 재입력<input type="password" value={password} autoComplete="current-password" onChange={event => setPassword(event.target.value)} /></label>}

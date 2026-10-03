@@ -5,11 +5,12 @@ import {BillingClientError,authorizationNotice,billingErrorNotice,continueChecko
   type BillingPlan,type CheckoutAttempt} from './billing-client';
 import {prepareBillingMutation,restoreBillingMutation,submitBillingMutation,type BillingMutationAttempt,
   type BillingMutationContext} from './billing-mutation-client';
+import {isDeletionScheduledAccess} from './deletion-scheduled-copy';
 import './billing-settings.css';
 
 type Period={id:string;subscriptionId:string;billingPeriod:number;startsAt:string|null;endsAt:string|null;totalAmount:number;
   supplyAmount:number;vatAmount:number;taxFreeAmount:number|null;state:string;paidAt:string|null;refundedAmount:number};
-type Snapshot={currentPlan:BillingPlan|null;product:string;organizationId:string;canManage:boolean;access:{mode:string;canStartNew:boolean;periodId?:string|null;endsAt:string|null;graceEndsAt:string|null};
+type Snapshot={currentPlan:BillingPlan|null;product:string;organizationId:string;canManage:boolean;access:{mode:string;reason?:string;canStartNew:boolean;periodId?:string|null;endsAt:string|null;graceEndsAt:string|null};
   subscription:{id:string;planId:string;state:string;anchorAt:string|null;cancelRequestedAt:string|null;terminatedAt:string|null}|null;
   periods:Period[];transactions:Array<{id:string;periodId:string;orderId:string;state:string;mode:string;errorCode:string|null}>};
 type Refund={id:string;periodId:string;amount:number;state:string;reason:string;createdAt:string};
@@ -80,6 +81,8 @@ export function FieldBillingSettings({organizationId,canManage}:{organizationId:
   const plan=attempt?.organizationId===organizationId?attempt.plan:plans.find(p=>p.id===selected)??null;
   const allowed=canManage&&snapshot?.organizationId===organizationId&&snapshot.canManage&&!stale;
   const existing=snapshot?.subscription;
+  // 조직 삭제 예약 중에는 새 구독 신청(카드 등록) 조작을 숨긴다
+  const deletionScheduled=isDeletionScheduledAccess(snapshot?.access);
   async function checkout(){
     if(!allowed||!plan||!agreed||!autoRenew||busy)return;
     const current=currentView();setBusy(true);setNotice('');
@@ -150,9 +153,10 @@ export function FieldBillingSettings({organizationId,canManage}:{organizationId:
       {plan?<><div className="plan-price">{plan.supplyAmount.toLocaleString('ko-KR')}<span>원 / 월</span></div><p className="small muted">부가세 포함 {money(plan.totalAmount)}{plan.mode==='test'?' · 테스트 가격':''}</p>
         <ul className="features-list"><li>✓ {title} 자체 구독</li><li>✓ 승인된 AI 제공량 {plan.includedAiUnits.toLocaleString('ko-KR')}회</li><li>✓ 월 갱신 · Asia/Seoul 기준일 유지</li><li>✓ 승인된 결제 유예 {plan.graceDays}일</li></ul>
         <details><summary>구독 조건·환불 조건 확인</summary><p className="field-note mt8">{plan.termsText}</p><p className="field-note mt8">{plan.refundText}</p></details>
+        {deletionScheduled?<p className="field-note mt16">삭제 예정 사업장이라 새 구독 신청을 시작할 수 없습니다.</p>:<>
         <label className="checkline mt16"><input type="checkbox" checked={agreed} disabled={busy||!allowed} onChange={e=>setAgreed(e.target.checked)}/><span>금액·세금·제공량·구독 및 환불 조건에 동의합니다.</span></label>
         <label className="checkline mt8"><input type="checkbox" checked={autoRenew} disabled={busy||!allowed} onChange={e=>setAutoRenew(e.target.checked)}/><span>카드 인증 후 최초 청구와 같은 조건의 월 자동 갱신에 동의합니다.</span></label>
-        <button className="btn btn-primary btn-lg wfull mt16" type="button" disabled={busy||!allowed||!agreed||!autoRenew||plan.taxFreeAmount===null||Boolean(existing&&!existing.terminatedAt&&attempt?.subscriptionId!==existing.id)} onClick={()=>void checkout()}>{attempt?'기존 구독 신청 이어가기':'플랜 선택·카드 등록'}</button>
+        <button className="btn btn-primary btn-lg wfull mt16" type="button" disabled={busy||!allowed||!agreed||!autoRenew||plan.taxFreeAmount===null||Boolean(existing&&!existing.terminatedAt&&attempt?.subscriptionId!==existing.id)} onClick={()=>void checkout()}>{attempt?'기존 구독 신청 이어가기':'플랜 선택·카드 등록'}</button></>}
         {plan.taxFreeAmount===null&&<p className="field-note mt8">면세 조건이 승인되지 않아 신청할 수 없습니다.</p>}</>:<p className="field-note mt24">신청할 수 있는 승인된 독립 가격이 없습니다. 승인 전에는 카드 등록과 청구를 시작하지 않습니다.</p>}
       {existing&&<p className="field-note mt16">기존 구독: {snapshot?.currentPlan?.name} · 부가세 포함 {money(snapshot?.currentPlan?.totalAmount??NaN)} · AI 제공량 {snapshot?.currentPlan?.includedAiUnits.toLocaleString('ko-KR')}회. 새 플랜을 선택해도 기존 구독 조건은 변경되지 않습니다.</p>}
       {existing&&!existing.terminatedAt&&attempt?.subscriptionId!==existing.id&&<p className="field-note mt8">기존 구독이 있어 새 카드 등록은 제한됩니다. 기존 구독의 갱신·내역을 확인해 주세요.</p>}

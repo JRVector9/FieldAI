@@ -1,3 +1,6 @@
+# 설계용 계약 예제 생성기(2026-09-24 문서 패키지). 여기서 만드는 event_envelope/action_request/knowledge_snapshot 스키마·예제는
+# 설계 기준이며 실제 서버 envelope(uuid event_id, notification_owner_product·route_generation 등)와 다르다. 실제 계약은 *.openapi.json과 docs/03.
+# 주의: contracts/CONTRACT_NOTES.md는 이후 손으로 갱신된 문서이므로 이미 있으면 덮어쓰지 않는다(아래 가드).
 from pathlib import Path
 import json, copy
 from jsonschema import Draft202012Validator, FormatChecker
@@ -41,6 +44,6 @@ x=copy.deepcopy(ex_action);x['expected_service_revision']='7';bad('revision_must
 x=copy.deepcopy(ex_action);x['request']={'mode':'slot','timezone':'Asia/Seoul'};bad('slot_requires_start_end',x,action)
 x=copy.deepcopy(ex_action);del x['consent'];bad('customer_consent_reference_required',x,action)
 x=copy.deepcopy(ex_knowledge);x['business']['private_notes']='secret';bad('private_facts_excluded',x,knowledge)
-(R/'CONTRACT_NOTES.md').write_text('''# 계약 예제 사용 안내\n\n이 파일은 연동 명세를 개발 에이전트가 구조화해 읽을 수 있게 제공한 **JSON Schema·합성 예제**입니다. 운영 API 서버, 완성 OpenAPI, 실제 서명 검증기 또는 SDK가 아닙니다.\n\n- event_envelope: 웹훅 최소 메타데이터 계약. 서명/인가/원본 조회는 서버 별도 검증입니다.\n- action_request: 고객 확인 후 외부 문의/예약 요청. 예약 확정 권한이 아닙니다.\n- knowledge_snapshot: 승인된 외부 사실. 예제 hash의 0은 형식 확인용으로 실제 내용 무결성 검증 값이 아닙니다.\n- task_graph / acceptance_catalog: 46개 작업과160개 인수 명세의 기계 판독본입니다.\n\n타임존·번호·날짜·요청의 실제 의미, 고객 동의 진위, 조직 매핑, 스코프, source hash, end>start, 서비스 소요시간, 전화번호 유효성, 예약 충돌은 schema 통과와 별도로 서버에서 확인해야 합니다. 테스트 전화번호로 외부 메시지를 발송하지 마세요.\n\nSchema/example 검사는 문서 패키지 품질 검사이며 서비스 인수 테스트 통과가 아닙니다. 운영 OpenAPI는 C01에서 양쪽 제품 명세를 기준으로 완성하고 소비자/제공자 계약 테스트를 붙입니다.\n''')
+if not (R/'CONTRACT_NOTES.md').exists(): (R/'CONTRACT_NOTES.md').write_text('''# 계약 예제 사용 안내\n\n이 파일은 연동 명세를 개발 에이전트가 구조화해 읽을 수 있게 제공한 **JSON Schema·합성 예제**입니다. 운영 API 서버, 완성 OpenAPI, 실제 서명 검증기 또는 SDK가 아닙니다.\n\n- event_envelope: 웹훅 최소 메타데이터 계약. 서명/인가/원본 조회는 서버 별도 검증입니다.\n- action_request: 고객 확인 후 외부 문의/예약 요청. 예약 확정 권한이 아닙니다.\n- knowledge_snapshot: 승인된 외부 사실. 예제 hash의 0은 형식 확인용으로 실제 내용 무결성 검증 값이 아닙니다.\n- task_graph / acceptance_catalog: 46개 작업과160개 인수 명세의 기계 판독본입니다.\n\n타임존·번호·날짜·요청의 실제 의미, 고객 동의 진위, 조직 매핑, 스코프, source hash, end>start, 서비스 소요시간, 전화번호 유효성, 예약 충돌은 schema 통과와 별도로 서버에서 확인해야 합니다. 테스트 전화번호로 외부 메시지를 발송하지 마세요.\n\nSchema/example 검사는 문서 패키지 품질 검사이며 서비스 인수 테스트 통과가 아닙니다. 운영 OpenAPI는 C01에서 양쪽 제품 명세를 기준으로 완성하고 소비자/제공자 계약 테스트를 붙입니다.\n''')
 (ROOT:=R.parent/'quality_checks'/'schema_check.json').write_text(json.dumps({'schemas_and_examples_valid':valid,'invalid_examples_rejected':checks,'service_tests_run':False},ensure_ascii=False,indent=2))
 print('Validated 3 schemas, 3 examples; rejected',len(checks),'invalid payloads')

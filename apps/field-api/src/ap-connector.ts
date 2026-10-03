@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID }
 import type { FastifyInstance } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
 import { recordFieldRevocation } from './revocation-journal.js';
+import { organizationDeletionScheduled } from './subscription-access.js';
 
 export type ApConnectorConfig = {
   issuer: string;
@@ -436,10 +437,19 @@ export function registerApConnectorRoutes(app: FastifyInstance, runtime: FieldBu
     const state = randomBytes(32).toString('base64url');
     const verifier = randomBytes(32).toString('base64url');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
-    await runtime.pool.query(
-      `insert into field.ap_oauth_attempts(id, organization_id, initiator_user_id, state_hash,
-         verifier_cipher, expires_at, requested_installation) values ($1,$2,$3,$4,$5,now() + interval '10 minutes',$6)`,
-      [randomUUID(), organizationId, userId, hash(state), seal(verifier, config.tokenKey), purpose === 'installation']);
+    // H1: 삭제 예약·완료 조직은 새 AP 연결을 시작하지 않는다(조직 FOR SHARE로 삭제 예약 생성과 직렬화).
+    const db = await runtime.pool.connect();
+    try {
+      await db.query('begin');
+      if (await organizationDeletionScheduled(db, organizationId)) {
+        await db.query('rollback'); return reply.code(409).send({ error: 'deletion_scheduled' });
+      }
+      await db.query(
+        `insert into field.ap_oauth_attempts(id, organization_id, initiator_user_id, state_hash,
+           verifier_cipher, expires_at, requested_installation) values ($1,$2,$3,$4,$5,now() + interval '10 minutes',$6)`,
+        [randomUUID(), organizationId, userId, hash(state), seal(verifier, config.tokenKey), purpose === 'installation']);
+      await db.query('commit');
+    } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
     const authorization = new URL(`${config.issuer.replace(/\/$/, '')}/oauth2/authorize`);
     for (const [key, value] of Object.entries({ response_type: 'code', client_id: config.clientId,
       redirect_uri: config.redirectUri, scope: [...requestedScopes, ...(purpose === 'installation' ? installationScopes : [])].join(' '), state,

@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyError, FastifyInstance, FastifyRequest } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
 import { RETENTION_TABLES, type RetentionKind } from './work-retention.js';
+import { sendPublicError } from './logging.js';
 
 const pattern = /^\/v1\/(owner\/)?(inquiries|reservations|external-requests)\/([0-9a-f-]{36})(?:\/|$)/i;
 export function registerFieldRetentionConsumers(app: FastifyInstance, runtime: FieldBusinessRuntime) {
@@ -34,8 +35,9 @@ export function registerFieldRetentionConsumers(app: FastifyInstance, runtime: F
     const retention = await retainedWork(request);
     return retention ? { ...payload, retention } : payload;
   });
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if ((error as { code?: string }).code === 'PFR01') return reply.header('Cache-Control', 'private, no-store').code(410).send({ error: 'retention_work_ended' });
-    return reply.send(error);
+    // 그 밖의 오류는 공통 처리(5xx는 internal_error만, logging.ts sendPublicError).
+    return sendPublicError(error as FastifyError, request, reply);
   });
 }

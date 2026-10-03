@@ -31,7 +31,9 @@ test("Field legal pages show an unset operator placeholder instead of invented v
     for (const heading of ["수집 항목과 이용 목적", "보존기간", "처리 위탁", "국외 이전", "이용자 권리"]) assert.match(privacy, new RegExp(heading));
     assert.match(privacy, /OpenAI \(미국\)/);
     assert.match(privacy, /마지막 시도 후 1일이 지나면 삭제/);
-    assert.doesNotMatch(privacy, /180일|90일/);
+    // 업무 보존 일수를 지어내지 않는다. 코드(retention-purge.ts)가 집행하는 인증 메일 발송 기록 행의 일수만 예외로 허용한다
+    const withoutEmailOutboxRow = privacy.replace(/<tr><th scope="row">인증 메일 발송 기록<\/th>.*?<\/tr>/g, "");
+    assert.doesNotMatch(withoutEmailOutboxRow, /180일|90일/);
   });
 });
 
@@ -75,4 +77,15 @@ test("Field booking request form shows the notice above the extended required co
   const consent = html.indexOf("예약 처리에 필요한 연락처 저장에 동의합니다. 위 개인정보 수집·이용 안내를 확인했습니다. (필수)");
   assert.ok(notice > 0 && consent > notice);
   assert.match(html, /요청 내용·희망 시간/);
+});
+
+// 개인정보처리방침은 구현된 계정·조직 삭제와 카카오·2단계 인증·인증 메일 기록 수집을 반영한다
+test("Field privacy policy describes implemented deletion and the newly collected auth items", () => {
+  const html = renderToStaticMarkup(<PrivacyPage />);
+  assert.doesNotMatch(html, /계정 삭제 기능 준비 중/);
+  assert.match(html, /14일 유예/);
+  assert.match(html, /카카오 계정 식별값/);
+  assert.match(html, /백업코드\(암호화 저장\)/);
+  assert.match(html, /인증 메일 발송 기록/);
+  assert.match(html, /7일 뒤 수신 주소를 익명화/);
 });

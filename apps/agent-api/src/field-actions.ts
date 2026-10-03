@@ -135,8 +135,13 @@ export type FieldNotificationRoute = { owner: 'ap' | 'field' | null; allowed: bo
   cause?: 'blocked_integration' | 'connection_not_available' };
 const unknownRoute: FieldNotificationRoute = { owner: null, allowed: false, reason: 'route_unknown' };
 const transientRoute: FieldNotificationRoute = { ...unknownRoute, transient: true };
-const routeReasons = new Set(['ap_route_generation_1', 'route_transfer_pending',
-  'field_route_active', 'field_route_suspended']);
+// Field 계약의 사유별 owner·allowed 조합(external-request-public-routes 알림 경로 응답). 그 밖의 조합은 route_unknown이다(추가, P2-4)
+const routeCombinations: Record<string, { owner: 'ap' | 'field'; allowed: boolean }> = {
+  ap_route_generation_1: { owner: 'ap', allowed: true },
+  route_transfer_pending: { owner: 'ap', allowed: false },
+  field_route_active: { owner: 'field', allowed: false },
+  field_route_suspended: { owner: 'field', allowed: false },
+};
 // 고객 알림을 만들기 직전에 Field 알림 경로를 확인한다. scope가 없는 연결은 확인할 수 없으므로 null(기존 세대 1 AP 규칙)을,
 // 확인 시도가 실패하면 이중 발송을 막기 위해 route_unknown을 돌려준다.
 export async function readFieldNotificationRoute(runtime: BusinessRuntime, inquiryId: string,
@@ -157,11 +162,14 @@ export async function readFieldNotificationRoute(runtime: BusinessRuntime, inqui
   if (response.status >= 500 || response.status === 429) return transientRoute;
   try {
     const data = response.ok ? object(await response.json()) : null;
+    // owner∈{ap,field}·allowed boolean·reason 문자열(64자 이하)을 확인한 뒤 사유와 owner·allowed 조합이 계약과 같은지 본다
+    const combination = typeof data?.reason === 'string' && data.reason.length <= 64
+      && Object.hasOwn(routeCombinations, data.reason) ? routeCombinations[data.reason] : undefined;
     if (!data || data.externalRequestId !== action.external_request_id
       || data.reservationId !== action.reservation_id
       || (data.owner !== 'ap' && data.owner !== 'field') || ![1, 2].includes(Number(data.generation))
-      || typeof data.allowed !== 'boolean' || !routeReasons.has(String(data.reason))
-      || (data.owner === 'field' && data.allowed)) return unknownRoute;
+      || typeof data.allowed !== 'boolean' || !combination
+      || combination.owner !== data.owner || combination.allowed !== data.allowed) return unknownRoute;
     return { owner: data.owner, allowed: data.allowed,
       reason: data.reason as FieldNotificationRoute['reason'] };
   } catch { return unknownRoute; }
@@ -557,7 +565,7 @@ export function registerFieldActionRoutes(app: FastifyInstance, runtime: Busines
       : reply.code(409).send({ error: 'idempotency_conflict' });
     const unresolved = await runtime.pool.query<{ id: string }>(
       `select id from ap.field_action_requests where inquiry_id = $1 and connection_id = $2
-         and service_id = $3 and kind = $4 and state in ('sending','delivery_unknown') limit 1`,
+         and service_id = $3 and kind = $4 and state in ('sending','delivery_unknown','unresolved') limit 1`,
       [inquiry.id, body.connectionId, body.serviceId, body.kind]);
     if (unresolved.rows[0]) return reply.code(409).send({ error: 'prior_delivery_unknown',
       actionRequestId: unresolved.rows[0].id });
@@ -663,7 +671,8 @@ export function registerFieldActionRoutes(app: FastifyInstance, runtime: Busines
         [request.params.actionId, inquiry.id]);
       const action = found.rows[0];
       if (!action) return reply.code(404).send({ error: 'field_action_not_found' });
-      if (action.state === 'accepted_external' || action.state === 'rejected')
+      // 운영자가 종결한 결과 미상(unresolved)도 종결 상태다. 다시 확인·재전송하지 않는다(추가)
+      if (action.state === 'accepted_external' || action.state === 'rejected' || action.state === 'unresolved')
         return reply.header('Cache-Control', 'private, no-store').send(status(action));
       const grant = await fieldResourceForCustomer(runtime, inquiry.id, secretHash,
         action.connection_id, 'field.requests.read');

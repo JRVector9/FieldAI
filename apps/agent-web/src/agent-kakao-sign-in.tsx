@@ -59,7 +59,8 @@ export function kakaoAuthorizeUrl(data: unknown) {
   try { return new URL(url).origin === KAKAO_AUTHORIZE_ORIGIN ? url : null; } catch { return null; }
 }
 
-export function AgentKakaoSignIn({ onTwoFactor, callbackPath }: { onTwoFactor: () => void; callbackPath?: string }) {
+// label: 연결 화면처럼 기존 계정 로그인만 안내할 곳에서 버튼 문구를 바꾼다(기본은 시작하기).
+export function AgentKakaoSignIn({ onTwoFactor, callbackPath, label = "카카오로 시작하기" }: { onTwoFactor: () => void; callbackPath?: string; label?: string }) {
   const [state, setState] = useState<KakaoProviderState>("loading");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -99,7 +100,7 @@ export function AgentKakaoSignIn({ onTwoFactor, callbackPath }: { onTwoFactor: (
 
   const reason = kakaoUnavailableReason(state);
   return <>
-    <button className="agent-auth-kakao" type="button" disabled={state !== "configured" || busy} onClick={() => void start()}>카카오로 시작하기</button>
+    <button className="agent-auth-kakao" type="button" disabled={state !== "configured" || busy} onClick={() => void start()}>{label}</button>
     {reason && state !== "loading" && <p className="agent-auth-unavailable">{reason}</p>}
     {message && <p role="status" className="state-message">{message}</p>}
   </>;

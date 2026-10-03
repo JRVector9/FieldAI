@@ -118,7 +118,8 @@ test('AP organization deletion is owner-confirmed, cooled, cancelable and retain
     const before = (await call('GET', '/v1/organizations/current/deletion-requests/current', owner)).json();
     assert.equal(before.request, null);
     assert.deepEqual(before.preconditions.map((item: { code: string; ok: boolean }) => [item.code, item.ok]),
-      [['paid_subscription_active', false], ['connections_active', true], ['pending_action_requests', true]]);
+      [['paid_subscription_active', false], ['connections_active', true], ['pending_action_requests', true],
+        ['integrator_grants_active', true]]);
     await pool.query("update ap.paid_subscriptions set state='canceled',terminated_at=now() where id=$1", [subscription]);
 
     // 예약: 14일 유예, 배포 즉시 중지, 새 업무 차단, 기존 고객 확인키 열람 유지.
@@ -494,6 +495,12 @@ test('AP stopped organization deletions are listed for admins and resumed only b
     // 다시 실행: 감사자·사유 누락은 거절, operator는 사유와 함께 실행 시각·오류·실패 횟수를 되돌린다.
     assert.equal((await call('POST', resumeUrl, auditor, { reason })).statusCode, 403);
     assert.equal((await call('POST', resumeUrl, operator, { reason: '짧음' })).json().error, 'invalid_reason');
+    // 다른 관리자 변경 경로와 같은 Origin 검사, NUL 문자 사유 거절(추가)
+    const crossOrigin = await app.inject({ method: 'POST', url: resumeUrl,
+      headers: { 'x-test-user': operator, origin: 'https://evil.example' }, payload: { reason } });
+    assert.equal(crossOrigin.statusCode, 403);
+    assert.equal(crossOrigin.json().error, 'origin_denied');
+    assert.equal((await call('POST', resumeUrl, operator, { reason: '저장소 권한\u0000확인 후 다시 실행' })).json().error, 'invalid_text');
     assert.equal((await call('POST', `/v1/admin/organization-deletions/${randomUUID()}/resume`, operator, { reason })).statusCode, 404);
     const resumed = await call('POST', resumeUrl, operator, { reason });
     assert.equal(resumed.statusCode, 200, resumed.body);

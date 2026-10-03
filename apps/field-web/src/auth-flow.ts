@@ -14,9 +14,19 @@ export function emailDeliveryNotice(state: EmailDeliveryState, purpose: "verify_
     : "메일 발송 환경이 연결되지 않았습니다. 지금은 재설정 메일을 보낼 수 없습니다.";
   if (state === "mock") return "로컬(mock) 환경입니다. 메일은 실제로 발송되지 않고 Field 서버 로그와 발송 기록에만 남습니다.";
   if (state === "unknown") return "메일 발송 상태를 확인하지 못했습니다. 잠시 뒤 다시 시도해 주세요.";
+  // 공급사 발송 결과는 화면에서 확인할 수 없으므로 "보냈다"가 아니라 "요청했다"로 안내한다
   return purpose === "verify_email"
-    ? "확인 메일을 보냈습니다. 메일의 링크를 열면 가입이 완료됩니다."
-    : "가입된 이메일이면 비밀번호 재설정 링크를 보냈습니다. 링크는 1시간 동안 사용할 수 있습니다.";
+    ? "확인 메일 발송을 요청했습니다. 메일이 오지 않으면 다시 보내기를 눌러 주세요."
+    : "가입된 이메일이면 비밀번호 재설정 링크 발송을 요청했습니다. 링크는 1시간 동안 사용할 수 있으며, 메일이 오지 않으면 다시 요청해 주세요.";
+}
+
+// 확인 메일 안내 영역의 제목·본문. 로그인 경로(sign_in)에서는 그 순간 메일을 보내지 않으므로 발송을 단정하지 않는다.
+export function verificationNoticeCopy(state: EmailDeliveryState | null, context: "sign_up" | "sign_in") {
+  if (state === null) return { title: "이메일 주소 확인이 필요합니다", body: "메일 발송 상태를 확인하고 있습니다." };
+  if (state === "blocked_integration") return { title: "메일 발송 환경이 연결되지 않았습니다", body: emailDeliveryNotice(state, "verify_email") };
+  if (context === "sign_in") return { title: "이메일 주소 확인이 필요합니다", body: state === "configured"
+    ? "가입 확인 메일의 링크를 먼저 열어 주세요. 메일이 없으면 다시 보내기를 눌러 주세요." : emailDeliveryNotice(state, "verify_email") };
+  return { title: state === "configured" ? "확인 메일 발송을 요청했습니다" : "이메일 주소 확인이 필요합니다", body: emailDeliveryNotice(state, "verify_email") };
 }
 
 export function signInOutcome(status: number, data: unknown): SignInOutcome {

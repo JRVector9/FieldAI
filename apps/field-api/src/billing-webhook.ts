@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { PoolClient } from 'pg';
 import type { FieldBusinessRuntime } from './business.js';
+import { ipLimitBucket } from './ip-bucket.js';
 
 // 토스 웹훅 수신 IP별 15분 한도(토스 재전송 최대 7회를 충분히 수용).
 const WEBHOOK_IP_LIMIT = 120;
@@ -32,7 +33,8 @@ export function parseTossWebhook(body: unknown): TossWebhookHint | null {
 async function consumeWebhookWindow(db: PoolClient, ip: string): Promise<number | null> {
   const secret = process.env.FIELD_AUTH_SECRET;
   if (!secret) throw new Error('FIELD_AUTH_SECRET is required for billing webhook limits');
-  const subject = createHmac('sha256', secret).update('field-billing-webhook-ip-v1\0').update(ip).digest('hex');
+  // IPv6는 /64로 묶어 주소만 바꿔 창을 늘리지 못하게 한다(ip-bucket.ts).
+  const subject = createHmac('sha256', secret).update('field-billing-webhook-ip-v1\0').update(ipLimitBucket(ip)).digest('hex');
   const row = (await db.query<{ attempts: number; retry_after: number }>(
     `insert into field.billing_webhook_ip_windows(subject_hash, attempts, window_started_at, updated_at)
      values ($1, 1, clock_timestamp(), clock_timestamp())

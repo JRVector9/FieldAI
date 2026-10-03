@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
+import { DELETION_SCHEDULED_OWNER_MESSAGE, isDeletionScheduledError } from "./deletion-scheduled-copy";
 import "./agent-field-connections.css";
 
 type Connection = { id: string; apOrganizationId: string; apAgentId: string;
@@ -97,7 +98,8 @@ export function AgentFieldConnections() {
       if (response.status === 201) {
         location.assign((response.data as { authorizationUrl: string }).authorizationUrl); return;
       }
-      setStatus(response.status === 503 ? "Field 연결 설정이 없습니다. AP 상담 기능은 계속 사용할 수 있습니다."
+      setStatus(isDeletionScheduledError(response.status, response.data) ? DELETION_SCHEDULED_OWNER_MESSAGE
+        : response.status === 503 ? "Field 연결 설정이 없습니다. AP 상담 기능은 계속 사용할 수 있습니다."
         : response.status === 404 ? "이 AP 조직의 승인 권한이 없습니다. AP owner 계정과 AI 동의를 확인해 주세요."
           : response.status === 409 ? "이미 연결된 기록입니다. 연결 상태를 확인해 주세요."
             : `Field 동의 시작에 실패했습니다 (${response.status}).`);

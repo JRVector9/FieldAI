@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
-import { agentAdminSections as sections, stoppedDeletionReason, type AgentAdminSection } from "./agent-admin-sections";
+import { agentAdminSections as sections, deletionResumeBlockReason, stoppedDeletionReason, type AgentAdminSection } from "./agent-admin-sections";
 import "./agent-admin.css";
 import { AgentModerationAdmin } from './AgentModerationAdmin';
 import { AgentCustomerSupport } from './AgentCustomerSupport';
@@ -94,10 +94,12 @@ function OrganizationDeletionRecovery({ role }: { role: "operator" | "auditor" }
       <h3>{item.organizationName}</h3>
       <p>멈춘 사유 {stoppedDeletionReason(item.lastError)} · 실행 실패 {item.executionFailures}회 · 전체 시도 {item.attemptCount}회</p>
       <p>실행 예정 {new Date(item.scheduledAt).toLocaleString("ko-KR")} · 요청 ID {item.id}</p>
-      {role === "operator" ? <>
-        <label>다시 실행 사유(10~500자)<input value={reasons[item.id] ?? ""} maxLength={500} onChange={event => setReasons({ ...reasons, [item.id]: event.target.value })} /></label>
-        <button type="button" disabled={busy || (reasons[item.id] ?? "").trim().length < 10} onClick={() => void resume(item.id)}>다시 실행</button>
-      </> : <p>다시 실행은 operator 권한이 필요합니다.</p>}
+      {role === "operator" && <label>다시 실행 사유(10~500자)<input value={reasons[item.id] ?? ""} maxLength={500} onChange={event => setReasons({ ...reasons, [item.id]: event.target.value })} /></label>}
+      {(() => {
+        const blocked = deletionResumeBlockReason({ role, reason: reasons[item.id] ?? "", busy });
+        return <><button type="button" disabled={blocked !== null} aria-describedby={blocked ? `resume-block-${item.id}` : undefined} onClick={() => void resume(item.id)}>다시 실행</button>
+          {blocked && <p id={`resume-block-${item.id}`}>{blocked}</p>}</>;
+      })()}
     </article>)}</div>}
   </section>;
 }
@@ -136,7 +138,8 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
       const result = await request("/api/auth/sign-in/email", "POST", { email, password });
       const outcome = signInOutcome(result.status, result.data);
       if (outcome === "email_not_verified") { setStatus("이메일 주소 확인이 필요합니다. 가입 확인 메일의 링크를 먼저 열어 주세요."); return; }
-      if (outcome !== "signed_in" && outcome !== "two_factor") { setStatus(`로그인하지 못했습니다 (${result.status}).`); return; }
+      if (outcome === "invalid_credentials") { setStatus("이메일 또는 비밀번호가 맞지 않습니다."); return; }
+      if (outcome !== "signed_in" && outcome !== "two_factor") { setStatus("로그인하지 못했습니다. 잠시 뒤 다시 시도해 주세요."); return; }
       setPassword("");
       if (outcome === "two_factor") { setPhase("totp"); return; }
       await load();

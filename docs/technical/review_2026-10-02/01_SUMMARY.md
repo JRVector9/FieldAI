@@ -55,9 +55,11 @@
 
 ## 3. 수정하지 않고 결정을 요청하는 항목
 
-- **Field M1 — 신고로 숨긴 사이트의 신규 문의·예약 접수 차단 여부.** 현재 코드·테스트(`moderation.db.test.ts:101`)·TASKS:198은 "숨김 중에도 신규 직접 접수 유지"를 의도된 결정으로 명시한다. 차단으로 바꾸려면 TASKS 재개 기록과 사용자 승인이 먼저 필요하다. 구현 후 원복했다.
-- **trustProxy 배포 조건.** Next 16 외부 rewrite는 `X-Forwarded-For`를 추가하지 않고 클라이언트 헤더를 그대로 넘긴다. 운영에서는 Next 앞단 LB/엣지가 XFF를 append해야 `loopback` 신뢰로 실제 고객 IP가 잡힌다. 이 조건을 배포 문서에 넣어야 한다.
-- **`(추가)` 표식.** AGENTS 6.0에 따라 붙인 표식이 사용자 화면에 37곳 이상 노출된다. 운영 고객 화면에도 둘지 결정이 필요하다.
+> 현재 열린 결정은 §13 한 곳에 모았다. 아래는 당시 기록이며 해결된 항목에 **해결** 표시를 붙였다.
+
+- **(열림 → §13) Field M1 — 신고로 숨긴 사이트의 신규 문의·예약 접수 차단 여부.** 현재 코드·테스트(`moderation.db.test.ts:101`)·TASKS:198은 "숨김 중에도 신규 직접 접수 유지"를 의도된 결정으로 명시한다. 차단으로 바꾸려면 TASKS 재개 기록과 사용자 승인이 먼저 필요하다. 구현 후 원복했다.
+- **(해결 — `c22b288`: compose가 `*_TRUST_PROXY` 기본값을 제품 네트워크 대역으로 두고, `infra/edge/Caddyfile.example`·`.env.live.example`에 XFF 재작성 조건을 문서화) trustProxy 배포 조건.** Next 16 외부 rewrite는 `X-Forwarded-For`를 추가하지 않고 클라이언트 헤더를 그대로 넘긴다. 운영에서는 Next 앞단 LB/엣지가 XFF를 append해야 `loopback` 신뢰로 실제 고객 IP가 잡힌다. 이 조건을 배포 문서에 넣어야 한다.
+- **(열림 → §13) `(추가)` 표식.** AGENTS 6.0에 따라 붙인 표식이 사용자 화면에 37곳 이상 노출된다. 운영 고객 화면에도 둘지 결정이 필요하다.
 
 ## 4. 리뷰에서 나왔지만 이번 범위 밖으로 남긴 결함
 
@@ -157,13 +159,13 @@ AP P2/P3·Field 중간/낮음 항목 전체는 `03_AP_CODE_REVIEW.md`, `04_FIELD
 | 약관·처리방침·고지 | `/terms`, `/privacy`(양 앱). 운영자 정보는 env, 미설정 시 "운영자 정보 미설정" 표시. 보존기간은 코드 근거만(정책 테이블 → "정책 확정 전"). 공개 고객 폼 3곳에 "개인정보 수집·이용 안내 (추가)" | `apps/*-web/src/legal.tsx`, `app/{terms,privacy}`, `field-public.tsx`, `field-booking.tsx`, `agent-public.tsx` | `NEXT_PUBLIC_LEGAL_*` 7종 |
 | 배포 산출물 | 제품별 `Dockerfile.api`(worker 동일 이미지, `--target migrate`)·`Dockerfile.web`, `compose.live.yaml`(db→migrate→api→web/worker, 자격증명 필요 worker는 profile), `.env.live.example`, `infra/edge/Caddyfile.example`, `.github/workflows/ci.yml`(lint/typecheck/unit/DB suite 양쪽/계약/빌드/이미지), ADR 0003 | `infra/`, `.github/`, `.dockerignore`, `docs/04` 5.1.1 | 예시 파일 참조 |
 
-**결정 필요 / 남은 공백**
-- 템플릿 초안에서 소개 문구가 hero 본문과 '소개' 섹션에 두 번 나온다(`layoutToSite` 기존 동작). 한 곳으로 줄일지 결정.
-- API 이미지에 better-auth의 선택 peer로 `next`가 포함된다(약 285MB). lockfile/peer 규칙 변경 필요.
-- live에서 공개 OAuth 연결 baseline을 만드는 `oauth-lifecycle-cli`가 mock 전용이라 live 공개 OAuth 연결은 blocked_integration.
-- 사업자 자체 도메인 TLS(Caddy on-demand `ask`)는 Field API에 `?domain=` 형식 endpoint가 없어 초안만.
-- OAuth 연결 로그인 화면(`agent-connect.tsx`)은 2FA 확인 미처리. email_outbox의 주소 보존·삭제 정책 없음. 실 SMTP 미시험.
-- nodemailer 10.0.13(MIT-0, 2026-09-30 배포)은 공급망 검토 권장.
+**결정 필요 / 남은 공백** (현재 열린 항목은 §13)
+- (열림 → §13) 템플릿 초안에서 소개 문구가 hero 본문과 '소개' 섹션에 두 번 나온다(`layoutToSite` 기존 동작). 한 곳으로 줄일지 결정.
+- (해결 — `196befc`, 이미지 868→460MB) API 이미지에 better-auth의 선택 peer로 `next`가 포함된다(약 285MB). lockfile/peer 규칙 변경 필요.
+- (열림 → §13) live에서 공개 OAuth 연결 baseline을 만드는 `oauth-lifecycle-cli`가 mock 전용이라 live 공개 OAuth 연결은 blocked_integration.
+- (해결 — `b5df6af` allow endpoint, `196befc` Caddy edge 어댑터. 실 Caddy/ACME는 공급사 검수로 남음) 사업자 자체 도메인 TLS(Caddy on-demand `ask`)는 Field API에 `?domain=` 형식 endpoint가 없어 초안만.
+- (해결 — `196befc` 연결 로그인 2FA·outbox 보존, 실 SMTP는 §13 공급사 항목) OAuth 연결 로그인 화면(`agent-connect.tsx`)은 2FA 확인 미처리. email_outbox의 주소 보존·삭제 정책 없음. 실 SMTP 미시험.
+- (열림 → §13) nodemailer 10.0.13(MIT-0, 2026-09-30 배포)은 공급망 검토 권장.
 
 검수(2026-10-03, Mac local mock, Node 24.18.0, PG17 격리 DB, Playwright venv):
 
@@ -187,18 +189,18 @@ AP P2/P3·Field 중간/낮음 항목 전체는 `03_AP_CODE_REVIEW.md`, `04_FIELD
 | 항목 | 구현 | 주요 파일 | 비고 |
 |---|---|---|---|
 | 카카오 로그인(양 제품) | better-auth 내장 `kakao` 공급사, `account.accountLinking.enabled:false`(동일 이메일 자동 병합 금지, B03), 카카오 미인증 이메일 거부, `GET /v1/auth/providers`, 카카오 콜백에도 2FA 적용하는 브리지 플러그인. 웹은 configured일 때만 버튼 활성 | `apps/*-api/src/kakao-provider.ts`, `auth.ts`, `*-kakao-sign-in.tsx` | `AP_KAKAO_CLIENT_ID/SECRET`, `FIELD_KAKAO_*`. mock에 키가 있으면 부팅 거부. 내장 공급사는 PKCE 없음. 실 카카오 미검증 |
-| AP `human_active` | `POST /v1/owner/inquiries/:id/take-over`·`/release`(직접 응대 시작/종료 `(추가)`), human_active 중 고객 메시지는 AI run 생성 없이 상태 유지 | `inquiries.ts`, `workspace.tsx` | **AI 재개(human→ai_assisting)는 미구현**: `ap_inquiries_contact_state_check`가 동의 후 대화를 human 모드로 고정하며, 완화 시 개인정보가 AI 기록으로 흘러감. 결정 필요 |
-| Toss 웹훅(양 제품) | `POST /v1/billing/webhooks/toss`: 서명 없는 힌트로만 취급. event_type/order_id/payment_key sha256만 저장, 원장 변경 없음, 결과 미상 건의 `next_attempt_at`만 60초 초과 예약일 때 앞당김, IP 창, 응답 고정 `{received:true}`, 30일 정리 | `billing-webhook.ts`, migration AP 000086 / Field 000079 | 결제 워커 기본 backoff가 60초라 현재는 앞당김 효과 거의 없음(결정 필요) |
+| AP `human_active` | `POST /v1/owner/inquiries/:id/take-over`·`/release`(직접 응대 시작/종료 `(추가)`), human_active 중 고객 메시지는 AI run 생성 없이 상태 유지 | `inquiries.ts`, `workspace.tsx` | **AI 재개(human→ai_assisting)는 미구현**(결정 → §13): `ap_inquiries_contact_state_check`가 동의 후 대화를 human 모드로 고정하며, 완화 시 개인정보가 AI 기록으로 흘러감. 결정 필요 |
+| Toss 웹훅(양 제품) | `POST /v1/billing/webhooks/toss`: 서명 없는 힌트로만 취급. event_type/order_id/payment_key sha256만 저장, 원장 변경 없음, 결과 미상 건의 `next_attempt_at`만 60초 초과 예약일 때 앞당김, IP 창, 응답 고정 `{received:true}`, 30일 정리 | `billing-webhook.ts`, migration AP 000086 / Field 000079 | 결제 워커 기본 backoff가 60초라 현재는 앞당김 효과 거의 없음(결정 필요 → §13) |
 | 계정·조직 삭제(양 제품) | 조직: owner 확인 입력+3개 승인+전제 조건(유료 구독·연결·미결 요청/예약) → 14일 유예(`deletion_scheduled`로 신규 업무 차단, Field 사이트 비공개, AP 배포/캠페인 pause) → 보존 워커가 실행(사이트·지식·카탈로그 내용 삭제/비움, 문의·예약 원본·청구 원장·감사 보존, 알림 수신처 암호문 삭제, 다른 조직 멤버십 없는 사용자만 세션 만료, 자체 도메인 해제). 계정: 비밀번호 재입력(5회/15분) 또는 카카오 전용 계정은 5분 이내 재로그인, 관리자/조직 owner/활성 grant면 거부, user 행은 익명 tombstone, email_outbox 익명화 | `account-deletion.ts`, migration AP 000085 / Field 000077, `*-account.tsx`, `/workspace/account` | 삭제된 조직 owner는 `owner_user_id` unique로 새 조직 생성 불가. 상호명은 보존(법무 검토) |
-| Field 공개 API 4개(§4.12) | `GET external-requests/{id}`, `POST .../customer-decisions`(accept/withdraw, 확정 아님), `GET .../notification-route`, `POST webhooks/agent`(HMAC inbox, `connection.revoked` 처리). 계약 preview.9, scope 2개 추가·client 등록 허용 | `external-request-public-routes.ts`, `ap-webhook-inbox.ts`, migration Field 000078, `contracts/field-integrator-v1.openapi.json` | §4.6 상태 4종은 AP ActionRequest 상태표이며 Field `external_work_requests.status`에 넣으면 의미가 틀려 미적용(AP 결정 필요). AP는 아직 새 경로를 소비하지 않음 |
+| Field 공개 API 4개(§4.12) | `GET external-requests/{id}`, `POST .../customer-decisions`(accept/withdraw, 확정 아님), `GET .../notification-route`, `POST webhooks/agent`(HMAC inbox, `connection.revoked` 처리). 계약 preview.9, scope 2개 추가·client 등록 허용 | `external-request-public-routes.ts`, `ap-webhook-inbox.ts`, migration Field 000078, `contracts/field-integrator-v1.openapi.json` | §4.6 상태 4종은 AP ActionRequest 상태표이며 Field `external_work_requests.status`에 넣으면 의미가 틀려 미적용(AP 결정 필요 → §13). AP는 아직 새 경로를 소비하지 않음(해결 — `196befc`) |
 | OAuth 선택 행 cascade(H1, 기존 결함) | better-auth가 만료/로그아웃 세션을 삭제하면 `oauth_selections`→연결이 cascade 삭제되어 통합 token 401. `session_id` nullable + `on delete set null` | migration AP 000087 / Field 000080 | 로그아웃 시 access token은 better-auth가 회수, `offline_access` refresh로 지속 |
-| 자체 도메인 on-demand TLS | `GET /v1/public/site-hosts/allow?domain=`(tls_pending/connected만 200, 삭제 조직 거부), Caddyfile `on_demand_tls { ask }` | `custom-domain-routes.ts`, `infra/edge/Caddyfile.example` | edge 어댑터 구현체가 없어 운영에서는 여전히 blocked_integration |
+| 자체 도메인 on-demand TLS | `GET /v1/public/site-hosts/allow?domain=`(tls_pending/connected만 200, 삭제 조직 거부), Caddyfile `on_demand_tls { ask }` | `custom-domain-routes.ts`, `infra/edge/Caddyfile.example` | edge 어댑터 구현체가 없어 운영에서는 여전히 blocked_integration(해결 — `196befc` Caddy edge 어댑터, 실 Caddy/ACME는 미검증) |
 | HEIC | sharp가 HEVC를 디코딩하지 못함을 확인. 415 `heic_unsupported`, 선택기 accept에서 제거, 안내 문구. site-editor의 틀린 문구 2곳 수정 | `site-media.ts`, `inquiry-media.ts`, `site-editor.tsx` | 실제 HEIC 변환은 libheif+HEVC 빌드 필요 |
 | 구조화 로그·PII 가림 | pino 로거, 헤더/본문 redact, 전화·이메일 마스킹, 라우트 패턴 URL, requestId | `apps/*-api/src/logging.ts`, docs/04 5.6.1 | `AP_LOG_LEVEL`/`FIELD_LOG_LEVEL` |
 
 **리뷰에서 나와 반영한 것:** 웹훅 원문 저장 중단·응답 고정·정리, 계정 삭제 비밀번호 시도 제한, 카카오 전용 계정 삭제 경로, 세션 만료 범위, 삭제 후 PII(outbox·알림 수신처), S3 HeadObject 404/403 구분과 12회 상한, RFC 3339 검증, HMAC 검증 후 잠금, `deletion_scheduled` 웹 문구, 동의 화면 scope 한국어 라벨.
 
-**남긴 것:** 직접 응대 시작/종료 행위자 기록(check 제약 migration 필요), 조직 삭제 예약 재인증, 여러 조직 owner의 삭제 대상 선택, owner 발송 기록 암호문 정리 테스트, 멈춘 삭제 요청의 `next_attempt_at='infinity'` 운영 절차, lifecycle 저널 전체 스캔, 사진 삭제 경로.
+**남긴 것(해결 — 7건 모두 `196befc`, 사진 삭제는 `13bcd31`에서 2단계로 재구성):** 직접 응대 시작/종료 행위자 기록(check 제약 migration 필요), 조직 삭제 예약 재인증, 여러 조직 owner의 삭제 대상 선택, owner 발송 기록 암호문 정리 테스트, 멈춘 삭제 요청의 `next_attempt_at='infinity'` 운영 절차, lifecycle 저널 전체 스캔, 사진 삭제 경로.
 
 검수(2026-10-03, Mac local mock, Node 24.18.0, PG17 격리 DB, Playwright venv):
 
@@ -272,3 +274,57 @@ AP P2/P3·Field 중간/낮음 항목 전체는 `03_AP_CODE_REVIEW.md`, `04_FIELD
 | `test:security` | 0 | 368/368 |
 
 실 Caddy/ACME·카카오·토스·S3·SMTP, 독립성 검사, 사용자 최종 화면 테스트는 미실행.
+
+## 13. 현재 열린 결정 — 단일 목록 (2026-10-03, HEAD `13bcd31` 기준)
+
+TASKS 상단·HANDOFF가 말하는 "결정 필요 항목"은 이 목록이다. §3·§9·§10·§11에 흩어져 있던 항목 중 코드로 해결된 것은 각 절에 **해결** 표시를 붙였고, 아래에는 사용자·운영 결정 또는 외부 계약이 있어야 닫히는 것만 남긴다. 결정 전에는 현재 동작(괄호)을 유지한다.
+
+| # | 결정 | 현재 동작 | 출처 |
+|---|---|---|---|
+| 1 | AP AI 응대 재개(`human_active` → `ai_assisting`) 허용 여부 | 직접 응대 종료 뒤에도 AI 재개 없음. `ap_inquiries_contact_state_check` 완화 시 동의 후 개인정보가 AI 기록으로 흘러감 | §10 |
+| 2 | docs/03 §4.6 상태 4종을 AP ActionRequest 상태표에 둘 위치 | Field `external_work_requests.status`에는 미적용 | §10 |
+| 3 | Toss 웹훅 힌트의 결제 worker backoff 앞당김 기준(현재 60초 초과일 때만) | worker 기본 backoff가 60초라 효과 거의 없음 | §10 |
+| 4 | 신고로 숨긴 Field 사이트의 신규 문의·예약 접수 차단 여부 | 접수 유지(`moderation.db.test.ts:101`, TASKS 기존 결정) | §3 |
+| 5 | `(추가)` 표식을 운영 고객 화면에도 둘지 | AGENTS 6.0대로 표시 | §3 |
+| 6 | 운영 체험 정책 값 승인(`*_TRIAL_CONSENT_VERSION`·`*_TRIAL_DAYS`) | 값이 없으면 live 체험 시작이 닫힘 | §9 |
+| 7 | 운영자 법적 정보 입력(`NEXT_PUBLIC_LEGAL_*` 7종) | "운영자 정보 미설정" 표시 | §9 |
+| 8 | 공급사 키·계약(SMTP·카카오·토스·S3·LLM·솔라피/웹 푸시·DNS/Caddy·레지스트리) | 각 기능 `blocked_integration`. S3가 없으면 retention worker의 사진 파일 삭제 단계도 미실행 | §5·§9 |
+| 9 | 계정 삭제 시 사용자가 소유한 OAuth client 처리(삭제 차단 사유로 둘지, 삭제 트랜잭션에서 비활성화·토큰 회수할지) | 차단 사유는 refresh token만 봄. client는 남음 | `17_HOLISTIC_SECURITY.md` |
+| 10 | 카카오 전용 계정의 관리자 2FA(`allowPasswordless` 허용 또는 비밀번호 추가 후 등록 안내) | 카카오 전용 계정은 2FA 등록 불가 → 비mock 관리자가 될 수 없음 | `13_HOLISTIC_AP_API.md`·`14_HOLISTIC_FIELD_API.md` |
+| 11 | 템플릿 초안의 소개 문구 중복(hero 본문과 '소개' 섹션) | 두 곳에 표시 | §9 |
+| 12 | live 공개 OAuth 연결 baseline 절차(`oauth-lifecycle-cli`는 mock 전용) | live 공개 OAuth 연결은 `blocked_integration` | §9 |
+| 13 | nodemailer 10.0.13 공급망 검토 | 검토 전 | §9 |
+| 14 | 같은 연결에 scope를 더하는 재동의 흐름 | 새 scope는 연결 해제 후 재연결로 안내 | §11 |
+
+## 14. 종합 리뷰(놓친 것 점검) + 반영 — 2026-10-03
+
+5개 관점(AP API `13`, Field API `14`, 웹 `15`, 인프라·문서·CI `16`, 보안 `17`)으로 84af59a 이후 전체 변경을 다시 검토했다. Critical/High는 보안에서 0건, 기능 연계에서 다음이 핵심이었다.
+
+| 발견 | 반영 |
+|---|---|
+| 조직 삭제 유예 중 결제·체험·연결 시작·통합 선택이 막히지 않음(양 제품) | 네 경로 모두 409 `deletion_scheduled`. 웹은 배너와 시작 버튼 숨김, 403/409 문구 통일 |
+| 삭제 실행·PII 정리가 S3 필수 retention worker에만 묶여 기본 배포에서 영원히 미실행 | worker가 S3/저널 없이 기동, 미디어 단계만 blocked_integration. compose에서 retention worker 상시 실행 |
+| 해제된 연결의 24시간 지난 `delivery_unknown`이 삭제를 영구 차단 | 전제 조건·보존 판단에서 제외, 운영자 종결 `POST /v1/admin/field-actions/:id/close-unknown` → `unresolved`(AP 000094) |
+| 조직 삭제가 외부 통합 OAuth grant를 회수하지 않고, 계정 삭제가 매체·OAuth client를 확인하지 않음 | 실행 시 grant 회수(회수 저널 기록), 차단 사유 `publisher_membership_required_removal`·`oauth_clients_active` |
+| Field 조직 삭제 실행기가 잠금 아래 S3 I/O | 남은 사진을 `deleting`으로 넘기고 0건일 때만 실행 |
+| CI가 고정 컨테이너 이름(`docker exec`)을 전제해 반드시 실패 | compose.mock 기반 DB, e2e job(Playwright+mock:run) 추가 |
+| 500 응답에 DB 오류 원문 노출, NUL 문자 미검증 | 5xx `{error:'internal_error'}`, 새 입력 `invalid_text` |
+| 인증 링크 자동 로그인(login CSRF), 미인증 선점 계정, better-auth 기본 한도 | `autoSignInAfterVerification:false`, 48시간 미인증 계정 정리, DB 저장 rateLimit, 메일 10분 중복 억제, 요청 timeout 30초, IPv6 /64 창 |
+| 웹: 삭제 유예 안내 없음, 원시 오류 코드 노출, 정책 문구 낡음, live `/preview` 링크, 포커스 | 공통 문구 헬퍼, `execution_failed` 매핑, 처리방침 갱신, `NEXT_PUBLIC_APP_PROFILE`, 포커스 이동, 사진 삭제 복구 관리자 패널 |
+| 문서·원장: 커밋 해시 누락, 마스터 문서 지연, SHA256SUMS 불일치, 낡은 README/ADR | TASKS 해시·분리, 마스터 재생성(`tools/build_report.py`), SHA 재계산, 문서 갱신, §13 열린 결정 단일 목록 |
+
+**남긴 것:** AP 미해결 요청 종결 관리자 화면(목록 API 없음), 운영자용 메일 outbox 화면, `test:independence` CI job, 기존 자유 입력의 NUL(500 대신 `internal_error`로만 표시), 카카오 전용 관리자 2FA(비밀번호 재설정으로 우회), 삭제 저널 백업 재적용, Field 공개 catalog의 유예 중 노출.
+
+검수(2026-10-03, Mac local mock, Node 24.18.0, PG17 격리 DB, Playwright venv):
+
+| 명령 | exit | 결과 |
+|---|---|---|
+| `lint` / `typecheck` / `test:unit` | 0 | tools 41(미등록 테스트 2개 포함), agent-api 38, field-api 57, agent-web 94, field-web 145 |
+| `build:agent` / `build:field` / `build:web:agent` / `build:web:field` | 0 | |
+| `test:db:agent` | 0 | 42파일 177/177 (migration 000094 포함) |
+| `test:db:field` | 0 | 36파일 200/200 (migration 000084 포함) |
+| `test:contracts`, `test:integration:faults` | 0 | 14/14, 15/15 (customer-decisions·revocation-restore 추가) |
+| `test:e2e:agent` / `field` / `distribution` | 0 | 10/10, 8/8, 2/2 (계정 삭제 HTTP spike 추가) |
+| `test:security` | 0 | 381/381 (TLS ask·health 404 추가) |
+
+실 Caddy/ACME·카카오·토스·S3·SMTP, GitHub Actions 실제 실행, 독립성 검사, 사용자 최종 화면 테스트는 미실행.

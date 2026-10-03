@@ -37,10 +37,13 @@ function store(jar: Jar, response: Response) {
   return response;
 }
 const cookie = (jar: Jar) => [...jar].map(([name, value]) => `${name}=${value}`).join('; ');
-async function call(jar: Jar, path: string, body?: unknown) {
+// 비mock에서는 better-auth 요청 한도가 켜져 있고(Security #5) 접속 IP별로 센다. 한도와 무관한 시나리오는 요청마다 합성 IP를 준다.
+const syntheticIp = () => `198.18.${randomBytes(1)[0]}.${randomBytes(1)[0]}`;
+async function call(jar: Jar, path: string, body?: unknown, ip = syntheticIp()) {
   const response = await auth.handler(new Request(`${base}/api/auth${path}`, {
     method: body === undefined ? 'GET' : 'POST',
-    headers: { origin: base, cookie: cookie(jar), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    headers: { origin: base, cookie: cookie(jar), 'x-forwarded-for': ip,
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }));
   return store(jar, response);
@@ -56,6 +59,15 @@ async function signUp(jar: Jar) {
 const outbox = async (email: string) => (await pool.query<{ purpose: string; state: string; text: string;
   provider_message_id: string | null; error_code: string | null; sent_at: Date | null }>(
   'select purpose,state,text,provider_message_id,error_code,sent_at from field.email_outbox where "to"=$1 order by created_at', [email])).rows;
+// 인증 메일은 요청 밖에서 기록·발송된다(M5). 행이 count개가 되고 대기(pending) 행이 없을 때까지 기다린다.
+async function settledOutbox(email: string, count: number) {
+  for (let waited = 0; waited < 5000; waited += 20) {
+    const rows = await outbox(email);
+    if (rows.length >= count && rows.every(row => row.state !== 'pending')) return rows;
+    await new Promise(done => setTimeout(done, 20));
+  }
+  throw new Error(`auth email outbox did not settle for ${count} rows`);
+}
 
 // RFC 6238 TOTP(SHA-1, 6자리, 30초). otpauth URI의 base32 secret을 그대로 디코딩한다.
 function totp(uri: string, at = Date.now()) {
@@ -76,7 +88,7 @@ test('Field sandbox sign-up records verify_email as blocked_integration when SMT
   assert.equal(emailDeliveryState(blockedProvider), 'blocked_integration');
   const jar: Jar = new Map();
   const { email, password } = await signUp(jar);
-  const rows = await outbox(email);
+  const rows = await settledOutbox(email, 1);
   assert.equal(rows.length, 1);
   assert.equal(rows[0]!.purpose, 'verify_email');
   assert.equal(rows[0]!.state, 'blocked_integration');
@@ -93,7 +105,7 @@ test('Field sandbox verification and password reset go through the injected prov
   authEmail.provider = { kind: 'smtp', async send(message) { sent.push(message); return { outcome: 'sent', providerMessageId: `synthetic-${sent.length}` }; } };
   const jar: Jar = new Map();
   const { email, password } = await signUp(jar);
-  const verifyRow = (await outbox(email))[0]!;
+  const verifyRow = (await settledOutbox(email, 1))[0]!;
   assert.equal(verifyRow.state, 'sent');
   assert.equal(verifyRow.provider_message_id, 'synthetic-1');
   assert.ok(verifyRow.sent_at);
@@ -104,14 +116,16 @@ test('Field sandbox verification and password reset go through the injected prov
   const verifyJar: Jar = new Map();
   const verified = await call(verifyJar, `/verify-email?token=${encodeURIComponent(link.searchParams.get('token')!)}`);
   assert.equal(verified.status, 200, await verified.clone().text());
-  assert.ok(verifyJar.size > 0, 'autoSignInAfterVerification sets a session cookie');
+  // Security #3: 인증 링크만으로는 로그인되지 않는다(autoSignInAfterVerification: false). 인증 뒤 직접 로그인한다.
+  assert.equal(verifyJar.size, 0, 'verification link must not sign the browser in');
+  assert.equal((await call(verifyJar, '/sign-in/email', { email, password })).status, 200);
   const session = await auth.api.getSession({ headers: new Headers({ cookie: cookie(verifyJar) }) });
   assert.equal(session?.user.emailVerified, true);
   assert.equal((session?.session as { twoFactorVerified?: boolean } | undefined)?.twoFactorVerified, false);
 
   const reset = await call(new Map(), '/request-password-reset', { email });
   assert.equal(reset.status, 200);
-  const rows = await outbox(email);
+  const rows = await settledOutbox(email, 2);
   assert.deepEqual(rows.map(row => [row.purpose, row.state]), [['verify_email', 'sent'], ['reset_password', 'sent']]);
   const resetLink = new URL(/https?:\/\/\S+/.exec(sent[1]!.text)![0]);
   assert.equal(`${resetLink.origin}${resetLink.pathname}`, `${webOrigin}/reset-password`);
@@ -123,13 +137,35 @@ test('Field sandbox verification and password reset go through the injected prov
     'password reset revokes existing sessions');
   assert.equal((await call(new Map(), '/sign-in/email', { email, password })).status, 401);
   assert.equal((await call(new Map(), '/sign-in/email', { email, password: newPassword })).status, 200);
-  // 없는 계정도 같은 응답이며 메일·outbox 행을 만들지 않는다.
+  // 없는 계정도 같은 응답이며 메일·outbox 행을 만들지 않는다(아래 요청들이 끝난 뒤 다시 확인한다).
   const unknown = `field-auth-missing-${randomUUID()}@example.invalid`;
   assert.equal((await call(new Map(), '/request-password-reset', { email: unknown })).status, 200);
-  assert.equal((await outbox(unknown)).length, 0);
+  // M5: 같은 주소·목적으로 10분 안에 다시 요청하면 같은 응답이지만 보내지 않고 suppressed_duplicate만 남긴다.
+  assert.equal((await call(new Map(), '/request-password-reset', { email })).status, 200);
+  assert.deepEqual((await settledOutbox(email, 3)).at(-1)?.state, 'suppressed_duplicate');
+  assert.equal(sent.length, 2, 'duplicate reset mail must not reach the provider');
+  // 10분이 지나면 다시 보낸다. 공급사 미연결이면 blocked_integration으로 남는다.
+  await pool.query(`update field.email_outbox set created_at=created_at-interval '11 minutes' where lower("to")=lower($1)`, [email]);
   authEmail.provider = blockedProvider;
   assert.equal((await call(new Map(), '/request-password-reset', { email })).status, 200);
-  assert.deepEqual((await outbox(email)).at(-1)?.state, 'blocked_integration');
+  assert.deepEqual((await settledOutbox(email, 4)).at(-1)?.state, 'blocked_integration');
+  assert.equal((await outbox(unknown)).length, 0);
+});
+
+// Security #5: 비mock에서는 better-auth 요청 한도가 DB("rateLimit", 000084)에 기록되고, 같은 IP의 로그인은 10초 3회 뒤 429다.
+test('Field sandbox better-auth rate limit is enabled and stored in the database', async () => {
+  authEmail.provider = blockedProvider;
+  const ip = syntheticIp();
+  const email = `field-auth-limit-${randomUUID()}@example.invalid`;
+  const statuses: number[] = [];
+  for (let index = 0; index < 4; index += 1)
+    statuses.push((await call(new Map(), '/sign-in/email', { email, password: 'wrong-password-123' }, ip)).status);
+  assert.deepEqual(statuses.slice(0, 3).every(status => status !== 429), true, String(statuses));
+  assert.equal(statuses[3], 429);
+  assert.equal((await call(new Map(), '/sign-in/email', { email, password: 'wrong-password-123' })).status !== 429, true,
+    'another IP keeps its own bucket');
+  const stored = await pool.query<{ count: number }>(`select count from "rateLimit" where key like $1`, [`%${ip}%`]);
+  assert.equal(stored.rows[0]?.count, 3);
 });
 
 test('Field sandbox admin needs 2FA enrollment and a session established through TOTP; mock is unchanged', async () => {

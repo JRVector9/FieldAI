@@ -43,6 +43,22 @@ import { registerCustomerSupportRoutes } from './customer-support.js';
 import { registerSourceRefreshRoutes } from './source-refreshes.js';
 import { registerAuthProviderRoutes } from './kakao-provider.js';
 
+// 앞단 프록시 신뢰 설정(Field의 FIELD_TRUST_PROXY와 같은 규칙, 추가). 비우면 같은 호스트의 프록시(loopback)만 신뢰하고,
+// true/false 또는 쉼표로 구분한 IP·CIDR·이름(loopback 등)을 지정한다.
+export function trustProxyFromEnvironment(value = process.env.AP_TRUST_PROXY): boolean | string {
+  if (value === undefined || value.trim() === '') return 'loopback';
+  if (value === 'true' || value === 'false') return value === 'true';
+  return value;
+}
+
+// 요청 수신(본문 포함) 제한 시간. 느린 본문으로 연결을 오래 붙잡지 못하게 한다(추가). 기본 30초, 1초~10분 정수 ms만 허용한다.
+export function requestTimeoutFromEnvironment(value = process.env.AP_REQUEST_TIMEOUT_MS) {
+  if (value === undefined || value === '') return 30_000;
+  const timeout = Number(value);
+  if (!/^[0-9]+$/.test(value) || timeout < 1_000 || timeout > 600_000) throw new Error('AP_REQUEST_TIMEOUT_MS is invalid');
+  return timeout;
+}
+
 export function createAgentApp(
   probe: () => Promise<void>,
   authHandler?: (request: Request) => Promise<Response>,
@@ -52,7 +68,18 @@ export function createAgentApp(
 ) {
   // 신뢰할 프록시 hop만 X-Forwarded-For를 반영한다. 기본은 같은 호스트의 Next rewrite(loopback)
   // 구조화 로그(AP_LOG_LEVEL)와 PII 가림·requestId는 logging.ts가 정한다.
-  const app = Fastify({ trustProxy: process.env.AP_TRUST_PROXY ?? 'loopback', ...loggingOptionsFromEnvironment() });
+  const app = Fastify({ trustProxy: trustProxyFromEnvironment(), requestTimeout: requestTimeoutFromEnvironment(),
+    ...loggingOptionsFromEnvironment() });
+  // 전역 오류 응답(추가): 보존 종료 가드(PAP01)는 410, 4xx는 Fastify 기본 본문, 5xx는 원문(DB 오류 문구·SQLSTATE·내부 메시지)을
+  // 응답에 싣지 않고 {error:'internal_error'}만 돌려준다. 원문은 가림 처리된 구조화 로그에만 남긴다.
+  app.setErrorHandler((error, _request, reply) => {
+    if ((error as { code?: string }).code === 'PAP01') return reply.header('Cache-Control', 'private, no-store').code(410).send({ error: 'retention_work_ended' });
+    const raw = (error as { statusCode?: unknown }).statusCode;
+    const statusCode = typeof raw === 'number' && raw >= 400 && raw < 600 ? raw : 500;
+    if (statusCode < 500) return reply.send(error);
+    reply.log.error({ err: error }, 'request failed');
+    return reply.code(statusCode).send({ error: 'internal_error' });
+  });
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_request, body, done) => {
     done(null, body);
   });

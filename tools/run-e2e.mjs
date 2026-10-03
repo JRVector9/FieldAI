@@ -15,6 +15,8 @@ const suites = {
     ['AP retention legacy closure evidence migration', 'agent-retention-migration.test.mjs'],
     ['AP native retention policy approval, inquiry holds, and administrator recovery', 'agent-retention-http.test.mjs'],
     ['AP native widget retention end, explicit new consultation and stale response isolation', 'ap-widget-ended-http.test.mjs'],
+    ['AP organization deletion re-auth schedule, blocked trial start and cancel', 'account-deletion-http.test.mjs',
+      { ACCOUNT_DELETION_PRODUCT: 'agent' }],
   ],
   field: [
     ['Field owner, public site, inquiry, and two booking modes', 'field-owner-flow-http.test.mjs'],
@@ -24,6 +26,8 @@ const suites = {
     ['Field customer support scopes, owned snapshots, and private photo expiry', 'field-customer-support-http.test.mjs'],
     ['Field retention legacy closure migration and immutable policy basis', 'field-retention-migration.test.mjs'],
     ['Field retention policies, holds, job cancellation/approval, independent purge worker and ended receipt', 'field-retention-http.test.mjs'],
+    ['Field organization deletion re-auth schedule, blocked trial start and cancel', 'account-deletion-http.test.mjs',
+      { ACCOUNT_DELETION_PRODUCT: 'field' }],
   ],
   distribution: [
     ['AP publisher recovery', 'publisher-recovery-http.test.mjs'],
@@ -66,10 +70,10 @@ async function ready(url, product) {
   }
 }
 
-function run(label, filename, env) {
+function run(label, filename, env, extra = {}) {
   process.stdout.write(`local mock E2E: ${label}\n`);
   const result = spawnSync(process.execPath,
-    ['--test', `tools/spikes/${filename}`], { cwd: root, env, stdio: 'inherit' });
+    ['--test', `tools/spikes/${filename}`], { cwd: root, env: { ...env, ...extra }, stdio: 'inherit' });
   if (result.error) throw result.error;
   if (result.signal || result.status !== 0)
     throw new Error(`${label} failed (${result.signal ?? result.status})`);
@@ -105,7 +109,7 @@ try {
     env.FIELD_DISTRIBUTION_E2E = '1';
     env.FIELD_DISTRIBUTION_BROWSER_PYTHON = python;
   }
-  for (const [label, filename] of suites[mode]) run(label, filename, env);
+  for (const [label, filename, extra] of suites[mode]) run(label, filename, env, extra);
   process.stdout.write(`local mock E2E ${mode}: passed; external-provider and release gates remain open\n`);
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

@@ -163,8 +163,12 @@ export function registerFieldCustomerDecisionRoutes(app: FastifyInstance, runtim
       const decisions = await runtime.pool.query<DecisionRow>(
         `select * from ap.field_customer_decisions where action_request_id = $1
          order by created_at desc limit 10`, [action.id]);
+      // 연결이 제안 응답 권한(field.proposals.respond)에 동의했는지. 없으면 화면이 수락·철회를 비활성화하고 사유를 보인다(추가, P2-5)
+      const canRespond = (await runtime.pool.query<{ scopes: string[] }>(
+        'select scopes from ap.field_connections where id = $1', [action.connection_id])).rows[0]
+        ?.scopes.includes('field.proposals.respond') ?? false;
       const send = (readState: ReadState | 'not_applicable', snapshot?: Snapshot) =>
-        reply.header('Cache-Control', 'private, no-store').send({ ...base,
+        reply.header('Cache-Control', 'private, no-store').send({ ...base, canRespond,
           field: { readState, state: snapshot?.state ?? null, revision: snapshot?.revision ?? null,
             proposal: snapshot?.proposal ?? null,
             checkedAt: snapshot ? new Date(snapshot.checkedAt).toISOString() : null },

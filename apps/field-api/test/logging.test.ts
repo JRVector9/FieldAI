@@ -3,6 +3,7 @@ import { Writable } from 'node:stream';
 import { test } from 'node:test';
 import Fastify from 'fastify';
 import { logLevelFromEnvironment, loggingOptionsFromEnvironment, maskLogText, maskLogValue, REDACT_PATHS } from '../src/logging.js';
+import { createFieldApp } from '../src/app.js';
 
 test('Field log masking keeps only the phone prefix and last four digits and the first email character', () => {
   assert.equal(maskLogText('연락처 010-1234-5678, 01198765432, 016 123 4567'), '연락처 010-****-5678, 011-****-5432, 016-****-4567');
@@ -66,4 +67,44 @@ test('Field request log is one compact line without body, query, headers or cust
     assert.equal((failed.err as { message: string }).message, '저장 실패 customer=010-****-8888 c***@example.com');
     assert.deepEqual(failed.req, { method: 'GET', url: '/v1/fail' });
   } finally { await app.close(); }
+});
+
+// Security #1: 5xx는 DB 오류 문구·SQLSTATE 대신 고정 코드만 돌려주고, 4xx(형식·크기)는 그대로 둔다.
+test('Field 5xx responses hide internal error details while 4xx keep their code', async () => {
+  const app = createFieldApp(async () => undefined);
+  app.get('/synthetic/db-error', async () => {
+    throw Object.assign(new Error('invalid byte sequence for encoding "UTF8": 0x00'), { code: '22021' });
+  });
+  app.get('/synthetic/unavailable', async () => { throw Object.assign(new Error('Field revocation journal unavailable'), { statusCode: 503 }); });
+  app.post('/synthetic/body', async () => ({ ok: true }));
+  try {
+    const failed = await app.inject('/synthetic/db-error');
+    assert.equal(failed.statusCode, 500);
+    assert.deepEqual(failed.json(), { error: 'internal_error' });
+    assert.doesNotMatch(failed.body, /22021|UTF8|0x00/);
+    const unavailable = await app.inject('/synthetic/unavailable');
+    assert.deepEqual([unavailable.statusCode, unavailable.json()], [503, { error: 'internal_error' }]);
+    const malformed = await app.inject({ method: 'POST', url: '/synthetic/body', headers: { 'content-type': 'application/json' }, payload: '{' });
+    assert.equal(malformed.statusCode, 400);
+    assert.equal(malformed.json().code, 'FST_ERR_CTP_INVALID_JSON_BODY');
+  } finally { await app.close(); }
+});
+
+// Security #11: 요청 전체 제한 시간은 기본 30초이고 FIELD_REQUEST_TIMEOUT_MS로 바꾼다. 범위 밖 값은 기동을 멈춘다.
+test('Field request timeout defaults to 30 seconds and validates FIELD_REQUEST_TIMEOUT_MS', async () => {
+  const previous = process.env.FIELD_REQUEST_TIMEOUT_MS;
+  try {
+    delete process.env.FIELD_REQUEST_TIMEOUT_MS;
+    const app = createFieldApp(async () => undefined);
+    assert.equal(app.server.requestTimeout, 30_000);
+    await app.close();
+    process.env.FIELD_REQUEST_TIMEOUT_MS = '15000';
+    const configured = createFieldApp(async () => undefined);
+    assert.equal(configured.server.requestTimeout, 15_000);
+    await configured.close();
+    for (const invalid of ['0', '999', 'abc', '600001'])
+      assert.throws(() => { process.env.FIELD_REQUEST_TIMEOUT_MS = invalid; createFieldApp(async () => undefined); }, /FIELD_REQUEST_TIMEOUT_MS/);
+  } finally {
+    if (previous === undefined) delete process.env.FIELD_REQUEST_TIMEOUT_MS; else process.env.FIELD_REQUEST_TIMEOUT_MS = previous;
+  }
 });

@@ -3,7 +3,8 @@
 #   docker build -f infra/field/Dockerfile.api -t fieldai-field-api .
 #   docker build -f infra/field/Dockerfile.api --target migrate -t fieldai-field-migrate .
 # 빌드 단계에도 AP 소스·매니페스트를 복사하지 않는다(B02). worker는 같은 이미지를 다른 command로 실행한다.
-ARG NODE_IMAGE=node:24-bookworm-slim
+# .node-version과 같은 패치 버전으로 고정한다(바꿀 때 두 곳을 함께 수정).
+ARG NODE_IMAGE=node:24.18.0-bookworm-slim
 
 FROM ${NODE_IMAGE} AS base
 ENV PNPM_HOME=/pnpm \

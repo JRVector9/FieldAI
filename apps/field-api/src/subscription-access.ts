@@ -32,3 +32,16 @@ export async function subscriptionAccess(db:Pool|PoolClient,organizationId:strin
   return {mode:'cleanup_only' as const,canStartNew:false,endsAt:paid?.ends_at??null,graceEndsAt:null,
     reason:trial?'trial_ended':'paid_subscription_required'};
 }
+
+// H1: 조직 삭제 예약·완료(또는 deleted_at) 조직에는 새 결제·체험·연결·통합 grant를 만들지 않는다.
+// 호출자 트랜잭션에서 조직 행을 FOR SHARE로 잡아 삭제 예약 생성(조직 FOR UPDATE)과 직렬화한다.
+export async function organizationDeletionScheduled(db:PoolClient,organizationId:string) {
+  // 이전 스키마(000077 이전)를 재현하는 마이그레이션 검사에서는 삭제 표·deleted_at이 없으므로 조직 잠금만 잡는다(subscriptionAccess와 같은 이유).
+  if(!(await db.query<{present:boolean}>("select to_regclass('field.organization_deletion_requests') is not null as present")).rows[0]!.present) {
+    await db.query('select 1 from field.organizations where id=$1 for share',[organizationId]);
+    return false;
+  }
+  const org=(await db.query<{deleted:boolean}>('select deleted_at is not null as deleted from field.organizations where id=$1 for share',[organizationId])).rows[0];
+  if(!org||org.deleted)return true;
+  return Boolean((await db.query("select 1 from field.organization_deletion_requests where organization_id=$1 and status in ('scheduled','executed') limit 1",[organizationId])).rowCount);
+}

@@ -48,6 +48,17 @@ test('Field Toss webhook records blocked_integration in mock, rejects elsewhere,
     assert.equal(limited.statusCode, 429);
     assert.ok(Number(limited.headers['retry-after']) >= 1);
     assert.equal(await stored(), 1);
+    // Security #4: IPv6는 /64로 묶는다. 같은 /64 안에서 주소만 바꿔도 같은 창이고, 다른 /64는 별도 창이다.
+    await pool.query('delete from field.billing_webhook_ip_windows');
+    for (let index = 0; index < 120; index += 1) {
+      const accepted = await app.inject({ method: 'POST', url: '/v1/billing/webhooks/toss', payload: { eventType: 'BILLING_DELETED', data: {} },
+        remoteAddress: `2001:db8:5:6:${(index + 1).toString(16)}::1` });
+      assert.equal(accepted.statusCode, 200, accepted.body);
+    }
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/billing/webhooks/toss', payload: body, remoteAddress: '2001:db8:5:6:ffff::9' })).statusCode, 429);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/billing/webhooks/toss', payload: { eventType: 'BILLING_DELETED', data: {} },
+      remoteAddress: '2001:db8:5:7::1' })).statusCode, 200);
+    assert.equal((await pool.query('select count(*)::int as n from field.billing_webhook_ip_windows')).rows[0].n, 2);
   } finally {
     if (profile === undefined) delete process.env.FIELD_PROFILE; else process.env.FIELD_PROFILE = profile;
     await app.close();
@@ -58,7 +69,7 @@ test('Field Toss webhook records blocked_integration in mock, rejects elsewhere,
 test('Field inbound cleanup removes only expired webhook hints and attempt windows', async () => {
   const oldOrder = `order_${randomUUID()}`.slice(0, 40), freshOrder = `order_${randomUUID()}`.slice(0, 40);
   const oldWindow = randomUUID().replaceAll('-', '').padEnd(64, '0'), freshWindow = randomUUID().replaceAll('-', '').padEnd(64, 'a');
-  const oldUser = randomUUID(), freshUser = randomUUID();
+  const oldUser = randomUUID(), freshUser = randomUUID(), owner = randomUUID(), org = randomUUID();
   await pool.query(`insert into field.billing_webhook_events(id,event_type,order_id,received_at,processed_at,outcome) values
     ($1,'PAYMENT_STATUS_CHANGED',$2,now()-interval '31 days',now(),'blocked_integration'),
     ($3,'PAYMENT_STATUS_CHANGED',$4,now()-interval '29 days',now(),'blocked_integration')`,
@@ -67,8 +78,18 @@ test('Field inbound cleanup removes only expired webhook hints and attempt windo
     ($1,1,now()-interval '20 minutes',now()-interval '20 minutes'),($2,1,now(),now())`, [oldWindow, freshWindow]);
   await pool.query(`insert into field.account_deletion_password_windows(user_id,attempts,window_started_at,updated_at) values
     ($1,1,now()-interval '20 minutes',now()-interval '20 minutes'),($2,1,now(),now())`, [oldUser, freshUser]);
+  // M2: 공개 접수 IP 창·전화번호 창도 15분 창이 끝나면 지운다.
+  await pool.query('insert into "user"(id,name,email,"emailVerified") values ($1,$1,$2,true)', [owner, `${owner}@example.invalid`]);
+  await pool.query('insert into field.organizations(id,owner_user_id,name) values ($1,$2,$3)', [org, owner, 'Field Window Org']);
+  for (const table of ['public_submission_ip_windows', 'public_submission_windows'])
+    await pool.query(`insert into field.${table}(organization_id,subject_hash,attempts,window_started_at,updated_at) values
+      ($1,$2,1,now()-interval '20 minutes',now()-interval '20 minutes'),($1,$3,1,now(),now())`, [org, oldWindow, freshWindow]);
   const purged = await purgeExpiredInboundRecords(pool);
   assert.ok(purged.billingWebhookEvents >= 1 && purged.billingWebhookIpWindows >= 1 && purged.passwordWindows >= 1);
+  assert.deepEqual([purged.publicSubmissionIpWindows, purged.publicSubmissionWindows], [1, 1]);
+  for (const table of ['public_submission_ip_windows', 'public_submission_windows'])
+    assert.deepEqual((await pool.query(`select subject_hash from field.${table} where organization_id = $1`, [org])).rows,
+      [{ subject_hash: freshWindow }], table);
   assert.deepEqual((await pool.query('select order_id from field.billing_webhook_events where order_id = any($1::text[])',
     [[oldOrder, freshOrder]])).rows, [{ order_id: freshOrder }]);
   assert.deepEqual((await pool.query('select subject_hash from field.billing_webhook_ip_windows where subject_hash = any($1::text[])',

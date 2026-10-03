@@ -55,10 +55,14 @@ function store(jar: Jar, response: Response) {
   return response;
 }
 const cookie = (jar: Jar) => [...jar].map(([name, value]) => `${name}=${value}`).join('; ');
+// 비mock 인증은 IP별 요청 한도(rateLimit)가 켜져 있으므로 흐름 검사는 호출마다 다른 합성 클라이언트 IP(TEST-NET-2)로 보낸다.
+let syntheticIp = 0;
 async function call(jar: Jar, path: string, body?: unknown) {
+  syntheticIp += 1;
   const response = await auth.handler(new Request(`${base}/api/auth${path}`, {
     method: body === undefined ? 'GET' : 'POST',
-    headers: { origin: base, cookie: cookie(jar), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    headers: { origin: base, cookie: cookie(jar), 'x-forwarded-for': `198.51.100.${(syntheticIp % 250) + 1}`,
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }));
   return store(jar, response);

@@ -322,3 +322,33 @@ test('Field executes only separately approved retention jobs and confirms file a
     await rm(root, { recursive: true, force: true });
   }
 });
+
+// M4: 문의 사진 저장소·보존 원장·사이트 사진 저장소가 없어도 작업자가 기동한다. 조직 삭제 실행·짧은 창 정리는 그대로 하고,
+// 사진 삭제·법정 보존은 건너뛰며 blocked_integration을 한 줄씩 알린다(완료를 주장하지 않는다).
+test('Field retention worker boots without private media or journals and still runs deletion and cleanup steps', async () => {
+  const pool = new Pool({ connectionString: process.env.FIELD_DATABASE_URL });
+  const owner = randomUUID(), org = randomUUID(), requestId = randomUUID();
+  try {
+    await pool.query('insert into "user"(id,name,email,"emailVerified") values ($1,$1,$2,true)', [owner, `${owner}@example.invalid`]);
+    await pool.query('insert into field.organizations(id,owner_user_id,name) values ($1,$2,$3)', [org, owner, 'Field Boot Org']);
+    await pool.query("insert into field.memberships(organization_id,user_id,role) values ($1,$2,'owner')", [org, owner]);
+    await pool.query(`insert into field.organization_deletion_requests(id,organization_id,requested_by,confirmation,status,requested_at,scheduled_at,next_attempt_at)
+      values ($1,$2,$3,'{}'::jsonb,'scheduled',now()-interval '15 days',now()-interval '1 minute',now()-interval '1 minute')`, [requestId, org, owner]);
+    await pool.query(`insert into field.public_submission_ip_windows(organization_id,subject_hash,attempts,window_started_at,updated_at)
+      values ($1,$2,1,now()-interval '20 minutes',now()-interval '20 minutes')`, [org, 'b'.repeat(64)]);
+    const worker = await promisify(execFile)(process.execPath, ['--import', 'tsx', 'src/retention-purge-worker.ts', '--once'], {
+      env: { PATH: process.env.PATH, FIELD_PROFILE: 'mock', FIELD_DATABASE_URL: process.env.FIELD_DATABASE_URL }, timeout: 20000,
+    });
+    assert.match(worker.stdout, /field retention worker ready/);
+    assert.match(worker.stdout, /field organization deletion: executed/);
+    assert.match(worker.stderr, /field site asset deletion: blocked_integration/);
+    assert.match(worker.stderr, /field retention: blocked_integration/);
+    assert.doesNotMatch(worker.stdout, /field retention: (empty|completed)/);
+    assert.equal((await pool.query('select status from field.organization_deletion_requests where id=$1', [requestId])).rows[0].status, 'executed');
+    assert.equal((await pool.query('select count(*)::int as n from field.public_submission_ip_windows where organization_id=$1', [org])).rows[0].n, 0);
+    // production 가드는 그대로다: NODE_ENV=production에서 live가 아니면 기동하지 않는다.
+    await assert.rejects(promisify(execFile)(process.execPath, ['--import', 'tsx', 'src/retention-purge-worker.ts', '--once'], {
+      env: { PATH: process.env.PATH, NODE_ENV: 'production', FIELD_PROFILE: 'mock', FIELD_DATABASE_URL: process.env.FIELD_DATABASE_URL }, timeout: 20000,
+    }));
+  } finally { await pool.end(); }
+});

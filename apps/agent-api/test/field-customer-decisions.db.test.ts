@@ -6,7 +6,8 @@ import { fromNodeHeaders } from 'better-auth/node';
 import { Pool } from 'pg';
 import { agentRevocationJournalFromEnvironment } from '../src/revocation-journal.js';
 import { createAgentApp } from '../src/app.js';
-import { deliverFieldAgentEventOnce, enqueueFieldAgentEvent, purgeAckedFieldAgentEvents } from '../src/field-webhook-sender.js';
+import { AUTH_REJECT_RETRY_LIMIT, deliverFieldAgentEventOnce, enqueueFieldAgentEvent, NOT_READY_RETRY_LIMIT,
+  purgeAckedFieldAgentEvents } from '../src/field-webhook-sender.js';
 import { apToFieldSignatureSendVersion } from '../src/field-signature.js';
 import { processFieldEventInboxOnce, type FieldRouteCache } from '../src/field-event-inbox.js';
 
@@ -93,10 +94,10 @@ test('AP customer reads Field proposals, decides once per key, honours notificat
       revision: number; startAt: string; endAt: string; state: string } | null };
   let readMode: 'ok' | 401 | 403 | 404 | 503 | 'throw' = 'ok';
   let readCalls = 0;
-  let decisionMode: 'ok' | 'lose_after_commit' | 'throw' | 404 = 'ok';
+  let decisionMode: 'ok' | 'lose_after_commit' | 'throw' | 404 | 'proof_expired' = 'ok';
   const decisionBodies: Record<string, unknown>[] = [];
   const storedDecisions = new Map<string, { body: string; result: Record<string, unknown> }>();
-  let routeMode: 'ap' | 'field' | 503 = 'ap';
+  let routeMode: 'ap' | 'field' | 503 | 'bad_combo' = 'ap';
   let routeCalls = 0;
   const events: Array<Record<string, unknown>> = [];
   let webhookMode: 'ok' | 401 | 503 = 'ok';
@@ -137,6 +138,9 @@ test('AP customer reads Field proposals, decides once per key, honours notificat
     if (external && url.pathname.endsWith('/notification-route')) {
       routeCalls++;
       if (routeMode === 503) return Response.json({ error: 'unavailable' }, { status: 503 });
+      // 계약에 없는 조합(Field 담당인데 AP 세대 1 사유)은 AP가 route_unknown으로 다뤄야 한다
+      if (routeMode === 'bad_combo') return Response.json({ externalRequestId: external.externalRequestId,
+        reservationId: external.reservationId, owner: 'field', generation: 2, allowed: false, reason: 'ap_route_generation_1' });
       return Response.json({ externalRequestId: external.externalRequestId,
         reservationId: external.reservationId, owner: routeMode,
         generation: routeMode === 'field' ? 2 : 1, allowed: routeMode === 'ap',
@@ -151,6 +155,8 @@ test('AP customer reads Field proposals, decides once per key, honours notificat
       // 저장 전 실패: 네트워크 단절(throw)·Field가 저장 전에 거절(404)
       if (decisionMode === 'throw') throw new Error('field_decision_timeout_before_store');
       if (decisionMode === 404) return Response.json({ error: 'external_reservation_not_found' }, { status: 404 });
+      // 고객 확인 기록이 Field 신선도(24시간)를 넘겨 저장 전에 거절된 경우
+      if (decisionMode === 'proof_expired') return Response.json({ error: 'customer_proof_expired' }, { status: 409 });
       const prior = storedDecisions.get(body.idempotencyKey);
       if (prior) return prior.body === raw ? Response.json(prior.result)
         : Response.json({ error: 'idempotency_conflict' }, { status: 409 });
@@ -308,6 +314,8 @@ test('AP customer reads Field proposals, decides once per key, honours notificat
     assert.equal(view.statusCode, 200, view.body);
     assert.equal(view.json().state, 'accepted_external');
     assert.equal(view.json().field.readState, 'current');
+    // 연결이 제안 응답 권한에 동의했으므로 고객 화면은 수락·철회를 활성화할 수 있다
+    assert.equal(view.json().canRespond, true);
     assert.equal(view.json().field.state, 'proposed');
     assert.deepEqual(view.json().field.proposal, { revision: 3, startAt: proposalStart.toISOString(),
       endAt: proposalEnd.toISOString(), state: 'awaiting_customer' });
@@ -455,6 +463,50 @@ test('AP customer reads Field proposals, decides once per key, honours notificat
       delete process.env.AP_EVENT_SIGNATURE_SEND_VERSION;
       receiverSignatureVersion = 2;
     }
+    // 4-2) Field 401은 AUTH_REJECT_RETRY_LIMIT번째 시도에서 blocked로 멈춘다(그 전까지는 retry)
+    const enqueueEvent = async () => {
+      const db = await pool.connect();
+      try {
+        await db.query('begin');
+        const id = await enqueueFieldAgentEvent(db, { organizationId, connectionId, actionRequestId: actionId,
+          correlationId: randomUUID(), status: 'customer_decided_accept', occurredAt: new Date() });
+        await db.query('commit');
+        return id;
+      } finally { db.release(); }
+    };
+    const outboxState = async (id: string) => (await pool.query<{ state: string; attempts: number; last_http_status: number | null;
+      last_error: string | null }>(`select state,attempts,last_http_status,last_error from ap.field_agent_event_outbox where id = $1`, [id])).rows[0];
+    const rejectedEvent = await enqueueEvent();
+    webhookMode = 401;
+    try {
+      for (let attempt = 1; attempt < AUTH_REJECT_RETRY_LIMIT; attempt++) {
+        assert.equal(await deliverFieldAgentEventOnce(pool, runtime.fieldConnector), 'retry', String(attempt));
+        await pool.query('update ap.field_agent_event_outbox set next_attempt_at = now() where id = $1', [rejectedEvent]);
+      }
+      assert.equal(await deliverFieldAgentEventOnce(pool, runtime.fieldConnector), 'blocked');
+      assert.deepEqual(await outboxState(rejectedEvent), { state: 'blocked', attempts: AUTH_REJECT_RETRY_LIMIT,
+        last_http_status: 401, last_error: 'receiver_rejected' });
+      assert.equal(await deliverFieldAgentEventOnce(pool, runtime.fieldConnector), 'empty');
+    } finally { webhookMode = 'ok'; }
+    // 4-3) degraded 연결의 사건은 복구를 기다려 재시도하되 NOT_READY_RETRY_LIMIT번째 시도에서 blocked로 멈춘다
+    const degradedEvent = await enqueueEvent();
+    await pool.query("update ap.field_connections set status = 'degraded' where id = $1", [connectionId]);
+    try {
+      const webhooksBefore = webhookBodies.length;
+      assert.equal(await deliverFieldAgentEventOnce(pool, runtime.fieldConnector), 'retry');
+      assert.deepEqual(await outboxState(degradedEvent), { state: 'retry', attempts: 1, last_http_status: null,
+        last_error: 'connection_not_ready' });
+      await pool.query('update ap.field_agent_event_outbox set attempts = $2, next_attempt_at = now() where id = $1',
+        [degradedEvent, NOT_READY_RETRY_LIMIT - 2]);
+      assert.equal(await deliverFieldAgentEventOnce(pool, runtime.fieldConnector), 'retry');
+      await pool.query('update ap.field_agent_event_outbox set next_attempt_at = now() where id = $1', [degradedEvent]);
+      assert.equal(await deliverFieldAgentEventOnce(pool, runtime.fieldConnector), 'blocked');
+      assert.deepEqual(await outboxState(degradedEvent), { state: 'blocked', attempts: NOT_READY_RETRY_LIMIT,
+        last_http_status: null, last_error: 'connection_not_ready_limit' });
+      assert.equal(webhookBodies.length, webhooksBefore);
+    } finally {
+      await pool.query("update ap.field_connections set status = 'review_required' where id = $1", [connectionId]);
+    }
 
     // 5) 알림 경로: Field 담당이면 생략, 일시 장애면 미러링하지 않고 다음 동기화에서 재확인, scope 없으면 기존 세대 1 규칙
     const syncPath = `${viewPath}/sync-events`;
@@ -509,6 +561,8 @@ test('AP customer reads Field proposals, decides once per key, honours notificat
       payload: { decision: 'accept', proposalRevision: reservation.revision } });
     assert.equal(missing.statusCode, 403, missing.body);
     assert.equal(missing.json().error, 'scope_missing');
+    // 조회 응답이 응답 권한 없음을 미리 알려 화면이 버튼을 비활성화한다
+    assert.equal((await app.inject({ url: viewPath, headers: bearer })).json().canRespond, false);
     assert.equal(decisionBodies.length, 4);
     pushEvent(4, 'field.reservation.change_proposed', 'change_proposed');
     pushEvent(5, 'field.reservation.canceled', 'canceled');
@@ -571,6 +625,35 @@ test('AP customer reads Field proposals, decides once per key, honours notificat
     assert.equal(rekeyed?.state, 'recorded');
     assert.notEqual(rekeyed?.idempotency_key, closed?.idempotency_key);
 
+    // 8-1) Field가 고객 확인 기록 만료(customer_proof_expired)로 저장 전에 거절하면 거절로 닫고, 다음 시도는 새 키·새 고객 기록으로 보낸다
+    reservation.revision += 1;
+    reservation.state = 'change_proposed';
+    reservation.proposal = { ...reservation.proposal!, revision: reservation.revision, state: 'awaiting_customer' };
+    const expiredRevision = reservation.revision;
+    decisionMode = 'proof_expired';
+    const expiredProof = await app.inject({ method: 'POST', url: decisionPath, headers: bearer,
+      payload: { decision: 'accept', proposalRevision: expiredRevision } });
+    assert.equal(expiredProof.statusCode, 409, expiredProof.body);
+    assert.equal(expiredProof.json().error, 'customer_proof_expired');
+    assert.equal(expiredProof.json().decisionState, 'rejected');
+    const expiredRow = (await pool.query<{ state: string; error_code: string; idempotency_key: string; customer_record_id: string }>(
+      `select state,error_code,idempotency_key,customer_record_id from ap.field_customer_decisions
+       where action_request_id = $1 and decision = 'accept' and proposal_revision = $2`, [actionId, expiredRevision])).rows[0]!;
+    assert.deepEqual([expiredRow.state, expiredRow.error_code], ['rejected', 'customer_proof_expired']);
+    decisionMode = 'ok';
+    const reproved = await app.inject({ method: 'POST', url: decisionPath, headers: bearer,
+      payload: { decision: 'accept', proposalRevision: expiredRevision } });
+    assert.equal(reproved.statusCode, 201, reproved.body);
+    assert.equal(reproved.json().decisionState, 'recorded');
+    const reprovedRow = (await pool.query<{ idempotency_key: string; customer_record_id: string }>(
+      `select idempotency_key,customer_record_id from ap.field_customer_decisions
+       where action_request_id = $1 and decision = 'accept' and proposal_revision = $2`, [actionId, expiredRevision])).rows[0]!;
+    assert.notEqual(reprovedRow.idempotency_key, expiredRow.idempotency_key);
+    assert.notEqual(reprovedRow.customer_record_id, expiredRow.customer_record_id);
+    const lastBody = decisionBodies.at(-1) as { idempotencyKey: string; customerProof: { recordId: string } };
+    assert.equal(lastBody.idempotencyKey, reprovedRow.idempotency_key);
+    assert.equal(lastBody.customerProof.recordId, reprovedRow.customer_record_id);
+
     // 9) 수신 확인 행은 30일 뒤 보존 단계에서 지운다. 다음 사건 순번(max+1)이 재사용되지 않도록 action별 최신 행은 남긴다
     const outboxRows = async () => (await pool.query<{ aggregate_version: number }>(
       `select aggregate_version from ap.field_agent_event_outbox where aggregate_id = $1
@@ -584,6 +667,15 @@ test('AP customer reads Field proposals, decides once per key, honours notificat
       where aggregate_id = $1`, [actionId]);
     assert.equal(await purgeAckedFieldAgentEvents(pool), versions.length - 1);
     assert.deepEqual(await outboxRows(), [versions.at(-1)]);
+    // 9-1) 차단(blocked) 행도 마지막 변경 30일 뒤 지운다. 30일이 안 된 행과 대상별 최신 행은 남긴다
+    const blockedIds = [await enqueueEvent(), await enqueueEvent(), await enqueueEvent()];
+    const blockedVersions = await outboxRows();
+    for (const [index, id] of blockedIds.entries())
+      await pool.query(`update ap.field_agent_event_outbox set state = 'blocked',lease_until = null,
+        updated_at = now() - $2::interval where id = $1`, [id, index === 1 ? '29 days' : '31 days']);
+    // 이전 최신 acked 행(31일)과 가장 오래된 blocked 행이 지워진다
+    assert.equal(await purgeAckedFieldAgentEvents(pool), 2);
+    assert.deepEqual(await outboxRows(), blockedVersions.slice(-2));
 
     // 10) push 경로(수신함)도 sync 경로처럼 기록 직전 Field 알림 경로를 확인한다
     const reservationId = (await pool.query<{ reservation_id: string }>(
@@ -758,18 +850,47 @@ test('AP customer reads Field proposals, decides once per key, honours notificat
       [pushed14.eventId]);
     assert.equal(await processFieldEventInboxOnce(pool, runtime.fieldConnector), 'processed');
     assert.deepEqual(await notice(14), { state: 'blocked_integration', suppression_reason: null });
+    // 10-11) 계약에 없는 owner·allowed·reason 조합은 route_unknown(생략)으로 기록하고 AP 발송을 만들지 않는다
+    routeMode = 'bad_combo';
+    const pushed15 = feedEvent(15, 'field.reservation.changed', 'confirmed');
+    await receive(pushed15);
+    assert.equal(await processFieldEventInboxOnce(pool, runtime.fieldConnector), 'processed');
+    assert.deepEqual(await notice(15), { state: 'not_applicable', suppression_reason: 'route_unknown' });
+    assert.equal(await deliveryCount(15), 0);
+    routeMode = 'ap';
+    // 10-12) 처리 중 예외가 난 행은 processing_failed로 미뤄 2초마다 다시 집지 않는다. 원인이 사라지면 처리된다
+    await pool.query(`create function ap.synthetic_reject_reservation_event() returns trigger language plpgsql as $f$
+      begin raise exception 'synthetic mirror failure'; end $f$`);
+    await pool.query(`create trigger synthetic_reject_reservation_event before insert on ap.field_reservation_events
+      for each row execute function ap.synthetic_reject_reservation_event()`);
+    const pushed16 = feedEvent(16, 'field.reservation.changed', 'confirmed');
+    try {
+      await receive(pushed16);
+      await assert.rejects(processFieldEventInboxOnce(pool, runtime.fieldConnector), /synthetic mirror failure/);
+      assert.deepEqual(await inboxRow(pushed16), { state: 'received', error_code: 'processing_failed', processed: false, backed_off: true });
+      const failedDelay = await retryDelay(pushed16);
+      assert.ok(failedDelay > 25 && failedDelay <= 30, String(failedDelay));
+      assert.equal(await processFieldEventInboxOnce(pool, runtime.fieldConnector), 'empty');
+    } finally {
+      await pool.query('drop trigger synthetic_reject_reservation_event on ap.field_reservation_events');
+      await pool.query('drop function ap.synthetic_reject_reservation_event()');
+    }
+    await pool.query('update ap.field_event_inbox set next_attempt_at = now() where source_event_id = $1', [pushed16.eventId]);
+    assert.equal(await processFieldEventInboxOnce(pool, runtime.fieldConnector), 'processed');
+    assert.equal(await mirroredCount(16), 1);
+    assert.deepEqual(await inboxRow(pushed16), { state: 'processed', error_code: null, processed: true, backed_off: false });
     // 10-10) 확인키가 아예 없는 상담만 조회 없이 route_unknown(생략)으로 기록한다.
     // 현재 스키마는 접수된 상담(external/human)에 확인키를 요구하므로, 상담 행을 접수 전(ai) 상태로 되돌려 재현한다
     await pool.query(`update ap.inquiries set mode = 'ai', state = 'ai_assisting', automation_paused = false,
       customer_name = null, customer_phone = null, visitor_key_hash = null, consent_at = null
       where id = $1`, [inquiryId]);
-    const pushed15 = feedEvent(15, 'field.reservation.changed', 'confirmed');
-    await receive(pushed15);
+    const pushed17 = feedEvent(17, 'field.reservation.changed', 'confirmed');
+    await receive(pushed17);
     const callsBeforeKeyless = routeCalls;
     assert.equal(await processFieldEventInboxOnce(pool, runtime.fieldConnector), 'processed');
     assert.equal(routeCalls, callsBeforeKeyless);
-    assert.deepEqual(await notice(15), { state: 'not_applicable', suppression_reason: 'route_unknown' });
-    assert.equal(await deliveryCount(15), 0);
+    assert.deepEqual(await notice(17), { state: 'not_applicable', suppression_reason: 'route_unknown' });
+    assert.equal(await deliveryCount(17), 0);
   } finally {
     Date.now = realNow;
     await app.close();

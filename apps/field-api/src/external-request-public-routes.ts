@@ -7,7 +7,7 @@ import { acceptReservationProposal, requestReservationCancellation } from './boo
 
 // RFC 3339 date-time(시간대 필수). JS Date.parse만 통과하고 PG timestamptz가 거부하는 문자열은 400으로 막는다.
 const RFC3339 = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:[0-5]\d(\.\d{1,9})?(Z|[+-]([01]\d|2[0-3]):[0-5]\d)$/i;
-function isRfc3339(value: string) {
+export function isRfc3339(value: string) {
   const match = RFC3339.exec(value);
   // 월별 일수(윤년 포함)를 넘는 날짜는 PG가 거부하므로 여기서 거른다.
   return !!match && Number(match[3]) <= new Date(Date.UTC(Number(match[1]), Number(match[2]), 0)).getUTCDate()

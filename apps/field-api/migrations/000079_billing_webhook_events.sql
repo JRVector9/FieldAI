@@ -23,3 +23,6 @@ create table field.billing_webhook_ip_windows (
 );
 create index field_billing_webhook_ip_windows_cleanup_idx on field.billing_webhook_ip_windows(updated_at);
 -- 보존: 이벤트는 30일, IP 창은 만료(15분) 뒤 보존 작업자(retention-purge-worker) 정리 단계에서 지운다.
+-- 롤백(가역, 힌트·창만 사라짐. 결제 확정은 워커 lookup이 하므로 원장 영향 없음):
+--   drop table field.billing_webhook_ip_windows; drop table field.billing_webhook_events;
+--   웹훅 경로(billing-webhook.ts)를 먼저 끈다.

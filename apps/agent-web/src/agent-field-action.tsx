@@ -27,7 +27,9 @@ type CustomerDecision = { decision: "accept" | "withdraw"; proposalRevision: num
 // 결과 미상인 이전 고객 결정(서버 409 prior_decision_unknown 본문 또는 조회 결과)
 type PendingDecision = Pick<CustomerDecision, "decision" | "proposalRevision">;
 type FieldStateView = { field: { readState: FieldReadState; state: string | null; revision: number | null;
-  proposal: FieldProposal | null; checkedAt: string | null }; decisions: CustomerDecision[] };
+  proposal: FieldProposal | null; checkedAt: string | null }; decisions: CustomerDecision[];
+  // 사업자 연결에 제안 응답 권한이 있는지(서버 추가 필드). 이전 응답에는 없으므로 false일 때만 막는다
+  canRespond?: boolean };
 type RequestDetails = { mode: "inquiry"; timezone: string }
   | { mode: "preferred"; preferredTimeText: string; timezone: string }
   | { mode: "slot"; startAt: string; timezone: string };
@@ -48,6 +50,7 @@ function actionLabel(state: string, error?: string | null, kind?: Action["kind"]
     case "accepted_external": return kind === "inquiry"
       ? "Field에 문의 접수됨 · 사업자 응답 대기" : "Field에 요청 접수됨 · 예약 확정 전";
     case "delivery_unknown": return "전달 결과 확인 중 · 새 요청을 만들지 마세요";
+    case "unresolved": return "운영자가 전달 결과 미확인으로 종결함 · 사업자에게 직접 확인해 주세요";
     case "sending": return "Field에 전달 중";
     case "rejected": return "Field가 접수하지 않음 · 조건을 다시 확인하세요";
     default: return state;
@@ -63,7 +66,7 @@ function fieldReadLabel(readState: FieldReadState) {
     default: return "";
   }
 }
-function decisionErrorLabel(error?: string | null) {
+export function decisionErrorLabel(error?: string | null) {
   switch (error) {
     case "proposal_mismatch": return "제안이 바뀌었습니다. 새로 고침해 주세요";
     case "decision_not_supported": return "변경 제안은 여기서 철회할 수 없습니다. 사업자에게 문의해 주세요.";
@@ -72,7 +75,16 @@ function decisionErrorLabel(error?: string | null) {
     case "scope_missing": return "사업자의 Field 연결에 제안 응답 권한 동의가 없습니다. 사업자에게 문의해 주세요.";
     case "connection_invalid": return "Field 연결이 유효하지 않아 결정을 전달하지 못했습니다.";
     case "field_reservation_mismatch": return "Field 예약 연결을 확인하지 못해 결정을 전달하지 못했습니다.";
-    default: return `Field가 결정을 받지 않았습니다${error ? ` (${error})` : ""}.`;
+    case "customer_proof_reused": return "이미 사용한 응답 확인 정보입니다. 제안을 새로 고친 뒤 다시 눌러 주세요.";
+    case "customer_proof_mismatch": return "응답 확인 정보가 현재 제안과 맞지 않습니다. 제안을 새로 고친 뒤 다시 눌러 주세요.";
+    case "idempotency_conflict": return "같은 요청으로 다른 응답이 이미 기록됐습니다. 제안을 새로 고쳐 현재 상태를 확인해 주세요.";
+    case "field_decision_rejected": return "Field가 이 응답을 받지 않았습니다. 제안을 새로 고친 뒤 다시 시도해 주세요.";
+    case "field_reservation_not_accepted": return "Field가 아직 이 예약 요청을 접수하지 않아 응답할 수 없습니다. 잠시 뒤 다시 확인해 주세요.";
+    case "invalid_receipt_key": return "접수 확인키가 바뀌었거나 맞지 않습니다. 새 확인키로 접수 확인 화면을 다시 열어 주세요.";
+    case "invalid_customer_decision": return "응답 내용을 확인하지 못했습니다. 제안을 새로 고친 뒤 다시 시도해 주세요.";
+    case "external_reservation_not_found": return "Field에서 이 예약을 찾지 못했습니다. 사업자에게 문의해 주세요.";
+    // 알 수 없는 코드는 고객 화면에 노출하지 않는다
+    default: return "Field가 이 응답을 받지 않았습니다. 제안을 새로 고친 뒤 다시 시도해 주세요.";
   }
 }
 function reservationLabel(state: string) {
@@ -92,6 +104,7 @@ export function FieldProposalPanel({ view, busy, pending, onRefresh, onDecide }:
   const unknown = pending ?? view?.decisions.find(item => item.decisionState === "decision_unknown");
   const fresh = field?.readState === "current";
   const acceptBlocked = !proposal ? "현재 응답할 제안이 없습니다."
+    : view?.canRespond === false ? "사업자 연결에 제안 응답 권한이 없습니다."
     : !fresh ? "Field 현재 상태를 확인한 뒤 응답할 수 있습니다."
       : proposal.state !== "awaiting_customer" ? "이미 제안을 수락했습니다. 예약 확정은 사업자가 합니다." : "";
   const withdrawBlocked = acceptBlocked || (field?.state !== "proposed"
@@ -215,7 +228,8 @@ export function AgentFieldAction({ inquiryId, receiptKey, initialSummary = '', e
         const view = result.data as FieldStateView;
         setFieldStates(previous => ({ ...previous, [actionId]: view }));
         setNotice(view.field.readState === "current" ? "Field 현재 상태를 확인했습니다." : fieldReadLabel(view.field.readState));
-      } else setNotice(`Field 상태를 확인하지 못했습니다 (${result.status}). 이전 확인 상태를 유지합니다.`);
+      } else setNotice(result.status === 401 ? decisionErrorLabel("invalid_receipt_key")
+        : "Field 상태를 확인하지 못했습니다. 이전 확인 상태를 유지합니다.");
     } catch { setNotice("Field 상태 응답을 받지 못했습니다. 이전 확인 상태를 유지합니다."); }
     finally { setBusy(false); }
   }

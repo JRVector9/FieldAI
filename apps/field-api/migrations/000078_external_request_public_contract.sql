@@ -66,3 +66,8 @@ create index field_ap_webhook_inbox_connection_idx
 -- 서명 시각 창(±300초)이 재전송을 막으므로 오래된 event_id 기록이 사라져도 재사용은 거부된다.
 create index field_ap_webhook_inbox_recorded_cleanup_idx
   on field.ap_webhook_inbox(received_at) where state = 'recorded';
+-- 롤백(주의): §4.12 경로(external-request-public-routes.ts)·수신함(ap-webhook-inbox.ts)을 먼저 끈 뒤
+--   drop table field.ap_webhook_inbox; drop table field.external_request_customer_decisions;
+--   update "oauthResource" set "allowedScopes" = "allowedScopes" - 'field.proposals.respond' - 'field.notification_route.read',
+--     "updatedAt" = now() where "identifier" ~ '^https?://[^/]+/integrations/v1$' and jsonb_typeof("allowedScopes") = 'array';
+--   이미 발급된 두 scope의 토큰·동의는 위 갱신으로 회수되지 않으므로 해당 referenceId 토큰을 따로 revoke한다.

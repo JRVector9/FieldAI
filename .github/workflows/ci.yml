@@ -1,15 +1,18 @@
 # FieldAI CI — AP와 Field를 서로 다른 job·DB에서 검사한다(B01/B02).
 #
 # 범위
-# - static:    lint·typecheck·unit(test:unit 안의 DB 러너 검사 때문에 두 mock DB를 띄운다)
-# - agent:     AP 전용 PostgreSQL만 있는 job에서 test:db:agent·AP 빌드. Field env·서비스 없음.
-# - field:     Field 전용 PostgreSQL·Valkey만 있는 job에서 test:db:field·Field 빌드. AP env·서비스 없음.
-# - contracts: 두 제품 공개 계약·연결 소비자 DB 검사(두 DB 필요).
+# - static:    lint·typecheck·unit. DB·Valkey가 필요 없다(DB 러너 통합 검사는 DB_SUITE_ADMIN_INTEGRATION=1일 때만 실행되어 여기서는 skip).
+# - agent:     AP mock compose(PostgreSQL)만 띄운 job에서 test:db:agent·AP 빌드. Field env·서비스 없음.
+# - field:     Field mock compose(PostgreSQL·Valkey)만 띄운 job에서 test:db:field·Field 빌드. AP env·서비스 없음.
+# - contracts: 두 제품 공개 계약·연결 소비자 DB 검사(두 mock compose 필요).
+# - e2e:       Playwright(Python)와 pnpm mock:run 전체 스택으로 test:e2e:*·test:security·test:integration:faults.
 # - images:    infra/*/Dockerfile.* 이미지 빌드만(push 없음).
+# DB 테스트는 로컬과 같은 compose 프로젝트 이름(fieldai-<product>-mock)으로 띄운다.
+#   일부 DB 테스트가 고정 컨테이너 이름(fieldai-<product>-mock-db-1)에 docker exec(pg_dump/pg_restore)를 하므로
+#   GitHub services:(자동 이름)로 바꾸지 않는다.
 # 실행하지 않는 것
-# - test:e2e:*·test:security·test:independence:*·test:integration:faults는 Playwright(Python)와
-#   mock 전체 스택 기동이 필요해 CI에서 돌리지 않는다. 아래 주석의 e2e job 초안 참고.
-# - 서비스 컨테이너 비밀번호는 CI 일회용 값이다(운영 비밀값 아님). 실제 secret은 사용하지 않는다.
+# - test:independence:*는 상대 제품 컨테이너·포트가 없는 상태가 전제라 아직 CI job이 없다(수동 증거 필요).
+# - mock env의 DB·Valkey 비밀번호는 setup-mock-env.mjs가 job마다 만드는 일회용 값이다. 실제 secret은 사용하지 않는다.
 name: ci
 
 on:
@@ -23,36 +26,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  AP_CI_DB_PASSWORD: ci-only-agent-db
-  FIELD_CI_DB_PASSWORD: ci-only-field-db
-  FIELD_CI_VALKEY_PASSWORD: ci-only-field-queue
-
 jobs:
   static:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    services:
-      agent-db:
-        image: postgres:17.11
-        env:
-          POSTGRES_DB: fieldai_agent_mock
-          POSTGRES_USER: agent_local
-          POSTGRES_PASSWORD: ci-only-agent-db
-        ports: ['55431:5432']
-        options: >-
-          --health-cmd "pg_isready -U agent_local -d fieldai_agent_mock"
-          --health-interval 2s --health-timeout 2s --health-retries 30
-      field-db:
-        image: postgres:17.11
-        env:
-          POSTGRES_DB: fieldai_field_mock
-          POSTGRES_USER: field_local
-          POSTGRES_PASSWORD: ci-only-field-db
-        ports: ['55432:5432']
-        options: >-
-          --health-cmd "pg_isready -U field_local -d fieldai_field_mock"
-          --health-interval 2s --health-timeout 2s --health-retries 30
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -61,14 +38,9 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # setup-mock-env.mjs와 같은 형식의 infra/<product>/.env를 만든 뒤 나머지 키(인증·저널)는 스크립트가 채운다.
+      # 일부 unit 검사가 infra/<product>/.env 형식을 읽으므로 일회용 mock env만 만든다(DB는 띄우지 않음).
       - name: Write mock env files
-        run: |
-          printf 'AP_MOCK_DB_PASSWORD=%s\nAP_DATABASE_URL=postgresql://agent_local:%s@127.0.0.1:55431/fieldai_agent_mock\n' \
-            "$AP_CI_DB_PASSWORD" "$AP_CI_DB_PASSWORD" > infra/agent/.env
-          printf 'FIELD_MOCK_DB_PASSWORD=%s\nFIELD_DATABASE_URL=postgresql://field_local:%s@127.0.0.1:55432/fieldai_field_mock\nFIELD_MOCK_VALKEY_PASSWORD=%s\nFIELD_VALKEY_URL=valkey://:%s@127.0.0.1:56332/0\n' \
-            "$FIELD_CI_DB_PASSWORD" "$FIELD_CI_DB_PASSWORD" "$FIELD_CI_VALKEY_PASSWORD" "$FIELD_CI_VALKEY_PASSWORD" > infra/field/.env
-          node tools/setup-mock-env.mjs agent field
+        run: node tools/setup-mock-env.mjs agent field
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test:unit
@@ -76,17 +48,6 @@ jobs:
   agent:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    services:
-      agent-db:
-        image: postgres:17.11
-        env:
-          POSTGRES_DB: fieldai_agent_mock
-          POSTGRES_USER: agent_local
-          POSTGRES_PASSWORD: ci-only-agent-db
-        ports: ['55431:5432']
-        options: >-
-          --health-cmd "pg_isready -U agent_local -d fieldai_agent_mock"
-          --health-interval 2s --health-timeout 2s --health-retries 30
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -95,13 +56,13 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # AP job에는 infra/field/.env와 FIELD_* 값을 만들지 않는다.
-      - name: Write AP mock env file
+      # AP job에는 infra/field/.env와 FIELD_* 값·Field 컨테이너를 만들지 않는다.
+      - name: Start AP mock database
         run: |
-          printf 'AP_MOCK_DB_PASSWORD=%s\nAP_DATABASE_URL=postgresql://agent_local:%s@127.0.0.1:55431/fieldai_agent_mock\n' \
-            "$AP_CI_DB_PASSWORD" "$AP_CI_DB_PASSWORD" > infra/agent/.env
           node tools/setup-mock-env.mjs agent
           test ! -e infra/field/.env
+          docker compose --project-name fieldai-agent-mock --env-file infra/agent/.env \
+            -f infra/agent/compose.mock.yaml up -d --wait
       - run: pnpm test:db:agent
       - run: pnpm build:agent
       - run: pnpm build:web:agent
@@ -109,42 +70,21 @@ jobs:
   field:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    services:
-      field-db:
-        image: postgres:17.11
-        env:
-          POSTGRES_DB: fieldai_field_mock
-          POSTGRES_USER: field_local
-          POSTGRES_PASSWORD: ci-only-field-db
-        ports: ['55432:5432']
-        options: >-
-          --health-cmd "pg_isready -U field_local -d fieldai_field_mock"
-          --health-interval 2s --health-timeout 2s --health-retries 30
     steps:
       - uses: actions/checkout@v5
-      # 서비스 컨테이너는 command를 받을 수 없어 requirepass Valkey는 직접 띄운다(mock compose와 같은 버전).
-      - name: Start Field Valkey
-        run: |
-          docker run -d --name field-valkey -p 127.0.0.1:56332:6379 valkey/valkey:8.1.10-alpine \
-            valkey-server --requirepass "$FIELD_CI_VALKEY_PASSWORD" --appendonly yes
-          for _ in $(seq 1 30); do
-            docker exec -e REDISCLI_AUTH="$FIELD_CI_VALKEY_PASSWORD" field-valkey valkey-cli ping | grep -q PONG && exit 0
-            sleep 1
-          done
-          exit 1
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Field job에는 infra/agent/.env와 AP_* 값을 만들지 않는다.
-      - name: Write Field mock env file
+      # Field job에는 infra/agent/.env와 AP_* 값·AP 컨테이너를 만들지 않는다. Valkey도 같은 compose로 뜬다.
+      - name: Start Field mock database and queue
         run: |
-          printf 'FIELD_MOCK_DB_PASSWORD=%s\nFIELD_DATABASE_URL=postgresql://field_local:%s@127.0.0.1:55432/fieldai_field_mock\nFIELD_MOCK_VALKEY_PASSWORD=%s\nFIELD_VALKEY_URL=valkey://:%s@127.0.0.1:56332/0\n' \
-            "$FIELD_CI_DB_PASSWORD" "$FIELD_CI_DB_PASSWORD" "$FIELD_CI_VALKEY_PASSWORD" "$FIELD_CI_VALKEY_PASSWORD" > infra/field/.env
           node tools/setup-mock-env.mjs field
           test ! -e infra/agent/.env
+          docker compose --project-name fieldai-field-mock --env-file infra/field/.env \
+            -f infra/field/compose.mock.yaml up -d --wait
       - run: pnpm test:db:field
       - run: pnpm build:field
       - run: pnpm build:web:field
@@ -152,27 +92,6 @@ jobs:
   contracts:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    services:
-      agent-db:
-        image: postgres:17.11
-        env:
-          POSTGRES_DB: fieldai_agent_mock
-          POSTGRES_USER: agent_local
-          POSTGRES_PASSWORD: ci-only-agent-db
-        ports: ['55431:5432']
-        options: >-
-          --health-cmd "pg_isready -U agent_local -d fieldai_agent_mock"
-          --health-interval 2s --health-timeout 2s --health-retries 30
-      field-db:
-        image: postgres:17.11
-        env:
-          POSTGRES_DB: fieldai_field_mock
-          POSTGRES_USER: field_local
-          POSTGRES_PASSWORD: ci-only-field-db
-        ports: ['55432:5432']
-        options: >-
-          --health-cmd "pg_isready -U field_local -d fieldai_field_mock"
-          --health-interval 2s --health-timeout 2s --health-retries 30
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -181,14 +100,87 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Write mock env files
+      - name: Start both mock databases
         run: |
-          printf 'AP_MOCK_DB_PASSWORD=%s\nAP_DATABASE_URL=postgresql://agent_local:%s@127.0.0.1:55431/fieldai_agent_mock\n' \
-            "$AP_CI_DB_PASSWORD" "$AP_CI_DB_PASSWORD" > infra/agent/.env
-          printf 'FIELD_MOCK_DB_PASSWORD=%s\nFIELD_DATABASE_URL=postgresql://field_local:%s@127.0.0.1:55432/fieldai_field_mock\nFIELD_MOCK_VALKEY_PASSWORD=%s\nFIELD_VALKEY_URL=valkey://:%s@127.0.0.1:56332/0\n' \
-            "$FIELD_CI_DB_PASSWORD" "$FIELD_CI_DB_PASSWORD" "$FIELD_CI_VALKEY_PASSWORD" "$FIELD_CI_VALKEY_PASSWORD" > infra/field/.env
           node tools/setup-mock-env.mjs agent field
+          for product in agent field; do
+            docker compose --project-name "fieldai-$product-mock" --env-file "infra/$product/.env" \
+              -f "infra/$product/compose.mock.yaml" up -d --wait
+          done
       - run: pnpm test:contracts
+
+  # mock 전체 스택(두 API·웹·worker, 포트 3001/3002/4311/4321)을 띄우고 브라우저 검사까지 실행한다.
+  # 실패는 job 실패로 전파된다(continue-on-error 없음). 외부 공급사·출시 게이트는 여기서 통과 처리하지 않는다.
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    needs: [agent, field, contracts]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pnpm install --frozen-lockfile
+      # 실행기·spike는 Python 경로를 env로 받는다. 같은 venv를 모든 브라우저 단계에 쓴다.
+      - name: Install Playwright Chromium
+        run: |
+          python -m venv "$RUNNER_TEMP/playwright-venv"
+          "$RUNNER_TEMP/playwright-venv/bin/pip" install playwright
+          "$RUNNER_TEMP/playwright-venv/bin/python" -m playwright install --with-deps chromium
+          python_bin="$RUNNER_TEMP/playwright-venv/bin/python"
+          {
+            echo "AP_BROWSER_PYTHON=$python_bin"
+            echo "FIELD_BROWSER_PYTHON=$python_bin"
+            echo "FIELD_SAME_PAGE_BROWSER_PYTHON=$python_bin"
+          } >> "$GITHUB_ENV"
+      # mock:run(tools/mock-run.mjs suite)이 env 작성·compose up --wait·migration·빌드·connector 등록 뒤 네 서버와 worker를 띄운다.
+      - name: Start mock suite
+        run: |
+          # pnpm mock:run과 같은 진입점. 종료 신호를 직접 받도록 node로 실행한다.
+          nohup node tools/mock-run.mjs suite > "$RUNNER_TEMP/mock-run.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/mock-run.pid"
+          for _ in $(seq 1 180); do
+            if curl -fsS http://127.0.0.1:4311/health/ready >/dev/null \
+              && curl -fsS http://127.0.0.1:4321/health/ready >/dev/null \
+              && curl -fsS -o /dev/null http://127.0.0.1:3001/workspace \
+              && curl -fsS -o /dev/null http://127.0.0.1:3002/workspace \
+              && grep -q 'Mock services ready' "$RUNNER_TEMP/mock-run.log"; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/mock-run.pid")" 2>/dev/null; then
+              tail -n 200 "$RUNNER_TEMP/mock-run.log"
+              exit 1
+            fi
+            sleep 5
+          done
+          tail -n 200 "$RUNNER_TEMP/mock-run.log"
+          exit 1
+      - run: pnpm test:e2e:agent
+      - run: pnpm test:e2e:field
+      - run: pnpm test:e2e:distribution
+      - run: pnpm test:security
+      - run: pnpm test:integration:faults
+      - name: Show mock suite log
+        if: failure()
+        run: tail -n 400 "$RUNNER_TEMP/mock-run.log" || true
+      - name: Stop mock suite
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/mock-run.pid" ]; then
+            kill -INT "$(cat "$RUNNER_TEMP/mock-run.pid")" 2>/dev/null || true
+            sleep 5
+          fi
+          for product in agent field; do
+            if [ -f "infra/$product/.env" ]; then
+              docker compose --project-name "fieldai-$product-mock" --env-file "infra/$product/.env" \
+                -f "infra/$product/compose.mock.yaml" down -v || true
+            fi
+          done
 
   images:
     runs-on: ubuntu-24.04
@@ -222,24 +214,3 @@ jobs:
           push: false
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
-
-  # E2E·보안 검사 초안(비활성). Playwright용 Python·브라우저와 mock 전체 스택(pnpm mock:run)을 띄워야 한다.
-  # 활성화 전 run-e2e.mjs의 전제(포트 3001/3002/4311/4321, 상대 제품 정지 조건)를 CI에서 재현해야 한다.
-  # e2e:
-  #   runs-on: ubuntu-24.04
-  #   needs: [agent, field]
-  #   steps:
-  #     - uses: actions/checkout@v5
-  #     - uses: pnpm/action-setup@v4
-  #     - uses: actions/setup-node@v5
-  #       with:
-  #         node-version-file: .node-version
-  #         cache: pnpm
-  #     - uses: actions/setup-python@v6
-  #     - run: pnpm install --frozen-lockfile
-  #     # run-e2e.mjs는 FIELD_DISTRIBUTION_BROWSER_PYTHON(기본 /tmp/fieldai-ui-venv/bin/python)을 사용한다.
-  #     - run: python -m venv /tmp/fieldai-ui-venv && /tmp/fieldai-ui-venv/bin/pip install playwright && /tmp/fieldai-ui-venv/bin/python -m playwright install --with-deps chromium
-  #     - run: pnpm test:e2e:agent
-  #     - run: pnpm test:e2e:field
-  #     - run: pnpm test:e2e:distribution
-  #     - run: pnpm test:security

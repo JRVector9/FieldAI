@@ -70,3 +70,14 @@ test("AP human inquiry form shows the notice above the extended required consent
   assert.match(html, /<input type="checkbox" required=""/);
   assert.match(html, /href="\/terms">이용약관 \(추가\)/);
 });
+
+// 개인정보처리방침은 구현된 계정·조직 삭제와 카카오·2단계 인증·인증 메일 기록 수집을 반영한다
+test("AP privacy policy describes implemented deletion and the newly collected auth items", () => {
+  const html = renderToStaticMarkup(<PrivacyPage />);
+  assert.doesNotMatch(html, /계정 삭제 기능 준비 중/);
+  assert.match(html, /14일 유예/);
+  assert.match(html, /카카오 계정 식별값/);
+  assert.match(html, /백업코드\(암호화 저장\)/);
+  assert.match(html, /인증 메일 발송 기록/);
+  assert.match(html, /7일 뒤 수신 주소를 익명화/);
+});

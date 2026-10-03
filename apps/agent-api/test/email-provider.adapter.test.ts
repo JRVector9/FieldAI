@@ -46,6 +46,18 @@ test('AP auth email outbox always records the attempt and redacts one-time token
   assert.deepEqual(queries[1]!.values, ['row-1', 'blocked_integration', null, 'smtp_not_configured']);
   const throwing: EmailProvider = { kind: 'smtp', async send() { throw new Error('boom'); } };
   assert.equal((await deliverAuthEmail(pool, throwing, { purpose: 'reset_password', message, secret: 'ONE-TIME-TOKEN' })).errorCode, 'email_provider_error');
+  // 같은 주소·목적의 10분 내 재요청은 감사 행만 suppressed_duplicate로 남기고 공급사를 부르지 않는다
+  const duplicates: { sql: string; values: unknown[] }[] = [];
+  const duplicatePool = { async query(sql: string, values: unknown[]) { duplicates.push({ sql, values });
+    return { rows: [{ id: 'row-2', state: 'suppressed_duplicate' }], rowCount: 1 }; } } as unknown as Pool;
+  let sends = 0;
+  const counting: EmailProvider = { kind: 'smtp', async send() { sends++; return { outcome: 'sent', providerMessageId: 'x' }; } };
+  assert.deepEqual(await deliverAuthEmail(duplicatePool, counting, { purpose: 'reset_password', message, secret: 'ONE-TIME-TOKEN' }),
+    { outcome: 'suppressed_duplicate' });
+  assert.equal(sends, 0);
+  assert.equal(duplicates.length, 1);
+  assert.match(duplicates[0]!.sql, /suppressed_duplicate/);
+  assert.equal(duplicates[0]!.values.at(-1), 10);
 });
 
 test('AP readiness stays ready but reports unconfigured email as a blocked integration detail', async () => {

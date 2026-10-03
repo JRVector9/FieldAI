@@ -6,7 +6,7 @@ import { oauthProvider } from '@better-auth/oauth-provider';
 import { twoFactor } from 'better-auth/plugins/two-factor';
 import { APIError } from 'better-auth/api';
 import { assertProductionProfile } from './production-profile.js';
-import { authEmailMessage, deliverAuthEmail, emailProviderFromEnvironment, type EmailProvider } from './email-provider.js';
+import { authEmailMessage, deliverAuthEmailInBackground, emailProviderFromEnvironment, type EmailProvider } from './email-provider.js';
 import { kakaoProviderConfig, kakaoSocialProviders, kakaoTwoFactorBridge, rejectUnverifiedKakaoUser } from './kakao-provider.js';
 
 const databaseUrl = process.env.FIELD_DATABASE_URL;
@@ -52,6 +52,9 @@ export const auth = betterAuth({
   trustedOrigins: [...new Set([webOrigin, ...process.env.FIELD_PROFILE === 'mock' ? ['http://localhost:3002', 'http://127.0.0.1:3002'] : []])],
   database: authPool,
   socialProviders: kakaoSocialProviders(kakao, webOrigin),
+  // Security #5: mock이 아니면(sandbox 포함) better-auth 요청 한도를 켜고 DB("rateLimit", 000084)에 둔다.
+  // 메모리 저장소와 달리 재시작·다중 인스턴스에서도 한도가 유지된다.
+  rateLimit: { enabled: process.env.FIELD_PROFILE !== 'mock', storage: 'database' },
   // 동일 이메일 자동 병합 금지(결정 19). 이미 이메일로 가입한 주소의 카카오 로그인은 account_not_linked로 거부된다.
   account: { accountLinking: { enabled: false } },
   emailAndPassword: {
@@ -59,16 +62,19 @@ export const auth = betterAuth({
     requireEmailVerification: process.env.FIELD_PROFILE !== 'mock',
     revokeSessionsOnPasswordReset: true,
     // 메일 링크는 Field 웹 화면으로 보낸다. 없는 계정이어도 같은 응답을 주는 better-auth 동작을 유지하려고 예외를 던지지 않는다.
+    // 발송은 요청 밖에서 진행한다(M5, email-provider.ts deliverAuthEmailInBackground).
     sendResetPassword: async ({ user, token }) => {
-      await deliverAuthEmail(authPool, authEmail.provider, { purpose: 'reset_password', secret: token,
+      deliverAuthEmailInBackground(authPool, authEmail.provider, { purpose: 'reset_password', secret: token,
         message: authEmailMessage('reset_password', user.email, webLink('/reset-password', token)) });
     },
   },
   emailVerification: {
     sendOnSignUp: true,
-    autoSignInAfterVerification: true,
+    // Security #3: 인증 링크를 남에게 보내 그 브라우저를 링크 주인 계정으로 로그인시키는 login CSRF를 막는다.
+    // 인증 완료 뒤에는 로그인 화면에서 직접 로그인한다.
+    autoSignInAfterVerification: false,
     sendVerificationEmail: async ({ user, token }) => {
-      await deliverAuthEmail(authPool, authEmail.provider, { purpose: 'verify_email', secret: token,
+      deliverAuthEmailInBackground(authPool, authEmail.provider, { purpose: 'verify_email', secret: token,
         message: authEmailMessage('verify_email', user.email, webLink('/verify-email', token)) });
     },
   },

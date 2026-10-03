@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mkdir, open, readdir, readFile, rename } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 
 export type FieldRevocationEntry = { version: 1; product: 'field'; id: string; createdAt: string;
   organizationId: string; targetKind: 'selection' | 'connection'; targetId: string;
@@ -78,8 +78,18 @@ export class FieldRevocationJournal {
   }
 }
 
+// 원장 디렉터리 환경값을 절대 경로로 고정한다. 상대 경로는 실행 위치(cwd)마다 다른 곳을 가리키므로 mock에서만 허용하고
+// 설정을 읽는 시점의 cwd 기준 절대 경로로 바꾼다. mock이 아니면 기동을 멈춘다(compose는 /var/lib/fieldai/... 절대 경로).
+export function journalDirectoryFromEnvironment(name: 'FIELD_REVOCATION_JOURNAL_DIRECTORY' | 'FIELD_RETENTION_JOURNAL_DIRECTORY') {
+  const value = process.env[name];
+  if (!value) return undefined;
+  if (isAbsolute(value)) return value;
+  if (process.env.FIELD_PROFILE !== 'mock') throw new Error(`${name} must be an absolute path`);
+  return resolve(value);
+}
+
 export function fieldRevocationJournalFromEnvironment() {
-  const root = process.env.FIELD_REVOCATION_JOURNAL_DIRECTORY, secret = process.env.FIELD_REVOCATION_JOURNAL_SECRET;
+  const root = journalDirectoryFromEnvironment('FIELD_REVOCATION_JOURNAL_DIRECTORY'), secret = process.env.FIELD_REVOCATION_JOURNAL_SECRET;
   return root && secret ? new FieldRevocationJournal(root, secret) : undefined;
 }
 

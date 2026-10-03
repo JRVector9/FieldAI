@@ -1478,6 +1478,25 @@ test('Field ID 조회·고객 제안 결정·알림 경로·AP 사건 수신함�
     assert.deepEqual((await app.inject({ url: routePath, headers: full.headers })).json(), {
       externalRequestId: first.externalRequestId, reservationId: first.reservationId,
       owner: 'field', generation: 2, allowed: false, reason: 'field_route_active' });
+    // 세대 2 중지(고객 철회) 분기와 세대 1 이전 대기 분기도 AP 발송을 허용하지 않는다.
+    await pool.query(`update field.external_reservation_notification_routes set state='suspended',customer_withdrawn_at=now(),
+      customer_withdrawal_id=$2 where reservation_id=$1`, [first.reservationId, randomUUID()]);
+    assert.deepEqual((await app.inject({ url: routePath, headers: full.headers })).json(), {
+      externalRequestId: first.externalRequestId, reservationId: first.reservationId,
+      owner: 'field', generation: 2, allowed: false, reason: 'field_route_suspended' });
+    const routeEvent = (await pool.query<{ id: string }>('select id from field.reservation_events where reservation_id=$1 order by revision limit 1',
+      [first.reservationId])).rows[0]!.id;
+    await pool.query(`update field.external_reservation_notification_routes set state='consented',route_generation=1,activation_id=null,
+      activated_at=null,ap_closed_revision=null,ap_closed_event_id=null,customer_withdrawn_at=null,customer_withdrawal_id=null,
+      pending_transfer_id=$2,pending_revision=1,pending_event_id=$3,pending_customer_consent_id=$4,pending_started_at=now()
+      where reservation_id=$1`, [first.reservationId, randomUUID(), routeEvent, randomUUID()]);
+    assert.deepEqual((await app.inject({ url: routePath, headers: full.headers })).json(), {
+      externalRequestId: first.externalRequestId, reservationId: first.reservationId,
+      owner: 'ap', generation: 1, allowed: false, reason: 'route_transfer_pending' });
+    // 이후 시나리오를 위해 세대 2 활성 상태로 되돌린다.
+    await pool.query(`update field.external_reservation_notification_routes set state='active',route_generation=2,activation_id=$2,
+      activated_at=now(),ap_closed_revision=0,ap_closed_event_id=$3,pending_transfer_id=null,pending_revision=null,pending_event_id=null,
+      pending_customer_consent_id=null,pending_started_at=null where reservation_id=$1`, [first.reservationId, randomUUID(), randomUUID()]);
 
     // prefix ''는 v1 원문, versionHeader null은 X-Signature-Version 헤더 생략이다. 기본은 AP 발신과 같은 v2다.
     const send = (envelope: Record<string, unknown>, options: { keyId?: string; timestamp?: string;
@@ -1508,6 +1527,9 @@ test('Field ID 조회·고객 제안 결정·알림 경로·AP 사건 수신함�
     assert.equal((await send({ ...updated, source_product: 'field' })).statusCode, 400);
     assert.equal((await send({ ...updated, aggregate_type: 'action' })).statusCode, 400);
     assert.equal((await send({ ...updated, data: { ...updated.data, phone: '010-3333-4444' } })).statusCode, 400);
+    // L1: occurred_at은 RFC 3339만 받는다. Date.parse만 통과하고 PG가 거부하는 값은 서명 확인 전에 400이다(이전에는 500).
+    for (const occurred of ['1', '2026-02-30T00:00:00Z', '2026-10-03 10:00:00'])
+      assert.deepEqual((await send({ ...updated, event_id: randomUUID(), occurred_at: occurred })).json(), { error: 'invalid_event_body' }, occurred);
     // 같은 연결 키라도 Field 방향(field->ap)으로 서명된 v2 사건은 반사로 보고 거부한다.
     assert.equal((await send(updated, { prefix: 'v2:field->ap.' })).statusCode, 401);
     // v1 원문에 v2 헤더를 붙이거나 알 수 없는 버전을 보내면 거부한다.
@@ -1546,7 +1568,9 @@ test('Field ID 조회·고객 제안 결정·알림 경로·AP 사건 수신함�
     assert.match(readFileSync(resolve('src', 'ap-event-worker.ts'), 'utf8'), /fieldSignatureSendVersion\(\)/);
     for (const file of ['ap-webhook-inbox.ts', 'ap-connection-revoke-receiver.ts'])
       assert.match(readFileSync(resolve('src', file), 'utf8'), /timingSafeEqual\(expected, Buffer\.from\(signature, 'hex'\)\)/);
-    assert.equal((await send({ ...updated, aggregate_version: 4 })).statusCode, 409);
+    // 같은 event_id에 본문이 다르면 event_id_conflict다.
+    const conflicting = await send({ ...updated, aggregate_version: 4 });
+    assert.deepEqual([conflicting.statusCode, conflicting.json()], [409, { error: 'event_id_conflict' }]);
     const inbox = await pool.query<{ state: string; event_type: string; processed_at: Date | null }>(
       `select state,event_type,processed_at from field.ap_webhook_inbox where source_event_id = $1`, [updated.event_id]);
     assert.deepEqual(inbox.rows.map(row => [row.state, row.event_type, row.processed_at]),

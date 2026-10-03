@@ -43,10 +43,10 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 |---|---|
 | `infra/agent/Dockerfile.api`, `infra/field/Dockerfile.api` | 제품별 API·worker 이미지(`pnpm deploy --prod`), `--target migrate` 일회성 migration 이미지 |
 | `infra/agent/Dockerfile.web`, `infra/field/Dockerfile.web` | 제품별 Next 웹 이미지(`APP_PROFILE=live` 기본, `NEXT_PUBLIC_*`·rewrite 대상은 빌드 인자) |
-| `infra/agent/compose.live.yaml`, `infra/field/compose.live.yaml` | 제품 단독 live 실행(자기 PostgreSQL 17, Field는 Valkey 추가, migrate→api→web·worker) |
+| `infra/agent/compose.live.yaml`, `infra/field/compose.live.yaml` | 제품 단독 live 실행(자기 PostgreSQL 17, Field는 Valkey 추가, migrate→api→web·worker). retention worker는 기본 서비스(계정·조직 삭제·outbox·웹훅 정리 담당, S3 없으면 사진 파일 삭제 단계만 `blocked_integration`), Field site-ai·ap-event worker만 profile |
 | `infra/agent/.env.live.example`, `infra/field/.env.live.example` | 제품별 환경변수 목록(부팅 필수/`blocked_integration`/정책 구분). 실제 `.env.live`는 git 무시 |
-| `infra/edge/Caddyfile.example` | TLS 종료·제품별 upstream 분리·X-Forwarded-For 재작성·Field 와일드카드(DNS-01)·Field 사업자 자체 도메인 on-demand TLS(`ask` → `GET /v1/public/site-hosts/allow?domain=`) |
-| `.github/workflows/ci.yml` | lint·typecheck·unit, 제품별 DB job, 계약 검사, 이미지 빌드(push 없음) |
+| `infra/edge/Caddyfile.example`, `infra/edge/.env.example` | TLS 종료·제품별 upstream 분리·X-Forwarded-For 재작성·Field 와일드카드(DNS-01)·Field 사업자 자체 도메인 on-demand TLS(`ask` → `GET /v1/public/site-hosts/allow?domain=`) |
+| `.github/workflows/ci.yml` | lint·typecheck·unit, 제품별 DB job(로컬과 같은 `compose.mock.yaml`), 계약 검사, `e2e` job(`test:e2e:*`·`test:security`·`test:integration:faults`, Playwright+`mock:run`), 이미지 빌드(push 없음). `test:independence:*`는 CI 밖이라 수동 증거가 필요 |
 
 Field 사업자 자체 도메인의 TLS 준비 확인은 `FIELD_DOMAIN_EDGE=caddy`(선택 `FIELD_DOMAIN_EDGE_PROBE_TIMEOUT_MS`, 기본 5000ms)일 때만 켜진다. 도메인 작업자는 `https://<도메인>/.well-known/field-site-health`를 SNI로 요청해 기본 신뢰 저장소로 인증서 체인·이름을 검증하고(자체 서명 거절), Field API가 ask와 같은 조건(tls_pending·connected·TLS 실패 error)에서 돌려준 증명값 `proof`(= `FIELD_AUTH_SECRET` 하위 키로 만든 HMAC-SHA256(도메인 + ':' + 조직 ID), 공개 조직 ID만으로는 만들 수 없음)가 도메인 행으로 계산한 값과 같을 때만 connected로 바꾼다. 확인 실패는 tls_pending에서 처음 실패한 시각(`checked_at`, `last_error='domain_tls_unconfirmed'`, DB 기록이라 여러 작업자·재시작이 같은 시각을 봄)부터 15분 동안 tls_pending, 그 뒤 error(`domain_tls_failed`)로 남긴다. verifying 등에서 막 넘어온 첫 확인 실패는 유예에 넣지 않는다. error는 다음 확인이 성공할 때까지 유지하며(tls_pending과 왕복하지 않음) 상태가 실제로 바뀔 때만 `field.site.domain.status` 사건을 남긴다. 사업자 도메인 설정 화면은 `last_error`를 한국어 원인 안내로 보여 준다. 연결된 도메인은 마지막 확정 점검 뒤 15분 안의 실패에서 연결을 유지한다. Caddy는 이 경로만 Host를 유지해 Field API로 넘겨야 한다(`infra/edge/Caddyfile.example`). 값이 없으면 기존처럼 `blocked_integration`이며, 실제 Caddy·ACME·공인 DNS 환경의 발급·갱신 검수는 아직 수행하지 않았다.
 

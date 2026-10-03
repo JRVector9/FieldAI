@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
 import { signInOutcome } from "./auth-flow";
+import { DELETION_SCHEDULED_OWNER_MESSAGE, isDeletionScheduledError } from "./deletion-scheduled-copy";
 import { TwoFactorChallenge } from "./agent-auth-pages";
 import { AgentKakaoSignIn } from "./agent-kakao-sign-in";
 import "./agent-connect.css";
@@ -86,7 +87,8 @@ export function ConnectSignIn() {
       <button type="button" disabled={busy} onClick={() => void verified()}>다시 시도 (추가)</button></div>
       : twoFactorPending ? <TwoFactorChallenge onVerified={verified} onCancel={() => { setTwoFactorPending(false); setPassword(""); }} />
       : <>{/* 카카오 로그인도 이 연결 화면(서명된 연결 요청 쿼리 포함)으로 돌아와 2단계 인증·연결 이어 가기를 같은 흐름으로 처리한다 */}
-      <AgentKakaoSignIn callbackPath="/connect/sign-in" onTwoFactor={() => { setStatus(""); setTwoFactorPending(true); }} />
+      <AgentKakaoSignIn callbackPath="/connect/sign-in" label="카카오로 로그인" onTwoFactor={() => { setStatus(""); setTwoFactorPending(true); }} />
+      <p>카카오로 로그인해도 연결할 AP 계정과 조직은 AP 작업 공간에서 먼저 만들어 두어야 합니다.</p>
       <div className="agent-auth-divider">또는 이메일로</div>
       <form className="form-fields ap-connect-form" onSubmit={event => void signIn(event)}>
       <label>이메일<input type="email" required autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} /></label>
@@ -127,6 +129,7 @@ export function ConnectSelect() {
         clientId: options.client.id, organizationId: selected.id, agentId: selected.agentId,
         deploymentIds: deployments, scopes: requestedScopes(),
       });
+      if (isDeletionScheduledError(saved.status, saved.data)) { setStatus(DELETION_SCHEDULED_OWNER_MESSAGE); return; }
       if (saved.status !== 201) { setStatus(`자원 선택을 저장하지 못했습니다 (${saved.status}). 다시 확인해 주세요.`); return; }
       follow(await request("/api/auth/oauth2/continue", "POST", { postLogin: true, oauth_query: oauthQuery() }));
     } catch (error) { setStatus(error instanceof Error ? error.message : "동의 화면으로 이동하지 못했습니다."); }

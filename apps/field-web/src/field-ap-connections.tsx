@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Brand } from "@fieldai/ui";
 import { requestJson } from "./field-api";
+import { DELETION_SCHEDULED_OWNER_MESSAGE, isDeletionScheduledError } from "./deletion-scheduled-copy";
 import { FieldSourceRefresh } from "./field-source-refresh";
 import { FieldApPublicInstallation } from "./field-ap-public-installation";
 import { FieldRouteKey } from "./field-route-key";
@@ -116,7 +117,8 @@ export function FieldApConnections() {
       const result = await requestJson("/v1/sites/verification", "POST", { proof: proof.trim(), origin: siteOrigin });
       setStatus(result.status === 200 || result.status === 201
         ? "사이트 주소 증명값을 저장했습니다. AP에서 이 배포의 소유 확인과 활성화를 진행해 주세요."
-        : `사이트 주소 증명값 저장에 실패했습니다 (${result.status}).`);
+        : (result.data as { error?: string }).error === "site_origin_not_allowed" ? "사이트 주소가 현재 공개 주소나 연결 완료된 자체 도메인이 아닙니다. 주소·도메인 연결 상태를 확인한 뒤 다시 시도해 주세요."
+          : `사이트 주소 증명값 저장에 실패했습니다 (${result.status}).`);
     } catch { setStatus("사이트 주소 증명값을 저장하지 못했습니다."); }
     finally { setBusy(false); }
   }
@@ -130,7 +132,8 @@ export function FieldApConnections() {
         setInstallation({ connectionId, deploymentId, publicId: (result.data as { publicId: string }).publicId,
           origin: siteOrigin!, mode, status: "active" });
         setStatus("공개 사이트에 AP 상담 위젯을 설치했습니다. 공개 주소에서 확인해 주세요.");
-      } else setStatus(`설치할 수 없습니다 (${result.status}). AP 배포·접근 동의·사이트 주소를 확인해 주세요.`);
+      } else setStatus((result.data as { error?: string }).error === "site_origin_not_allowed" ? "사이트 주소가 현재 공개 주소나 연결 완료된 자체 도메인이 아닙니다. 주소·도메인 연결 상태를 확인한 뒤 다시 시도해 주세요."
+        : `설치할 수 없습니다 (${result.status}). AP 배포·접근 동의·사이트 주소를 확인해 주세요.`);
     } catch { setStatus("AP 연결 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."); }
     finally { setBusy(false); }
   }
@@ -157,7 +160,8 @@ export function FieldApConnections() {
         location.assign(authorizationUrl);
         return;
       }
-      setStatus(response.status === 503
+      setStatus(isDeletionScheduledError(response.status, response.data) ? DELETION_SCHEDULED_OWNER_MESSAGE
+        : response.status === 503
         ? "AP 연결 설정이 아직 없습니다. Field 자체 사이트·직접 문의·예약은 계속 이용할 수 있습니다."
         : response.status === 404 ? "이 사업장의 연결 권한이 없습니다. Field owner로 로그인해 주세요."
           : `연결 시작에 실패했습니다 (${response.status}).`);

@@ -1,8 +1,26 @@
-import type { FastifyInstance } from 'fastify';
+import { randomUUID } from 'node:crypto';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
 import { requireAdmin } from './admin-auth.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// 관리자 쓰기 요청의 Origin 확인(L3). Field 웹 origin만 허용하고, localhost 예외는 mock 프로필에서만 둔다.
+// Origin이 없는 비브라우저 호출은 관리자 세션·MFA 검사로 막는다.
+function adminOriginAllowed(request: FastifyRequest) {
+  if (request.headers['sec-fetch-site'] === 'cross-site') return false;
+  const origin = request.headers.origin;
+  if (origin === undefined) return true;
+  return [process.env.FIELD_PUBLIC_WEB_ORIGIN ?? 'http://localhost:3002',
+    ...process.env.FIELD_PROFILE === 'mock' ? ['http://localhost:3002', 'http://127.0.0.1:3002'] : []].includes(origin);
+}
+// 운영자 사유: 10~500자, NUL 금지(PG 거부로 500이 되지 않게 400으로 막는다).
+function operatorReason(body: unknown): { reason: string } | { error: 'invalid_reason' | 'invalid_text' } {
+  const value = body !== null && typeof body === 'object' ? (body as Record<string, unknown>).reason : undefined;
+  if (typeof value === 'string' && value.includes('\u0000')) return { error: 'invalid_text' };
+  const reason = typeof value === 'string' ? value.trim() : '';
+  return reason.length < 10 || reason.length > 500 ? { error: 'invalid_reason' } : { reason };
+}
 
 type AdminCounts = {
   organizations: string;
@@ -95,12 +113,13 @@ export function registerFieldAdminRoutes(app: FastifyInstance, runtime: FieldBus
   // owner·구성원 삭제 상태 응답(account-deletion.ts view)에서는 빠진다.
   app.post<{ Params: { id: string } }>('/v1/admin/organization-deletions/:id/resume', async (request, reply) => {
     reply.header('Cache-Control', 'private, no-store');
+    if (!adminOriginAllowed(request)) return reply.code(403).send({ error: 'origin_denied' });
     const admin = await requireAdmin(request, reply, runtime, { role: 'operator' });
     if (!admin) return reply;
     if (!uuid.test(request.params.id)) return reply.code(404).send({ error: 'deletion_request_not_found' });
-    const body = request.body !== null && typeof request.body === 'object' ? request.body as Record<string, unknown> : {};
-    const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
-    if (reason.length < 10 || reason.length > 500) return reply.code(400).send({ error: 'invalid_reason' });
+    const checked = operatorReason(request.body);
+    if ('error' in checked) return reply.code(400).send({ error: checked.error });
+    const { reason } = checked;
     const db = await runtime.pool.connect();
     try {
       await db.query('begin');
@@ -117,6 +136,49 @@ export function registerFieldAdminRoutes(app: FastifyInstance, runtime: FieldBus
         where id=$1 returning id,next_attempt_at as "nextAttemptAt"`, [request.params.id, admin.userId, reason])).rows[0]!;
       await db.query('commit');
       return { product: 'field', id: resumed.id, status: 'scheduled', nextAttemptAt: resumed.nextAttemptAt.toISOString() };
+    } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
+  });
+
+  // 멈춘 사진 2단계 삭제(deletion_next_attempt_at=infinity: 저장소 권한 부족·시도 상한) 목록(L10, 추가). 운영자·감사자 모두 조회한다.
+  app.get<{ Querystring: { status?: string } }>('/v1/admin/site-asset-deletions', async (request, reply) => {
+    reply.header('Cache-Control', 'private, no-store');
+    const admin = await requireAdmin(request, reply, runtime);
+    if (!admin) return reply;
+    if (request.query.status !== 'stopped') return reply.code(400).send({ error: 'invalid_status' });
+    const rows = await runtime.pool.query(`select a.id,s.id as "siteId",a.organization_id as "organizationId",
+        a.deletion_requested_at as "requestedAt",a.deletion_attempts as "attempts",a.deletion_error as "error",
+        a.deletion_stopped_at as "stoppedAt"
+      from field.site_assets a left join field.sites s on s.organization_id=a.organization_id
+      where a.state='deleting' and a.deletion_next_attempt_at='infinity'::timestamptz
+      order by a.deletion_requested_at,a.id limit 100`);
+    return { product: 'field', role: admin.role, deletions: rows.rows };
+  });
+
+  // 멈춘 사진 삭제 다시 실행(L10, 추가). operator만, 사유 10~500자. 다음 시도 시각을 지금으로, 시도 횟수·오류를 초기화하고
+  // 사진 행에는 감사 칸이 없으므로 site_asset_deletion_resumes에 운영자·사유·직전 오류·직전 시도 횟수를 같은 트랜잭션으로 남긴다.
+  app.post<{ Params: { id: string } }>('/v1/admin/site-asset-deletions/:id/resume', async (request, reply) => {
+    reply.header('Cache-Control', 'private, no-store');
+    if (!adminOriginAllowed(request)) return reply.code(403).send({ error: 'origin_denied' });
+    const admin = await requireAdmin(request, reply, runtime, { role: 'operator' });
+    if (!admin) return reply;
+    if (!uuid.test(request.params.id)) return reply.code(404).send({ error: 'site_asset_deletion_not_found' });
+    const checked = operatorReason(request.body);
+    if ('error' in checked) return reply.code(400).send({ error: checked.error });
+    const db = await runtime.pool.connect();
+    try {
+      await db.query('begin');
+      const row = (await db.query<{ organization_id: string; state: string; stopped: boolean; attempts: number; error: string | null }>(
+        `select organization_id,state,deletion_next_attempt_at='infinity'::timestamptz as stopped,deletion_attempts as attempts,
+           deletion_error as error from field.site_assets where id=$1 for update`, [request.params.id])).rows[0];
+      if (!row) { await db.query('rollback'); return reply.code(404).send({ error: 'site_asset_deletion_not_found' }); }
+      if (row.state !== 'deleting' || !row.stopped) { await db.query('rollback'); return reply.code(409).send({ error: 'deletion_not_stopped' }); }
+      await db.query(`insert into field.site_asset_deletion_resumes(id,asset_id,organization_id,actor_user_id,reason,previous_error,previous_attempts)
+        values ($1,$2,$3,$4,$5,$6,$7)`, [randomUUID(), request.params.id, row.organization_id, admin.userId, checked.reason, row.error, row.attempts]);
+      const resumed = (await db.query<{ nextAttemptAt: Date }>(`update field.site_assets set deletion_next_attempt_at=clock_timestamp(),
+          deletion_attempts=0,deletion_error=null,deletion_stopped_at=null where id=$1 returning deletion_next_attempt_at as "nextAttemptAt"`,
+      [request.params.id])).rows[0]!;
+      await db.query('commit');
+      return { product: 'field', id: request.params.id, state: 'deleting', nextAttemptAt: resumed.nextAttemptAt.toISOString() };
     } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
   });
 }

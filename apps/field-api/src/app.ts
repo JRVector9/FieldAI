@@ -2,7 +2,7 @@ import { registerCustomDomainRoutes } from './custom-domain-routes.js';
 import { registerFieldDeliveryRoutes } from './notification-delivery-routes.js';
 import { registerFieldBillingConsentRoutes } from './billing-consent-routes.js';
 import Fastify from 'fastify';
-import { loggingOptionsFromEnvironment } from './logging.js';
+import { loggingOptionsFromEnvironment, sendPublicError } from './logging.js';
 import { fromNodeHeaders } from 'better-auth/node';
 import { registerFieldBusinessRoutes, type FieldBusinessRuntime } from './business.js';
 import { registerInquiryRoutes } from './inquiries.js';
@@ -52,6 +52,15 @@ function trustProxyFromEnvironment(value = process.env.FIELD_TRUST_PROXY): boole
   return value;
 }
 
+// 요청 전체(본문 수신 포함) 제한 시간(Security #11). 느린 본문으로 연결을 오래 잡지 못하게 한다. 기본 30초.
+function requestTimeoutFromEnvironment(value = process.env.FIELD_REQUEST_TIMEOUT_MS) {
+  if (value === undefined || value.trim() === '') return 30_000;
+  const timeout = Number(value);
+  if (!Number.isInteger(timeout) || timeout < 1000 || timeout > 600_000)
+    throw new Error('FIELD_REQUEST_TIMEOUT_MS must be an integer from 1000 to 600000');
+  return timeout;
+}
+
 export function createFieldApp(
   probe: () => Promise<void>,
   authHandler?: (request: Request) => Promise<Response>,
@@ -59,9 +68,12 @@ export function createFieldApp(
   businessRuntime?: FieldBusinessRuntime,
 ) {
   // 구조화 로그(FIELD_LOG_LEVEL)와 PII 가림·requestId는 logging.ts가 정한다.
-  const app = Fastify({ trustProxy: trustProxyFromEnvironment(), ...loggingOptionsFromEnvironment() });
+  const app = Fastify({ trustProxy: trustProxyFromEnvironment(), requestTimeout: requestTimeoutFromEnvironment(),
+    ...loggingOptionsFromEnvironment() });
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 8 * 1024 * 1024 },
     (_request, body, done) => done(null, body));
+  // 업무 라우트가 있으면 retention-consumers.ts가 같은 공통 처리를 포함한 오류 처리기를 등록한다(범위당 하나만 허용).
+  if (!businessRuntime) app.setErrorHandler(sendPublicError);
   if (businessRuntime) {
     businessRuntime = { ...businessRuntime, revocationJournal: businessRuntime.revocationJournal ?? fieldRevocationJournalFromEnvironment() };
     registerFieldAdminRoutes(app, businessRuntime);

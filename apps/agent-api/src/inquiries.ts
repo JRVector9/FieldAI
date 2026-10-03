@@ -297,12 +297,16 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
     const client = await runtime.pool.connect();
     try {
       await client.query('begin');
-      const result = await client.query<InquiryRow>(
-        'select organization_id, state, revision, next_sequence from ap.inquiries where id = $1 and visitor_key_hash = $2 for update',
+      const result = await client.query<InquiryRow & { organization_deleted: boolean }>(
+        `select i.organization_id, i.state, i.revision, i.next_sequence, o.deleted_at is not null as organization_deleted
+         from ap.inquiries i join ap.organizations o on o.id = i.organization_id
+         where i.id = $1 and i.visitor_key_hash = $2 for update of i`,
         [request.params.id, keyHash(key)],
       );
       const row = result.rows[0];
       if (!row) { await client.query('rollback'); return reply.code(401).send({ error: 'invalid_receipt_key' }); }
+      // 삭제가 실행된 조직은 받을 사업자가 없으므로 새 고객 메시지를 받지 않는다(기존 열람은 유지, 추가 P2-7)
+      if (row.organization_deleted) { await client.query('rollback'); return reply.code(410).send({ error: 'organization_deleted' }); }
       const replay = await messageReplay(client, request.params.id, attempt);
       if (replay) {
         await client.query('rollback');
@@ -650,7 +654,7 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
     try {
       await client.query('begin');
       const result = await client.query<InquiryRow>(
-        `select i.organization_id, i.state, i.next_sequence from ap.inquiries i
+        `select i.organization_id, i.state, i.revision, i.next_sequence from ap.inquiries i
          join ap.memberships m on m.organization_id = i.organization_id
          where i.id = $1 and m.user_id = $2 and m.role in ('owner', 'editor')
            and i.consent_at is not null and i.mode = 'human' for update of i`,
@@ -671,6 +675,13 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
       const messageId = await insertMessage(client, request.params.id, row.next_sequence, 'owner', visibility, body, attempt);
       if (visibility === 'customer') {
         await client.query("update ap.inquiries set state = 'waiting_customer' where id = $1", [request.params.id]);
+        // 직접 응대(human_active) 중 답변은 직접 응대를 끝낸다. 종료 행위자(답변자)를 같은 트랜잭션에 남긴다(추가, P2-6).
+        // revision은 insertMessage가 이미 1 올렸으므로 사건 revision은 그 값(row.revision + 1)이다(고객 메시지의 reopened와 같은 규칙)
+        if (row.state === 'human_active') {
+          await client.query(
+            `insert into ap.inquiry_resolution_events(id, inquiry_id, event_type, revision, actor_user_id)
+             values ($1, $2, 'human_release', $3, $4)`, [randomUUID(), request.params.id, row.revision + 1, userId]);
+        }
         await recordInquiryEvent(client, row.organization_id, 'ap.inquiry.owner_reply', request.params.id, messageId);
       }
       await client.query('commit');

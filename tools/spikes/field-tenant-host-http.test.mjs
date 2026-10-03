@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
+import { get } from 'node:http';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 import pg from 'pg';
@@ -133,4 +134,32 @@ test('Field tenant origin serves only its approved site and public intake while 
       }
     } finally { await pool.end(); }
   }
+});
+
+// edge(Caddy) on-demand TLS ask와 사업자 도메인 TLS 확인 경로. 등록·검증되지 않은 도메인에는 발급 허용·증명값을 주지 않는다.
+// Caddy는 두 경로를 Field API로 바로 보내므로 웹 프록시가 아니라 API(4321)에 Host를 지정해 요청한다.
+function apiGet(path, host) {
+  return new Promise((resolveGet, rejectGet) => {
+    get({ host: '127.0.0.1', port: 4321, path, headers: host ? { host } : {} }, response => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => { body += chunk; });
+      response.on('end', () => resolveGet({ status: response.statusCode, headers: response.headers, body }));
+    }).on('error', rejectGet);
+  });
+}
+
+test('Field TLS ask and site-health refuse unknown custom domains without caching', async () => {
+  const unknown = `unknown-${randomUUID()}.example.invalid`;
+  const ask = await apiGet(`/v1/public/site-hosts/allow?domain=${encodeURIComponent(unknown)}`);
+  assert.equal(ask.status, 404, ask.body);
+  assert.equal(JSON.parse(ask.body).error, 'site_host_not_allowed');
+  assert.equal(ask.headers['cache-control'], 'no-store');
+  const empty = await apiGet('/v1/public/site-hosts/allow');
+  assert.equal(empty.status, 404, empty.body);
+  const health = await apiGet('/.well-known/field-site-health', unknown);
+  assert.equal(health.status, 404, health.body);
+  assert.equal(JSON.parse(health.body).error, 'site_host_not_allowed');
+  assert.equal(health.headers['cache-control'], 'no-store');
+  assert.doesNotMatch(health.body, /proof/);
 });

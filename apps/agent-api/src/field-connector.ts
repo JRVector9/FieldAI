@@ -3,6 +3,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID }
 import type { FastifyInstance } from 'fastify';
 import type { PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
+import { rejectDeletionScheduled } from './trial-access.js';
 
 export type FieldConnectorConfig = {
   issuer: string;
@@ -518,8 +519,17 @@ export function registerFieldConnectorRoutes(app: FastifyInstance, runtime: Busi
     if (!config || !valid(config)) return reply.code(503).send({ error: 'blocked_integration' });
     const existing = await runtime.pool.query('select 1 from ap.field_connections where id = $1', [fieldConnectionId]);
     if (existing.rowCount) return reply.code(409).send({ error: 'connection_already_bound' });
-    const authorization = await startFieldConsent(runtime.pool, config, { fieldConnectionId, apGrantId,
-      apOrganizationId: selection.organization_id, apAgentId: selection.agent_id, userId }, 'full');
+    // 조직 삭제 유예·실행 중에는 새 Field 연결 동의를 시작하지 않는다. 삭제 예약과 같은 조직 행 잠금 아래에서 확인하고 시도를 기록한다(추가)
+    const db = await runtime.pool.connect();
+    let authorization: string;
+    try {
+      await db.query('begin');
+      await db.query('select id from ap.organizations where id = $1 for share', [selection.organization_id]);
+      if (await rejectDeletionScheduled(reply, db, selection.organization_id)) { await db.query('rollback'); return reply; }
+      authorization = await startFieldConsent(db, config, { fieldConnectionId, apGrantId,
+        apOrganizationId: selection.organization_id, apAgentId: selection.agent_id, userId }, 'full');
+      await db.query('commit');
+    } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
     return reply.code(201).header('Cache-Control', 'no-store').send({ authorizationUrl: authorization });
   });
 

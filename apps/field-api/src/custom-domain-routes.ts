@@ -6,7 +6,10 @@ import { rejectExpiredTrial } from './trial-access.js';
 import { normalizeCustomHostname } from './custom-domain-dns.js';
 import { siteHealthProof, siteHealthSecret } from './custom-domain-edge-caddy.js';
 import { customDomainContextFromEnvironment, disconnectSiteDomain, domainView, resolvedCustomHost, type CustomDomainContext, type SiteDomain } from './custom-domains.js';
+import { ipLimitBucket } from './ip-bucket.js';
 
+const HOST_CHECK_LIMIT=60;
+const HOST_CHECK_WINDOW_MS=60_000;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function object(value: unknown): Record<string, unknown>|null {return value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:null;}
 export function registerCustomDomainRoutes(app: FastifyInstance, runtime: FieldBusinessRuntime,
@@ -115,10 +118,24 @@ export function registerCustomDomainRoutes(app: FastifyInstance, runtime: FieldB
           and r.status in ('scheduled','executed')) limit 1`,[hostname]);
     return found.rows[0]?{hostname,organizationId:found.rows[0].organization_id}:null;
   }
+  // 공개 ask·site-health 조회의 접속 IP별 1분 60회 창(Security #4, 추가). 조회 전용 경로라 DB에 쓰지 않고 프로세스 메모리만 쓴다.
+  // IPv6는 /64로 묶는다. 창이 바뀌면 전체를 비워 메모리가 쌓이지 않게 한다.
+  const hostCheckWindows=new Map<string,number>();let hostCheckWindowStartedAt=0;
+  function hostCheckLimited(request:FastifyRequest,reply:FastifyReply){
+    const now=Date.now();
+    if(now-hostCheckWindowStartedAt>=HOST_CHECK_WINDOW_MS){hostCheckWindows.clear();hostCheckWindowStartedAt=now;}
+    const key=ipLimitBucket(request.ip),attempts=(hostCheckWindows.get(key)??0)+1;
+    hostCheckWindows.set(key,attempts);
+    if(attempts<=HOST_CHECK_LIMIT)return false;
+    reply.header('Retry-After',Math.max(1,Math.ceil((hostCheckWindowStartedAt+HOST_CHECK_WINDOW_MS-now)/1000))).code(429).send({error:'rate_limited'});
+    return true;
+  }
+  // Caddy는 200/404만 본다. 조직 ID는 돌려주지 않는다(Security #4).
   app.get<{Querystring:{domain?:unknown}}>('/v1/public/site-hosts/allow',async(request,reply)=>{
     reply.header('Cache-Control','no-store');
+    if(hostCheckLimited(request,reply))return reply;
     const allowed=await allowedHost(request.query.domain);
-    return allowed?{domain:allowed.hostname,organizationId:allowed.organizationId}:reply.code(404).send({error:'site_host_not_allowed'});
+    return allowed?{domain:allowed.hostname}:reply.code(404).send({error:'site_host_not_allowed'});
   });
   // edge TLS 준비 확인(추가). Caddy가 사업자 도메인 HTTPS 요청 중 이 경로만 Field API로 넘긴다(Host 유지).
   // ask와 같은 허용 조건의 도메인에만 증명값을 돌려주고, 조회 전용이며 DB에 쓰지 않는다.
@@ -126,6 +143,7 @@ export function registerCustomDomainRoutes(app: FastifyInstance, runtime: FieldB
   // Caddy edge 어댑터는 인증서 체인 검증을 통과한 응답의 proof가 도메인 행으로 계산한 값과 같을 때만 TLS ready로 본다.
   app.get('/.well-known/field-site-health',async(request,reply)=>{
     reply.header('Cache-Control','no-store');
+    if(hostCheckLimited(request,reply))return reply;
     const allowed=await allowedHost(request.headers.host);
     return allowed?{ok:true,proof:siteHealthProof(siteHealthSecret(),allowed.hostname,allowed.organizationId)}
       :reply.code(404).send({error:'site_host_not_allowed'});

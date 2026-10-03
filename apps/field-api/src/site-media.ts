@@ -163,13 +163,16 @@ export async function runSiteAssetDeletionOnce(runtime: { pool: Pool; siteMedia?
     } catch (error) { code = error instanceof MediaPermissionError ? 'media_permission' : 'media_unavailable'; }
     if (code) {
       // 권한 부족은 재시도로 풀리지 않으므로 시도 횟수를 그대로 두고 멈춘다. 그 밖의 실패는 30초부터 두 배씩(최대 1시간) 미루고
-      // 12회째 실패하면 멈춘다. 멈춘 행은 deletion_next_attempt_at='infinity'와 deletion_error로 운영자가 확인한다(원인 해결 뒤 시각을 되돌린다).
+      // 12회째 실패하면 멈춘다. 멈춘 행은 deletion_next_attempt_at='infinity'와 deletion_error로 운영자가 확인하고
+      // 원인 해결 뒤 POST /v1/admin/site-asset-deletions/:id/resume으로 다시 시작한다(admin.ts).
       const stopped = (await pool.query<{ stopped: boolean }>(
         `update field.site_assets set
            deletion_attempts = deletion_attempts + case when $2 = 'media_permission' then 0 else 1 end,
            deletion_error = case when $2 <> 'media_permission' and deletion_attempts + 1 >= $3 then $2 || ',attempts_stopped' else $2 end,
            deletion_next_attempt_at = case when $2 = 'media_permission' or deletion_attempts + 1 >= $3 then 'infinity'::timestamptz
-             else clock_timestamp() + least(interval '30 seconds' * power(2, deletion_attempts), interval '1 hour') end
+             else clock_timestamp() + least(interval '30 seconds' * power(2, deletion_attempts), interval '1 hour') end,
+           -- 멈춘 시각(운영자 목록 stoppedAt, 000084). 재시도 예약이면 비운다.
+           deletion_stopped_at = case when $2 = 'media_permission' or deletion_attempts + 1 >= $3 then clock_timestamp() else null end
          where id = $1 and state = 'deleting' returning deletion_next_attempt_at = 'infinity'::timestamptz as stopped`,
         [asset.id, code, SITE_ASSET_DELETION_MAX_ATTEMPTS])).rows[0]?.stopped;
       if (stopped) result.stopped += 1; else if (stopped === false) result.retried += 1;

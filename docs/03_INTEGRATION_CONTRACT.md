@@ -322,6 +322,8 @@ Field source가 해제되면 그 값의 AP 사용을 중단한다. 데이터가 
 | 경로 | 권한/필수 입력 | 결과 |
 |---|---|---|
 | GET /integrations/v1/me | AP 위임 token | 허용 조직·AI·scope·grant 상태 |
+| GET /integrations/v1/agent | `ap.agent.read` | 이 grant에서 선택한 승인 AI 정보 |
+| GET /integrations/v1/deployments | `ap.agent.read` | 이 grant에서 명시 선택된 활성 배포 목록 |
 | POST /integrations/v1/connections | ap.connections.create, 현재 owner 위임/선택 조직·AI·client·grant, 외부 조직 UUID·정확 origin | installation_only binding, UUID 멱등 영수증 |
 | GET /integrations/v1/connections/{id} | ap.connections.create, 같은 client·grant·조직·AI | 설치 전용 연결 상태 |
 | GET /integrations/v1/connections/{id}/source | ap.sources.refresh, 현재 연결 | AP 저장/승인 source 버전·검토 상태·현재 snapshot 실제 수신 시각(nullable) |
@@ -330,12 +332,14 @@ Field source가 해제되면 그 값의 AP 사용을 중단한다. 데이터가 
 | POST /integrations/v1/deployments | ap.deployments.manage, 자기 public 연결·정확 origin·선택 조직/AI, UUID key | owned_embed pending 준비; 검증/명시 활성은 별도 |
 | GET /integrations/v1/deployments/{id} | ap.deployments.manage, 이 client+grant가 만든 배포 | 상태·소유 proof·revision/ETag |
 | POST /integrations/v1/deployments/{id}/verify / activate / pause | ap.deployments.manage, 자기 배포·UUID key·If-Match | 실제 소유 검증/명시 활성/중지, 충돌409·조건 누락428 |
-| GET /integrations/v1/conversations | read, 연결 제한 cursor | 최소 목록·출처·remote 상태 |
-| GET /integrations/v1/conversations/{id}/messages | read, 범위·cursor | 원본 sequence |
-| POST /integrations/v1/conversations/{id}/replies | user reply, message·revision·idempotency | 원본 message ID·저장/알림 상태 |
+| GET /integrations/v1/conversations | `ap.conversations.read`, 연결 제한 cursor | 최소 목록·출처·remote 상태 |
+| GET /integrations/v1/conversations/{id} | `ap.conversations.read`, 연결 범위 | 대화 메타데이터·현재 revision(본문은 messages) |
+| GET /integrations/v1/conversations/{id}/messages | `ap.conversations.read`, 범위·cursor | 원본 sequence |
+| POST /integrations/v1/conversations/{id}/replies | `ap.conversations.reply`, message·revision·idempotency | 원본 message ID·저장/알림 상태 |
+| GET /integrations/v1/action-requests/{actionId}/attachments/{attachmentId} | `ap.conversations.read`, 이 ActionRequest에서 고객이 전달 동의한 사진 | 준비된 사진 원본 1건 |
 | POST /integrations/v1/connections/{id}/revoke | 현재 연결별 HMAC 서명; 범용 manage 동의는 후속 | AP 로컬 회수·서명 영수증 |
 | POST /integrations/v1/field-events | 등록 서명·event envelope |202 durable inbox receipt |
-| GET /integrations/v1/events/{id}/delivery | 연결 사건 read | processed/notification status |
+| GET /integrations/v1/events/{id}/delivery | `ap.conversations.read`, 연결 사건 | processed/notification status |
 | GET /integrations/v1/events/{id}/recovery-status | 해제 연결별 HMAC | 기존 사건 수신/처리·알림 상태 재조회 |
 | POST /integrations/v1/notification-routes/close | 해제 연결별 HMAC·전환 ID·예약 마지막 사건 | 세대 1 종료 영수증. Field 활성화/발송 성공 아님 |
 
@@ -343,11 +347,14 @@ Field source가 해제되면 그 값의 AP 사용을 중단한다. 데이터가 
 
 | 경로 | 권한/필수 입력 | 결과 |
 |---|---|---|
+| GET /integrations/v1/me | Field 위임 token | 현재 Field 위임 grant(선택 사업장·scope) |
 | GET /integrations/v1/capabilities | Field 위임 token | 이 연결에서 지원/허용된 도구 |
+| POST /integrations/v1/connections/{id}/bind | `field.facts.read`, 설정된 AP 커넥터 client·Field/AP 양쪽 grant | pending 연결의 상호 동의 기록(같은 요청 반복은 같은 결과) |
 | GET /integrations/v1/facts | field.facts.read, ETag/version | 승인 snapshot·entity version·hash |
-| GET /integrations/v1/availability | scope, service_id·revision·from/to | 요청 가능 구간만 |
-| POST /integrations/v1/external-requests | create, ActionRequest·consent·idempotency | external_request_id·requested 상태 |
-| GET /integrations/v1/external-requests/by-source/{actionId} | read, binding | 타임아웃 뒤 기존 수락 확인 |
+| GET /integrations/v1/availability | `field.availability.read`, `serviceId`(필수)·`date`(시간표형 서비스는 필수) | 현재 승인 가격·예약 방식·정책 revision·가능 구간. 점유·확정 아님 |
+| POST /integrations/v1/external-requests | `field.requests.create`, ActionRequest·consent·idempotency | external_request_id·requested 상태 |
+| GET /integrations/v1/external-requests/by-source/{actionId} | `field.requests.read`, binding | 타임아웃 뒤 기존 수락 확인 |
+| GET /integrations/v1/external-requests/by-source/{actionId}/events | `field.requests.read`, 현재 연결·client·actor·grant | revision 순 예약 사건 이력(PII 없음) |
 | GET /integrations/v1/external-requests/{id} | `field.requests.read`, 연결 리소스 | 최신 상태·revision(ETag)·제안 (preview.9 구현) |
 | POST /integrations/v1/external-requests/{id}/customer-decisions | `field.proposals.respond`, exact proposal·customer proof | 동의/철회 상태. 확정 아님 (preview.9 구현) |
 | GET /integrations/v1/external-requests/{id}/notification-route | `field.notification_route.read` | 소유 제품·generation·허용 여부 (preview.9 구현) |

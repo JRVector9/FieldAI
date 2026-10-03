@@ -249,6 +249,7 @@ export async function processFieldEventInboxOnce(pool: Pool, fieldConnector?: Fi
 async function processFieldEventInboxRow(pool: Pool, routeCache: FieldRouteCache):
   Promise<'empty' | 'processed' | 'deferred' | 'rejected' | RouteLookup> {
   const db = await pool.connect();
+  let claimedId: string | undefined;
   try {
     await db.query('begin');
     const pending = await db.query<InboxRow>(
@@ -259,6 +260,7 @@ async function processFieldEventInboxRow(pool: Pool, routeCache: FieldRouteCache
        order by revision,received_at for update skip locked limit 1`);
     const row = pending.rows[0];
     if (!row) { await db.query('commit'); return 'empty'; }
+    claimedId = row.id;
     const action = await db.query<ActionRow>(
       `select a.id,a.organization_id,a.inquiry_id,a.connection_id,a.reservation_id,a.state,
         c.route_generation,c.status as connection_status,s.revoked_at,
@@ -352,5 +354,13 @@ async function processFieldEventInboxRow(pool: Pool, routeCache: FieldRouteCache
     await db.query(`update ap.field_event_inbox set state = 'processed',
       error_code = null,processed_at = now() where id = $1`, [row.id]);
     await db.query('commit'); return 'processed';
-  } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
+  } catch (error) {
+    await db.query('rollback');
+    // 처리 중 예외가 난 행은 2초마다 같은 행을 다시 집어 전체 수신함을 멈추지 않도록 별도 커넥션으로 미룬다(추가, P2-4).
+    // 간격은 수신 뒤 지난 시간만큼(30초~1시간). 원인은 작업자 로그로 남기고 행에는 processing_failed만 기록한다
+    if (claimedId) await pool.query(`update ap.field_event_inbox set error_code = 'processing_failed',
+      next_attempt_at = now() + least(greatest(now() - received_at, interval '30 seconds'), interval '1 hour')
+      where id = $1 and state in ('received','pending_gap')`, [claimedId]).catch(() => undefined);
+    throw error;
+  } finally { db.release(); }
 }

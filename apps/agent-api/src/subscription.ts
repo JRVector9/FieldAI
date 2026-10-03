@@ -1,5 +1,5 @@
 import { subscriptionAccess } from './subscription-access.js';
-import { trialPolicy } from './trial-access.js';
+import { rejectDeletionScheduled, trialPolicy } from './trial-access.js';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { BusinessRuntime } from './business.js';
@@ -63,11 +63,14 @@ export function registerAgentSubscriptionRoutes(app: FastifyInstance, runtime: B
     const body = request.body as Record<string, unknown> | null;
     if (!body || body.consentVersion !== policy.consentVersion || body.termsAccepted !== true)
       return reply.code(400).send({ error: 'explicit_trial_consent_required' });
-    const inserted = await runtime.pool.query(
+    // 조직 삭제 유예·실행 중에는 체험을 새로 시작하지 않는다(추가). 체험은 삭제 전제 조건이 아니므로 확인과 생성 사이의
+    // 경합이 삭제 실행을 막지 않는다. 그래서 별도 트랜잭션 없이 확인한 뒤 기존과 같이 한 문장으로 만든다
+    if (await rejectDeletionScheduled(reply, runtime.pool, member.organizationId)) return reply;
+    const inserted = (await runtime.pool.query(
       `insert into ap.trial_subscriptions(id,organization_id,consent_version,started_by,ends_at)
        values ($1,$2,$3,$4,now()+make_interval(days => $5::int)) on conflict (organization_id) do nothing returning id`,
-      [randomUUID(), member.organizationId, policy.consentVersion, member.userId, policy.days]);
-    return reply.code(inserted.rowCount ? 201 : 200)
+      [randomUUID(), member.organizationId, policy.consentVersion, member.userId, policy.days])).rowCount;
+    return reply.code(inserted ? 201 : 200)
       .send(result(member.organizationId, await getTrial(member.organizationId), policy, true));
   });
 

@@ -3,8 +3,9 @@ import test, { before } from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 let FieldProposalPanel: typeof import("../src/agent-field-action").FieldProposalPanel;
+let decisionErrorLabel: typeof import("../src/agent-field-action").decisionErrorLabel;
 before(async () => {
-  ({ FieldProposalPanel } = await import("../src/agent-field-action.js"));
+  ({ FieldProposalPanel, decisionErrorLabel } = await import("../src/agent-field-action.js"));
 });
 const proposal = { revision: 3, startAt: "2026-10-10T01:00:00.000Z", endAt: "2026-10-10T01:30:00.000Z",
   state: "awaiting_customer" as const };
@@ -64,4 +65,26 @@ test("이전 결정이 결과 미상이면 그 결정·revision을 보여 주고
   // 결과 미상이 없으면 다시 확인 버튼을 보이지 않는다
   const plain = renderToStaticMarkup(<FieldProposalPanel view={view({})} busy={false} onRefresh={() => {}} onDecide={() => {}} />);
   assert.doesNotMatch(plain, /결과 다시 확인/);
+});
+
+// 사업자 연결에 제안 응답 권한이 없으면(canRespond=false) 수락·철회를 사유와 함께 막는다. 이전 응답(필드 없음)은 막지 않는다
+test("canRespond=false는 결정 버튼을 막고 권한 사유를 보이며, 필드가 없으면 기존 동작을 유지한다", () => {
+  const blocked = renderToStaticMarkup(<FieldProposalPanel view={{ ...(view({}) as object), canRespond: false } as never}
+    busy={false} onRefresh={() => {}} onDecide={() => {}} />);
+  assert.deepEqual(buttons(blocked).map(item => item.disabled), [false, true, true]);
+  assert.match(blocked, /사업자 연결에 제안 응답 권한이 없습니다/);
+  const allowed = renderToStaticMarkup(<FieldProposalPanel view={{ ...(view({}) as object), canRespond: true } as never}
+    busy={false} onRefresh={() => {}} onDecide={() => {}} />);
+  assert.deepEqual(buttons(allowed).map(item => item.disabled), [false, false, false]);
+});
+
+test("고객 결정 오류 코드는 한국어로 안내하고 모르는 코드는 노출하지 않는다", () => {
+  for (const code of ["customer_proof_reused", "customer_proof_mismatch", "idempotency_conflict", "field_decision_rejected",
+    "field_reservation_not_accepted", "invalid_receipt_key"]) {
+    const label = decisionErrorLabel(code);
+    assert.doesNotMatch(label, new RegExp(code));
+    assert.doesNotMatch(label, /[a-z]+_[a-z]+/);
+  }
+  assert.match(decisionErrorLabel("invalid_receipt_key"), /접수 확인키/);
+  assert.equal(decisionErrorLabel("something_new"), "Field가 이 응답을 받지 않았습니다. 제안을 새로 고친 뒤 다시 시도해 주세요.");
 });

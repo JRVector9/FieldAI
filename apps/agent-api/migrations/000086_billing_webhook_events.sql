@@ -23,3 +23,5 @@ create table ap.billing_webhook_ip_windows (
   updated_at timestamptz not null
 );
 create index ap_billing_webhook_ip_windows_cleanup_idx on ap.billing_webhook_ip_windows(updated_at);
+-- 롤백(가역): 웹훅 힌트는 결제·환불 원장을 바꾸지 않으므로 수신 기록을 보관할 필요가 있으면 먼저 내보낸 뒤
+--   drop table ap.billing_webhook_ip_windows; drop table ap.billing_webhook_events;

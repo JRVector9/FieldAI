@@ -4,6 +4,8 @@ import type { FieldBusinessRuntime } from './business.js';
 import { unsealApEventSecret } from './integrator-routes.js';
 import { commitReceivedApRevocation } from './ap-connection-revoke-receiver.js';
 import { acceptsV1ApSignature, apToFieldSignaturePrefix } from './ap-signature.js';
+// L1: occurred_at은 PG timestamptz가 받는 RFC 3339만 허용한다(Date.parse만 통과하는 "1" 같은 값은 서명 확인 뒤 500이 됐다).
+import { isRfc3339 } from './external-request-public-routes.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_EVENT_BYTES = 65_536;
@@ -35,7 +37,7 @@ function parseAgentEvent(raw: Buffer): AgentEvent | null {
     || !uuid.test(String(body.event_id)) || !uuid.test(String(body.connection_id))
     || !uuid.test(String(body.aggregate_id)) || !uuid.test(String(body.correlation_id))
     || !Number.isSafeInteger(body.aggregate_version) || Number(body.aggregate_version) < 1
-    || typeof body.occurred_at !== 'string' || !Number.isFinite(Date.parse(body.occurred_at))
+    || typeof body.occurred_at !== 'string' || !isRfc3339(body.occurred_at)
     || data.resource_id !== body.aggregate_id
     || typeof data.status !== 'string' || data.status.length < 1 || data.status.length > 80
     || (body.event_type === 'connection.revoked'

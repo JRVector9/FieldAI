@@ -2,6 +2,10 @@ import type { Pool, PoolClient } from 'pg';
 
 export type RetentionKind = 'inquiry';
 export const RETENTION_TABLES = { inquiry: 'ap.inquiries' };
+// 연결이 해제되었고 동의 24시간이 지난 결과 미상 전달(별칭 r)은 reconcile로 다시 확인할 수 없다(field-actions.ts reconcile).
+// 조직 삭제 전제 조건과 보존 보류(external_pending)에서 빼고, 조직 삭제 기록에는 건수만 남긴다(추가, P1-1).
+export const UNRECONCILABLE_ACTION_SQL = `r.state='delivery_unknown' and r.consent_confirmed_at<clock_timestamp()-interval '24 hours'
+  and exists(select 1 from ap.field_connections c where c.id=r.connection_id and c.status='revoked')`;
 export type RetentionPolicy = { id:string; anonymous_days:number; work_days:number; photo_days:number; reference:string; reason:string;
   requested_by:string; request_hash:string; created_at:Date; approved_by:string|null; approved_at:Date|null;
   approval_reason:string|null; retired_at:Date|null };
@@ -10,6 +14,7 @@ type RetentionWork = { target_id:string; organization_id:string; state:string; m
   future_at:Date|null; held:boolean; supported:boolean };
 
 // AP 자체 원장만 사용한다. 외부 업무 상태는 AP가 검증해 받은 사건이며 Field DB를 조회하지 않는다.
+// 연결 해제·동의 24시간 경과로 다시 확인할 수 없는 결과 미상 전달은 외부 업무 대기(external_pending)로 보지 않는다(추가, P1-1).
 export const RETENTION_WORK_QUERY = `select i.id as target_id,i.organization_id,i.state,i.mode,i.revision,i.retention_closed_at as closed_at,i.created_at,i.retention_work_purged_at as work_purged_at,
   greatest(i.created_at,(select max(m.created_at) from ap.inquiry_messages m where m.inquiry_id=i.id),
     (select max(a.created_at) from ap.inquiry_attachments a where a.inquiry_id=i.id),
@@ -19,7 +24,8 @@ export const RETENTION_WORK_QUERY = `select i.id as target_id,i.organization_id,
     and not exists(select 1 from ap.field_action_requests r where r.inquiry_id=i.id and r.state<>'rejected') as anonymous,
   exists(select 1 from ap.ai_runs r where r.inquiry_id=i.id and r.status='in_progress')
     or exists(select 1 from ap.inquiry_messages m where m.inquiry_id=i.id and m.actor='owner' and m.delivery_state in ('pending','unknown')) as pending,
-  exists(select 1 from ap.field_action_requests r where r.inquiry_id=i.id and (r.state in ('sending','delivery_unknown')
+  exists(select 1 from ap.field_action_requests r where r.inquiry_id=i.id and ((r.state in ('sending','delivery_unknown')
+      and not (${UNRECONCILABLE_ACTION_SQL}))
     or (r.state='accepted_external' and (r.kind='inquiry' or coalesce((select e.state from ap.field_reservation_events e
       where e.action_request_id=r.id order by e.revision desc limit 1),'unknown') not in ('completed','canceled','rejected','expired','no_show'))))) as external_pending,
   (select max(greatest(e.start_at,e.end_at)) from ap.field_reservation_events e join ap.field_action_requests r on r.id=e.action_request_id where r.inquiry_id=i.id) as future_at,

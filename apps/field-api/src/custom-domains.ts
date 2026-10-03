@@ -49,13 +49,16 @@ export function domainView(row: SiteDomain, context: CustomDomainContext) {
 const usable = `d.ownership_release_generation is null and d.hostname_claimed and d.desired_state='active' and d.state='connected' and d.ownership_state='verified'
   and d.dns_state='verified' and d.tls_state='ready' and d.binding_state='ready'
   and d.valid_until>now() and d.certificate_expires_at>now()`;
+// 삭제 예약·실행된 조직의 도메인은 공개 조회에서 찾지 않는다(L9, ask/health와 같은 기준).
 export async function resolvedCustomHost(db: Pick<Pool | PoolClient, 'query'>, hostname: unknown, lock = false) {
   const normalized = normalizeCustomHostname(hostname);
   if (!normalized) return null;
   const found = await db.query<{ id: string; site_id: string; organization_id: string; slug: string; hostname: string }>(
     `select d.id,d.site_id,d.organization_id,s.slug,d.hostname from field.site_domains d
       join field.sites s on s.id=d.site_id where d.hostname=$1 and ${usable}
-      and exists(select 1 from field.site_releases r where r.site_id=s.id)${lock ? ' for share of d' : ''}`, [normalized]);
+      and exists(select 1 from field.site_releases r where r.site_id=s.id)
+      and not exists(select 1 from field.organization_deletion_requests x where x.organization_id=d.organization_id
+        and x.status in ('scheduled','executed'))${lock ? ' for share of d' : ''}`, [normalized]);
   return found.rows[0] ?? null;
 }
 // 도메인 연결 해제(사업자 해제·조직 삭제 실행 공통). 호출자가 해당 행을 for update로 잠근 트랜잭션 안에서 부른다.
