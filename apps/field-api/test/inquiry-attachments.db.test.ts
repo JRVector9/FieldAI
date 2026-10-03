@@ -6,6 +6,7 @@ import { after, test } from 'node:test';
 import { fromNodeHeaders } from 'better-auth/node';
 import { Pool } from 'pg';
 import sharp from 'sharp';
+import { SYNTHETIC_HEIC } from './heic-fixture.js';
 import { createFieldApp } from '../src/app.js';
 
 process.loadEnvFile(resolve('../../infra/field/.env'));
@@ -304,6 +305,9 @@ test('Field keeps customer inquiry photos private and retrievable by receipt or 
       headers: { ...uploadHeaders, authorization: `Bearer ${randomBytes(32).toString('base64url')}` }, payload: jpeg })).statusCode, 401);
     assert.equal((await app.inject({ method: 'POST', url: path,
       headers: uploadHeaders, payload: Buffer.from('<svg onload="alert(1)"/>') })).statusCode, 415);
+    const heic = await app.inject({ method: 'POST', url: path, headers: uploadHeaders, payload: SYNTHETIC_HEIC });
+    assert.equal(heic.statusCode, 415);
+    assert.deepEqual(heic.json(), { error: 'unsupported_image_format', hint: 'heic_unsupported' });
     assert.equal((await app.inject({ method: 'POST', url: path,
       headers: uploadHeaders, payload: Buffer.alloc(8 * 1024 * 1024 + 1) })).statusCode, 413);
     for (const color of ['#103050', '#406080', '#7090a0', '#b0c0d0']) {

@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { FieldBusinessRuntime } from './business.js';
-import { normalizeSiteImage } from './site-media.js';
+import { normalizeSiteImage, unsupportedImageError } from './site-media.js';
 import { authorizedApDeployments } from './ap-connector.js';
 import { publicInstallationFor } from './ap-public-installation-execution.js';
 import { rejectExpiredTrial } from './trial-access.js';
@@ -333,7 +333,7 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
     if (!runtime.siteMedia) return reply.code(503).send({ error: 'blocked_integration' });
     if (!Buffer.isBuffer(request.body)) return reply.code(415).send({ error: 'unsupported_image' });
     const normalized = await normalizeSiteImage(request.body);
-    if (!normalized) return reply.code(415).send({ error: 'unsupported_image' });
+    if (!normalized) return reply.code(415).send(unsupportedImageError(request.body));
     const count = await runtime.pool.query<{ count: string }>(
       'select count(*) from field.site_assets where organization_id = $1', [organization.organization_id],
     );
@@ -399,7 +399,8 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
       `select a.object_key, a.sha256 from field.site_assets a
        join field.site_release_assets ra on ra.asset_id = a.id
        join field.site_releases r on r.id = ra.release_id
-       where a.id = $1 and not exists (select 1 from field.site_visibility_holds h where h.site_id=r.site_id and h.released_at is null) and r.revision = (
+       where a.id = $1 and not exists (select 1 from field.site_visibility_holds h where h.site_id=r.site_id and h.released_at is null)
+         and not exists (select 1 from field.organization_deletion_requests d where d.organization_id=a.organization_id and d.status in ('scheduled','executed')) and r.revision = (
          select max(latest.revision) from field.site_releases latest where latest.site_id = r.site_id)
        limit 1`, [request.params.id],
     );
@@ -629,6 +630,9 @@ export function registerSiteRoutes(app: FastifyInstance, runtime: FieldBusinessR
        where s.slug = $1 order by r.revision desc limit 1`, [request.params.slug],
     );
     if (!result.rows[0]) return reply.code(404).send({ error: 'site_not_found' });
+    // 조직 삭제 예약·완료 동안 공개 사이트를 내린다. 고객 접수 확인 경로(확인키)는 별도로 유지된다.
+    if ((await runtime.pool.query("select 1 from field.organization_deletion_requests where organization_id=$1 and status in ('scheduled','executed')",
+      [result.rows[0].organization_id])).rowCount) return reply.header('Cache-Control', 'no-store').code(404).send({ error: 'site_not_found' });
     if ((await runtime.pool.query('select 1 from field.site_visibility_holds where site_id=$1 and released_at is null',
       [result.rows[0].site_id])).rowCount) return reply.header('Cache-Control', 'no-store').code(404).send({ error: 'site_visibility_restricted', organizationId: result.rows[0].organization_id });
     const row = result.rows[0];

@@ -5,10 +5,13 @@ import { fieldIntegratorGrant } from './integrator-auth.js';
 import { inspectStoredApGrant, refreshStoredApGrant } from './ap-connector.js';
 import { integratorAvailability } from './bookings.js';
 import { recordFieldRevocation } from './revocation-journal.js';
+import { registerExternalRequestPublicRoutes } from './external-request-public-routes.js';
+import { registerApWebhookInbox } from './ap-webhook-inbox.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const allowedScopes = new Set(['field.facts.read', 'field.availability.read',
-  'field.requests.create', 'field.requests.read', 'field.customer_access.create']);
+  'field.requests.create', 'field.requests.read', 'field.customer_access.create',
+  'field.proposals.respond', 'field.notification_route.read']);
 const object = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const eventSecretPattern = /^[A-Za-z0-9_-]{43}$/;
@@ -50,6 +53,9 @@ async function client(runtime: FieldBusinessRuntime, clientId: unknown): Promise
 }
 
 export function registerFieldIntegratorRoutes(app: FastifyInstance, runtime: FieldBusinessRuntime) {
+  // 공개 계약 preview.9 경로(Field ID 조회·고객 제안 결정·알림 경로·AP 사건 수신함)도 같은 통합 모듈에서 등록한다.
+  registerExternalRequestPublicRoutes(app, runtime);
+  registerApWebhookInbox(app, runtime);
   app.get<{ Querystring: { clientId?: string } }>('/integrations/v1/authorization/options', async (request, reply) => {
     const actor = await session(request, reply, runtime);
     if (!actor) return reply;
@@ -185,7 +191,7 @@ export function registerFieldIntegratorRoutes(app: FastifyInstance, runtime: Fie
         'availability.read': permitted('field.availability.read'),
         'request.create': permitted('field.requests.create'),
         'customer_access.create': permitted('field.customer_access.create'),
-        'proposal.respond': false },
+        'proposal.respond': permitted('field.proposals.respond') },
     });
   });
 

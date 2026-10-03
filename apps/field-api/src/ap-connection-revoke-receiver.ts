@@ -1,10 +1,47 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import type { PoolClient } from 'pg';
 import type { FieldBusinessRuntime } from './business.js';
 import { unsealApEventSecret } from './integrator-routes.js';
 import { recordFieldRevocation } from './revocation-journal.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type ReceivedConnection = { id: string; organization_id: string; field_grant_id: string | null };
+// 서명 검증을 통과한 AP 연결 해제를 같은 트랜잭션에서 로컬 반영한다. 서명 해제 경로와 AP 사건 수신함이 함께 쓴다.
+// 같은 해제 ID 재수신은 'replayed', 다른 해제 ID가 이미 반영됐으면 'conflict'를 돌려주고 아무것도 바꾸지 않는다.
+export async function commitReceivedApRevocation(db: PoolClient, runtime: FieldBusinessRuntime,
+  connection: ReceivedConnection, revocationId: string): Promise<'committed' | 'replayed' | 'conflict'> {
+  const connectionId = connection.id;
+  const prior = await db.query<{ id: string }>(
+    `select id from field.ap_received_connection_revocations where connection_id = $1`,
+    [connectionId]);
+  if (prior.rows[0]) return prior.rows[0].id === revocationId ? 'replayed' : 'conflict';
+  await recordFieldRevocation(runtime.revocationJournal, { targetKind: 'connection', targetId: connectionId,
+    organizationId: connection.organization_id, selectionId: connection.field_grant_id && uuid.test(connection.field_grant_id) ? connection.field_grant_id : null,
+    source: 'remote', revocationId });
+  await db.query(`insert into field.ap_received_connection_revocations(id,connection_id)
+    values ($1,$2)`, [revocationId, connectionId]);
+  await db.query(`update field.ap_connections set status = 'revoked',updated_at = now()
+    where id = $1`, [connectionId]);
+  await db.query(`update field.site_ap_installations set status = 'paused',updated_at = now()
+    where connection_id = $1 and status = 'active'`, [connectionId]);
+  if (connection.field_grant_id && uuid.test(connection.field_grant_id)) {
+    await db.query(`update field.oauth_selections set revoked_at = now()
+      where id = $1 and revoked_at is null`, [connection.field_grant_id]);
+    await db.query(`update "oauthAccessToken" set revoked = now()
+      where "referenceId" = $1 and revoked is null`, [connection.field_grant_id]);
+    await db.query(`update "oauthRefreshToken" set revoked = now()
+      where "referenceId" = $1 and revoked is null`, [connection.field_grant_id]);
+    await db.query(`delete from "oauthConsent" where "referenceId" = $1`,
+      [connection.field_grant_id]);
+  }
+  await db.query(`insert into field.outbox(id,organization_id,event_type,aggregate_id,payload)
+    values ($1,$2,'field.ap_connection.remote_revoked',$3,$4::jsonb)`,
+  [randomUUID(), connection.organization_id, connectionId,
+    JSON.stringify({ connectionId, revocationId })]);
+  return 'committed';
+}
 
 export function registerApConnectionRevokeReceiver(app: FastifyInstance, runtime: FieldBusinessRuntime) {
   app.post<{ Params: { id: string } }>('/integrations/v1/connections/:id/revoke', async (request, reply) => {
@@ -47,36 +84,8 @@ export function registerApConnectionRevokeReceiver(app: FastifyInstance, runtime
       if (!timingSafeEqual(expected, Buffer.from(signature, 'hex'))) {
         await db.query('rollback'); return reply.code(401).send({ error: 'invalid_revoke_signature' });
       }
-      const prior = await db.query<{ id: string }>(
-        `select id from field.ap_received_connection_revocations where connection_id = $1`,
-        [connectionId]);
-      if (prior.rows[0] && prior.rows[0].id !== revocationId) {
+      if (await commitReceivedApRevocation(db, runtime, connection, revocationId) === 'conflict') {
         await db.query('rollback'); return reply.code(409).send({ error: 'revocation_id_conflict' });
-      }
-      if (!prior.rows[0]) {
-        await recordFieldRevocation(runtime.revocationJournal, { targetKind: 'connection', targetId: connectionId,
-          organizationId: connection.organization_id, selectionId: connection.field_grant_id && uuid.test(connection.field_grant_id) ? connection.field_grant_id : null,
-          source: 'remote', revocationId });
-        await db.query(`insert into field.ap_received_connection_revocations(id,connection_id)
-          values ($1,$2)`, [revocationId, connectionId]);
-        await db.query(`update field.ap_connections set status = 'revoked',updated_at = now()
-          where id = $1`, [connectionId]);
-        await db.query(`update field.site_ap_installations set status = 'paused',updated_at = now()
-          where connection_id = $1 and status = 'active'`, [connectionId]);
-        if (connection.field_grant_id && uuid.test(connection.field_grant_id)) {
-          await db.query(`update field.oauth_selections set revoked_at = now()
-            where id = $1 and revoked_at is null`, [connection.field_grant_id]);
-          await db.query(`update "oauthAccessToken" set revoked = now()
-            where "referenceId" = $1 and revoked is null`, [connection.field_grant_id]);
-          await db.query(`update "oauthRefreshToken" set revoked = now()
-            where "referenceId" = $1 and revoked is null`, [connection.field_grant_id]);
-          await db.query(`delete from "oauthConsent" where "referenceId" = $1`,
-            [connection.field_grant_id]);
-        }
-        await db.query(`insert into field.outbox(id,organization_id,event_type,aggregate_id,payload)
-          values ($1,$2,'field.ap_connection.remote_revoked',$3,$4::jsonb)`,
-        [randomUUID(), connection.organization_id, connectionId,
-          JSON.stringify({ connectionId, revocationId })]);
       }
       await db.query('commit');
       return reply.header('Cache-Control', 'no-store').send({

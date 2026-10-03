@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Field delegated integrator API",
-    "version": "1.0.0-preview.8",
-    "description": "Field bearer facts, availability, scoped external request receipt including selected attachment IDs, by-source lookup, customer reservation handoff, capability discovery, explicit AP-to-Field binding, and signed AP initiated connection revoke. Attachment bytes are copied later through the authorized AP action route; the request receipt does not assert copy success. Release consumer gates are pending."
+    "version": "1.0.0-preview.9",
+    "description": "Field bearer facts, availability, scoped external request receipt including selected attachment IDs, by-source lookup, connection-bound external request state by Field ID, customer proposal decisions that never confirm a booking, notification route ownership reads, customer reservation handoff, capability discovery, explicit AP-to-Field binding, signed AP initiated connection revoke, and a signed AP event inbox. Attachment bytes are copied later through the authorized AP action route; the request receipt does not assert copy success. Release consumer gates are pending."
   },
   "servers": [{ "url": "/" }],
   "components": {
@@ -11,6 +11,10 @@
       "apRevokeHmac": {
         "type": "apiKey", "in": "header", "name": "X-Signature",
         "description": "HMAC-SHA256 over timestamp.revocation_id.connection_id.revoke using the bound connection key selected by X-Key-Id. X-Revocation-Id and X-Timestamp are required."
+      },
+      "apEventHmac": {
+        "type": "apiKey", "in": "header", "name": "X-Signature",
+        "description": "HMAC-SHA256 over timestamp.event_id.raw_body_bytes using the bound connection key selected by X-Key-Id. X-Event-Id and X-Timestamp (Unix seconds, +-5 minutes) are required. The same event ID and body may be retried with a fresh timestamp and signature."
       },
       "fieldOAuth": {
         "type": "oauth2",
@@ -23,7 +27,9 @@
               "field.availability.read": "Read the selected organization's current service terms and requestable slots",
               "field.requests.create": "Submit a consented AP ActionRequest to the selected Field organization",
               "field.requests.read": "Read the result and sanitized reservation events of a submitted AP ActionRequest",
-              "field.customer_access.create": "Issue one-use customer handoff codes for an accepted external reservation"
+              "field.customer_access.create": "Issue one-use customer handoff codes for an accepted external reservation",
+              "field.proposals.respond": "Record a customer's accept or withdraw decision on an owner proposal for an accepted external reservation; never confirms a booking",
+              "field.notification_route.read": "Read which product owns customer notifications for an accepted external request"
             }
           }
         }
@@ -42,7 +48,7 @@
         "properties": {
           "grantId": { "type": "string", "format": "uuid" },
           "organizationId": { "type": "string", "format": "uuid" },
-          "scopes": { "type": "array", "items": { "type": "string", "enum": ["field.facts.read", "field.availability.read", "field.requests.create", "field.requests.read", "field.customer_access.create"] } },
+          "scopes": { "type": "array", "items": { "type": "string", "enum": ["field.facts.read", "field.availability.read", "field.requests.create", "field.requests.read", "field.customer_access.create", "field.proposals.respond", "field.notification_route.read"] } },
           "state": { "type": "string", "enum": ["active"] }
         },
         "additionalProperties": false
@@ -181,6 +187,95 @@
           "requestId": { "type": "string", "format": "uuid" }, "retryable": { "const": false }
         }, "additionalProperties": false
       },
+      "ExternalRequestProposal": {
+        "type": "object", "required": ["revision", "startAt", "endAt", "state"],
+        "properties": {
+          "revision": { "type": "integer", "minimum": 1, "description": "Reservation revision that created this owner proposal. Use it as proposalRevision." },
+          "startAt": { "type": "string", "format": "date-time" },
+          "endAt": { "type": "string", "format": "date-time" },
+          "state": { "type": "string", "enum": ["awaiting_customer", "customer_accepted"], "description": "customer_accepted is still not a confirmed booking; only the Field owner confirms." }
+        }, "additionalProperties": false
+      },
+      "ExternalRequestState": {
+        "type": "object",
+        "required": ["externalRequestId", "actionRequestId", "connectionId", "organizationId", "kind", "status", "reservationId", "state", "revision", "proposal", "receivedAt"],
+        "properties": {
+          "externalRequestId": { "type": "string", "format": "uuid" },
+          "actionRequestId": { "type": "string", "format": "uuid" },
+          "connectionId": { "type": "string", "format": "uuid" },
+          "organizationId": { "type": "string", "format": "uuid" },
+          "kind": { "type": "string", "enum": ["inquiry", "reservation_request"] },
+          "status": { "const": "requested", "description": "Field receipt status of the external request. It does not change after receipt." },
+          "reservationId": { "type": ["string", "null"], "format": "uuid" },
+          "state": { "type": "string", "description": "Current Field reservation state for reservation_request, or open/closed Field work state for inquiry." },
+          "revision": { "type": "integer", "minimum": 0, "description": "Current reservation revision, or Field work revision for inquiry. The ETag header carries the same value." },
+          "proposal": { "oneOf": [{ "$ref": "#/components/schemas/ExternalRequestProposal" }, { "type": "null" }] },
+          "receivedAt": { "type": "string", "format": "date-time" }
+        }, "additionalProperties": false
+      },
+      "CustomerDecisionRequest": {
+        "type": "object", "required": ["decision", "proposalRevision", "customerProof", "idempotencyKey"],
+        "properties": {
+          "decision": { "type": "string", "enum": ["accept", "withdraw"], "description": "accept moves proposed to customer_accepted (or change_proposed to change_accepted). withdraw is the Field customer cancel request and is only accepted on an initial proposal (proposed to canceled). decline is not supported because Field has no customer transition that refuses a proposal while keeping the request open." },
+          "proposalRevision": { "type": "integer", "minimum": 1 },
+          "customerProof": {
+            "type": "object", "required": ["recordId", "confirmedAt", "originConversationId"],
+            "properties": {
+              "recordId": { "type": "string", "format": "uuid", "description": "Caller audit record of the customer's explicit decision. One record can be used once per external request." },
+              "confirmedAt": { "type": "string", "format": "date-time", "description": "Must be within the last 24 hours and not more than 5 minutes in the future." },
+              "originConversationId": { "type": "string", "format": "uuid", "description": "Must equal the originConversationId stored with the external request. This is not identity verification." }
+            }, "additionalProperties": false
+          },
+          "idempotencyKey": { "type": "string", "format": "uuid" }
+        }, "additionalProperties": false
+      },
+      "CustomerDecisionResult": {
+        "type": "object", "required": ["decisionId", "externalRequestId", "reservationId", "decision", "proposalRevision", "state", "revision", "retryable"],
+        "properties": {
+          "decisionId": { "type": "string", "format": "uuid" },
+          "externalRequestId": { "type": "string", "format": "uuid" },
+          "reservationId": { "type": "string", "format": "uuid" },
+          "decision": { "type": "string", "enum": ["accept", "withdraw"] },
+          "proposalRevision": { "type": "integer", "minimum": 1 },
+          "state": { "type": "string", "enum": ["customer_accepted", "change_accepted", "canceled"], "description": "Reservation state right after this decision. Never confirmed." },
+          "revision": { "type": "integer", "minimum": 2 },
+          "retryable": { "const": false }
+        }, "additionalProperties": false
+      },
+      "NotificationRoute": {
+        "type": "object", "required": ["externalRequestId", "reservationId", "owner", "generation", "allowed", "reason"],
+        "properties": {
+          "externalRequestId": { "type": "string", "format": "uuid" },
+          "reservationId": { "type": ["string", "null"], "format": "uuid" },
+          "owner": { "type": "string", "enum": ["ap", "field"], "description": "Product that owns customer notifications for this request." },
+          "generation": { "type": "integer", "enum": [1, 2] },
+          "allowed": { "type": "boolean", "description": "Whether the caller (AP) may send customer notifications for this request now." },
+          "reason": { "type": "string", "enum": ["ap_route_generation_1", "route_transfer_pending", "field_route_active", "field_route_suspended"] }
+        }, "additionalProperties": false
+      },
+      "AgentEventEnvelope": {
+        "type": "object",
+        "required": ["spec_version", "event_id", "event_type", "source_product", "connection_id", "aggregate_type", "aggregate_id", "aggregate_version", "occurred_at", "correlation_id", "data"],
+        "properties": {
+          "spec_version": { "const": "1.0" },
+          "event_id": { "type": "string", "format": "uuid" },
+          "event_type": { "type": "string", "enum": ["agent.conversation.updated", "agent.action.delivery_updated", "agent.notification.updated", "connection.revoked"] },
+          "source_product": { "const": "agent_platform" },
+          "connection_id": { "type": "string", "format": "uuid" },
+          "aggregate_type": { "type": "string", "enum": ["conversation", "action", "notification", "connection"], "description": "Must match event_type: conversation, action, notification, or connection for connection.revoked." },
+          "aggregate_id": { "type": "string", "format": "uuid", "description": "For connection.revoked this is connection_id." },
+          "aggregate_version": { "type": "integer", "minimum": 1 },
+          "occurred_at": { "type": "string", "format": "date-time" },
+          "correlation_id": { "type": "string", "format": "uuid", "description": "For connection.revoked this is the AP revocation ID shared with the signed revoke route." },
+          "data": {
+            "type": "object", "required": ["resource_id", "status"],
+            "properties": {
+              "resource_id": { "type": "string", "format": "uuid", "description": "Must equal aggregate_id." },
+              "status": { "type": "string", "minLength": 1, "maxLength": 80, "description": "revoked for connection.revoked." }
+            }, "additionalProperties": false
+          }
+        }, "additionalProperties": false
+      },
       "ExternalReservationEvent": {
         "type": "object",
         "required": ["eventId", "revision", "eventType", "state", "occurredAt", "customerNotificationOwnerProduct", "routeGeneration"],
@@ -308,6 +403,71 @@
           "200": { "description": "Sanitized Field reservation events", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExternalReservationEvents" } } } },
           "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/integrations/v1/external-requests/{id}": {
+      "get": {
+        "operationId": "getFieldExternalRequest",
+        "description": "Read the latest Field state of an accepted external request by Field external request ID. Only the same current connection, client, actor and grant that can read by-source may read it; requests of other connections are a safe 404. A proposal is present only while an owner proposal awaits or has the customer's acceptance; neither is a confirmed booking.",
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "security": [{ "fieldOAuth": ["field.requests.read"] }],
+        "responses": {
+          "200": { "description": "Current external request state", "headers": { "ETag": { "description": "Quoted current revision", "schema": { "type": "string", "pattern": "^\"[0-9]+\"$" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExternalRequestState" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/integrations/v1/external-requests/{id}/customer-decisions": {
+      "post": {
+        "operationId": "recordFieldCustomerProposalDecision",
+        "description": "Record the decision of a customer who is talking to the caller (AP) on the exact current owner proposal of an AP-origin reservation. Field reuses its own customer accept and cancel request transitions. It never confirms a booking; the Field owner still confirms. The same idempotencyKey and body returns the stored result with 200, a different body for the same key or reuse of customerProof.recordId returns 409. A stale or non-current proposalRevision returns 409 proposal_mismatch.",
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerDecisionRequest" },
+          "example": { "decision": "accept", "proposalRevision": 1, "customerProof": { "recordId": "00000000-0000-4000-8000-000000000011", "confirmedAt": "2026-10-03T10:00:00Z", "originConversationId": "00000000-0000-4000-8000-000000000003" }, "idempotencyKey": "00000000-0000-4000-8000-000000000012" } } } },
+        "security": [{ "fieldOAuth": ["field.proposals.respond"] }],
+        "responses": {
+          "201": { "description": "Decision recorded; reservation is not confirmed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerDecisionResult" } } } },
+          "200": { "description": "Identical prior decision replayed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CustomerDecisionResult" } } } },
+          "400": { "description": "Invalid decision body, or decision_not_supported for decline", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "proposal_mismatch, decision_not_supported for withdraw on a change proposal, customer_proof_mismatch, customer_proof_expired, customer_proof_reused, or idempotency_conflict", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/integrations/v1/external-requests/{id}/notification-route": {
+      "get": {
+        "operationId": "getFieldExternalRequestNotificationRoute",
+        "description": "Read customer notification ownership for an accepted external request from the Field notification route transfer ledger. Generation 1 belongs to AP. After a revoked connection, customer consent and owner activation, generation 2 belongs to Field and AP is not allowed to notify. This read is bound to a connection that is still valid (review_required) and its grant, so in practice AP observes only generation 1: once the connection is revoked its token is revoked too and this read returns 401 or 404. Generation 2 is reported only if the route transfers while the connection is still valid. This read does not change the route.",
+        "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "security": [{ "fieldOAuth": ["field.notification_route.read"] }],
+        "responses": {
+          "200": { "description": "Current notification route owner", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotificationRoute" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }, "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/integrations/v1/webhooks/agent": {
+      "post": {
+        "operationId": "receiveSignedAgentEvent",
+        "description": "Signed AP to Field event inbox. A 202 confirms durable inbox receipt only. connection.revoked uses correlation_id as the AP revocation ID and applies the same local Field revoke as the signed revoke route; other event types are recorded without further processing in this preview. The same event ID and body may be retried with a fresh timestamp and signature.",
+        "parameters": [
+          { "in": "header", "name": "X-Event-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Key-Id", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "in": "header", "name": "X-Timestamp", "required": true, "schema": { "type": "string", "pattern": "^[0-9]{10}$" } }
+        ],
+        "requestBody": { "required": true, "content": { "application/vnd.agent-event+json": { "schema": { "$ref": "#/components/schemas/AgentEventEnvelope" },
+          "example": { "spec_version": "1.0", "event_id": "11111111-1111-4111-8111-111111111111", "event_type": "connection.revoked", "source_product": "agent_platform", "connection_id": "22222222-2222-4222-8222-222222222222", "aggregate_type": "connection", "aggregate_id": "22222222-2222-4222-8222-222222222222", "aggregate_version": 1, "occurred_at": "2026-10-03T10:05:00Z", "correlation_id": "44444444-4444-4444-8444-444444444444", "data": { "resource_id": "22222222-2222-4222-8222-222222222222", "status": "revoked" } } } } },
+        "security": [{ "apEventHmac": [] }],
+        "responses": {
+          "202": { "description": "Event stored in the Field inbox or identical event already stored", "content": { "application/json": { "schema": { "type": "object", "required": ["received"], "properties": { "received": { "type": "boolean" } }, "additionalProperties": false } } } },
+          "400": { "description": "Malformed or forbidden event body", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "description": "Same event ID with different body or connection", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Event route unavailable", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },

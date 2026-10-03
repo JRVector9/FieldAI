@@ -7,7 +7,8 @@ export type FieldGrant = { id: string; organization_id: string; actor_user_id: s
 
 export async function fieldIntegratorGrant(request: FastifyRequest, reply: FastifyReply,
   runtime: FieldBusinessRuntime, requiredScope?: 'field.facts.read' | 'field.availability.read'
-    | 'field.requests.create' | 'field.requests.read' | 'field.customer_access.create'): Promise<FieldGrant | null> {
+    | 'field.requests.create' | 'field.requests.read' | 'field.customer_access.create'
+    | 'field.proposals.respond' | 'field.notification_route.read'): Promise<FieldGrant | null> {
   const bearer = /^Bearer ([A-Za-z0-9_-]{20,512})$/.exec(request.headers.authorization ?? '')?.[1];
   if (!bearer) { reply.code(401).send({ error: 'invalid_access_token' }); return null; }
   if (runtime.oauthLifecycleGuard) {

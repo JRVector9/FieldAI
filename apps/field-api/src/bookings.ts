@@ -326,6 +326,37 @@ async function ownerNotificationDelivery(client: PoolClient, row: Reservation) {
   return found.rows[0]?.connection_status === 'review_required'
     ? 'handled_by_ap' : 'manual_contact_required';
 }
+// 고객의 사업자 제안 수락 전이. Field 고객 화면과 공개 연동 고객 결정이 같은 전이를 쓰며 확정은 사업자 몫이다.
+// 잠긴 예약 행과 기대 revision이 맞지 않으면 아무것도 바꾸지 않고 null을 돌려준다.
+export async function acceptReservationProposal(client: PoolClient, row: Reservation, expectedRevision: number) {
+  if ((row.state !== 'proposed' && row.state !== 'change_proposed') || row.revision !== expectedRevision) return null;
+  const nextState = row.state === 'change_proposed' ? 'change_accepted' : 'customer_accepted';
+  const updated = await client.query<Reservation>(
+    `update field.reservations set state = $2, revision = revision + 1,
+      proposal_accepted_at = now(), updated_at = now() where id = $1 returning *`, [row.id, nextState]);
+  await recordEvent(client, row, nextState, 'field.reservation.proposal_accepted', 'customer', null,
+    { proposalStartAt: iso(row.proposal_start_at) }, updated.rows[0]!.revision);
+  await outbox(client, row.organization_id, 'field.reservation.proposal_accepted', row.id,
+    { reservationId: row.id, revision: updated.rows[0]!.revision, notification: 'pending' });
+  return updated.rows[0]!;
+}
+// 고객 취소 요청 전이. 점유가 없으면 바로 취소, 확정 점유가 있으면 사업자 판단을 기다린다.
+export async function requestReservationCancellation(client: PoolClient, row: Reservation,
+  expectedRevision: number, reason: string) {
+  const allowed = ['requested', 'proposed', 'customer_accepted', 'confirmed',
+    'change_requested', 'change_proposed', 'change_accepted'];
+  if (!allowed.includes(row.state) || row.revision !== expectedRevision) return null;
+  const hasOccupancy = row.confirmed_start_at !== null;
+  const nextState = hasOccupancy ? 'cancel_requested' : 'canceled';
+  const updated = await client.query<Reservation>(
+    `update field.reservations set state = $2, revision = revision + 1,
+      updated_at = now() where id = $1 returning *`, [row.id, nextState]);
+  await recordEvent(client, row, nextState, 'field.reservation.cancel_requested', 'customer', null,
+    { reason }, updated.rows[0]!.revision);
+  await outbox(client, row.organization_id, 'field.reservation.cancel_requested', row.id,
+    { reservationId: row.id, revision: updated.rows[0]!.revision, notification: 'pending' });
+  return updated.rows[0]!;
+}
 function receiptHash(request: FastifyRequest): string | null {
   const bearer = request.headers.authorization;
   if (!bearer?.startsWith('Bearer ')) return null;
@@ -1159,19 +1190,12 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
       await client.query('begin');
       const row = await visitorReservation(client, request.params.id, request);
       if (!row) { await client.query('rollback'); return reply.code(404).send({ error: 'reservation_not_found' }); }
-      if ((row.state !== 'proposed' && row.state !== 'change_proposed') || row.revision !== body.expectedRevision) {
+      const accepted = await acceptReservationProposal(client, row, body.expectedRevision);
+      if (!accepted) {
         await client.query('rollback'); return reply.code(409).send({ error: 'revision_conflict' });
       }
-      const nextState = row.state === 'change_proposed' ? 'change_accepted' : 'customer_accepted';
-      const updated = await client.query<Reservation>(
-        `update field.reservations set state = $2, revision = revision + 1,
-          proposal_accepted_at = now(), updated_at = now() where id = $1 returning *`, [row.id, nextState]);
-      await recordEvent(client, row, nextState, 'field.reservation.proposal_accepted', 'customer', null,
-        { proposalStartAt: iso(row.proposal_start_at) }, updated.rows[0]!.revision);
-      await outbox(client, row.organization_id, 'field.reservation.proposal_accepted', row.id,
-        { reservationId: row.id, revision: updated.rows[0]!.revision, notification: 'pending' });
       await client.query('commit');
-      return { ...publicReservation(updated.rows[0]!), delivery: 'pending' };
+      return { ...publicReservation(accepted), delivery: 'pending' };
     } catch (error) { await client.query('rollback'); throw error; } finally { client.release(); }
   });
 
@@ -1212,22 +1236,12 @@ export function registerBookingRoutes(app: FastifyInstance, runtime: FieldBusine
       await client.query('begin');
       const row = await visitorReservation(client, request.params.id, request);
       if (!row) { await client.query('rollback'); return reply.code(404).send({ error: 'reservation_not_found' }); }
-      const allowed = ['requested', 'proposed', 'customer_accepted', 'confirmed',
-        'change_requested', 'change_proposed', 'change_accepted'];
-      if (!allowed.includes(row.state) || row.revision !== body.expectedRevision) {
+      const canceled = await requestReservationCancellation(client, row, body.expectedRevision, body.reason.trim());
+      if (!canceled) {
         await client.query('rollback'); return reply.code(409).send({ error: 'revision_conflict' });
       }
-      const hasOccupancy = row.confirmed_start_at !== null;
-      const nextState = hasOccupancy ? 'cancel_requested' : 'canceled';
-      const updated = await client.query<Reservation>(
-        `update field.reservations set state = $2, revision = revision + 1,
-          updated_at = now() where id = $1 returning *`, [row.id, nextState]);
-      await recordEvent(client, row, nextState, 'field.reservation.cancel_requested', 'customer', null,
-        { reason: body.reason.trim() }, updated.rows[0]!.revision);
-      await outbox(client, row.organization_id, 'field.reservation.cancel_requested', row.id,
-        { reservationId: row.id, revision: updated.rows[0]!.revision, notification: 'pending' });
       await client.query('commit');
-      return { ...publicReservation(updated.rows[0]!), delivery: 'pending' };
+      return { ...publicReservation(canceled), delivery: 'pending' };
     } catch (error) { await client.query('rollback'); throw error; } finally { client.release(); }
   });
 

@@ -6,6 +6,7 @@ import type { IncomingHttpHeaders } from 'node:http';
 import { fromNodeHeaders } from 'better-auth/node';
 import { Pool } from 'pg';
 import sharp from 'sharp';
+import { SYNTHETIC_HEIC } from './heic-fixture.js';
 import { createFieldApp } from '../src/app.js';
 
 process.loadEnvFile(resolve('../../infra/field/.env'));
@@ -218,6 +219,12 @@ test('Field accepts safe site photos, scopes them to one business, and publishes
       payload: Buffer.from('<svg onload="alert(1)"/>') });
     assert.equal(rejected.statusCode, 415);
     assert.equal((rejected.json() as { error: string }).error, 'unsupported_image');
+    assert.equal(objects.size, 0);
+    // 아이폰 HEIC는 일반 실패가 아니라 형식 미지원 사유로 거부한다.
+    const heic = await app.inject({ method: 'POST', url: '/v1/sites/assets',
+      headers: { cookie: account.cookie, 'content-type': 'application/octet-stream' }, payload: SYNTHETIC_HEIC });
+    assert.equal(heic.statusCode, 415);
+    assert.deepEqual(heic.json(), { error: 'unsupported_image_format', hint: 'heic_unsupported' });
     assert.equal(objects.size, 0);
     const jpeg = await sharp({ create: { width: 4, height: 3, channels: 3, background: '#f16e50' } })
       .jpeg().withExif({ IFD0: { ImageDescription: 'private source metadata' } }).toBuffer();

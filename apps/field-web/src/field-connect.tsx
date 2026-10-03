@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
+import { scopeLabel } from "./connect-scope-label";
 import "./field-connect.css";
 
 type Organization = { id: string; name: string; catalogRevision: number | null };
@@ -103,7 +104,7 @@ export function FieldConnectSelect() {
           <option key={item.id} value={item.id} disabled={item.catalogRevision === null}>
             {item.name} · {item.catalogRevision === null ? "승인 정보 없음" : `승인 ${item.catalogRevision}`}
           </option>)}</select></label>
-      <section aria-label="요청 접근 범위"><h2>요청 접근 범위</h2><ul>{requestedScopes().map(scope => <li key={scope}>{scope}</li>)}</ul></section>
+      <section aria-label="요청 접근 범위"><h2>요청 접근 범위</h2><ul>{requestedScopes().map(scope => <li key={scope}>{scopeLabel(scope)}</li>)}</ul></section>
       <button type="submit" disabled={busy || !organizationId}>선택하고 동의 내용 확인</button>
     </form></>}</Shell>;
 }
@@ -135,7 +136,7 @@ export function FieldConnectConsent() {
   }
   return <Shell title="Field 정보 접근 동의" status={status}>{selection && <div className="field-connect-form">
     <p><strong>{selection.clientName}</strong>에 다음 Field 자원 접근을 허용하시겠습니까?</p>
-    <dl><dt>사업장</dt><dd>{selection.organizationName}</dd><dt>접근 범위</dt><dd>{selection.scopes.join(", ")}</dd></dl>
+    <dl><dt>사업장</dt><dd>{selection.organizationName}</dd><dt>접근 범위</dt><dd>{selection.scopes.map(scopeLabel).join(", ")}</dd></dl>
     <p>동의 후에도 연결 권한을 철회할 수 있습니다. Field 사이트·직접 문의·예약 원본은 Field에 남습니다.</p>
     <div className="field-connect-actions"><button type="button" disabled={busy} onClick={() => void decide(true)}>접근 허용</button>
       <button type="button" disabled={busy} onClick={() => void decide(false)}>거부</button></div>

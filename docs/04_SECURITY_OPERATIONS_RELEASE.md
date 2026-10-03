@@ -45,7 +45,7 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 | `infra/agent/Dockerfile.web`, `infra/field/Dockerfile.web` | 제품별 Next 웹 이미지(`APP_PROFILE=live` 기본, `NEXT_PUBLIC_*`·rewrite 대상은 빌드 인자) |
 | `infra/agent/compose.live.yaml`, `infra/field/compose.live.yaml` | 제품 단독 live 실행(자기 PostgreSQL 17, Field는 Valkey 추가, migrate→api→web·worker) |
 | `infra/agent/.env.live.example`, `infra/field/.env.live.example` | 제품별 환경변수 목록(부팅 필수/`blocked_integration`/정책 구분). 실제 `.env.live`는 git 무시 |
-| `infra/edge/Caddyfile.example` | TLS 종료·제품별 upstream 분리·X-Forwarded-For 재작성·Field 와일드카드(DNS-01) |
+| `infra/edge/Caddyfile.example` | TLS 종료·제품별 upstream 분리·X-Forwarded-For 재작성·Field 와일드카드(DNS-01)·Field 사업자 자체 도메인 on-demand TLS(`ask` → `GET /v1/public/site-hosts/allow?domain=`) |
 | `.github/workflows/ci.yml` | lint·typecheck·unit, 제품별 DB job, 계약 검사, 이미지 빌드(push 없음) |
 
 production 이미지는 `NODE_ENV=production`이며 `AP_PROFILE`/`FIELD_PROFILE`이 `live`가 아니면 부팅하지 않는다. 각 compose는 상대 제품의 서비스·DB·환경변수를 참조하지 않는다. E2E·보안·독립성·장애 주입 검사, 실제 TLS·레지스트리 push·운영 서버 검수는 이 산출물로 통과 처리하지 않는다.
@@ -109,6 +109,21 @@ AP 회원·Field 회원·AP 상담·Field 직접 상담·고객이 Field에 제�
 별도 지표: AP 첫 AI 활성화, 외부 사이트 설치 성공, 상담 인계율, 답변 지연, 모델 비용, Field 사이트 공개 완료, 실제 문의 처리, 예약 확정, connector 전달 지연/unknown/중복 차단, 승인 source 최신성, 중복 알림, 서로 독립인 구독 전환·재결제. 매체는 집계만 보고 예약 확정을 실제 매출·수금으로 표시하지 않는다.
 
 AP 장애가 Field 직접 접수 오류율로 번지지 않는지, Field 장애가 AP native 질의를 끊는지 별도 synthetic probe로 확인한다. 제품별 이벤트·로그·원가를 보되 correlation_id로 허용된 장애 추적을 가능하게 한다. 상관 ID에 전화번호를 넣지 않는다.
+
+### 5.6.1 API 구조화 로그와 개인정보 가림
+
+AP API와 Field API는 각자 `apps/agent-api/src/logging.ts`, `apps/field-api/src/logging.ts`로 Fastify(pino) JSON 로그를 표준 출력에 쓴다. 두 제품은 설정 코드를 공유하지 않는다.
+
+| 항목 | 내용 |
+|---|---|
+| 수준 | `AP_LOG_LEVEL` / `FIELD_LOG_LEVEL` (`fatal`·`error`·`warn`·`info`·`debug`·`trace`·`silent`, 기본 `info`). 그 밖의 값이면 부팅 실패. `node:test` 실행 중(env 미지정)에는 기본 `silent` |
+| 요청 로그 | 요청마다 완료 한 줄: `method`, `url`(일치한 라우트 패턴, 없으면 쿼리 문자열을 뗀 경로), `statusCode`, `ms`, `requestId`, `organizationId`(`x-organization-id`가 UUID일 때만). 시작 줄·404 원문 URL 줄은 남기지 않는다 |
+| requestId | 들어온 `x-request-id`가 `[A-Za-z0-9._:-]{1,128}`이면 그대로, 아니면 UUID 생성. 전화번호·확인키를 넣지 않는다 |
+| 남기지 않는 것 | 요청 본문, 쿼리 문자열, 요청/응답 헤더, 고객 IP·user-agent, 고객 이름·연락처 |
+| redact(`[redacted]`) | `req`·`res`·`request`·`headers` 아래 `authorization`, `proxy-authorization`, `cookie`, `set-cookie`, `x-receipt-key`, `x-solapi-secret`, `x-signature`, `x-admin-billing-session-id`, `x-support-access-id`(Field는 `x-field-route-key-session-id` 추가), 그리고 `req.body`·`request.body`·`body` |
+| 가림 | 메시지·객체 값·오류 message/stack 속 휴대전화 `01[016789]-?\d{3,4}-?\d{4}` → `010-****-1234`(앞 3자리·끝 4자리만), 이메일 → `a***@domain`, 문장 속 URL 쿼리 삭제 |
+
+가림은 정규식 기반의 2차 방어다. 코드는 고객 입력·비밀값을 로그에 넘기지 않는 것을 1차 원칙으로 한다. 로그 수집·보관 기간(위 표의 기술 로그 30일)·접근 권한·삭제는 로그를 받는 호스트(컨테이너 런타임 로그 드라이버·수집기)의 책임이며 이 저장소는 보관을 구현하지 않는다. worker 진입점은 고정 문구만 `console`로 쓰며 이번 설정의 대상이 아니다.
 
 ## 5.7 출시 게이트
 

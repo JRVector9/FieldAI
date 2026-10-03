@@ -25,6 +25,13 @@
 
 {
 	email {$ACME_EMAIL}
+	# 사업자 자체 도메인 인증서는 처음 접속할 때 발급한다(on-demand TLS).
+	# Caddy가 발급 전에 GET <ask>?domain=<host>를 호출하고 200일 때만 발급한다.
+	# Field API는 소유권 TXT·라우팅 DNS가 검증된 활성 도메인(상태 tls_pending/connected)에만 200을 준다.
+	# Field API가 다른 서버에 있으면 그 내부 주소로 바꾸되 공개 인터넷에 노출하지 않는다.
+	on_demand_tls {
+		ask http://127.0.0.1:4321/v1/public/site-hosts/allow
+	}
 }
 
 # ───────────── AP(Agent Platform) ─────────────
@@ -59,18 +66,17 @@
 	reverse_proxy 127.0.0.1:3002
 }
 
-# 사업자 자체 도메인(미구성): Caddy on-demand TLS는 `ask` URL에 ?domain=<host>로 허용 여부를 물어야 한다.
-# 현재 Field API에는 그 형식의 허용 확인 endpoint가 없으므로(경로형 /v1/public/site-hosts/<host>만 존재)
-# 임의 도메인 인증서 발급을 막기 위해 아래 블록을 켜지 않는다. endpoint가 생기면 다음 형태로 추가한다.
-#
-# {
-# 	on_demand_tls {
-# 		ask http://127.0.0.1:4321/<허용 확인 endpoint>
-# 	}
-# }
-# https:// {
-# 	tls {
-# 		on_demand
-# 	}
-# 	reverse_proxy 127.0.0.1:3002
-# }
+# 사업자 자체 도메인(shop.example.co.kr 등) → Field web(Host로 사이트 판별)
+# - 위에 명시한 호스트·와일드카드에 해당하지 않는 HTTPS 요청만 이 블록으로 온다.
+# - 인증서는 on_demand_tls ask가 허용한 도메인에만 발급된다. 등록만 했거나 DNS 확인 전·연결 해제된 도메인은 거부된다.
+# - X-Forwarded-For는 위 "X-Forwarded-For" 설명대로 reverse_proxy 기본 동작이 실제 접속 IP로 다시 쓴다.
+#   Field web은 이 값을 그대로 API로 넘기고 API는 *_TRUST_PROXY 대역만 신뢰한다.
+# - 주의: Field 도메인 상태가 connected가 되려면 인증서·바인딩을 확인해 주는 edge 어댑터(DomainEdgeProvider)가
+#   Field API에 연결되어야 한다. 어댑터가 없으면 도메인은 blocked_integration에 머물고 ask도 거부한다(발급 안 함).
+https:// {
+	tls {
+		on_demand
+	}
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3002
+}

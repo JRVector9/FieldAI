@@ -301,6 +301,8 @@ export function PublicCatalogPage({ id }: { id: string }) {
           : "같은 연락처의 새 문의가 짧은 시간에 여러 건 접수되어 잠시 제한됩니다. 입력 내용은 유지했습니다. 잠시 뒤 다시 시도해 주세요.");
       else if (result.status === 403 && (result.data as { error?: string }).error === "trial_ended")
         setStatus("사업자의 Field 체험이 종료되어 새 문의를 접수할 수 없습니다. 입력 내용은 유지됩니다. 기존 문의는 확인키로 열 수 있습니다.");
+      else if (result.status === 403 && (result.data as { error?: string }).error === "deletion_scheduled")
+        setStatus("이 사업장은 삭제 예정이라 새 접수를 받지 않습니다.");
       else setStatus(`문의를 접수하지 못했습니다 (${result.status}). 입력 내용은 화면에 남아 있습니다.`);
     } catch { setStatus(canRecoverAfterReload
       ? "응답을 받지 못했습니다. 새로고침하면 기존 접수를 조회하거나 같은 내용을 다시 제출할 수 있습니다."
@@ -414,7 +416,7 @@ export function PublicCatalogPage({ id }: { id: string }) {
                 {!ownerTest && <label>연락처<input required type="tel" maxLength={30} value={phone} onChange={event => setPhone(event.target.value)} /></label>}
                 <label>문의 내용<textarea required maxLength={5000} value={message} onChange={event => setMessage(event.target.value)} /></label>
                 {!ownerTest && <label className="booking-visit-region">지역·이용 장소 (선택)<input maxLength={200} value={visitRegion} onChange={event => setVisitRegion(event.target.value)} placeholder="상세 주소는 사업자와 조율할 수 있습니다." /></label>}
-                {!ownerTest && <label className="inquiry-photo-label"><span aria-hidden="true">▧</span> 사진 첨부 (최대 5장, 장당 8MB)<input type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => {
+                {!ownerTest && <label className="inquiry-photo-label"><span aria-hidden="true">▧</span> 사진 첨부 (최대 5장, 장당 8MB)<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={event => {
                   const result = selectedInquiryPhotos(event.currentTarget.files);
                   if (result.error) { event.currentTarget.value = ""; setStatus(result.error); return; }
                   setPhotos(result.selected); setStatus("");
@@ -630,7 +632,7 @@ export function InquiryPage({ id }: { id: string }) {
         {!inquiry.retention?.workPurgedAt && <form className="field-conversation-composer" onSubmit={event => void reply(event)}><label className="sr-only" htmlFor="field-conversation-reply">추가 질문</label><textarea id="field-conversation-reply" required maxLength={5000} value={body} onChange={event => setBody(event.target.value)} placeholder="추가 내용을 남겨주세요" /><button type="submit" disabled={busy || recoveringMessage}>추가 질문 저장</button></form>}
         <p className="field-conversation-foot">내부 메모는 고객 대화에 표시하지 않습니다. 외부 알림 발송 상태는 각 메시지에 표시됩니다.</p>
         {!inquiry.retention?.workPurgedAt && <FieldCustomerNotificationConsent kind="inquiry" id={id} receiptKey={key} />}
-        <details className="field-conversation-tools"><summary>확인키·사진 관리</summary><div><h2>확인키 관리</h2><p>다른 문의를 열 때는 현재 대화를 닫고 새 확인키를 입력합니다.</p><button className="field-conversation-switch-key" type="button" disabled={hasPendingMessage || busy} onClick={() => { setInquiry(null); setKey(""); clearPhotoSelection(); setPendingPhotoMessageId(null); setRefreshNeeded(false); }}>다른 확인키로 열기</button>{hasPendingMessage ? <p>이전 추가 질문 결과를 확인한 뒤 확인키를 교체할 수 있습니다.</p> : <ReceiptRotationPanel path={`/v1/inquiries/${id}/receipt-key/rotate`} label="문의" currentKey={key} onRotated={onReceiptRotated} />}<div className="knowledge-source"><label className="inquiry-photo-label">문의 사진 첨부 (선택, 최대 5장·장당 8MB)<input ref={photoInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy || Boolean(inquiry?.retention?.workPurgedAt)} onChange={event => {
+        <details className="field-conversation-tools"><summary>확인키·사진 관리</summary><div><h2>확인키 관리</h2><p>다른 문의를 열 때는 현재 대화를 닫고 새 확인키를 입력합니다.</p><button className="field-conversation-switch-key" type="button" disabled={hasPendingMessage || busy} onClick={() => { setInquiry(null); setKey(""); clearPhotoSelection(); setPendingPhotoMessageId(null); setRefreshNeeded(false); }}>다른 확인키로 열기</button>{hasPendingMessage ? <p>이전 추가 질문 결과를 확인한 뒤 확인키를 교체할 수 있습니다.</p> : <ReceiptRotationPanel path={`/v1/inquiries/${id}/receipt-key/rotate`} label="문의" currentKey={key} onRotated={onReceiptRotated} />}<div className="knowledge-source"><label className="inquiry-photo-label">문의 사진 첨부 (선택, 최대 5장·장당 8MB)<input ref={photoInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy || Boolean(inquiry?.retention?.workPurgedAt)} onChange={event => {
           const result = selectedInquiryPhotos(event.currentTarget.files);
           if (result.error) { event.currentTarget.value = ""; setStatus(result.error); return; }
           setPhotos(result.selected); setStatus("");

@@ -5,8 +5,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 require.extensions[".css"] = () => {};
 let PublicKnowledgePage: typeof import("../src/agent-public").PublicKnowledgePage;
 let ServiceSelect: typeof import("../src/agent-public").ServiceSelect;
+let unsupportedInquiryPhotoMessage: typeof import("../src/agent-public").unsupportedInquiryPhotoMessage;
+let DELETION_SCHEDULED_MESSAGE: string;
 before(async () => {
-  ({ PublicKnowledgePage, ServiceSelect } = await import("../src/agent-public.js"));
+  ({ PublicKnowledgePage, ServiceSelect, unsupportedInquiryPhotoMessage, DELETION_SCHEDULED_MESSAGE } = await import("../src/agent-public.js"));
+});
+
+// 사진 형식 거절(415)은 재시도 안내 없이 다른 형식을 고르게 하고, 삭제 예정 사업장은 접수 중지 사유를 보여 준다.
+test("AP photo 415 copy maps the HEIC hint without retry wording, and deletion_scheduled has its own copy", () => {
+  assert.match(unsupportedInquiryPhotoMessage("heic_unsupported"), /HEIC 사진은 지원하지 않습니다/);
+  assert.match(unsupportedInquiryPhotoMessage(null), /지원하지 않는 사진 형식/);
+  for (const hint of ["heic_unsupported", null]) assert.doesNotMatch(unsupportedInquiryPhotoMessage(hint), /다시 시도/);
+  assert.equal(DELETION_SCHEDULED_MESSAGE, "이 사업장은 삭제 예정이라 새 접수를 받지 않습니다.");
 });
 
 test("AP link offers AI guidance and keeps direct human submission visible", () => {

@@ -6,6 +6,8 @@ import { AgentRetentionJournal } from './retention-journal.js';
 import { verifyAgentRetentionJournal } from './retention-journal-integrity.js';
 import { runAgentRetentionJobOnce } from './retention-purge.js';
 import { assertProductionProfile } from './production-profile.js';
+import { purgeAccountDeletionPasswordWindows, runOrganizationDeletionOnce } from './account-deletion.js';
+import { purgeBillingWebhookRecords } from './billing-webhook.js';
 
 assertProductionProfile();
 const databaseUrl = process.env.AP_DATABASE_URL;
@@ -27,6 +29,14 @@ try {
   process.stdout.write('agent retention worker ready\n');
   do {
     try {
+      // 유예가 끝난 조직 삭제 요청을 같은 주기에 하나씩 실행한다(문의·예약 원본은 아래 보존 작업이 정리).
+      const deletion = await runOrganizationDeletionOnce({ pool });
+      if (deletion !== 'empty') process.stdout.write(`agent organization deletion: ${deletion}\n`);
+      // 토스 웹훅 수신 기록(30일)·만료된 IP 창과 계정 삭제 비밀번호 시도 창을 같은 주기에 정리한다.
+      const webhook = await purgeBillingWebhookRecords(pool);
+      const passwordWindows = await purgeAccountDeletionPasswordWindows(pool);
+      if (webhook.events || webhook.windows || passwordWindows)
+        process.stdout.write(`agent webhook/attempt cleanup: events=${webhook.events} windows=${webhook.windows} passwordWindows=${passwordWindows}\n`);
       const result = await runAgentRetentionJobOnce({ pool, media, journal });
       if (result !== 'empty' || process.argv.includes('--once')) process.stdout.write(`agent retention: ${result}\n`);
       if (process.argv.includes('--once')) break;

@@ -25,6 +25,18 @@ export async function removeRetainedPayload(db: PoolClient, kind: RetentionKind,
   await db.query("update field.outbox set payload=jsonb_build_object('retention','purged') where aggregate_id=$1", [id]);
 }
 
+// 짧은 보존 기간 정리(보존 작업자 주기 단계). 서명 없는 토스 웹훅 힌트·처리 작업자가 없는 AP recorded 사건은 30일,
+// IP·비밀번호 시도 창은 15분 창이 끝난 뒤 지운다. 원장·업무 원본은 건드리지 않는다.
+export async function purgeExpiredInboundRecords(pool: Pool) {
+  const count = async (sql: string) => (await pool.query(sql)).rowCount ?? 0;
+  return {
+    billingWebhookEvents: await count("delete from field.billing_webhook_events where received_at < now() - interval '30 days'"),
+    billingWebhookIpWindows: await count("delete from field.billing_webhook_ip_windows where updated_at < now() - interval '15 minutes'"),
+    passwordWindows: await count("delete from field.account_deletion_password_windows where updated_at < now() - interval '15 minutes'"),
+    apWebhookInbox: await count("delete from field.ap_webhook_inbox where state = 'recorded' and received_at < now() - interval '30 days'"),
+  };
+}
+
 export async function runFieldRetentionJobOnce(runtime: { pool: Pool; media?: FieldSiteMediaStore; journal?: Pick<FieldRetentionJournal, 'read' | 'append'> }): Promise<'empty' | 'completed' | 'blocked' | 'retry' | 'receipt_pending'> {
   if (runtime.journal) await verifyFieldRetentionJournal(runtime.pool,runtime.journal);
   const db = await runtime.pool.connect(); let job: RetentionJob | undefined;

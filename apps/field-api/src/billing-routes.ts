@@ -5,6 +5,7 @@ import type { FieldBusinessRuntime } from './business.js';
 // 관리자 접근은 retentionAdminFor → requireAdmin(비mock은 관리자 2단계 인증 세션 필수, QA157)을 따른다.
 import { retentionAdminFor as adminFor } from './retention-routes.js';
 import { billingSnapshot, planView, type BillingPlan } from './billing.js';
+import { registerFieldBillingWebhookRoute } from './billing-webhook.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -42,6 +43,8 @@ async function record(db: PoolClient, actor: string, key: string, requestHash: s
 }
 
 export function registerFieldBillingRoutes(app: FastifyInstance, runtime: FieldBusinessRuntime) {
+  // 토스 웹훅 수신(힌트 보관 전용). app.ts 등록 목록을 건드리지 않도록 결제 라우트와 함께 등록한다.
+  registerFieldBillingWebhookRoute(app, runtime);
   app.get('/v1/subscription/plans', async (request, reply) => {
     if (!await memberFor(request, reply, runtime)) return reply;
     const mode = ['mock','sandbox'].includes(process.env.FIELD_PROFILE ?? '') ? 'test' : 'live';

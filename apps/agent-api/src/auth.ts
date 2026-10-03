@@ -7,6 +7,7 @@ import { twoFactor } from 'better-auth/plugins/two-factor';
 import { APIError } from 'better-auth/api';
 import { assertProductionProfile } from './production-profile.js';
 import { authEmailMessage, deliverAuthEmail, emailProviderFromEnvironment, type EmailProvider } from './email-provider.js';
+import { kakaoProviderConfig, kakaoSocialProviders, kakaoTwoFactorBridge, rejectUnverifiedKakaoUser } from './kakao-provider.js';
 
 const databaseUrl = process.env.AP_DATABASE_URL;
 const secret = process.env.AP_AUTH_SECRET;
@@ -29,12 +30,18 @@ const webLink = (path: string, token: string) => {
 };
 // TOTP·백업코드 검증 요청에서 만들어진 세션만 관리자 2단계 인증 세션으로 표시한다.
 const TWO_FACTOR_SESSION_PATHS = new Set(['/two-factor/verify-totp', '/two-factor/verify-backup-code']);
+// 카카오 키가 없으면 공급사를 등록하지 않는다(blocked_integration). mock에 실제 키가 있으면 여기서 부팅 거부.
+const kakao = kakaoProviderConfig();
+const twoFactorPlugin = twoFactor({ issuer: 'Agent Platform' });
 
 export const auth = betterAuth({
   baseURL,
   secret,
   trustedOrigins: [...new Set([webOrigin, ...process.env.AP_PROFILE === 'mock' ? ['http://localhost:3001', 'http://127.0.0.1:3001'] : []])],
   database: authPool,
+  socialProviders: kakaoSocialProviders(kakao, webOrigin),
+  // 동일 이메일 자동 병합 금지(결정 19). 이미 이메일로 가입한 주소의 카카오 로그인은 account_not_linked로 거부된다.
+  account: { accountLinking: { enabled: false } },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: process.env.AP_PROFILE !== 'mock',
@@ -57,6 +64,14 @@ export const auth = betterAuth({
     additionalFields: { twoFactorVerified: { type: 'boolean', required: false, defaultValue: false, input: false } },
   },
   databaseHooks: {
+    user: {
+      create: {
+        before: async (user, context) => {
+          rejectUnverifiedKakaoUser(user, context);
+          return { data: user };
+        },
+      },
+    },
     session: {
       create: {
         before: async (session, context) => ({
@@ -66,7 +81,8 @@ export const auth = betterAuth({
     },
   },
   plugins: [
-    twoFactor({ issuer: 'Agent Platform' }),
+    twoFactorPlugin,
+    kakaoTwoFactorBridge(twoFactorPlugin, webOrigin),
     oauthLifecycleProvider(authPool, lifecycleJournalFromEnvironment()),
     oauthProvider({
       loginPage: `${webOrigin}/connect/sign-in`,

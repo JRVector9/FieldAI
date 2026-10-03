@@ -22,10 +22,10 @@
 | 4 | 관리자 MFA | 구현(TOTP+백업코드, 2FA 세션 판별) |
 | 5 | 배포 산출물 | 구현(Dockerfile/compose.live/Caddy/CI). 실 TLS·레지스트리·운영 기동은 미검증 |
 | 6 | 템플릿 빈 사이트 | 구현(승인 카탈로그로 섹션 구성) |
-| 7 | HEIC | 미처리 |
-| 8 | 계정·조직 삭제 | 미처리 |
+| 7 | HEIC | 정직한 거부(415)+안내로 처리. 실제 변환은 미지원(`01_SUMMARY.md` §10) |
+| 8 | 계정·조직 삭제 | 구현(`01_SUMMARY.md` §10) |
 | 9 | 고객 폼 개인정보 고지 | 구현 |
-| 10 | trustedOrigins/trustProxy/logger | trustedOrigins·trustProxy 구현, logger 미처리 |
+| 10 | trustedOrigins/trustProxy/logger | 모두 구현(logger는 §10) |
 
 아래 본문은 2026-10-02 조사 당시 기준이다.
 

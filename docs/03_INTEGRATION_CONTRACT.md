@@ -346,15 +346,17 @@ Field source가 해제되면 그 값의 AP 사용을 중단한다. 데이터가 
 | GET /integrations/v1/availability | scope, service_id·revision·from/to | 요청 가능 구간만 |
 | POST /integrations/v1/external-requests | create, ActionRequest·consent·idempotency | external_request_id·requested 상태 |
 | GET /integrations/v1/external-requests/by-source/{actionId} | read, binding | 타임아웃 뒤 기존 수락 확인 |
-| GET /integrations/v1/external-requests/{id} | read, 연결 리소스 | 최신 상태·version·제안 |
-| POST /integrations/v1/external-requests/{id}/customer-decisions | respond, exact proposal·customer proof | 동의/철회 상태. 확정 아님 |
-| GET /integrations/v1/external-requests/{id}/notification-route | route.read | 소유 제품·generation·허용 여부 |
+| GET /integrations/v1/external-requests/{id} | `field.requests.read`, 연결 리소스 | 최신 상태·revision(ETag)·제안 (preview.9 구현) |
+| POST /integrations/v1/external-requests/{id}/customer-decisions | `field.proposals.respond`, exact proposal·customer proof | 동의/철회 상태. 확정 아님 (preview.9 구현) |
+| GET /integrations/v1/external-requests/{id}/notification-route | `field.notification_route.read` | 소유 제품·generation·허용 여부 (preview.9 구현) |
 | POST /integrations/v1/customer-handoffs | `field.customer_access.create`, AP 확인키·accepted action·연결 예약 | 5분짜리 1회 Field 코드 발급 |
 | POST /v1/customer-handoffs/exchange | 1회 고엔트로피 코드 | Field 예약 확인키 발급·이전 키 폐기 |
 | POST /integrations/v1/connections/{id}/revoke | 현재 연결별 HMAC 서명; 범용 manage 동의는 후속 | Field 로컬 회수·서명 영수증 |
-| POST /integrations/v1/webhooks/agent | 등록 서명 |202 durable inbox receipt |
+| POST /integrations/v1/webhooks/agent | 등록 서명 |202 durable inbox receipt (preview.9 구현) |
 
-AP 설치 쓰기의 고정 계약은 `agent-integrator-v1.openapi.json` **1.0.0-preview.9**다. `ap.connections.create`/`ap.deployments.manage`는 client 등록과 AP owner의 조직·AI 선택, 실제 OAuth 동의/token 모두에 명시해야 한다. `externalOrganizationId`는 caller-side 설치 식별값이며 Field actor/조직 동의나 양방향 정보·예약 binding의 증거가 아니다. Field와 일반 외부 client는 같은 경로·scope·origin proof·권한을 사용한다. 현재 Field HTTP consumer 모듈은 이 계약을 소비하지만 사업자 새 BFF/화면 호출과 새 scope 재동의 사용자 흐름은 후속이다.
+Field 계약 `field-integrator-v1.openapi.json` **1.0.0-preview.9**에서 위 네 경로를 구현했다. Field ID 조회와 알림 경로 조회는 by-source와 같은 현재 연결·client·actor·grant에서만 열리고 다른 연결의 요청은 404다. 고객 결정은 Field 고객 수락(`proposed→customer_accepted`, `change_proposed→change_accepted`)과 첫 제안의 고객 취소 요청(`proposed→canceled`) 전이를 그대로 재사용하며 예약을 확정하지 않는다. 정확한 현재 제안 revision·원본 대화 ID·24시간 내 고객 결정 기록을 요구하고, 같은 멱등 키·본문은 200 재응답, 다른 본문·같은 고객 기록 재사용은 409다. 제안을 거절하면서 요청을 유지하는 고객 전이가 Field에 없으므로 `decline`은 400 `decision_not_supported`, 변경 제안의 철회는 확정 예약 취소가 되므로 409 `decision_not_supported`다. 알림 경로는 Field 알림 경로 전환 원장에서 계산하며 세대 2 활성/중지는 Field 담당·AP 발송 불가다. AP 사건 수신함은 `application/vnd.agent-event+json` 원문 바이트에 연결별 HMAC(`timestamp.event_id.raw_body`)을 검증한 뒤 `field.ap_webhook_inbox`에 내구 저장하고 202를 반환한다. `connection.revoked`는 `correlation_id`를 AP 해제 ID로 써서 서명 해제 경로와 같은 로컬 회수를 적용하고, 그 외 사건은 기록만 한다. AP 쪽 발신기·고객 결정 BFF/화면과 새 scope 재동의 흐름은 아직 없다.
+
+현재 AP 계약 파일은 `agent-integrator-v1.openapi.json` **1.0.0-preview.10**이며, 설치 쓰기 subset은 preview.9에서 고정된 그대로다. `ap.connections.create`/`ap.deployments.manage`는 client 등록과 AP owner의 조직·AI 선택, 실제 OAuth 동의/token 모두에 명시해야 한다. `externalOrganizationId`는 caller-side 설치 식별값이며 Field actor/조직 동의나 양방향 정보·예약 binding의 증거가 아니다. Field와 일반 외부 client는 같은 경로·scope·origin proof·권한을 사용한다. 현재 Field HTTP consumer 모듈은 이 계약을 소비하지만 사업자 새 BFF/화면 호출과 새 scope 재동의 사용자 흐름은 후속이다.
 
 신규 public 설치 write는 UUID `Idempotency-Key`를 쓰며 기존 reply/source refresh의 43자 base64url key는 유지한다. 같은 client+grant+operation+target/key와 정규 요청 본문/If-Match는 저장된 결과로200 복구하고, 변경 내용 재사용은409 `retryable:false`다. 배포 변경은 quoted revision `If-Match`를 사용하며 native 상태 변경도 revision을 진행한다. owner 위임/token 만료·회수 또는 현재 membership 상실은401, 누락 scope403, 다른 조직/AI/client/grant/native 배포는 안전한404다. 관리 API는 pending·verifiedAt·active·paused를 구분하고 실제 origin 검증 없이 active를 만들지 않는다. 성공 응답은 `request_id`, `operation_id`, `state`, `retryable`을 포함하고 오류는 `request_id`·rejected 상태·재시도 가능 여부를 구분한다. 저장 뒤 응답 유실/형상 오류는 같은 UUID로 복구하고 새 연결/key로 우회하지 않는다.
 

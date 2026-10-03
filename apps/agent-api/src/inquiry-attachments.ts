@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
-import { normalizeInquiryImage } from './inquiry-media.js';
+import { normalizeInquiryImage, unsupportedImageError } from './inquiry-media.js';
 import { integratorGrant } from './integrator-auth.js';
 import { retainReadGuardThroughResponse } from './retention-read-guard.js';
 
@@ -112,7 +112,7 @@ export function registerInquiryAttachmentRoutes(app: FastifyInstance, runtime: B
       if (!runtime.inquiryMedia) return reply.code(503).send({ error: 'blocked_integration' });
       if (!Buffer.isBuffer(request.body)) return reply.code(415).send({ error: 'unsupported_image' });
       const normalized = await normalizeInquiryImage(request.body);
-      if (!normalized) return reply.code(415).send({ error: 'unsupported_image' });
+      if (!normalized) return reply.code(415).send(unsupportedImageError(request.body));
       const sha256 = hash(normalized.data);
       const existing = await runtime.pool.query<ExistingPhotoRow>(
         `select id, byte_size, width, height from ap.inquiry_attachments

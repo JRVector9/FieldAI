@@ -4,7 +4,7 @@ import type { PoolClient } from 'pg';
 import type { FieldBusinessRuntime } from './business.js';
 import { rejectExpiredTrial } from './trial-access.js';
 import { normalizeCustomHostname } from './custom-domain-dns.js';
-import { customDomainContextFromEnvironment, domainView, resolvedCustomHost, type CustomDomainContext, type SiteDomain } from './custom-domains.js';
+import { customDomainContextFromEnvironment, disconnectSiteDomain, domainView, resolvedCustomHost, type CustomDomainContext, type SiteDomain } from './custom-domains.js';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function object(value: unknown): Record<string, unknown>|null {return value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:null;}
@@ -79,10 +79,7 @@ export function registerCustomDomainRoutes(app: FastifyInstance, runtime: FieldB
           await db.query('update field.site_domains set is_primary=false where site_id=$1 and is_primary',[row.site_id]);
           await db.query('update field.site_domains set is_primary=true,updated_at=now() where id=$1',[row.id]);
         }else if(action==='disconnect'){
-          if(row.desired_state==='active')await db.query(`update field.site_domains set desired_state='disconnected',state='release_pending',
-            is_primary=false,generation=generation+1,claim_token=null,lease_expires_at=null,valid_until=null,next_check_at=now(),updated_at=now() where id=$1`,[row.id]);
-          await db.query("update field.site_ap_installations set status='paused',updated_at=now() where site_id=$1 and site_origin=$2 and status='active'",[row.site_id,`https://${row.hostname}`]);
-          await db.query('delete from field.custom_domain_ap_proofs where domain_id=$1',[row.id]);
+          await disconnectSiteDomain(db,row);
         }else if(action==='reconnect'){
           if(row.desired_state!=='disconnected'||row.state!=='disconnected'){await db.query('rollback');return reply.code(409).send({error:'domain_release_not_completed'});}
           if(await rejectExpiredTrial(reply,db,identity.organizationId)){await db.query('rollback');return reply;}
@@ -102,6 +99,21 @@ export function registerCustomDomainRoutes(app: FastifyInstance, runtime: FieldB
       }catch(error){await db.query('rollback');throw error;}finally{db.release();}
     });
   }
+  // Caddy on-demand TLS `ask` 확인용. 소유권 TXT와 라우팅 DNS가 검증된 활성 도메인(tls_pending·connected)만 200을 준다.
+  // 인증서는 이 응답 뒤에 발급되므로 TLS ready를 요구하지 않는다. 조회 전용이며 DB에 쓰지 않는다.
+  // 삭제 예약·실행된 조직의 도메인은 발급·갱신을 허용하지 않는다(F-O16).
+  app.get<{Querystring:{domain?:unknown}}>('/v1/public/site-hosts/allow',async(request,reply)=>{
+    reply.header('Cache-Control','no-store');
+    const hostname=normalizeCustomHostname(request.query.domain,context.baseDomain);
+    if(!hostname)return reply.code(404).send({error:'site_host_not_allowed'});
+    const found=await runtime.pool.query<{organization_id:string}>(`select d.organization_id from field.site_domains d
+      join field.organizations o on o.id=d.organization_id and o.deleted_at is null
+      where d.hostname=$1 and d.hostname_claimed and d.desired_state='active' and d.ownership_release_generation is null
+        and d.ownership_state='verified' and d.dns_state='verified' and d.state in ('tls_pending','connected')
+        and not exists(select 1 from field.organization_deletion_requests r where r.organization_id=d.organization_id
+          and r.status in ('scheduled','executed')) limit 1`,[hostname]);
+    return found.rows[0]?{domain:hostname,organizationId:found.rows[0].organization_id}:reply.code(404).send({error:'site_host_not_allowed'});
+  });
   app.get<{Params:{hostname:string;kind:string;id:string}}>('/v1/public/site-hosts/:hostname/resources/:kind/:id',async(request,reply)=>{
     reply.header('Cache-Control','no-store');
     const tables:Record<string,string>={'inquiries':'field.inquiries','reservations':'field.reservations','site-assets':'field.site_assets'};

@@ -42,6 +42,7 @@ type Inquiry = {
   retention?:WorkRetention;
   id: string;
   state: string;
+  organizationDeleted?: boolean;
   service: { name: string } | null;
   messages: { id: string; actor: string; body: string; delivery_state: string }[];
   attachments: { id: string; messageId: string; contentType: "image/webp";
@@ -88,8 +89,18 @@ async function uploadInquiryPhoto(inquiryId: string, messageId: string, receiptK
     headers: { authorization: `Bearer ${receiptKey}`, "content-type": "application/octet-stream" },
     body: photo,
   });
-  return response.status;
+  // 415는 본문의 hint(heic_unsupported 등)로 형식 거절 사유를 구분한다.
+  const hint = response.status === 415 ? ((await response.json().catch(() => null)) as { hint?: unknown } | null)?.hint : null;
+  return { status: response.status, hint: typeof hint === "string" ? hint : null };
 }
+// 형식 거절(415)은 재시도로 해결되지 않으므로 다른 형식의 사진을 고르도록 안내한다.
+export function unsupportedInquiryPhotoMessage(hint: string | null) {
+  return hint === "heic_unsupported"
+    ? "HEIC 사진은 지원하지 않습니다. JPG·PNG·WEBP 사진으로 다시 선택해 주세요."
+    : "지원하지 않는 사진 형식입니다. JPG·PNG·WEBP 사진으로 다시 선택해 주세요.";
+}
+// 조직 삭제 유예 중(403 deletion_scheduled)에는 새 상담·문의를 받지 않는다.
+export const DELETION_SCHEDULED_MESSAGE = "이 사업장은 삭제 예정이라 새 접수를 받지 않습니다.";
 
 function ReceiptRotationPanel({ inquiryId, currentKey, onRotated }: {
   inquiryId: string; currentKey: string; onRotated: (nextKey: string) => void;
@@ -218,12 +229,15 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
         return;
       }
       const uploaded = await uploadInquiryPhoto(saved.id, messageId, saved.receiptKey, selected);
-      if (uploaded === 201 || uploaded === 200) {
+      if (uploaded.status === 201 || uploaded.status === 200) {
         setPhoto(null);
         setStatus(saved.state === 'external_ready'
           ? "AP 대화에 사진을 첨부했습니다. Field에 보낼 사진을 아래에서 별도로 선택하고 동의해 주세요."
           : "문의와 사진을 AP에 저장했습니다. 외부 알림은 미연결 상태입니다.");
-      } else setStatus(`문의는 저장됐지만 사진 첨부에 실패했습니다 (${uploaded}). 아래에서 다시 시도할 수 있습니다.`);
+      } else if (uploaded.status === 415) {
+        setPhoto(null);
+        setStatus(`문의는 저장됐지만 사진을 첨부하지 못했습니다. ${unsupportedInquiryPhotoMessage(uploaded.hint)}`);
+      } else setStatus(`문의는 저장됐지만 사진 첨부에 실패했습니다 (${uploaded.status}). 아래에서 다시 시도할 수 있습니다.`);
     } catch { setStatus("문의는 저장됐지만 사진 업로드 응답을 받지 못했습니다. 아래에서 다시 시도할 수 있습니다."); }
   }
   async function retryDirectPhoto() {
@@ -431,6 +445,7 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
           preserveQuestion();
           setAiStatus(started.status === 403 && started.error === "trial_ended"
             ? "사업자의 AP 체험이 종료되어 새 AI 상담을 시작할 수 없습니다."
+            : started.status === 403 && started.error === "deletion_scheduled" ? DELETION_SCHEDULED_MESSAGE
             : started.status === 503
             ? "AI 공급사 또는 사용 한도 설정을 사용할 수 없습니다. 아래에서 사람에게 직접 문의할 수 있습니다."
             : `AI 대화를 시작하지 못했습니다 (${started.status}). 사람 문의는 사용할 수 있습니다.`);
@@ -495,6 +510,8 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
           setAiStatus("AI 사용 한도에 도달했습니다. 사람 문의는 계속 사용할 수 있습니다.");
         else if (result.status === 403 && (result.data as { error?: string }).error === "trial_ended")
           setAiStatus("사업자의 AP 체험이 종료되어 새 AI 답변을 제공할 수 없습니다. 기존 대화는 확인할 수 있습니다.");
+        else if (result.status === 403 && (result.data as { error?: string }).error === "deletion_scheduled")
+          setAiStatus(DELETION_SCHEDULED_MESSAGE);
         else if (result.status === 503)
           setAiStatus("AI 공급사 또는 예산 설정을 사용할 수 없습니다. 아래 사람 문의 초안과 AI 질문 내용을 확인해 주세요.");
         else if (result.status === 409 && (result.data as { error?: string }).error === "automation_paused_or_source_changed")
@@ -527,6 +544,7 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
         if (!started.engagement) {
           setStatus(started.status === 403 && started.error === "trial_ended"
             ? "사업자의 AP 체험이 종료되어 새 문의를 접수할 수 없습니다. 입력은 유지됩니다."
+            : started.status === 403 && started.error === "deletion_scheduled" ? DELETION_SCHEDULED_MESSAGE
             : started.status === 404 ? "매체 배치가 중지되어 새 문의를 접수할 수 없습니다."
             : `매체 상담을 시작하지 못했습니다 (${started.status}). 입력은 유지됩니다.`);
           return;
@@ -591,6 +609,8 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
       }
       else if (result.status === 403 && (result.data as { error?: string }).error === "trial_ended")
         setStatus("사업자의 AP 체험이 종료되어 새 문의를 접수할 수 없습니다. 입력 내용은 유지됩니다. 기존 문의는 확인키로 열 수 있습니다.");
+      else if (result.status === 403 && (result.data as { error?: string }).error === "deletion_scheduled")
+        setStatus(DELETION_SCHEDULED_MESSAGE);
       else if ([409, 503].includes(result.status) && ['field_connection_unavailable',
         'field_services_unavailable', 'field_unavailable'].includes(
           (result.data as { error?: string }).error ?? '')) {
@@ -642,14 +662,14 @@ export function PublicKnowledgePage({ id, initialMessage = "", initialConditions
       <label>이름<input required maxLength={80} value={name} onChange={event => setName(event.target.value)} /></label>
       <label>연락처<input required type="tel" maxLength={30} value={phone} onChange={event => setPhone(event.target.value)} /></label>
       <label>문의 내용<textarea required maxLength={5000} value={message} onChange={event => updateHumanMessage(event.target.value)} /></label>
-      <div className="agent-public-photo"><label className="inquiry-photo-label">문의 사진 (선택, 최대 8MB)<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label><p>사진은 AP 대화 원본을 저장한 뒤 비공개로 첨부합니다. AI 분석에 사용하지 않습니다. Field로 보내려면 별도로 선택하고 동의해야 합니다.</p></div>
+      <div className="agent-public-photo"><label className="inquiry-photo-label">문의 사진 (선택, 최대 8MB)<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label><p>사진은 AP 대화 원본을 저장한 뒤 비공개로 첨부합니다. AI 분석에 사용하지 않습니다. Field로 보내려면 별도로 선택하고 동의해야 합니다.</p></div>
       <PrivacyNotice />
       <label><input type="checkbox" required checked={consent} onChange={event => setConsent(event.target.checked)} /> AP 대화와 요청 준비에 필요한 연락처 저장에 동의합니다. 위 개인정보 수집·이용 안내를 확인했습니다. (필수)</label>
       <button type="submit" value="human" disabled={busy || recovering || !knowledge || Boolean(engagement?.retention?.workPurgedAt)}>사람 문의 제출</button>
       {publicId && engagement && <><button type="submit" value="field" disabled={busy || recovering || !knowledge || Boolean(engagement?.retention?.workPurgedAt) || fieldReadiness !== "ready"}>Field 요청 준비</button><p>요청 준비만으로 Field에 전달되지 않습니다. 현재 서비스·가격·시간과 수신 사업자를 확인한 뒤 별도로 동의해야 합니다.</p></>}
       {!knowledge && <p>승인된 사업 정보를 불러온 뒤 문의를 접수할 수 있습니다.</p>}
       <p>회원가입·OTP 없이 접수하며, 번호 소유 확인 상태로 표시하지 않습니다.</p></form>}</section></div>
-    {receipt?.state === 'external_ready' && <section className="special-panel"><label className="inquiry-photo-label">AP 대화 사진 추가 (선택, 최대 8MB)<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label><p>사진을 AP 원본에 첨부해도 Field에는 자동 전달되지 않습니다. 아래에서 전달 사진을 따로 선택하고 동의해 주세요.</p></section>}
+    {receipt?.state === 'external_ready' && <section className="special-panel"><label className="inquiry-photo-label">AP 대화 사진 추가 (선택, 최대 8MB)<input type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label><p>사진을 AP 원본에 첨부해도 Field에는 자동 전달되지 않습니다. 아래에서 전달 사진을 따로 선택하고 동의해 주세요.</p></section>}
     {receipt && receipt.state !== "external_ready" && <AgentCustomerNotificationConsent kind="inquiry" id={receipt.id} receiptKey={receipt.receiptKey} />}
     {receipt && photo && <section className="special-panel"><p>AP 대화 원본은 저장됐습니다. 선택한 사진 {photo.name}을 첨부하거나 다시 시도할 수 있습니다.</p><button type="button" disabled={busy} onClick={() => void retryDirectPhoto()}>사진 첨부 또는 재시도</button>{receipt.state === 'external_ready' && <button type="button" disabled={busy} onClick={() => setPhoto(null)}>사진 없이 Field 조건 확인</button>}</section>}
     {receipt && (receipt.state !== 'external_ready' || !photo) && <AgentFieldAction inquiryId={receipt.id} receiptKey={receipt.receiptKey}
@@ -749,12 +769,17 @@ export function InquiryPage({ id }: { id: string }) {
     finally { setBusy(false); }
   }
   async function attachPhoto(messageId: string, selected: File) {
-    let uploaded: number;
+    let uploaded: { status: number; hint: string | null };
     try {
       uploaded = await uploadInquiryPhoto(id, messageId, key, selected);
     } catch { setStatus("질문은 저장됐지만 사진 업로드 응답을 받지 못했습니다. 같은 사진을 다시 첨부하면 기존 저장 건을 확인합니다."); return; }
-    if (uploaded !== 201 && uploaded !== 200) {
-      setStatus(`질문은 저장됐지만 사진 첨부에 실패했습니다 (${uploaded}). 다시 시도할 수 있습니다.`);
+    if (uploaded.status === 415) {
+      clearPhotoSelection(); setPendingPhotoMessageId(null);
+      setStatus(`사진을 첨부하지 못했습니다. ${unsupportedInquiryPhotoMessage(uploaded.hint)}`);
+      return;
+    }
+    if (uploaded.status !== 201 && uploaded.status !== 200) {
+      setStatus(`질문은 저장됐지만 사진 첨부에 실패했습니다 (${uploaded.status}). 다시 시도할 수 있습니다.`);
       return;
     }
     clearPhotoSelection(); setPendingPhotoMessageId(null);
@@ -839,10 +864,10 @@ export function InquiryPage({ id }: { id: string }) {
         pendingMessage.current = null; clearPendingMessageSubmission(id); setHasPendingMessage(false);
         setStatus("이전 시도를 포기했습니다. 이미 저장됐을 수 있으므로 새 질문 전에 대화 내용을 확인해 주세요.");
       }}>이전 시도 포기하고 새 질문</button></div>}
-    {inquiry && <div><h2>{inquiry.service?.name ?? "일반 문의"} · {inquiryStateLabel(inquiry.state)}</h2><AgentRetentionNotice retention={inquiry.retention}/>{inquiry.state === 'closed'&&!inquiry.retention?.workPurgedAt && <p>처리 완료된 문의도 추가 질문을 남기면 다시 사업자 확인 필요로 열립니다.</p>}{inquiry.state === 'spam' && <p>이 문의는 알림 중단 상태입니다. 추가 메시지는 보존되며 사업자 알림은 발송하지 않습니다.</p>}{refreshNeeded && <button type="button" disabled={busy} onClick={() => void refreshInquiry()}>문의 내용 다시 확인</button>}{hasPendingMessage ? <p>이전 추가 질문 결과를 확인한 뒤 확인키를 교체할 수 있습니다.</p> : <ReceiptRotationPanel inquiryId={id} currentKey={key} onRotated={onReceiptRotated} />}<ol>{inquiry.messages.map(message => <li key={message.id}><strong>{message.actor === "owner" ? "사업자" : message.actor === "assistant" ? "AI" : "고객"}</strong> {message.body} <small>알림 {deliveryLabel(message.delivery_state)}</small>
+    {inquiry && <div><h2>{inquiry.service?.name ?? "일반 문의"} · {inquiryStateLabel(inquiry.state)}</h2><AgentRetentionNotice retention={inquiry.retention}/>{inquiry.state === 'closed'&&!inquiry.retention?.workPurgedAt && <p>처리 완료된 문의도 추가 질문을 남기면 다시 사업자 확인 필요로 열립니다.</p>}{inquiry.state === 'spam' && <p>이 문의는 알림 중단 상태입니다. 추가 메시지는 보존되며 사업자 알림은 발송하지 않습니다.</p>}{inquiry.organizationDeleted && <p role="status">이 사업장은 AP에서 삭제되었습니다. 추가 질문을 남겨도 답변할 사람이 없습니다. 기존 문의 내용은 보존 기간 동안 확인할 수 있습니다.</p>}{refreshNeeded && <button type="button" disabled={busy} onClick={() => void refreshInquiry()}>문의 내용 다시 확인</button>}{hasPendingMessage ? <p>이전 추가 질문 결과를 확인한 뒤 확인키를 교체할 수 있습니다.</p> : <ReceiptRotationPanel inquiryId={id} currentKey={key} onRotated={onReceiptRotated} />}<ol>{inquiry.messages.map(message => <li key={message.id}><strong>{message.actor === "owner" ? "사업자" : message.actor === "assistant" ? "AI" : "고객"}</strong> {message.body} <small>알림 {deliveryLabel(message.delivery_state)}</small>
     {inquiry.attachments.filter(item => item.messageId === message.id).map((attachment, index) =>
       <PrivateInquiryPhoto key={attachment.id} inquiryId={id} attachmentId={attachment.id} receiptKey={key} label={`고객 첨부 사진 ${index + 1}`} />)}</li>)}</ol>{inquiry.state !== "external_ready" && !inquiry.retention?.workPurgedAt && <AgentCustomerNotificationConsent kind="inquiry" id={id} receiptKey={key} />}{!inquiry.retention?.workPurgedAt&&<><form className="form-fields" onSubmit={event => void followup(event)}><label>추가 질문<textarea required maxLength={5000} value={body} onChange={event => setBody(event.target.value)} /></label><button type="submit" disabled={busy || recoveringMessage}>추가 질문 저장</button></form>
-    <div className="knowledge-source"><label className="inquiry-photo-label">문의 사진 첨부 (선택, 최대 8MB)<input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label>{photo && <><p>선택한 사진: {photo.name}</p><button type="button" disabled={busy} onClick={() => void retryPhoto()}>사진만 첨부 또는 재시도</button></>}</div></>}
+    <div className="knowledge-source"><label className="inquiry-photo-label">문의 사진 첨부 (선택, 최대 8MB)<input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={event => setPhoto(event.currentTarget.files?.[0] ?? null)} /></label>{photo && <><p>선택한 사진: {photo.name}</p><button type="button" disabled={busy} onClick={() => void retryPhoto()}>사진만 첨부 또는 재시도</button></>}</div></>}
     </div>}</section>{inquiry&&!inquiry.retention?.workPurgedAt && <AgentFieldAction key={`${inquiry.state}:${fieldAttachmentRevision}`}
       inquiryId={id} receiptKey={key} externalReady={inquiry.state === 'external_ready'}
       initialSummary={inquiry.state === 'external_ready'

@@ -133,6 +133,45 @@ test('AP lost approval response is recovered by the same order without another c
   } finally {await f.close();}
 });
 
+// 토스 웹훅(추가)은 서명이 없어 힌트로만 보관한다. 원장은 워커의 lookup 결과로만 바뀐다.
+test('AP Toss webhook stores a hint without changing the ledger until the worker lookup',async()=>{
+  const f=await fixture();
+  try {
+    f.setMode('lost');assert.equal(await f.run(),'unknown');const before=await f.row();
+    const periodBefore=(await f.pool.query('select state,paid_at from ap.billing_periods where id=$1',[before.period_id])).rows[0];
+    const forged={eventType:'PAYMENT_STATUS_CHANGED',createdAt:new Date().toISOString(),
+      data:{paymentKey:'forgedPaymentKey123',orderId:before.order_id,status:'DONE',totalAmount:11000}};
+    const latest=async()=>(await f.pool.query('select * from ap.billing_webhook_events where order_id=$1 order by received_at desc,id desc limit 1',[before.order_id])).rows[0];
+    // 다음 lookup이 60초 이내면(기본 backoff) 앞당기지 않는다. 응답은 결과와 무관하게 같다.
+    const early=await f.call('POST','/v1/billing/webhooks/toss',forged);
+    assert.equal(early.statusCode,200,early.body);assert.deepEqual(early.json(),{received:true});
+    assert.equal((await latest()).outcome,'no_pending_reconciliation');
+    assert.equal((await f.row()).next_attempt_at.getTime(),before.next_attempt_at.getTime());
+    // 다음 lookup이 60초 넘게 남았으면 지금으로 앞당긴다.
+    await f.pool.query("update ap.billing_transactions set next_attempt_at=now()+interval '10 minutes' where id=$1",[before.id]);
+    const received=await f.call('POST','/v1/billing/webhooks/toss',forged);
+    assert.equal(received.statusCode,200,received.body);assert.deepEqual(received.json(),{received:true});
+    const hinted=await f.row();
+    assert.equal(hinted.state,'unknown');assert.equal(hinted.payment_key_ciphertext,before.payment_key_ciphertext);
+    assert.equal((await f.pool.query('select next_attempt_at<=now() as due from ap.billing_transactions where id=$1',[before.id])).rows[0].due,true);
+    assert.deepEqual((await f.pool.query('select state,paid_at from ap.billing_periods where id=$1',[before.period_id])).rows[0],periodBefore);
+    assert.equal(f.lookups.length,0);assert.equal(f.calls.length,1);
+    // 미인증 원문·평문 paymentKey는 저장하지 않고 파싱한 힌트와 paymentKey의 sha256만 남긴다.
+    const stored=await latest();
+    assert.equal(stored.event_type,'PAYMENT_STATUS_CHANGED');assert.equal(stored.order_id,before.order_id);
+    assert.equal(stored.payment_key_hash,createHash('sha256').update('forgedPaymentKey123').digest('hex'));
+    assert.ok(!('payload' in stored)&&!('payment_key' in stored));
+    assert.equal(stored.outcome,'reconcile_scheduled');assert.ok(stored.processed_at);
+    // 같은 주문의 재전송은 앞당길 미상 건이 없으므로 기록만 남긴다(응답은 동일).
+    assert.deepEqual((await f.call('POST','/v1/billing/webhooks/toss',forged)).json(),{received:true});
+    assert.equal((await latest()).outcome,'no_pending_reconciliation');
+    assert.equal((await f.call('POST','/v1/billing/webhooks/toss',{eventType:'bad type',data:{}})).statusCode,400);
+    assert.equal((await f.call('POST','/v1/billing/webhooks/toss',{eventType:'PAYMENT_STATUS_CHANGED',data:{orderId:'x'.repeat(70000)}})).statusCode,413);
+    // 확정은 다음 워커 실행의 공급사 lookup으로만 일어난다(재청구 없음).
+    assert.equal(await f.run(),'paid');assert.deepEqual(f.lookups,[before.order_id]);assert.equal(f.calls.length,1);
+  } finally {await f.close();}
+});
+
 test('AP not-found reconciliation reuses the entire stored request and stops after API key rotation',async()=>{
   const f=await fixture();
   try {

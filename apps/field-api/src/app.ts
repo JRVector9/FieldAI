@@ -2,6 +2,7 @@ import { registerCustomDomainRoutes } from './custom-domain-routes.js';
 import { registerFieldDeliveryRoutes } from './notification-delivery-routes.js';
 import { registerFieldBillingConsentRoutes } from './billing-consent-routes.js';
 import Fastify from 'fastify';
+import { loggingOptionsFromEnvironment } from './logging.js';
 import { fromNodeHeaders } from 'better-auth/node';
 import { registerFieldBusinessRoutes, type FieldBusinessRuntime } from './business.js';
 import { registerInquiryRoutes } from './inquiries.js';
@@ -27,6 +28,7 @@ import { registerExternalReservationContactRoutes } from './external-reservation
 import { registerExternalReservationNotificationRoute } from './external-reservation-notification-route.js';
 import { registerFieldUsageRoutes } from './usage.js';
 import { registerFieldSubscriptionRoutes } from './subscription.js';
+import { registerFieldAccountDeletionRoutes } from './account-deletion.js';
 import { registerFieldBillingRoutes } from './billing-routes.js';
 import { registerBillingRefundRoutes } from './billing-refund-routes.js';
 import { registerAdminBillingRoutes } from './admin-billing-routes.js';
@@ -39,6 +41,7 @@ import { registerFieldRetentionRoutes } from './retention-routes.js';
 import { registerFieldRetentionPurgeRoutes } from './retention-purge-routes.js';
 import { registerFieldRetentionConsumers } from './retention-consumers.js';
 import { fieldRevocationJournalFromEnvironment } from './revocation-journal.js';
+import { registerAuthProviderRoutes } from './kakao-provider.js';
 
 // 브라우저 요청은 Next rewrite를 거쳐 오므로 앞단 프록시가 보낸 X-Forwarded-For로 고객 IP를 구한다.
 // 기본값은 같은 장비의 프록시(loopback)만 신뢰해 외부에서 직접 보낸 헤더로 IP를 바꿀 수 없게 한다.
@@ -55,7 +58,8 @@ export function createFieldApp(
   authBaseURL = 'http://127.0.0.1:4321',
   businessRuntime?: FieldBusinessRuntime,
 ) {
-  const app = Fastify({ trustProxy: trustProxyFromEnvironment() });
+  // 구조화 로그(FIELD_LOG_LEVEL)와 PII 가림·requestId는 logging.ts가 정한다.
+  const app = Fastify({ trustProxy: trustProxyFromEnvironment(), ...loggingOptionsFromEnvironment() });
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 8 * 1024 * 1024 },
     (_request, body, done) => done(null, body));
   if (businessRuntime) {
@@ -93,6 +97,7 @@ export function createFieldApp(
     registerExternalReservationNotificationRoute(app, businessRuntime);
     registerFieldUsageRoutes(app, businessRuntime);
     registerFieldSubscriptionRoutes(app, businessRuntime);
+    registerFieldAccountDeletionRoutes(app, businessRuntime);
     registerFieldBillingRoutes(app, businessRuntime);
     registerBillingRefundRoutes(app, businessRuntime);
     registerAdminBillingRoutes(app, businessRuntime);
@@ -128,6 +133,7 @@ export function createFieldApp(
     // 웹 인증 화면이 메일 미연결을 정직하게 안내하도록 상태만 공개한다(계정 존재 여부와 무관).
     app.get('/v1/auth/email-delivery', async () => ({ product: 'field', state: emailDeliveryState() }));
   }
+  registerAuthProviderRoutes(app);
   app.get('/health/ready', async (_request, reply) => {
     try {
       await probe();

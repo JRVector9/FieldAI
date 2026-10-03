@@ -114,6 +114,64 @@ test('Field requires ownership DNS and exact TLS binding before selecting a cust
   }finally{await f.close();}
 });
 
+test('Field on-demand TLS ask allows only a verified active custom domain and never writes',async()=>{
+  const f=await fixture();try{
+    const ask=(query:string)=>f.app.inject({url:`/v1/public/site-hosts/allow${query}`});
+    const opened=(await f.create()).json();
+    // 등록 직후·소유권 미확인·라우팅 미확인 단계에서는 인증서 발급을 거부한다.
+    assert.equal((await ask('?domain=shop.example.com')).statusCode,404);
+    f.dns(false,true);assert.equal(await f.run(),'ownership_pending');assert.equal((await ask('?domain=shop.example.com')).statusCode,404);
+    f.dns(true,false);await f.due();assert.equal(await f.run(),'dns_pending');assert.equal((await ask('?domain=shop.example.com')).statusCode,404);
+    // 소유권·DNS가 검증되면 첫 인증서를 받아야 하므로 tls_pending부터 허용한다.
+    f.dns(true,true);await f.due();f.mode('pending');assert.equal(await f.run(),'tls_pending');
+    const before=await f.pool.query("select (select count(*) from field.outbox)::int as outbox,(select max(updated_at) from field.site_domains) as updated");
+    const allowed=await ask('?domain=SHOP.Example.COM');
+    assert.equal(allowed.statusCode,200);assert.equal(allowed.headers['cache-control'],'no-store');
+    assert.deepEqual(allowed.json(),{domain:'shop.example.com',organizationId:f.org});
+    const after=await f.pool.query("select (select count(*) from field.outbox)::int as outbox,(select max(updated_at) from field.site_domains) as updated");
+    assert.deepEqual(after.rows[0],before.rows[0]);
+    await f.due();f.mode('ready');assert.equal(await f.run(),'connected');
+    assert.equal((await ask('?domain=shop.example.com')).statusCode,200);
+    for(const query of ['','?domain=','?domain=other.example.com','?domain=shop.example.com:443','?domain=127.0.0.1',
+      `?domain=${f.slug}.sites.platform.com`,'?domain=shop.example.com&domain=other.example.com']){
+      const denied=await ask(query);assert.equal(denied.statusCode,404,query);assert.equal(denied.headers['cache-control'],'no-store');
+    }
+    // 연결 해제 후에는 새 인증서 발급·갱신을 허용하지 않는다.
+    assert.equal((await f.call('POST',`/v1/sites/domains/${opened.id}/disconnect`,{})).statusCode,200);
+    assert.equal((await ask('?domain=shop.example.com')).statusCode,404);
+  }finally{await f.close();}
+});
+
+// F-O16: 삭제 예약·실행된 조직의 도메인은 TLS 발급·갱신을 거부하고, 삭제 실행은 사업자 해제와 같은 경로로 도메인을 놓아준다.
+test('Field organization deletion denies TLS ask and releases the custom domain claim',async()=>{
+  const f=await fixture();try{
+    const {runOrganizationDeletionOnce}=await import('../src/account-deletion.js');
+    const ask=()=>f.app.inject({url:'/v1/public/site-hosts/allow?domain=shop.example.com'});
+    const opened=(await f.create()).json();assert.equal(await f.run(),'connected');
+    assert.equal((await ask()).statusCode,200);
+    const requestId=randomUUID();
+    await f.pool.query(`insert into field.organization_deletion_requests(id,organization_id,requested_by,confirmation,status,requested_at,scheduled_at,next_attempt_at)
+      values($1,$2,$3,'{}'::jsonb,'scheduled',now()-interval '15 days',now()+interval '1 day',now()+interval '1 day')`,[requestId,f.org,f.owner]);
+    assert.equal((await ask()).statusCode,404);
+    await f.pool.query("update field.organization_deletion_requests set status='canceled',canceled_at=now(),canceled_by=$2 where id=$1",[requestId,f.owner]);
+    assert.equal((await ask()).statusCode,200);
+    const again=randomUUID();
+    await f.pool.query(`insert into field.organization_deletion_requests(id,organization_id,requested_by,confirmation,status,requested_at,scheduled_at,next_attempt_at)
+      values($1,$2,$3,'{}'::jsonb,'scheduled',now()-interval '15 days',now()-interval '1 minute',now()-interval '1 minute')`,[again,f.org,f.owner]);
+    assert.equal(await runOrganizationDeletionOnce({pool:f.pool}),'executed');
+    assert.equal((await ask()).statusCode,404);
+    const released=(await f.pool.query('select desired_state,state,is_primary from field.site_domains where id=$1',[opened.id])).rows[0];
+    assert.deepEqual(released,{desired_state:'disconnected',state:'release_pending',is_primary:false});
+    assert.equal((await f.pool.query('select steps from field.organization_deletion_requests where id=$1',[again])).rows[0].steps.executed.domainsDisconnected,1);
+    // 도메인 작업자가 edge 바인딩을 지우고 claim을 놓으면 실제 도메인 주인이 다른 조직에서 다시 쓸 수 있다.
+    await f.due();assert.equal(await f.run(),'disconnected');assert.equal(f.removalCalls.length,1);
+    assert.equal((await f.pool.query('select hostname_claimed from field.site_domains where id=$1',[opened.id])).rows[0].hostname_claimed,false);
+    f.as(f.other);const reused=await f.call('POST','/v1/sites/domains',{hostname:'shop.example.com',requestKey:randomUUID()},f.otherOrg);
+    assert.equal(reused.statusCode,201,reused.body);
+    await f.due();assert.equal(await f.run(),'connected');
+  }finally{await f.close();}
+});
+
 test('Field missing edge authority stays blocked, unknown result does not bind, and expired evidence is rejected',async()=>{
   const f=await fixture();try{
     await f.create();const missing={...f.context,edge:undefined};

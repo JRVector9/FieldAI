@@ -2,6 +2,7 @@ import { registerIntegratorPublicWriteRoutes } from './integrator-public-write.j
 import { registerAgentDeliveryRoutes } from './notification-delivery-routes.js';
 import { registerAgentBillingConsentRoutes } from './billing-consent-routes.js';
 import Fastify from 'fastify';
+import { loggingOptionsFromEnvironment } from './logging.js';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { Pool } from 'pg';
 import { registerAgentRetentionRoutes } from './retention-routes.js';
@@ -32,6 +33,7 @@ import { registerFieldNotificationRouteClose } from './field-notification-route-
 import { registerFieldConnectionRevokeRoutes } from './field-connection-revoke.js';
 import { registerAgentUsageRoutes } from './usage.js';
 import { registerAgentSubscriptionRoutes } from './subscription.js';
+import { registerAgentAccountDeletionRoutes } from './account-deletion.js';
 import { registerAgentBillingRoutes } from './billing-routes.js';
 import { registerBillingRefundRoutes } from './billing-refund-routes.js';
 import { registerAdminBillingRoutes } from './admin-billing-routes.js';
@@ -39,6 +41,7 @@ import { registerAgentAdminRoutes } from './admin.js';
 import { registerAgentModerationRoutes } from './deployment-moderation.js';
 import { registerCustomerSupportRoutes } from './customer-support.js';
 import { registerSourceRefreshRoutes } from './source-refreshes.js';
+import { registerAuthProviderRoutes } from './kakao-provider.js';
 
 export function createAgentApp(
   probe: () => Promise<void>,
@@ -48,7 +51,8 @@ export function createAgentApp(
   businessRuntime?: BusinessRuntime,
 ) {
   // 신뢰할 프록시 hop만 X-Forwarded-For를 반영한다. 기본은 같은 호스트의 Next rewrite(loopback)
-  const app = Fastify({ trustProxy: process.env.AP_TRUST_PROXY ?? 'loopback' });
+  // 구조화 로그(AP_LOG_LEVEL)와 PII 가림·requestId는 logging.ts가 정한다.
+  const app = Fastify({ trustProxy: process.env.AP_TRUST_PROXY ?? 'loopback', ...loggingOptionsFromEnvironment() });
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_request, body, done) => {
     done(null, body);
   });
@@ -91,6 +95,7 @@ export function createAgentApp(
     registerFieldConnectionRevokeRoutes(app, businessRuntime);
     registerAgentUsageRoutes(app, businessRuntime);
     registerAgentSubscriptionRoutes(app, businessRuntime);
+    registerAgentAccountDeletionRoutes(app, businessRuntime);
     registerAgentBillingRoutes(app, businessRuntime);
     registerBillingRefundRoutes(app, businessRuntime);
     registerAdminBillingRoutes(app, businessRuntime);
@@ -125,6 +130,7 @@ export function createAgentApp(
     // 웹 인증 화면이 메일 미연결을 정직하게 안내하도록 상태만 공개한다(계정 존재 여부와 무관).
     app.get('/v1/auth/email-delivery', async () => ({ product: 'agent', state: emailDeliveryState() }));
   }
+  registerAuthProviderRoutes(app);
   app.get('/health/ready', async (_request, reply) => {
     try {
       await probe();

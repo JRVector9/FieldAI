@@ -16,6 +16,7 @@ import { ExternalRequestPhotos } from "./external-request-photos";
 import { inquiryDeliveryLabel } from "./field-notification-label";
 import { signInOutcome } from "./auth-flow";
 import { TwoFactorChallenge, VerificationEmailNotice } from "./field-auth-pages";
+import { FieldKakaoSignIn } from "./field-kakao-sign-in";
 
 type Phase = "loading" | "failed" | "auth" | "organization" | "catalog";
 type OwnerNotification = { id: string; organizationId: string; targetId: string;
@@ -1036,7 +1037,7 @@ export function FieldWorkspace() {
   if (phase === "auth") return <div className="field-auth-shell"><header className="field-home-header"><div className="field-home-wrap field-home-nav"><a href="/"><Brand product="Field" /></a><nav aria-label="서비스 탐색"><a href="/#how-it-works">서비스 소개</a><a href={process.env.NEXT_PUBLIC_AGENT_WEB_URL ?? "http://localhost:3001"}>사업자 AI</a><a href="/preview/owner/start">화면 둘러보기</a></nav><div className="field-home-nav-actions"><button type="button" onClick={() => setAuthMode(authMode === "sign-in" ? "sign-up" : "sign-in")}>{authMode === "sign-in" ? "무료로 시작" : "로그인"}</button></div></div></header>
     <main className="field-auth-layout"><section className="field-auth-story"><p className="field-home-kicker">YOUR BUSINESS, YOUR SPACE</p><h1>내 사업의 첫 화면을<br />직접 만들어보세요.</h1><p>개발 지식 없이도 괜찮아요.<br />사업 정보만 준비하면 시작할 수 있어요.</p><ul><li>나만의 사이트와 주소</li><li>AI와 함께 만드는 소개</li><li>고객 문의·예약을 한곳에서</li></ul></section>
       <section className="field-auth-form"><h2>{authMode === "sign-up" ? "내 사업의 새로운 시작." : "내 관리실로 돌아오기."}</h2><p>{authMode === "sign-up" ? "계정을 만들고 홈페이지 개설을 시작하세요." : "Field 계정으로 사업과 예약을 이어서 관리하세요."}</p>
-        <button className="field-auth-kakao" type="button" disabled>카카오로 시작하기</button><p className="field-auth-unavailable">카카오 인증은 외부 연동 후 사용할 수 있습니다.</p><div className="field-auth-divider">또는 이메일로</div>
+        <FieldKakaoSignIn onTwoFactor={() => setTwoFactorPending(true)} /><div className="field-auth-divider">또는 이메일로</div>
         {twoFactorPending ? <TwoFactorChallenge onVerified={async () => { setTwoFactorPending(false); await loadCatalog(); }} onCancel={() => setTwoFactorPending(false)} /> : <form className="form-fields" onSubmit={event => void authenticate(event, authMode)}>
           {authMode === "sign-up" && <label>이름<input required autoComplete="name" placeholder="어떻게 불러드릴까요?" value={name} onChange={event => setName(event.target.value)} /></label>}
           <label>이메일<input type="email" required autoComplete="email" placeholder="name@example.com" value={email} onChange={event => setEmail(event.target.value)} /></label>

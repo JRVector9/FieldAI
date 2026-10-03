@@ -11,6 +11,19 @@ export type AgentInquiryMediaStore = {
 };
 
 const objectKeyPattern = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.webp$/;
+// 설치된 sharp(libheif)는 AVIF만 해독하고 아이폰 HEIC(HEVC)는 해독하지 못한다.
+// ISO BMFF ftyp 상자의 브랜드로 HEIC를 알아내 일반 실패 대신 형식 미지원 사유를 돌려준다.
+const HEIC_BRANDS = new Set(['heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'hevm', 'hevs']);
+export function isHeicImage(input: unknown) {
+  if (!Buffer.isBuffer(input) || input.length < 16 || input.toString('latin1', 4, 8) !== 'ftyp') return false;
+  const boxEnd = Math.min(input.readUInt32BE(0), input.length, 256);
+  if (HEIC_BRANDS.has(input.toString('latin1', 8, 12))) return true;
+  for (let offset = 16; offset + 4 <= boxEnd; offset += 4) if (HEIC_BRANDS.has(input.toString('latin1', offset, offset + 4))) return true;
+  return false;
+}
+export function unsupportedImageError(input: unknown) {
+  return isHeicImage(input) ? { error: 'unsupported_image_format', hint: 'heic_unsupported' } : { error: 'unsupported_image' };
+}
 export async function normalizeInquiryImage(input: Buffer) {
   if (!input.length || input.length > 8 * 1024 * 1024) return null;
   try {

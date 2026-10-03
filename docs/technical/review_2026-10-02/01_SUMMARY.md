@@ -179,3 +179,37 @@ AP P2/P3·Field 중간/낮음 항목 전체는 `03_AP_CODE_REVIEW.md`, `04_FIELD
 | Docker 이미지 6개 빌드, 임시 PG로 migrate+live API `/health/ready` 200, compose config, actionlint | 0 | B4 보고. live compose `up`·실 TLS·레지스트리·amd64·GitHub Actions 실제 실행은 미검증 |
 
 첫 실행에서 E2E 3종·보안 1건이 `/health/ready` 본문 deepStrictEqual(`integrations.email` 추가)로 실패해 spike 6곳의 기대값을 `integrations: { email: 'mock' }`로 갱신한 뒤 재실행했다.
+
+## 10. 3단계 — 착수 순서 9~11 구현 + 리뷰 반영 — 2026-10-03
+
+5개 구현 에이전트 병렬 → 제품별 코드 리뷰 2건(`07_PHASE3_AP_CODE_REVIEW.md`, `08_PHASE3_FIELD_CODE_REVIEW.md`) → 제품별 수정 에이전트 2건 순서로 진행했다.
+
+| 항목 | 구현 | 주요 파일 | 비고 |
+|---|---|---|---|
+| 카카오 로그인(양 제품) | better-auth 내장 `kakao` 공급사, `account.accountLinking.enabled:false`(동일 이메일 자동 병합 금지, B03), 카카오 미인증 이메일 거부, `GET /v1/auth/providers`, 카카오 콜백에도 2FA 적용하는 브리지 플러그인. 웹은 configured일 때만 버튼 활성 | `apps/*-api/src/kakao-provider.ts`, `auth.ts`, `*-kakao-sign-in.tsx` | `AP_KAKAO_CLIENT_ID/SECRET`, `FIELD_KAKAO_*`. mock에 키가 있으면 부팅 거부. 내장 공급사는 PKCE 없음. 실 카카오 미검증 |
+| AP `human_active` | `POST /v1/owner/inquiries/:id/take-over`·`/release`(직접 응대 시작/종료 `(추가)`), human_active 중 고객 메시지는 AI run 생성 없이 상태 유지 | `inquiries.ts`, `workspace.tsx` | **AI 재개(human→ai_assisting)는 미구현**: `ap_inquiries_contact_state_check`가 동의 후 대화를 human 모드로 고정하며, 완화 시 개인정보가 AI 기록으로 흘러감. 결정 필요 |
+| Toss 웹훅(양 제품) | `POST /v1/billing/webhooks/toss`: 서명 없는 힌트로만 취급. event_type/order_id/payment_key sha256만 저장, 원장 변경 없음, 결과 미상 건의 `next_attempt_at`만 60초 초과 예약일 때 앞당김, IP 창, 응답 고정 `{received:true}`, 30일 정리 | `billing-webhook.ts`, migration AP 000086 / Field 000079 | 결제 워커 기본 backoff가 60초라 현재는 앞당김 효과 거의 없음(결정 필요) |
+| 계정·조직 삭제(양 제품) | 조직: owner 확인 입력+3개 승인+전제 조건(유료 구독·연결·미결 요청/예약) → 14일 유예(`deletion_scheduled`로 신규 업무 차단, Field 사이트 비공개, AP 배포/캠페인 pause) → 보존 워커가 실행(사이트·지식·카탈로그 내용 삭제/비움, 문의·예약 원본·청구 원장·감사 보존, 알림 수신처 암호문 삭제, 다른 조직 멤버십 없는 사용자만 세션 만료, 자체 도메인 해제). 계정: 비밀번호 재입력(5회/15분) 또는 카카오 전용 계정은 5분 이내 재로그인, 관리자/조직 owner/활성 grant면 거부, user 행은 익명 tombstone, email_outbox 익명화 | `account-deletion.ts`, migration AP 000085 / Field 000077, `*-account.tsx`, `/workspace/account` | 삭제된 조직 owner는 `owner_user_id` unique로 새 조직 생성 불가. 상호명은 보존(법무 검토) |
+| Field 공개 API 4개(§4.12) | `GET external-requests/{id}`, `POST .../customer-decisions`(accept/withdraw, 확정 아님), `GET .../notification-route`, `POST webhooks/agent`(HMAC inbox, `connection.revoked` 처리). 계약 preview.9, scope 2개 추가·client 등록 허용 | `external-request-public-routes.ts`, `ap-webhook-inbox.ts`, migration Field 000078, `contracts/field-integrator-v1.openapi.json` | §4.6 상태 4종은 AP ActionRequest 상태표이며 Field `external_work_requests.status`에 넣으면 의미가 틀려 미적용(AP 결정 필요). AP는 아직 새 경로를 소비하지 않음 |
+| OAuth 선택 행 cascade(H1, 기존 결함) | better-auth가 만료/로그아웃 세션을 삭제하면 `oauth_selections`→연결이 cascade 삭제되어 통합 token 401. `session_id` nullable + `on delete set null` | migration AP 000087 / Field 000080 | 로그아웃 시 access token은 better-auth가 회수, `offline_access` refresh로 지속 |
+| 자체 도메인 on-demand TLS | `GET /v1/public/site-hosts/allow?domain=`(tls_pending/connected만 200, 삭제 조직 거부), Caddyfile `on_demand_tls { ask }` | `custom-domain-routes.ts`, `infra/edge/Caddyfile.example` | edge 어댑터 구현체가 없어 운영에서는 여전히 blocked_integration |
+| HEIC | sharp가 HEVC를 디코딩하지 못함을 확인. 415 `heic_unsupported`, 선택기 accept에서 제거, 안내 문구. site-editor의 틀린 문구 2곳 수정 | `site-media.ts`, `inquiry-media.ts`, `site-editor.tsx` | 실제 HEIC 변환은 libheif+HEVC 빌드 필요 |
+| 구조화 로그·PII 가림 | pino 로거, 헤더/본문 redact, 전화·이메일 마스킹, 라우트 패턴 URL, requestId | `apps/*-api/src/logging.ts`, docs/04 5.6.1 | `AP_LOG_LEVEL`/`FIELD_LOG_LEVEL` |
+
+**리뷰에서 나와 반영한 것:** 웹훅 원문 저장 중단·응답 고정·정리, 계정 삭제 비밀번호 시도 제한, 카카오 전용 계정 삭제 경로, 세션 만료 범위, 삭제 후 PII(outbox·알림 수신처), S3 HeadObject 404/403 구분과 12회 상한, RFC 3339 검증, HMAC 검증 후 잠금, `deletion_scheduled` 웹 문구, 동의 화면 scope 한국어 라벨.
+
+**남긴 것:** 직접 응대 시작/종료 행위자 기록(check 제약 migration 필요), 조직 삭제 예약 재인증, 여러 조직 owner의 삭제 대상 선택, owner 발송 기록 암호문 정리 테스트, 멈춘 삭제 요청의 `next_attempt_at='infinity'` 운영 절차, lifecycle 저널 전체 스캔, 사진 삭제 경로.
+
+검수(2026-10-03, Mac local mock, Node 24.18.0, PG17 격리 DB, Playwright venv):
+
+| 명령 | exit | 결과 |
+|---|---|---|
+| `lint` / `typecheck` / `test:unit` | 0 | tools 35, agent-api 32, field-api 43, agent-web 78, field-web 125 |
+| `build:agent` / `build:field` / `build:web:agent` / `build:web:field` | 0 | |
+| `test:db:agent` | 0 | 39파일 164/164 (migration 000085~000087 포함) |
+| `test:db:field` | 0 | 35파일 184/184 (migration 000077~000080 포함) |
+| `test:contracts`, `test:integration:faults` | 0 | 10/10 |
+| `test:e2e:agent` / `field` / `distribution` | 0 | 9/9, 7/7, 2/2 |
+| `test:security` | 0 | 351/351 |
+
+실 카카오·토스·S3·SMTP·Caddy 공급사, 독립성 검사(`test:independence:*`), 사용자 최종 화면 테스트는 미실행.

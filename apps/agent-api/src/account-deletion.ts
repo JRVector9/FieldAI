@@ -1,0 +1,366 @@
+import { createHmac, randomUUID } from 'node:crypto';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { Pool, PoolClient } from 'pg';
+import { verifyPassword } from 'better-auth/crypto';
+import type { BusinessRuntime } from './business.js';
+
+// AP-O09 조직·계정 삭제(추가). 조직 삭제는 owner 명시 확인 → 14일 유예 → 작업자 실행 순서이며,
+// 문의·상담 원본·청구 원장·감사 기록은 지우지 않고 기존 보존 정책 경로에 맡긴다.
+export const DELETION_COOLING_DAYS = 14;
+// 비밀번호가 없는(카카오 전용) 계정은 이 시간 안에 새로 로그인한 세션으로만 계정 삭제를 진행한다.
+export const REAUTH_WINDOW_MINUTES = 5;
+// 계정 삭제 비밀번호 재입력은 사용자별 15분에 5회까지만 시도할 수 있다.
+const PASSWORD_ATTEMPT_LIMIT = 5;
+const DELETED_TEXT = '[삭제됨]';
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+type Db = Pool | PoolClient;
+type DeletionRow = { id: string; organization_id: string; requested_by: string; reason: string | null; status: string;
+  requested_at: Date; scheduled_at: Date; canceled_at: Date | null; executed_at: Date | null;
+  steps: Record<string, unknown>; attempt_count: number; last_error: string | null };
+
+const object = (value: unknown): Record<string, unknown> | null =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+
+function view(row: DeletionRow) {
+  return { id: row.id, status: row.status, reason: row.reason, requestedAt: row.requested_at.toISOString(),
+    scheduledAt: row.scheduled_at.toISOString(), canceledAt: row.canceled_at?.toISOString() ?? null,
+    executedAt: row.executed_at?.toISOString() ?? null, steps: row.steps, lastError: row.last_error };
+}
+
+// 조직 삭제 전제 조건. 하나라도 남아 있으면 예약도 실행도 하지 않는다.
+export async function organizationDeletionPreconditions(db: Db, organizationId: string) {
+  const row = (await db.query<{ paid: number; connections: number; actions: number }>(`select
+    (select count(*)::int from ap.paid_subscriptions where organization_id=$1 and terminated_at is null) as paid,
+    (select count(*)::int from ap.field_connections where ap_organization_id=$1 and status<>'revoked') as connections,
+    (select count(*)::int from ap.field_action_requests where organization_id=$1 and state in ('sending','delivery_unknown')) as actions`,
+  [organizationId])).rows[0]!;
+  return [
+    { code: 'paid_subscription_active', count: row.paid },
+    { code: 'connections_active', count: row.connections },
+    { code: 'pending_action_requests', count: row.actions },
+  ].map(item => ({ ...item, ok: item.count === 0 }));
+}
+
+// 계정 삭제 차단 사유. 삭제되지 않은 조직의 owner·플랫폼 관리자·살아 있는 OAuth 연결은 먼저 정리해야 한다.
+export async function accountDeletionBlockers(db: Db, userId: string) {
+  const row = (await db.query<{ owned: boolean; admin: boolean; grants: boolean }>(`select
+    exists(select 1 from ap.organizations where owner_user_id=$1 and deleted_at is null)
+      or exists(select 1 from ap.memberships m join ap.organizations o on o.id=m.organization_id
+        where m.user_id=$1 and m.role='owner' and o.deleted_at is null) as owned,
+    exists(select 1 from ap.platform_admin_memberships where user_id=$1) as admin,
+    exists(select 1 from "oauthRefreshToken" where "userId"=$1 and revoked is null and "expiresAt">now()) as grants`,
+  [userId])).rows[0]!;
+  return [row.owned && 'organization_deletion_required', row.admin && 'admin_membership_required_removal',
+    row.grants && 'oauth_grants_active']
+    .filter((code): code is string => typeof code === 'string');
+}
+
+// 비밀번호 로그인 정보(credential)의 해시. 없으면 최근 재로그인으로 본인을 확인한다.
+async function credentialPasswordHash(db: Db, userId: string) {
+  return (await db.query<{ password: string }>(
+    `select password from "account" where "userId"=$1 and "providerId"='credential' and password is not null limit 1`,
+    [userId])).rows[0]?.password ?? null;
+}
+
+// 현재 요청의 세션이 본인 것이고 REAUTH_WINDOW_MINUTES 이내에 새로 만들어졌는지 확인한다(카카오 재로그인 증빙).
+async function recentlySignedIn(runtime: BusinessRuntime, db: Db, request: FastifyRequest, userId: string) {
+  const session = await runtime.resolveSession?.(request.headers);
+  if (!session || session.userId !== userId) return false;
+  return Boolean((await db.query(
+    `select 1 from "session" where id=$1 and "userId"=$2 and "expiresAt">now()
+       and "createdAt">now()-make_interval(mins => $3::int)`, [session.id, userId, REAUTH_WINDOW_MINUTES])).rows[0]);
+}
+
+// 비밀번호 시도 창을 1 증가시키고 한도를 넘으면 남은 초를 돌려준다. 호출자 트랜잭션과 별개로 즉시 커밋된다.
+async function consumePasswordAttempt(pool: Pool, userId: string): Promise<number | null> {
+  const secret = process.env.AP_AUTH_SECRET;
+  if (!secret) throw new Error('AP_AUTH_SECRET is required for account deletion attempt limits');
+  const subject = createHmac('sha256', secret).update('ap-account-deletion-password-v1\0').update(userId).digest('hex');
+  const row = (await pool.query<{ attempts: number; retry_after: number }>(
+    `insert into ap.account_deletion_password_windows(subject_hash, attempts, window_started_at, updated_at)
+     values ($1, 1, clock_timestamp(), clock_timestamp())
+     on conflict (subject_hash) do update set
+       attempts = case when ap.account_deletion_password_windows.window_started_at <= clock_timestamp() - interval '15 minutes'
+         then 1 else least(ap.account_deletion_password_windows.attempts + 1, $2::integer + 1) end,
+       window_started_at = case when ap.account_deletion_password_windows.window_started_at <= clock_timestamp() - interval '15 minutes'
+         then clock_timestamp() else ap.account_deletion_password_windows.window_started_at end,
+       updated_at = clock_timestamp()
+     returning attempts,
+       greatest(1, ceil(extract(epoch from (window_started_at + interval '15 minutes' - clock_timestamp())))::integer) as retry_after`,
+    [subject, PASSWORD_ATTEMPT_LIMIT])).rows[0]!;
+  return row.attempts > PASSWORD_ATTEMPT_LIMIT ? row.retry_after : null;
+}
+
+// 보존 작업자 단계: 15분 창이 끝난 비밀번호 시도 창을 지운다.
+export async function purgeAccountDeletionPasswordWindows(pool: Pool) {
+  return (await pool.query(
+    `delete from ap.account_deletion_password_windows where subject_hash in (select subject_hash
+       from ap.account_deletion_password_windows where updated_at < clock_timestamp() - interval '15 minutes'
+       order by updated_at limit 1000)`)).rowCount ?? 0;
+}
+
+export function registerAgentAccountDeletionRoutes(app: FastifyInstance, runtime: BusinessRuntime) {
+  async function memberFor(request: FastifyRequest, reply: FastifyReply) {
+    reply.header('Cache-Control', 'private, no-store');
+    const userId = await runtime.resolveUserId(request.headers);
+    if (!userId) { reply.code(401).send({ error: 'authentication_required' }); return null; }
+    const header = request.headers['x-organization-id'];
+    if (header !== undefined && (typeof header !== 'string' || !uuid.test(header))) {
+      reply.code(400).send({ error: 'invalid_organization_id' }); return null;
+    }
+    // 헤더가 없으면 본인이 owner인 조직을 먼저 고른다(삭제는 owner 조직 기준).
+    const row = (await runtime.pool.query<{ organization_id: string; role: string; name: string }>(
+      `select m.organization_id,m.role,o.name from ap.memberships m join ap.organizations o on o.id=m.organization_id
+       where m.user_id=$1 and o.deleted_at is null and ($2::uuid is null or m.organization_id=$2::uuid)
+       order by (m.role='owner') desc,m.created_at limit 1`, [userId, header ?? null])).rows[0];
+    return { userId, organization: row ? { id: row.organization_id, name: row.name, canManage: row.role === 'owner' } : null };
+  }
+
+  app.get('/v1/organizations/current/deletion-requests/current', async (request, reply) => {
+    const member = await memberFor(request, reply);
+    if (!member) return reply;
+    if (!member.organization) {
+      // 삭제가 끝난 본인 조직은 구성원이 없으므로 owner 기준 실행 기록만 보여 준다.
+      const done = (await runtime.pool.query<DeletionRow & { name: string }>(
+        `select r.*,o.name from ap.organization_deletion_requests r join ap.organizations o on o.id=r.organization_id
+         where o.owner_user_id=$1 and r.status='executed' order by r.executed_at desc limit 1`, [member.userId])).rows[0];
+      if (!done) return reply.code(404).send({ error: 'organization_not_found' });
+      return { product: 'agent', organization: { id: done.organization_id, name: done.name, deleted: true }, canManage: false,
+        coolingDays: DELETION_COOLING_DAYS, preconditions: [], request: view(done) };
+    }
+    const latest = (await runtime.pool.query<DeletionRow>(
+      'select * from ap.organization_deletion_requests where organization_id=$1 order by requested_at desc,id desc limit 1',
+      [member.organization.id])).rows[0];
+    return { product: 'agent', organization: { id: member.organization.id, name: member.organization.name, deleted: false },
+      canManage: member.organization.canManage, coolingDays: DELETION_COOLING_DAYS,
+      preconditions: await organizationDeletionPreconditions(runtime.pool, member.organization.id),
+      request: latest ? view(latest) : null };
+  });
+
+  app.post('/v1/organizations/current/deletion-requests', async (request, reply) => {
+    const member = await memberFor(request, reply);
+    if (!member) return reply;
+    if (!member.organization) return reply.code(404).send({ error: 'organization_not_found' });
+    if (!member.organization.canManage) return reply.code(403).send({ error: 'owner_required' });
+    const body = object(request.body);
+    const ack = object(body?.acknowledgements);
+    const rawReason = body?.reason;
+    const reason = rawReason === undefined || rawReason === null || rawReason === '' ? null
+      : typeof rawReason === 'string' && rawReason.trim().length > 0 && rawReason.trim().length <= 1000 ? rawReason.trim() : undefined;
+    if (reason === undefined) return reply.code(400).send({ error: 'invalid_reason' });
+    if (ack?.retention !== true || ack.subscriptions !== true || ack.connections !== true)
+      return reply.code(400).send({ error: 'acknowledgements_required' });
+    if (typeof body?.confirmText !== 'string' || body.confirmText !== member.organization.name)
+      return reply.code(400).send({ error: 'confirmation_mismatch' });
+    const organizationId = member.organization.id;
+    const db = await runtime.pool.connect();
+    try {
+      await db.query('begin');
+      const org = (await db.query<{ name: string; deleted_at: Date | null }>(
+        'select name,deleted_at from ap.organizations where id=$1 for update', [organizationId])).rows[0];
+      if (!org || org.deleted_at) { await db.query('rollback'); return reply.code(409).send({ error: 'organization_deleted' }); }
+      const open = (await db.query<DeletionRow>(
+        "select * from ap.organization_deletion_requests where organization_id=$1 and status in ('scheduled','executed')",
+        [organizationId])).rows[0];
+      if (open) {
+        await db.query('rollback');
+        return open.status === 'scheduled' ? reply.code(200).send({ request: view(open) })
+          : reply.code(409).send({ error: 'organization_deleted' });
+      }
+      const preconditions = await organizationDeletionPreconditions(db, organizationId);
+      const failed = preconditions.find(item => !item.ok);
+      if (failed) { await db.query('rollback'); return reply.code(409).send({ error: failed.code, preconditions }); }
+      // 유예 시작 즉시 공개 상담 배포와 홍보 카드를 멈춘다. 취소해도 자동 재개하지 않는다(owner가 다시 활성화).
+      const deployments = (await db.query<{ id: string }>(
+        "update ap.deployments set status='paused',updated_at=now() where organization_id=$1 and status='active' returning id",
+        [organizationId])).rows.map(row => row.id);
+      const campaigns = (await db.query<{ id: string; current_release_id: string | null }>(
+        "update ap.campaigns set state='paused',updated_at=now() where organization_id=$1 and state='published' returning id,current_release_id",
+        [organizationId])).rows;
+      for (const campaign of campaigns)
+        await db.query('insert into ap.outbox(id,organization_id,event_type,aggregate_id,payload) values ($1,$2,$3,$4,$5::jsonb)',
+          [randomUUID(), organizationId, 'campaign.paused', campaign.id,
+            JSON.stringify({ campaignId: campaign.id, releaseId: campaign.current_release_id })]);
+      const created = (await db.query<DeletionRow>(
+        `insert into ap.organization_deletion_requests(id,organization_id,requested_by,reason,confirmation,status,
+           scheduled_at,next_attempt_at,steps)
+         values ($1,$2,$3,$4,$5::jsonb,'scheduled',now()+make_interval(days => $6::int),now()+make_interval(days => $6::int),$7::jsonb)
+         returning *`,
+        [randomUUID(), organizationId, member.userId, reason,
+          JSON.stringify({ organizationName: org.name, acknowledgements: { retention: true, subscriptions: true, connections: true } }),
+          DELETION_COOLING_DAYS, JSON.stringify({ scheduled: { deploymentsPaused: deployments, campaignsPaused: campaigns.map(row => row.id) } })])).rows[0]!;
+      await db.query('commit');
+      return reply.code(201).send({ request: view(created) });
+    } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
+  });
+
+  app.delete('/v1/organizations/current/deletion-requests/current', async (request, reply) => {
+    const member = await memberFor(request, reply);
+    if (!member) return reply;
+    if (!member.organization) return reply.code(404).send({ error: 'organization_not_found' });
+    if (!member.organization.canManage) return reply.code(403).send({ error: 'owner_required' });
+    const db = await runtime.pool.connect();
+    try {
+      await db.query('begin');
+      const open = (await db.query<DeletionRow>(
+        "select * from ap.organization_deletion_requests where organization_id=$1 and status in ('scheduled','executed') for update",
+        [member.organization.id])).rows[0];
+      if (!open || open.status !== 'scheduled') {
+        await db.query('rollback');
+        return open ? reply.code(409).send({ error: 'organization_deleted' }) : reply.code(404).send({ error: 'deletion_request_not_found' });
+      }
+      const canceled = (await db.query<DeletionRow>(
+        "update ap.organization_deletion_requests set status='canceled',canceled_at=now(),canceled_by=$2 where id=$1 returning *",
+        [open.id, member.userId])).rows[0]!;
+      await db.query('commit');
+      return { request: view(canceled) };
+    } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
+  });
+
+  app.get('/v1/account/deletion-eligibility', async (request, reply) => {
+    reply.header('Cache-Control', 'private, no-store');
+    const userId = await runtime.resolveUserId(request.headers);
+    if (!userId) return reply.code(401).send({ error: 'authentication_required' });
+    const user = (await runtime.pool.query<{ email: string }>('select email from "user" where id=$1', [userId])).rows[0];
+    if (!user) return reply.code(404).send({ error: 'account_not_found' });
+    const blockers = await accountDeletionBlockers(runtime.pool, userId);
+    // 비밀번호가 없는 계정은 최근 REAUTH_WINDOW_MINUTES분 이내 카카오로 다시 로그인한 세션이어야 한다.
+    const verification = await credentialPasswordHash(runtime.pool, userId) ? 'password' : 'recent_sign_in';
+    if (verification === 'recent_sign_in' && !await recentlySignedIn(runtime, runtime.pool, request, userId))
+      blockers.push('reauth_required');
+    return { product: 'agent', email: user.email, eligible: blockers.length === 0, blockers, verification,
+      reauthWindowMinutes: REAUTH_WINDOW_MINUTES };
+  });
+
+  app.post('/v1/account/deletion-requests', async (request, reply) => {
+    reply.header('Cache-Control', 'private, no-store');
+    const userId = await runtime.resolveUserId(request.headers);
+    if (!userId) return reply.code(401).send({ error: 'authentication_required' });
+    const body = object(request.body);
+    const password = body?.password;
+    if (password !== undefined && (typeof password !== 'string' || !password || password.length > 1024))
+      return reply.code(400).send({ error: 'password_required' });
+    if (body?.acknowledgement !== true) return reply.code(400).send({ error: 'acknowledgements_required' });
+    const db = await runtime.pool.connect();
+    try {
+      await db.query('begin');
+      const user = (await db.query<{ email: string }>('select email from "user" where id=$1 for update', [userId])).rows[0];
+      if (!user) { await db.query('rollback'); return reply.code(404).send({ error: 'account_not_found' }); }
+      if (typeof body.confirmText !== 'string' || body.confirmText.trim().toLowerCase() !== user.email.toLowerCase()) {
+        await db.query('rollback'); return reply.code(400).send({ error: 'confirmation_mismatch' });
+      }
+      const blockers = await accountDeletionBlockers(db, userId);
+      if (blockers.length) { await db.query('rollback'); return reply.code(409).send({ error: blockers[0], blockers }); }
+      const hash = await credentialPasswordHash(db, userId);
+      if (hash) {
+        if (typeof password !== 'string') { await db.query('rollback'); return reply.code(400).send({ error: 'password_required' }); }
+        // 실패 시도도 남도록 검증 전에 별도 커밋으로 시도 창을 소비한다(15분 5회).
+        const retryAfter = await consumePasswordAttempt(runtime.pool, userId);
+        if (retryAfter !== null) {
+          await db.query('rollback');
+          return reply.header('Retry-After', retryAfter).code(429).send({ error: 'password_attempts_exceeded' });
+        }
+        // better-auth 기본 비밀번호 검증(ctx.password.verify와 같은 scrypt 구현)으로 재입력을 확인한다.
+        if (!await verifyPassword({ hash, password })) {
+          await db.query('rollback'); return reply.code(403).send({ error: 'invalid_password' });
+        }
+      } else if (!await recentlySignedIn(runtime, db, request, userId)) {
+        // 카카오 전용 계정: 최근 REAUTH_WINDOW_MINUTES분 이내 카카오로 다시 로그인한 세션에서만 진행한다.
+        await db.query('rollback');
+        return reply.code(403).send({ error: 'reauth_required', reauthWindowMinutes: REAUTH_WINDOW_MINUTES });
+      }
+      const anonymousEmail = `deleted-${randomUUID()}@deleted.invalid`;
+      const removed = {
+        memberships: (await db.query('delete from ap.memberships where user_id=$1', [userId])).rowCount ?? 0,
+        // 세션 행은 지우지 않고 즉시 만료로 폐기한다(oauth_selections는 000087부터 세션 삭제에도 유지).
+        sessions: (await db.query('update "session" set "expiresAt"=now(),"updatedAt"=now() where "userId"=$1 and "expiresAt">now()', [userId])).rowCount ?? 0,
+        twoFactor: (await db.query('delete from "twoFactor" where "userId"=$1', [userId])).rowCount ?? 0,
+        verifications: (await db.query('delete from "verification" where value=$1', [userId])).rowCount ?? 0,
+        credentials: (await db.query('delete from "account" where "userId"=$1', [userId])).rowCount ?? 0,
+        // 인증 메일 감사 행의 수신 주소도 익명 주소로 바꾼다(발송 결과·시각은 감사용으로 유지).
+        emailOutboxAnonymized: (await db.query('update ap.email_outbox set "to"=$2 where lower("to")=lower($1)',
+          [user.email, anonymousEmail])).rowCount ?? 0,
+      };
+      // "user" 행은 청구·승인·감사 기록이 FK로 참조하므로 지우지 않고 식별정보를 익명화한다.
+      await db.query(`update "user" set name='삭제된 사용자',email=$2,"emailVerified"=false,image=null,
+        "twoFactorEnabled"=false,"updatedAt"=now() where id=$1`, [userId, anonymousEmail]);
+      await db.query(`insert into ap.account_deletion_audit(id,user_id,mode,removed) values ($1,$2,'anonymized',$3::jsonb)`,
+        [randomUUID(), userId, JSON.stringify(removed)]);
+      await db.query('commit');
+      return { product: 'agent', deleted: true, mode: 'anonymized' };
+    } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
+  });
+}
+
+// 유예가 끝난 조직 삭제 요청 하나를 실행한다. 전체를 한 트랜잭션으로 처리하므로 실패 시 아무것도 반영되지 않고 재시도한다.
+export async function runOrganizationDeletionOnce(runtime: { pool: Pool }): Promise<'empty' | 'executed' | 'blocked' | 'retry'> {
+  const db = await runtime.pool.connect();
+  let requestId: string | undefined;
+  try {
+    await db.query('begin');
+    const row = (await db.query<DeletionRow>(`select * from ap.organization_deletion_requests
+      where status='scheduled' and scheduled_at<=clock_timestamp() and next_attempt_at<=clock_timestamp()
+      order by next_attempt_at,id for update skip locked limit 1`)).rows[0];
+    if (!row) { await db.query('commit'); return 'empty'; }
+    requestId = row.id;
+    const organizationId = row.organization_id;
+    await db.query('select id from ap.organizations where id=$1 for update', [organizationId]);
+    const failed = (await organizationDeletionPreconditions(db, organizationId)).filter(item => !item.ok);
+    if (failed.length) {
+      await db.query(`update ap.organization_deletion_requests set last_error=$2,attempt_count=attempt_count+1,
+        next_attempt_at=clock_timestamp()+interval '1 hour' where id=$1`, [row.id, failed.map(item => item.code).join(',')]);
+      await db.query('commit'); return 'blocked';
+    }
+    const at = (await db.query<{ now: Date }>('select clock_timestamp() as now')).rows[0]!.now;
+    const count = async (sql: string, params: unknown[]) => (await db.query(sql, params)).rowCount ?? 0;
+    const members = (await db.query<{ user_id: string }>('select user_id from ap.memberships where organization_id=$1',
+      [organizationId])).rows.map(member => member.user_id);
+    // 조직을 먼저 삭제 표시한다(같은 트랜잭션). owner 수신처 연락처 정리 가드가 deleted_at을 확인한다.
+    await db.query('update ap.organizations set deleted_at=$2 where id=$1 and deleted_at is null', [organizationId, at]);
+    const executed = {
+      at: at.toISOString(),
+      deploymentsPaused: await count("update ap.deployments set status='paused',updated_at=now() where organization_id=$1 and status='active'", [organizationId]),
+      campaignsPaused: await count("update ap.campaigns set state='paused',updated_at=now() where organization_id=$1 and state='published'", [organizationId]),
+      // 상호명은 보존 중인 고객 접수 원본의 식별을 위해 남기고, 나머지 owner 입력 사업 정보는 비운다.
+      knowledgeDraftsCleared: await count(`update ap.knowledge_drafts set content=jsonb_build_object('businessName',coalesce(content->>'businessName',''),
+        'introduction','','region','','openingHours','','services','[]'::jsonb,'faqs','[]'::jsonb),updated_at=now() where organization_id=$1`, [organizationId]),
+      knowledgeReleasesCleared: await count(`update ap.knowledge_releases set content=jsonb_build_object('businessName',coalesce(content->>'businessName',''),
+        'introduction','','region','','openingHours','','services','[]'::jsonb,'faqs','[]'::jsonb) where organization_id=$1`, [organizationId]),
+      agentDraftsCleared: await count(`update ap.agent_drafts set content=jsonb_build_object('name',$2::text,'tone','clear','guideScope','','handoffText',''),
+        updated_at=now() where organization_id=$1`, [organizationId, DELETED_TEXT]),
+      agentReleasesCleared: await count(`update ap.agent_releases set content=jsonb_build_object('name',$2::text,'tone','clear','guideScope','','handoffText','')
+        where organization_id=$1`, [organizationId, DELETED_TEXT]),
+      ownerTestsCleared: await count("update ap.ai_runs set question=$2,answer=null where organization_id=$1 and kind='owner_test'", [organizationId, DELETED_TEXT]),
+      sourceSnapshotsDeleted: await count('delete from ap.knowledge_source_snapshots where source_id in (select id from ap.knowledge_sources where organization_id=$1)', [organizationId]),
+      sourceConflictsDeleted: await count('delete from ap.knowledge_source_integrity_conflicts where source_id in (select id from ap.knowledge_sources where organization_id=$1)', [organizationId]),
+      campaignsCleared: await count('update ap.campaigns set name=$2,updated_at=now() where organization_id=$1', [organizationId, DELETED_TEXT]),
+      campaignReleasesCleared: await count(`update ap.campaign_releases set content=content||jsonb_build_object('serviceName',$2::text,'description','')
+        where organization_id=$1`, [organizationId, DELETED_TEXT]),
+      ownerRecipientsRevoked: await count("update ap.notification_recipients set revoked_at=now() where organization_id=$1 and audience='owner' and revoked_at is null", [organizationId]),
+      // 철회만으로는 연락처 암호문이 남으므로 owner 수신처 암호문도 지운다(발송 이력의 암호문은 기존 보존 정책을 따른다).
+      ownerRecipientsCleared: await count(`update ap.notification_recipients set recipient_ciphertext=null,retention_purged_at=now()
+        where organization_id=$1 and audience='owner' and retention_purged_at is null`, [organizationId]),
+      // 다른 조직 구성원 자격이 남은 사용자는 그 조직 업무를 계속하므로 세션을 유지한다(이 조직 접근은 멤버십 삭제로 차단).
+      // 세션 행은 지우지 않고 즉시 만료시킨다.
+      sessionsRevoked: await count(`update "session" s set "expiresAt"=now(),"updatedAt"=now() where s."userId"=any($1::text[])
+        and s."expiresAt">now() and not exists(select 1 from ap.memberships m where m.user_id=s."userId" and m.organization_id<>$2)`,
+      [members, organizationId]),
+      membershipsRemoved: await count('delete from ap.memberships where organization_id=$1', [organizationId]),
+      retained: ['inquiries_and_consultations_under_retention_policy', 'billing_ledger', 'audit_logs', 'business_name'],
+    };
+    await db.query(`update ap.organization_deletion_requests set status='executed',executed_at=$2,steps=steps||jsonb_build_object('executed',$3::jsonb),
+      last_error=null,attempt_count=attempt_count+1 where id=$1`, [row.id, at, JSON.stringify(executed)]);
+    await db.query('commit');
+    return 'executed';
+  } catch (error) {
+    await db.query('rollback');
+    // 원인 추적용으로 PII가 없는 오류 코드(pg SQLSTATE 또는 오류 이름)만 남긴다. 메시지·detail은 저장하지 않는다.
+    const raw = (error as { code?: unknown; name?: unknown } | null);
+    const code = typeof raw?.code === 'string' ? raw.code : typeof raw?.name === 'string' ? raw.name : 'unknown';
+    const errorCode = /^[A-Za-z0-9_]{1,64}$/.test(code) ? code : 'unknown';
+    if (requestId) await runtime.pool.query(`update ap.organization_deletion_requests set attempt_count=attempt_count+1,
+      last_error=$2,next_attempt_at=clock_timestamp()+interval '5 minutes' where id=$1 and status='scheduled'`,
+    [requestId, `execution_failed:${errorCode}`]);
+    return 'retry';
+  } finally { db.release(); }
+}

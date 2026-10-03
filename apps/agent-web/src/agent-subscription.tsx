@@ -86,7 +86,7 @@ export function AgentSubscription() {
     finally { setBusy(false); }
   }
 
-  return <div className="site-shell"><header className="site-header"><a href="/"><Brand product="Agent Platform" /></a><nav aria-label="작업 메뉴"><a href="/workspace">사업 정보·문의함</a><a href="/workspace/usage">사용량</a></nav></header>
+  return <div className="site-shell"><header className="site-header"><a href="/"><Brand product="Agent Platform" /></a><nav aria-label="작업 메뉴"><a href="/workspace">사업 정보·문의함</a><a href="/workspace/usage">사용량</a><a href="/workspace/account">계정·조직 삭제 (추가)</a></nav></header>
     <main className="feature-section"><div className="feature-heading"><p className="eyebrow">Agent Platform · 체험과 구독</p><h1>AP 이용 상태</h1><p>AP 체험과 유료 구독은 Field와 별도로 관리합니다.</p></div>
       <button type="button" disabled={busy} onClick={() => void load()}>상태 새로고침</button>
       {notice && <p role="status" className="state-message">{notice} {notice.includes("로그인") || notice.includes("조직") ? <a href="/workspace">사업 정보 화면 열기</a> : null}</p>}

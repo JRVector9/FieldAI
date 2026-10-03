@@ -52,6 +52,14 @@ export async function resolvedCustomHost(db: Pick<Pool | PoolClient, 'query'>, h
       and exists(select 1 from field.site_releases r where r.site_id=s.id)${lock ? ' for share of d' : ''}`, [normalized]);
   return found.rows[0] ?? null;
 }
+// 도메인 연결 해제(사업자 해제·조직 삭제 실행 공통). 호출자가 해당 행을 for update로 잠근 트랜잭션 안에서 부른다.
+// edge 바인딩 제거와 hostname claim 해제는 custom-domain 작업자가 release_pending을 이어서 처리한다.
+export async function disconnectSiteDomain(db: Pick<PoolClient, 'query'>, row: Pick<SiteDomain, 'id' | 'site_id' | 'hostname' | 'desired_state'>) {
+  if(row.desired_state==='active')await db.query(`update field.site_domains set desired_state='disconnected',state='release_pending',
+    is_primary=false,generation=generation+1,claim_token=null,lease_expires_at=null,valid_until=null,next_check_at=now(),updated_at=now() where id=$1`,[row.id]);
+  await db.query("update field.site_ap_installations set status='paused',updated_at=now() where site_id=$1 and site_origin=$2 and status='active'",[row.site_id,`https://${row.hostname}`]);
+  await db.query('delete from field.custom_domain_ap_proofs where domain_id=$1',[row.id]);
+}
 export async function primarySiteOrigin(db: Pick<Pool | PoolClient, 'query'>, siteId: string, fallback: string | null) {
   const found = await db.query<{ hostname: string }>(`select d.hostname from field.site_domains d
     where d.site_id=$1 and d.is_primary and ${usable}`, [siteId]);

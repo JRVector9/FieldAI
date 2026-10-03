@@ -9,6 +9,7 @@ import sharp from 'sharp';
 import { createFieldApp } from '../src/app.js';
 import { deliverApEventOnce, reconcileApEventDeliveries } from '../src/ap-event-delivery.js';
 import { copyExternalRequestAttachmentOnce } from '../src/external-request-attachment-worker.js';
+import { purgeExpiredInboundRecords } from '../src/retention-purge.js';
 
 process.loadEnvFile(resolve('../../infra/field/.env'));
 process.env.FIELD_PROFILE = 'mock';
@@ -30,9 +31,9 @@ const canonical = (value: unknown): string => JSON.stringify(value,
     ? Object.fromEntries(Object.entries(entry).sort(([left], [right]) => left.localeCompare(right))) : entry);
 const digest = (value: unknown) => createHash('sha256').update(canonical(value)).digest('hex');
 
-function assertContract(path: string, actual: unknown) {
-  const declared = contract.paths[path]?.get?.responses?.['200']?.content?.['application/json']?.schema;
-  assert.ok(declared, `OpenAPI GET ${path} 200`);
+function assertContract(path: string, actual: unknown, method = 'get', status = '200') {
+  const declared = contract.paths[path]?.[method]?.responses?.[status]?.content?.['application/json']?.schema;
+  assert.ok(declared, `OpenAPI ${method.toUpperCase()} ${path} ${status}`);
   function check(schema: ResponseSchema, value: unknown, location: string): void {
     if (schema.$ref) {
       const name = schema.$ref.split('/').at(-1);
@@ -71,7 +72,7 @@ function assertContract(path: string, actual: unknown) {
     }
     if (schema.enum) assert.ok(schema.enum.includes(value), location);
   }
-  check(declared, actual, `GET ${path}`);
+  check(declared, actual, `${method.toUpperCase()} ${path}`);
 }
 
 async function actor() {
@@ -84,7 +85,7 @@ async function actor() {
   assert.equal((await post('/sign-up/email', { email, password, name: 'Field owner' })).status, 200);
   const signed = await post('/sign-in/email', { email, password });
   assert.equal(signed.status, 200);
-  return { email, cookie: signed.headers.getSetCookie().map(value => value.split(';')[0]).join('; ') };
+  return { email, password, cookie: signed.headers.getSetCookie().map(value => value.split(';')[0]).join('; ') };
 }
 
 test('Field owner delegates only approved catalog facts to a selected OAuth client', async () => {
@@ -1151,5 +1152,393 @@ test('Field owner delegates only approved catalog facts to a selected OAuth clie
       await pool.query('delete from field.organizations where id = $1', [organizationId]);
     }
     await pool.query('delete from "user" where email = any($1::text[])', [[owner.email, outsider.email]]);
+  }
+});
+
+test('Field ID 조회·고객 제안 결정·알림 경로·AP 사건 수신함은 연결 범위 공개 계약으로만 동작한다', async () => {
+  const owner = await actor();
+  const connectorKey = randomBytes(32);
+  const eventSecret = randomBytes(32);
+  const eventKeyId = randomUUID();
+  const app = createFieldApp(async () => undefined, auth.handler, base, {
+    pool,
+    resolveUserId: async headers => (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,
+    resolveSession: async headers => {
+      const session = await auth.api.getSession({ headers: fromNodeHeaders(headers) });
+      return session ? { id: session.session.id, userId: session.user.id } : null;
+    },
+    apConnector: { issuer: 'http://127.0.0.1:4311/api/auth', clientId: 'test-ap', clientSecret: 'synthetic',
+      tokenKey: connectorKey, redirectUri: 'http://127.0.0.1:4321/v1/connections/ap/callback',
+      webOrigin: 'http://127.0.0.1:3002' },
+  });
+  let organizationId = '';
+  try {
+    const created = await app.inject({ method: 'POST', url: '/v1/organizations',
+      headers: { cookie: owner.cookie }, payload: { name: 'Field 공개 결정 사업장' } });
+    assert.equal(created.statusCode, 201);
+    organizationId = created.json().id as string;
+    const ownerHeaders = { cookie: owner.cookie, 'x-organization-id': organizationId };
+    const serviceId = randomUUID();
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/business/draft', headers: ownerHeaders,
+      payload: { expectedRevision: 0, businessName: 'Field 공개 결정 사업장', introduction: '소개',
+        region: '서울', openingHours: '평일', contactPhone: '010-1111-2222', defaultBookingMode: 'request',
+        services: [{ id: serviceId, name: '방문 점검', description: '설명', bookingMode: 'request',
+          durationMinutes: 60, priceAmount: 30000 }] } })).statusCode, 200);
+    assert.equal((await app.inject({ method: 'POST', url: '/v1/catalog/releases', headers: ownerHeaders,
+      payload: { expectedRevision: 1 } })).statusCode, 201);
+    assert.equal((await app.inject({ method: 'PUT', url: '/v1/booking-policy', headers: ownerHeaders,
+      payload: { expectedRevision: 0, timezone: 'Asia/Seoul', weekly: { mon: { open: '09:00', close: '18:00' } },
+        closedDates: [], specialDates: {}, beforeMinutes: 0, afterMinutes: 0, minLeadMinutes: 0,
+        horizonDays: 30 } })).statusCode, 200);
+    const registration = await auth.handler(new Request(`${authBase}/oauth2/create-client`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: base, cookie: owner.cookie },
+      body: JSON.stringify({ client_name: 'AP public decision client',
+        redirect_uris: ['https://client.example.test/callback'], application_type: 'web',
+        token_endpoint_auth_method: 'client_secret_basic', grant_types: ['authorization_code'],
+        response_types: ['code'], scope: 'openid field.facts.read field.availability.read field.requests.create field.requests.read field.proposals.respond field.notification_route.read' }),
+    }));
+    assert.equal(registration.status, 201, await registration.clone().text());
+    const registered = await registration.json() as { client_id: string; client_secret: string };
+    // 동적 등록(auth.ts clientRegistrationAllowedScopes)으로 §4.12 새 scope 두 개를 직접 요청할 수 있다.
+    const registeredScopes = (await pool.query<{ scopes: string[] }>(
+      'select scopes from "oauthClient" where "clientId" = $1', [registered.client_id])).rows[0]?.scopes ?? [];
+    assert.ok(registeredScopes.includes('field.proposals.respond') && registeredScopes.includes('field.notification_route.read'),
+      JSON.stringify(registeredScopes));
+    const issue = async (scopes: string[], cookie = owner.cookie, client = registered, extraScope = '') => {
+      const selection = await app.inject({ method: 'POST', url: '/integrations/v1/authorization/selections',
+        headers: { cookie }, payload: { clientId: client.client_id, organizationId, scopes } });
+      assert.equal(selection.statusCode, 201, selection.body);
+      const verifier = randomBytes(32).toString('base64url');
+      const url = new URL(`${authBase}/oauth2/authorize`);
+      for (const [key, value] of Object.entries({ response_type: 'code', client_id: client.client_id,
+        redirect_uri: 'https://client.example.test/callback', scope: `openid ${extraScope}${scopes.join(' ')}`,
+        state: randomUUID(), code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+        code_challenge_method: 'S256', resource: `${base}/integrations/v1` })) url.searchParams.set(key, value);
+      const redirect = await auth.handler(new Request(url, { headers: { cookie } }));
+      assert.equal(redirect.status, 302);
+      const consent = await auth.handler(new Request(`${authBase}/oauth2/consent`, {
+        method: 'POST', headers: { 'content-type': 'application/json', origin: base, cookie },
+        body: JSON.stringify({ accept: true,
+          oauth_query: new URL(redirect.headers.get('location')!, authBase).searchParams.toString() }),
+      }));
+      assert.equal(consent.status, 200, await consent.clone().text());
+      const code = new URL((await consent.json() as { url: string }).url).searchParams.get('code');
+      assert.ok(code);
+      const token = await auth.handler(new Request(`${authBase}/oauth2/token`, {
+        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded',
+          authorization: `Basic ${Buffer.from(`${client.client_id}:${client.client_secret}`).toString('base64')}` },
+        body: new URLSearchParams({ grant_type: 'authorization_code', client_id: client.client_id,
+          redirect_uri: 'https://client.example.test/callback', code, code_verifier: verifier }),
+      }));
+      assert.equal(token.status, 200, await token.clone().text());
+      const issued = await token.json() as { access_token: string; refresh_token?: string };
+      return { grantId: selection.json().id as string, refreshToken: issued.refresh_token,
+        headers: { authorization: `Bearer ${issued.access_token}` } };
+    };
+    const full = await issue(['field.facts.read', 'field.availability.read', 'field.requests.create',
+      'field.requests.read', 'field.proposals.respond', 'field.notification_route.read']);
+    const me = await app.inject({ url: '/integrations/v1/me', headers: full.headers });
+    assert.equal(me.statusCode, 200, me.body);
+    assertContract('/integrations/v1/me', me.json());
+    assert.ok(me.json().scopes.includes('field.proposals.respond'));
+    const capabilities = await app.inject({ url: '/integrations/v1/capabilities', headers: full.headers });
+    assert.equal(capabilities.json().capabilities['proposal.respond'], true);
+    // H1: better-auth는 로그아웃·만료 세션 조회 때 session 행을 지운다. 동의를 만든 세션이 사라져도
+    // 이미 발급된 grant는 계속 인증되어야 한다(oauth_selections.session_id on delete set null).
+    const signIn = async () => {
+      const signed = await auth.handler(new Request(`${authBase}/sign-in/email`, {
+        method: 'POST', headers: { 'content-type': 'application/json', origin: base },
+        body: JSON.stringify({ email: owner.email, password: owner.password }) }));
+      assert.equal(signed.status, 200);
+      return signed.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    };
+    const deletedCookie = await signIn();
+    const deletedSessionGrant = await issue(['field.facts.read'], deletedCookie);
+    const deletedSessionId = (await auth.api.getSession({ headers: fromNodeHeaders({ cookie: deletedCookie }) }))!.session.id;
+    assert.equal((await pool.query('delete from "session" where id = $1', [deletedSessionId])).rowCount, 1);
+    const afterDelete = await pool.query<{ session_id: string | null; revoked_at: Date | null }>(
+      'select session_id,revoked_at from field.oauth_selections where id = $1', [deletedSessionGrant.grantId]);
+    assert.deepEqual(afterDelete.rows, [{ session_id: null, revoked_at: null }]);
+    const factsAfterDelete = await app.inject({ url: '/integrations/v1/facts', headers: deletedSessionGrant.headers });
+    assert.equal(factsAfterDelete.statusCode, 200, factsAfterDelete.body);
+    // better-auth 로그아웃은 그 세션에 묶인 access token만 회수하고(OIDC back-channel 정책) offline_access refresh token은 남긴다.
+    // 선택 행이 남아 있으므로 AP 같은 장기 연결은 refresh로 새 access token을 받아 계속 동작한다.
+    const offlineRegistration = await auth.handler(new Request(`${authBase}/oauth2/create-client`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: base, cookie: owner.cookie },
+      body: JSON.stringify({ client_name: 'AP offline client', redirect_uris: ['https://client.example.test/callback'],
+        application_type: 'web', token_endpoint_auth_method: 'client_secret_basic',
+        grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'],
+        scope: 'openid offline_access field.facts.read' }),
+    }));
+    assert.equal(offlineRegistration.status, 201, await offlineRegistration.clone().text());
+    const offlineClient = await offlineRegistration.json() as { client_id: string; client_secret: string };
+    const signedOutCookie = await signIn();
+    const signedOutGrant = await issue(['field.facts.read'], signedOutCookie, offlineClient, 'offline_access ');
+    assert.ok(signedOutGrant.refreshToken);
+    assert.equal((await app.inject({ url: '/integrations/v1/facts', headers: signedOutGrant.headers })).statusCode, 200);
+    const signOut = await auth.handler(new Request(`${authBase}/sign-out`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin: base, cookie: signedOutCookie },
+      body: '{}' }));
+    assert.equal(signOut.status, 200, await signOut.clone().text());
+    assert.equal(await auth.api.getSession({ headers: fromNodeHeaders({ cookie: signedOutCookie }) }), null);
+    const afterSignOut = await pool.query<{ session_id: string | null; revoked_at: Date | null }>(
+      'select session_id,revoked_at from field.oauth_selections where id = $1', [signedOutGrant.grantId]);
+    assert.deepEqual(afterSignOut.rows, [{ session_id: null, revoked_at: null }]);
+    const refreshed = await auth.handler(new Request(`${authBase}/oauth2/token`, {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${Buffer.from(`${offlineClient.client_id}:${offlineClient.client_secret}`).toString('base64')}` },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: signedOutGrant.refreshToken!,
+        resource: `${base}/integrations/v1` }),
+    }));
+    assert.equal(refreshed.status, 200, await refreshed.clone().text());
+    const factsAfterSignOut = await app.inject({ url: '/integrations/v1/facts',
+      headers: { authorization: `Bearer ${(await refreshed.json() as { access_token: string }).access_token}` } });
+    assert.equal(factsAfterSignOut.statusCode, 200, factsAfterSignOut.body);
+    // 세션이 없는 선택 행은 새 동의(현재 세션 기준 조회)에 쓰이지 않는다.
+    const current = await app.inject({ url: `/integrations/v1/authorization/current?clientId=${registered.client_id}`,
+      headers: { cookie: await signIn() } });
+    assert.equal(current.statusCode, 404, current.body);
+    const ownerUserId = (await auth.api.getSession({ headers: fromNodeHeaders({ cookie: owner.cookie }) }))!.user.id;
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm',
+      createHash('sha256').update(connectorKey).update('field-ap-event-route-v1').digest(), iv);
+    const eventSecretCipher = Buffer.concat([iv,
+      cipher.update(eventSecret.toString('base64url'), 'utf8'), cipher.final(), cipher.getAuthTag()]);
+    const deploymentId = randomUUID();
+    const connect = async (keyId: string) => {
+      const id = randomUUID();
+      await pool.query(`insert into field.ap_connections(id,organization_id,initiator_user_id,
+        ap_issuer,ap_client_id,ap_grant_id,ap_organization_id,ap_agent_id,ap_agent_name,
+        ap_agent_revision,allowed_deployment_ids,scopes,access_token_cipher,refresh_token_cipher,
+        access_expires_at,status,field_grant_id,field_actor_user_id,field_client_id,
+        event_key_id,event_secret_cipher,route_generation)
+        values ($1,$2,$3,'http://127.0.0.1:4311/api/auth','test-ap',$4,$5,$6,'Test AI',1,
+          $7,$8,$9,$10,now() + interval '1 hour','review_required',$11,$3,$12,$13,$14,1)`,
+      [id, organizationId, ownerUserId, randomUUID(), randomUUID(), randomUUID(), [deploymentId],
+        ['ap.agent.read'], randomBytes(32), randomBytes(32), full.grantId, registered.client_id,
+        keyId, eventSecretCipher]);
+      return id;
+    };
+    const connectionId = await connect(eventKeyId);
+    const availability = await app.inject({ url: `/integrations/v1/availability?serviceId=${serviceId}`,
+      headers: full.headers });
+    assert.equal(availability.statusCode, 200, availability.body);
+    const submit = async (connection: string) => {
+      const requestDetails = { mode: 'preferred', preferredTimeText: '다음 주 월요일 오전', timezone: 'Asia/Seoul' };
+      const body = { actionRequestId: randomUUID(), connectionId: connection, kind: 'reservation_request',
+        originConversationId: randomUUID(), externalServiceId: serviceId,
+        expectedServiceRevision: 1, expectedPolicyRevision: 1,
+        customer: { name: '결정 고객', phone: '010-3333-4444', verified: false },
+        request: requestDetails, summary: '점검 요청', attachmentRefs: [],
+        consent: { version: 'transfer-v1', recordId: randomUUID(), confirmedAt: new Date().toISOString(),
+          recipientProduct: 'field', recipientOrganizationId: organizationId,
+          items: ['name', 'phone', 'service', 'requested_time'],
+          conditionsHash: digest({ organizationId, catalogRevision: 1, policyRevision: 1,
+            service: availability.json().service, timezone: 'Asia/Seoul', request: requestDetails }) },
+        source: { provider: 'agent-platform', deploymentId, isTest: true } };
+      const accepted = await app.inject({ method: 'POST', url: '/integrations/v1/external-requests',
+        payload: body, headers: { ...full.headers, 'x-body-sha256': digest(body) } });
+      assert.equal(accepted.statusCode, 201, accepted.body);
+      return { body, externalRequestId: accepted.json().externalRequestId as string,
+        reservationId: accepted.json().reservationId as string };
+    };
+    const first = await submit(connectionId);
+    const statePath = `/integrations/v1/external-requests/${first.externalRequestId}`;
+    assert.equal((await app.inject({ url: statePath })).statusCode, 401);
+    const limited = await issue(['field.facts.read']);
+    assert.equal((await app.inject({ url: statePath, headers: limited.headers })).statusCode, 403);
+    const initial = await app.inject({ url: statePath, headers: full.headers });
+    assert.equal(initial.statusCode, 200, initial.body);
+    assertContract('/integrations/v1/external-requests/{id}', initial.json());
+    assert.equal(initial.headers.etag, '"0"');
+    assert.deepEqual({ ...initial.json() as Record<string, unknown>, receivedAt: undefined }, { externalRequestId: first.externalRequestId,
+      actionRequestId: first.body.actionRequestId, connectionId, organizationId, kind: 'reservation_request',
+      status: 'requested', reservationId: first.reservationId, state: 'requested', revision: 0, proposal: null,
+      receivedAt: undefined });
+    assert.doesNotMatch(initial.body, /010-3333-4444|결정 고객|점검 요청/);
+    assert.equal((await app.inject({ url: `/integrations/v1/external-requests/${randomUUID()}`,
+      headers: full.headers })).statusCode, 404);
+    // 다른 연결(해제·다른 grant 결합)의 요청은 같은 조직이어도 안전한 404다.
+    const otherConnectionId = await connect(randomUUID());
+    const other = await submit(otherConnectionId);
+    await pool.query(`update field.ap_connections set status = 'revoked' where id = $1`, [otherConnectionId]);
+    assert.equal((await app.inject({ url: `/integrations/v1/external-requests/${other.externalRequestId}`,
+      headers: full.headers })).statusCode, 404);
+    assert.equal((await app.inject({ url: `/integrations/v1/external-requests/${other.externalRequestId}/notification-route`,
+      headers: full.headers })).statusCode, 404);
+
+    const proposalStart = new Date(Date.now() + 3 * 86_400_000);
+    proposalStart.setUTCHours(1, 0, 0, 0);
+    const proposed = await app.inject({ method: 'POST', url: `/v1/owner/reservations/${first.reservationId}/proposals`,
+      headers: ownerHeaders, payload: { startAt: proposalStart.toISOString(), expectedRevision: 0,
+        expectedCatalogRevision: 1 } });
+    assert.equal(proposed.statusCode, 201, proposed.body);
+    const withProposal = await app.inject({ url: statePath, headers: full.headers });
+    assert.equal(withProposal.headers.etag, '"1"');
+    assert.equal(withProposal.json().state, 'proposed');
+    assert.deepEqual(withProposal.json().proposal, { revision: 1, startAt: proposalStart.toISOString(),
+      endAt: new Date(proposalStart.getTime() + 60 * 60_000).toISOString(), state: 'awaiting_customer' });
+
+    const decisionPath = `${statePath}/customer-decisions`;
+    const decision = { decision: 'accept', proposalRevision: 1, idempotencyKey: randomUUID(),
+      customerProof: { recordId: randomUUID(), confirmedAt: new Date().toISOString(),
+        originConversationId: first.body.originConversationId } };
+    const decide = (payload: object, headers = full.headers) =>
+      app.inject({ method: 'POST', url: decisionPath, headers, payload });
+    assert.equal((await app.inject({ method: 'POST', url: decisionPath, payload: decision })).statusCode, 401);
+    assert.equal((await decide(decision, limited.headers)).statusCode, 403);
+    assert.equal((await decide({ ...decision, decision: 'decline' })).json().error, 'decision_not_supported');
+    assert.equal((await decide({ ...decision, extra: true })).statusCode, 400);
+    // confirmedAt은 RFC 3339만 받는다. JS Date.parse만 통과하는 문자열도 PG 500 대신 400이다.
+    for (const confirmedAt of ['2026-02-30T00:00:00Z', '2026-10-03 00:00:00Z', 'October 3, 2026', '2026-10-03T00:00:00']) {
+      const invalid = await decide({ ...decision, idempotencyKey: randomUUID(),
+        customerProof: { ...decision.customerProof, confirmedAt } });
+      assert.equal(invalid.statusCode, 400, confirmedAt);
+      assert.equal(invalid.json().error, 'invalid_customer_decision', confirmedAt);
+    }
+    assert.equal((await app.inject({ method: 'POST', url: `/integrations/v1/external-requests/${other.externalRequestId}/customer-decisions`,
+      headers: full.headers, payload: { ...decision, idempotencyKey: randomUUID() } })).statusCode, 404);
+    const stale = await decide({ ...decision, idempotencyKey: randomUUID(), proposalRevision: 2 });
+    assert.equal(stale.statusCode, 409);
+    assert.equal(stale.json().error, 'proposal_mismatch');
+    assert.equal((await decide({ ...decision, idempotencyKey: randomUUID(),
+      customerProof: { ...decision.customerProof, originConversationId: randomUUID() } })).json().error,
+    'customer_proof_mismatch');
+    assert.equal((await decide({ ...decision, idempotencyKey: randomUUID(),
+      customerProof: { ...decision.customerProof,
+        confirmedAt: new Date(Date.now() - 25 * 60 * 60_000).toISOString() } })).json().error, 'customer_proof_expired');
+    const accepted = await decide(decision);
+    assert.equal(accepted.statusCode, 201, accepted.body);
+    assertContract('/integrations/v1/external-requests/{id}/customer-decisions', accepted.json(), 'post', '201');
+    assert.deepEqual({ ...accepted.json() as Record<string, unknown>, decisionId: undefined }, { decisionId: undefined,
+      externalRequestId: first.externalRequestId, reservationId: first.reservationId, decision: 'accept',
+      proposalRevision: 1, state: 'customer_accepted', revision: 2, retryable: false });
+    // 고객 수락은 확정이 아니다: 예약 점유와 확정 시각은 사업자 확정 전까지 비어 있다.
+    const stored = await pool.query<{ state: string; confirmed_start_at: Date | null; proposal_accepted_at: Date | null }>(
+      'select state,confirmed_start_at,proposal_accepted_at from field.reservations where id = $1', [first.reservationId]);
+    assert.equal(stored.rows[0]?.state, 'customer_accepted');
+    assert.equal(stored.rows[0]?.confirmed_start_at, null);
+    assert.ok(stored.rows[0]?.proposal_accepted_at);
+    const replay = await decide(decision);
+    assert.equal(replay.statusCode, 200);
+    assert.deepEqual(replay.json(), accepted.json());
+    const conflict = await decide({ ...decision, decision: 'withdraw' });
+    assert.equal(conflict.statusCode, 409);
+    assert.equal(conflict.json().error, 'idempotency_conflict');
+    assert.equal((await decide({ ...decision, idempotencyKey: randomUUID() })).json().error, 'customer_proof_reused');
+    assert.equal((await decide({ ...decision, idempotencyKey: randomUUID(),
+      customerProof: { ...decision.customerProof, recordId: randomUUID() } })).json().error, 'proposal_mismatch');
+    const afterAccept = await app.inject({ url: statePath, headers: full.headers });
+    assert.equal(afterAccept.json().state, 'customer_accepted');
+    assert.equal(afterAccept.json().proposal.state, 'customer_accepted');
+    assert.equal(afterAccept.json().proposal.revision, 1);
+    const recorded = await pool.query<{ event_type: string; actor_type: string; next_state: string }>(
+      `select event_type,actor_type,next_state from field.reservation_events
+       where reservation_id = $1 order by revision`, [first.reservationId]);
+    assert.deepEqual(recorded.rows.map(row => row.event_type), ['field.reservation.requested',
+      'field.reservation.proposed', 'field.reservation.proposal_accepted']);
+    assert.equal(recorded.rows[2]?.actor_type, 'customer');
+
+    // 철회는 첫 제안에서만 Field 고객 취소 요청 전이를 쓴다(점유 없음 → canceled).
+    const second = await submit(connectionId);
+    assert.equal((await app.inject({ method: 'POST', url: `/v1/owner/reservations/${second.reservationId}/proposals`,
+      headers: ownerHeaders, payload: { startAt: proposalStart.toISOString(), expectedRevision: 0,
+        expectedCatalogRevision: 1 } })).statusCode, 201);
+    const withdrawn = await app.inject({ method: 'POST',
+      url: `/integrations/v1/external-requests/${second.externalRequestId}/customer-decisions`, headers: full.headers,
+      payload: { decision: 'withdraw', proposalRevision: 1, idempotencyKey: randomUUID(),
+        customerProof: { recordId: randomUUID(), confirmedAt: new Date().toISOString(),
+          originConversationId: second.body.originConversationId } } });
+    assert.equal(withdrawn.statusCode, 201, withdrawn.body);
+    assert.equal(withdrawn.json().state, 'canceled');
+    assert.equal((await app.inject({ url: `/integrations/v1/external-requests/${second.externalRequestId}`,
+      headers: full.headers })).json().proposal, null);
+
+    const routePath = `${statePath}/notification-route`;
+    assert.equal((await app.inject({ url: routePath, headers: limited.headers })).statusCode, 403);
+    const route = await app.inject({ url: routePath, headers: full.headers });
+    assert.equal(route.statusCode, 200, route.body);
+    assertContract('/integrations/v1/external-requests/{id}/notification-route', route.json());
+    assert.deepEqual(route.json(), { externalRequestId: first.externalRequestId, reservationId: first.reservationId,
+      owner: 'ap', generation: 1, allowed: true, reason: 'ap_route_generation_1' });
+    await pool.query(`insert into field.external_reservation_notification_routes
+      (reservation_id,organization_id,connection_id,state,route_generation,customer_consent_id,
+       customer_consent_version,customer_consented_at,activation_id,activated_at,ap_closed_revision,ap_closed_event_id)
+      values ($1,$2,$3,'active',2,$4,'field-reservation-route-v1',now(),$5,now(),0,$6)`,
+    [first.reservationId, organizationId, connectionId, randomUUID(), randomUUID(), randomUUID()]);
+    assert.deepEqual((await app.inject({ url: routePath, headers: full.headers })).json(), {
+      externalRequestId: first.externalRequestId, reservationId: first.reservationId,
+      owner: 'field', generation: 2, allowed: false, reason: 'field_route_active' });
+
+    const send = (envelope: Record<string, unknown>, options: { keyId?: string; timestamp?: string;
+      secret?: Buffer; eventId?: string; contentType?: string } = {}) => {
+      const raw = Buffer.from(JSON.stringify(envelope));
+      const timestamp = options.timestamp ?? String(Math.floor(Date.now() / 1000));
+      const eventId = options.eventId ?? String(envelope.event_id);
+      return app.inject({ method: 'POST', url: '/integrations/v1/webhooks/agent', payload: raw,
+        headers: { 'content-type': options.contentType ?? 'application/vnd.agent-event+json',
+          'x-event-id': eventId, 'x-key-id': options.keyId ?? eventKeyId, 'x-timestamp': timestamp,
+          'x-signature': createHmac('sha256', options.secret ?? eventSecret)
+            .update(Buffer.concat([Buffer.from(`${timestamp}.${eventId}.`), raw])).digest('hex') } });
+    };
+    const updated = { spec_version: '1.0', event_id: randomUUID(), event_type: 'agent.conversation.updated',
+      source_product: 'agent_platform', connection_id: connectionId, aggregate_type: 'conversation',
+      aggregate_id: first.body.originConversationId, aggregate_version: 3, occurred_at: new Date().toISOString(),
+      correlation_id: first.body.actionRequestId,
+      data: { resource_id: first.body.originConversationId, status: 'waiting_customer' } };
+    assert.equal((await send(updated, { contentType: 'application/json' })).statusCode, 400);
+    assert.equal((await send(updated, { secret: randomBytes(32) })).statusCode, 401);
+    assert.equal((await send(updated, { keyId: randomUUID() })).statusCode, 401);
+    assert.equal((await send(updated, { timestamp: String(Math.floor(Date.now() / 1000) - 600) })).statusCode, 401);
+    assert.equal((await send(updated, { eventId: randomUUID() })).statusCode, 401);
+    assert.equal((await send({ ...updated, source_product: 'field' })).statusCode, 400);
+    assert.equal((await send({ ...updated, aggregate_type: 'action' })).statusCode, 400);
+    assert.equal((await send({ ...updated, data: { ...updated.data, phone: '010-3333-4444' } })).statusCode, 400);
+    const received = await send(updated);
+    assert.equal(received.statusCode, 202, received.body);
+    assert.deepEqual(received.json(), { received: true });
+    assert.equal((await send(updated)).statusCode, 202);
+    assert.equal((await send({ ...updated, aggregate_version: 4 })).statusCode, 409);
+    const inbox = await pool.query<{ state: string; event_type: string; processed_at: Date | null }>(
+      `select state,event_type,processed_at from field.ap_webhook_inbox where source_event_id = $1`, [updated.event_id]);
+    assert.deepEqual(inbox.rows.map(row => [row.state, row.event_type, row.processed_at]),
+      [['recorded', 'agent.conversation.updated', null]]);
+    // connection.revoked는 서명 해제 경로와 같은 로컬 회수를 적용하고 기존 예약은 보존한다.
+    const revocationId = randomUUID();
+    const revoked = { spec_version: '1.0', event_id: randomUUID(), event_type: 'connection.revoked',
+      source_product: 'agent_platform', connection_id: connectionId, aggregate_type: 'connection',
+      aggregate_id: connectionId, aggregate_version: 1, occurred_at: new Date().toISOString(),
+      correlation_id: revocationId, data: { resource_id: connectionId, status: 'revoked' } };
+    assert.equal((await send({ ...revoked, aggregate_id: randomUUID(),
+      data: { ...revoked.data, resource_id: randomUUID() } })).statusCode, 400);
+    assert.equal((await send(revoked)).statusCode, 202);
+    const connectionState = await pool.query<{ status: string; revocation: string | null; selection_revoked: Date | null }>(
+      `select c.status,r.id as revocation,s.revoked_at as selection_revoked from field.ap_connections c
+       left join field.ap_received_connection_revocations r on r.connection_id = c.id
+       join field.oauth_selections s on s.id::text = c.field_grant_id where c.id = $1`, [connectionId]);
+    assert.equal(connectionState.rows[0]?.status, 'revoked');
+    assert.equal(connectionState.rows[0]?.revocation, revocationId);
+    assert.ok(connectionState.rows[0]?.selection_revoked);
+    assert.equal((await send(revoked)).statusCode, 202);
+    assert.equal((await send({ ...updated, event_id: randomUUID() })).statusCode, 401);
+    const conflictingRevoke = await send({ ...revoked, event_id: randomUUID(), correlation_id: randomUUID() });
+    assert.equal(conflictingRevoke.statusCode, 202);
+    const revokeRows = await pool.query<{ state: string; error_code: string | null }>(
+      `select state,error_code from field.ap_webhook_inbox where connection_id = $1
+         and event_type = 'connection.revoked' order by received_at`, [connectionId]);
+    assert.deepEqual(revokeRows.rows.map(row => [row.state, row.error_code]),
+      [['processed', null], ['rejected', 'revocation_id_conflict']]);
+    assert.equal((await pool.query('select 1 from field.reservations where id = $1', [first.reservationId])).rowCount, 1);
+    assert.equal((await app.inject({ url: statePath, headers: full.headers })).statusCode, 401);
+    // 처리 작업자가 없는 recorded 사건만 30일 뒤 정리한다. 처리·거절된 해제 기록은 남긴다.
+    await pool.query(`update field.ap_webhook_inbox set received_at = now() - interval '31 days' where connection_id = $1`, [connectionId]);
+    assert.ok((await purgeExpiredInboundRecords(pool)).apWebhookInbox >= 1);
+    const remaining = await pool.query<{ state: string }>(
+      'select state from field.ap_webhook_inbox where connection_id = $1 order by received_at,state', [connectionId]);
+    assert.deepEqual(remaining.rows.map(row => row.state).sort(), ['processed', 'rejected']);
+  } finally {
+    await app.close();
+    if (organizationId) await pool.query('delete from field.organizations where id = $1', [organizationId]);
+    await pool.query('delete from "user" where email = $1', [owner.email]);
   }
 });

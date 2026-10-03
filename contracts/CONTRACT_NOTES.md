@@ -1,6 +1,6 @@
 # 계약 예제 사용 안내
 
-이 디렉터리는 연동 명세의 **JSON Schema·합성 예제**와 구현 중인 AP/Field 공개 API의 `agent-integrator-v1.openapi.json`·`field-integrator-v1.openapi.json` 미리보기를 제공합니다. Field 미리보기 preview.8에는 현재 동작하는 bearer 읽기, 승인된 FAQ와 명시 binding 경로가, AP 미리보기 preview.10에는 명시 scope를 가진 설치 전용 connection·owned_embed 공개 생성/관리와 연결별 source 버전·갱신 요청/상태, Field 서명 `facts.changed` 수신, 연결 해제 후 서명된 사건 상태 복구 조회와 예약별 세대 1 종료 영수증이 포함됩니다. 정보 동기화·설치·업무 요청을 포함한 완성 OpenAPI 또는 SDK가 아니며 실제 서명 검증은 각 제품 서버 구현에서 수행합니다.
+이 디렉터리는 연동 명세의 **JSON Schema·합성 예제**와 구현 중인 AP/Field 공개 API의 `agent-integrator-v1.openapi.json`·`field-integrator-v1.openapi.json` 미리보기를 제공합니다. Field 미리보기 preview.9에는 현재 동작하는 bearer 읽기, 승인된 FAQ와 명시 binding 경로, Field ID 요청 상태 조회·고객 제안 결정(확정 아님)·알림 경로 조회·AP 서명 사건 수신함이, AP 미리보기 preview.10에는 명시 scope를 가진 설치 전용 connection·owned_embed 공개 생성/관리와 연결별 source 버전·갱신 요청/상태, Field 서명 `facts.changed` 수신, 연결 해제 후 서명된 사건 상태 복구 조회와 예약별 세대 1 종료 영수증이 포함됩니다. 정보 동기화·설치·업무 요청을 포함한 완성 OpenAPI 또는 SDK가 아니며 실제 서명 검증은 각 제품 서버 구현에서 수행합니다.
 
 - event_envelope: 웹훅 최소 메타데이터 계약. 서명/인가/원본 조회는 서버 별도 검증입니다.
 - action_request: 고객 확인 후 외부 문의/예약 요청. 예약 확정 권한이 아닙니다.

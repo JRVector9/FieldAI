@@ -7,6 +7,7 @@ import { twoFactor } from 'better-auth/plugins/two-factor';
 import { APIError } from 'better-auth/api';
 import { assertProductionProfile } from './production-profile.js';
 import { authEmailMessage, deliverAuthEmail, emailProviderFromEnvironment, type EmailProvider } from './email-provider.js';
+import { kakaoProviderConfig, kakaoSocialProviders, kakaoTwoFactorBridge, rejectUnverifiedKakaoUser } from './kakao-provider.js';
 
 const databaseUrl = process.env.FIELD_DATABASE_URL;
 const secret = process.env.FIELD_AUTH_SECRET;
@@ -30,6 +31,9 @@ const webLink = (path: string, token: string) => {
 };
 // TOTP·백업코드 검증 요청에서 만들어진 세션만 관리자 2단계 인증 세션으로 표시한다.
 const TWO_FACTOR_SESSION_PATHS = new Set(['/two-factor/verify-totp', '/two-factor/verify-backup-code']);
+// 카카오 키가 없으면 공급사를 등록하지 않는다(blocked_integration). mock에 실제 키가 있으면 여기서 부팅 거부.
+const kakao = kakaoProviderConfig();
+const twoFactorPlugin = twoFactor({ issuer: 'Field' });
 
 const fieldScopes = [
   'field.facts.read',
@@ -47,6 +51,9 @@ export const auth = betterAuth({
   secret,
   trustedOrigins: [...new Set([webOrigin, ...process.env.FIELD_PROFILE === 'mock' ? ['http://localhost:3002', 'http://127.0.0.1:3002'] : []])],
   database: authPool,
+  socialProviders: kakaoSocialProviders(kakao, webOrigin),
+  // 동일 이메일 자동 병합 금지(결정 19). 이미 이메일로 가입한 주소의 카카오 로그인은 account_not_linked로 거부된다.
+  account: { accountLinking: { enabled: false } },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: process.env.FIELD_PROFILE !== 'mock',
@@ -69,6 +76,14 @@ export const auth = betterAuth({
     additionalFields: { twoFactorVerified: { type: 'boolean', required: false, defaultValue: false, input: false } },
   },
   databaseHooks: {
+    user: {
+      create: {
+        before: async (user, context) => {
+          rejectUnverifiedKakaoUser(user, context);
+          return { data: user };
+        },
+      },
+    },
     session: {
       create: {
         before: async (session, context) => ({
@@ -78,7 +93,8 @@ export const auth = betterAuth({
     },
   },
   plugins: [
-    twoFactor({ issuer: 'Field' }),
+    twoFactorPlugin,
+    kakaoTwoFactorBridge(twoFactorPlugin, webOrigin),
     oauthLifecycleProvider(authPool, lifecycleJournalFromEnvironment()),
     oauthProvider({
       loginPage: `${webOrigin}/connect/sign-in`,
@@ -117,7 +133,9 @@ export const auth = betterAuth({
       clientRegistrationDefaultScopes: ['openid'],
       clientRegistrationAllowedScopes: ['offline_access', 'field.facts.read',
         'field.availability.read', 'field.requests.create', 'field.requests.read',
-        'field.customer_access.create'],
+        'field.customer_access.create',
+        // §4.12 고객 결정·알림 경로 공개 API scope. 외부 통합자가 client 등록 때 직접 요청할 수 있어야 한다(B05)
+        'field.proposals.respond', 'field.notification_route.read'],
       clientPrivileges: ({ user, action }) => action !== 'create' || process.env.FIELD_PROFILE === 'mock'
         || user?.emailVerified === true,
       resources: [{

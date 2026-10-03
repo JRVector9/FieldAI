@@ -9,6 +9,14 @@
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
 
+## 착수 순서 9~11 구현(3단계) — 2026-10-03
+
+- **Current objective / state:** 카카오 로그인, human_active, Toss 웹훅, 계정·조직 삭제, Field 공개 API 4개, OAuth cascade 수리, TLS allow, HEIC, 로깅을 구현하고 리뷰 반영까지 마쳤다. 상세·결정 필요 사항은 `docs/technical/review_2026-10-02/01_SUMMARY.md` §10, 리뷰 원문은 `07`·`08`.
+- **Key design decisions:** 토스 웹훅은 서명이 없어 힌트로만 취급하고 원장은 lookup으로만 확정. 삭제는 유예·전제 조건·보존 규칙을 지키고 user 행은 tombstone. 카카오는 동일 이메일 자동 병합 금지(B03)·미인증 이메일 거부·2FA 적용. Field 공개 API는 bookings.ts의 기존 전이 함수를 추출해 재사용하고 확정은 하지 않는다.
+- **New env:** `AP_KAKAO_CLIENT_ID/SECRET`, `FIELD_KAKAO_*`, `AP_LOG_LEVEL`, `FIELD_LOG_LEVEL`. `infra/*/.env.live.example` 참조.
+- **Tests actually run:** `01_SUMMARY.md` §10 검수 표.
+- **Remaining work:** §10 "남긴 것"과 결정 필요 항목. AP가 Field 새 공개 API를 소비하는 커넥터·고객 결정 BFF는 후속.
+
 ## 운영 코드 공백 구현(2단계) — 2026-10-03
 
 - **Current objective / state:** 리뷰 잔여 결함 14건(1단계, `a745058`)에 이어 운영(non-mock) 환경을 막던 코드 공백을 구현했다: live 웹 빌드, 이메일 확인·재설정, 관리자 2FA, 운영 체험 정책, 템플릿 자동 구성, 약관·처리방침·고지, Dockerfile/compose.live/Caddy/CI. 상세·결정 필요 사항은 `docs/technical/review_2026-10-02/01_SUMMARY.md` §8·§9.

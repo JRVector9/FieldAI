@@ -73,9 +73,12 @@ async function actor() {
       ...(cookie ? { cookie } : {}) }, body: JSON.stringify(payload),
   }));
   assert.equal((await post('/sign-up/email', { email, password, name: 'Integrator owner' })).status, 200);
-  const signed = await post('/sign-in/email', { email, password });
-  assert.equal(signed.status, 200);
-  return { email, cookie: signed.headers.getSetCookie().map(value => value.split(';')[0]).join('; ') };
+  const signIn = async () => {
+    const signed = await post('/sign-in/email', { email, password });
+    assert.equal(signed.status, 200);
+    return signed.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+  };
+  return { email, cookie: await signIn(), signIn };
 }
 
 test('AP integrator chooses an owned AI and reads only explicitly delegated resources', async () => {
@@ -203,6 +206,18 @@ test('AP integrator chooses an owned AI and reads only explicitly delegated reso
     assert.equal(me.json().agentId, agentId);
     assert.deepEqual(me.json().deploymentIds, [deploymentId]);
     assert.deepEqual(me.json().scopes, ['ap.agent.read', 'ap.conversations.read']);
+    // 세션 행 만료·삭제(better-auth 만료 세션 정리와 같은 행 삭제)는 선택 행을 cascade로 지우지 않고 session_id만 비운다.
+    // 선택 행이 grant 근거로 남으므로 같은 grant의 bearer는 계속 인증된다.
+    // (better-auth 훅을 거친 로그아웃은 OIDC back-channel 규칙대로 그 세션에 묶인 access token만 따로 철회한다.)
+    const selectionSession = (await pool.query<{ session_id: string | null }>(
+      'select session_id from ap.oauth_selections where id = $1', [selectionId])).rows[0]!.session_id;
+    assert.ok(selectionSession);
+    await pool.query('update "session" set "expiresAt" = now() where id = $1', [selectionSession]);
+    await pool.query('delete from "session" where id = $1', [selectionSession]);
+    assert.equal((await pool.query<{ session_id: string | null; revoked_at: Date | null }>(
+      'select session_id, revoked_at from ap.oauth_selections where id = $1', [selectionId])).rows[0]?.session_id, null);
+    assert.equal((await app.inject({ url: '/integrations/v1/me', headers: bearer })).statusCode, 200);
+    owner.cookie = await owner.signIn();
     assert.equal((await app.inject({ url: '/integrations/v1/agent' })).statusCode, 401);
     const delegatedAgent = await app.inject({ url: '/integrations/v1/agent', headers: bearer });
     assert.equal(delegatedAgent.statusCode, 200, delegatedAgent.body);

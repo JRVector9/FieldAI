@@ -251,13 +251,15 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
     const key = visitorKey(request);
     if (!key) return reply.code(401).send({ error: 'receipt_key_required' });
     if (!uuidPattern.test(request.params.id)) return reply.code(404).send({ error: 'inquiry_not_found' });
-    const result = await runtime.pool.query<InquiryRow>(
-      'select id, state, customer_name, service_snapshot, knowledge_revision from ap.inquiries where id = $1 and visitor_key_hash = $2',
+    const result = await runtime.pool.query<InquiryRow & { organization_deleted: boolean }>(
+      `select i.id, i.state, i.customer_name, i.service_snapshot, i.knowledge_revision, o.deleted_at is not null as organization_deleted
+       from ap.inquiries i join ap.organizations o on o.id = i.organization_id where i.id = $1 and i.visitor_key_hash = $2`,
       [request.params.id, keyHash(key)],
     );
     const row = result.rows[0];
     if (!row) return reply.code(401).send({ error: 'invalid_receipt_key' });
-    return { id: row.id, state: row.state, customerName: row.customer_name,
+    // 조직 삭제가 실행된 문의는 원본 열람은 유지하되, 답변할 사업자가 없다는 사실을 함께 알린다.
+    return { id: row.id, state: row.state, customerName: row.customer_name, organizationDeleted: row.organization_deleted,
       service: row.service_snapshot, knowledgeRevision: row.knowledge_revision,
       messages: await messages(runtime.pool, row.id, true),
       attachments: await inquiryAttachments(runtime.pool, row.id) };
@@ -305,12 +307,14 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
       if (replay) {
         await client.query('rollback');
         if ('error' in replay) return reply.code(409).send(replay);
-        return reply.code(200).send(replay);
+        // 재전송 응답은 고정값(needs_owner) 대신 현재 문의 상태(human_active 유지 등)를 돌려준다.
+        return reply.code(200).send({ ...replay, state: row.state });
       }
       const isSpam = row.state === 'spam';
       const messageId = await insertMessage(client, request.params.id, row.next_sequence, 'customer', 'customer', body,
         attempt, undefined, isSpam);
-      const nextState = isSpam ? 'spam' : 'needs_owner';
+      // 사업자 직접 응대(human_active) 중이면 상태를 유지하고 사업자 알림(읽지 않음)만 남긴다.
+      const nextState = isSpam ? 'spam' : row.state === 'human_active' ? 'human_active' : 'needs_owner';
       await client.query("update ap.inquiries set state = $2, mode = 'human' where id = $1", [request.params.id, nextState]);
       if (row.state === 'closed') await client.query(
         `insert into ap.inquiry_resolution_events(id, inquiry_id, event_type, revision, source_message_id)
@@ -529,6 +533,57 @@ export function registerAgentInquiryRoutes(app: FastifyInstance, runtime: Busine
       return { id: row.id, state: targetState, revision: row.revision + 1 };
     } catch (error) { await client.query('rollback'); throw error; } finally { client.release(); }
   });
+
+  // 직접 응대 시작(추가)·직접 응대 종료(추가). 상태와 revision을 한 문장으로 바꾼다. 사람 문의(mode=human)는
+  // 이미 automation_paused이므로 AI 자동 답변이 없고, 고객 추가 메시지는 human_active를 유지한 채 알림만 남긴다.
+  // 동의 후 대화는 스키마상 익명 AI 단계(mode=ai)로 돌아갈 수 없으므로 종료 시 사람 문의 상태로만 되돌린다.
+  const humanHandling = async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply,
+    action: 'take_over' | 'release') => {
+    const userId = await ownerUser(request, reply, runtime);
+    if (!userId) return reply;
+    if (!uuidPattern.test(request.params.id)) return reply.code(404).send({ error: 'inquiry_not_found' });
+    const expectedRevision = object(request.body)?.expectedRevision;
+    if (typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
+      return reply.code(400).send({ error: 'invalid_expected_revision' });
+    const client = await runtime.pool.connect();
+    try {
+      await client.query('begin');
+      const found = await client.query<InquiryRow>(
+        `select i.id, i.state, i.revision from ap.inquiries i
+         join ap.memberships m on m.organization_id = i.organization_id
+         where i.id = $1 and m.user_id = $2 and m.role in ('owner', 'editor')
+           and i.consent_at is not null and i.mode = 'human' for update of i`,
+        [request.params.id, userId]);
+      const row = found.rows[0];
+      if (!row) { await client.query('rollback'); return reply.code(404).send({ error: 'inquiry_not_found' }); }
+      const done = action === 'take_over' ? row.state === 'human_active'
+        : row.state === 'needs_owner' || row.state === 'waiting_customer';
+      // 같은 요청의 재전송은 현재 결과를 돌려준다(응답 유실 복구).
+      if (done && row.revision === expectedRevision + 1) {
+        await client.query('rollback');
+        return { id: row.id, state: row.state, revision: row.revision };
+      }
+      if (row.revision !== expectedRevision) {
+        await client.query('rollback');
+        return reply.code(409).send({ error: 'inquiry_changed', state: row.state, revision: row.revision });
+      }
+      if (action === 'take_over' ? !['needs_owner', 'waiting_customer'].includes(row.state) : row.state !== 'human_active') {
+        await client.query('rollback');
+        return reply.code(409).send({ error: 'invalid_inquiry_state', state: row.state, revision: row.revision });
+      }
+      // 종료 시 마지막 고객 공개 메시지가 사업자 답변이면 고객 답변 대기, 아니면 사업자 확인 필요로 둔다.
+      const target = action === 'take_over' ? 'human_active' : (await client.query<{ actor: string }>(
+        `select actor from ap.inquiry_messages where inquiry_id = $1 and visibility = 'customer'
+         order by sequence desc limit 1`, [row.id])).rows[0]?.actor === 'owner' ? 'waiting_customer' : 'needs_owner';
+      await client.query(
+        `update ap.inquiries set state = $2, automation_paused = true, revision = revision + 1, updated_at = now()
+         where id = $1`, [row.id, target]);
+      await client.query('commit');
+      return { id: row.id, state: target, revision: row.revision + 1 };
+    } catch (error) { await client.query('rollback'); throw error; } finally { client.release(); }
+  };
+  app.post<{ Params: { id: string } }>('/v1/owner/inquiries/:id/take-over', (request, reply) => humanHandling(request, reply, 'take_over'));
+  app.post<{ Params: { id: string } }>('/v1/owner/inquiries/:id/release', (request, reply) => humanHandling(request, reply, 'release'));
 
   app.get<{ Params: { id: string } }>('/v1/owner/inquiries/:id/export', async (request, reply) => {
     const userId = await ownerUser(request, reply, runtime);
