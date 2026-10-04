@@ -46,11 +46,40 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 | `infra/agent/compose.live.yaml`, `infra/field/compose.live.yaml` | 제품 단독 live 실행(자기 PostgreSQL 17, Field는 Valkey 추가, migrate→api→web·worker). retention worker는 기본 서비스(계정·조직 삭제·outbox·웹훅 정리 담당, S3 없으면 사진 파일 삭제 단계만 `blocked_integration`), Field site-ai·ap-event worker만 profile |
 | `infra/agent/.env.live.example`, `infra/field/.env.live.example` | 제품별 환경변수 목록(부팅 필수/`blocked_integration`/정책 구분). 실제 `.env.live`는 git 무시 |
 | `infra/edge/Caddyfile.example`, `infra/edge/.env.example` | TLS 종료·제품별 upstream 분리·X-Forwarded-For 재작성·Field 와일드카드(DNS-01)·Field 사업자 자체 도메인 on-demand TLS(`ask` → `GET /v1/public/site-hosts/allow?domain=`) |
-| `.github/workflows/ci.yml` | lint·typecheck·unit, 제품별 DB job(로컬과 같은 `compose.mock.yaml`), 계약 검사, `e2e` job(`test:e2e:*`·`test:security`·`test:integration:faults`, Playwright+`mock:run`), 이미지 빌드(push 없음). `test:independence:*`는 CI 밖이라 수동 증거가 필요 |
+| `.github/workflows/ci.yml` | lint·typecheck·unit, 제품별 DB job(로컬과 같은 `compose.mock.yaml`), 모든 공개 연동 성공 응답의 계약 검사, 제품별 독립 runner의 `independence` matrix, `e2e` job(`test:e2e:*`·`test:security`·`test:integration:faults`, Playwright+`mock:run`), 이미지 빌드(push 없음). GitHub 실제 실행과 실 공급사 검수는 별도 증거가 필요 |
 
 Field 사업자 자체 도메인의 TLS 준비 확인은 `FIELD_DOMAIN_EDGE=caddy`(선택 `FIELD_DOMAIN_EDGE_PROBE_TIMEOUT_MS`, 기본 5000ms)일 때만 켜진다. 도메인 작업자는 `https://<도메인>/.well-known/field-site-health`를 SNI로 요청해 기본 신뢰 저장소로 인증서 체인·이름을 검증하고(자체 서명 거절), Field API가 ask와 같은 조건(tls_pending·connected·TLS 실패 error)에서 돌려준 증명값 `proof`(= `FIELD_AUTH_SECRET` 하위 키로 만든 HMAC-SHA256(도메인 + ':' + 조직 ID), 공개 조직 ID만으로는 만들 수 없음)가 도메인 행으로 계산한 값과 같을 때만 connected로 바꾼다. 확인 실패는 tls_pending에서 처음 실패한 시각(`checked_at`, `last_error='domain_tls_unconfirmed'`, DB 기록이라 여러 작업자·재시작이 같은 시각을 봄)부터 15분 동안 tls_pending, 그 뒤 error(`domain_tls_failed`)로 남긴다. verifying 등에서 막 넘어온 첫 확인 실패는 유예에 넣지 않는다. error는 다음 확인이 성공할 때까지 유지하며(tls_pending과 왕복하지 않음) 상태가 실제로 바뀔 때만 `field.site.domain.status` 사건을 남긴다. 사업자 도메인 설정 화면은 `last_error`를 한국어 원인 안내로 보여 준다. 연결된 도메인은 마지막 확정 점검 뒤 15분 안의 실패에서 연결을 유지한다. Caddy는 이 경로만 Host를 유지해 Field API로 넘겨야 한다(`infra/edge/Caddyfile.example`). 값이 없으면 기존처럼 `blocked_integration`이며, 실제 Caddy·ACME·공인 DNS 환경의 발급·갱신 검수는 아직 수행하지 않았다.
 
 production 이미지는 `NODE_ENV=production`이며 `AP_PROFILE`/`FIELD_PROFILE`이 `live`가 아니면 부팅하지 않는다. 각 compose는 상대 제품의 서비스·DB·환경변수를 참조하지 않는다. E2E·보안·독립성·장애 주입 검사, 실제 TLS·레지스트리 push·운영 서버 검수는 이 산출물로 통과 처리하지 않는다.
+
+### 5.1.2 live OAuth baseline·보호 체크포인트 절차 (A-04)
+
+이 절차는 제품별로 실행한다. API·web·OAuth 발급/연결/회수·사건·보존 작업자와 다른 관리 CLI를 정지하고 DB만 유지한다. 로드밸런서에서 신규 요청을 막고 진행 중인 요청/트랜잭션의 종료를 확인한다. 다른 제품의 중지는 필요하지 않다. 대상 DB와 기존 저널·서명키를 별도로 백업한다. 승인된 secret 관리 도구에서 자기 제품의 live 환경을 주입하고, 동일 호스트/컨테이너·DB role·연결 주소로 아래 모든 명령을 실행한다. compose 내부 DB URL을 호스트용 URL로 임의 바꿔 확인값을 재사용하지 않는다.
+
+live에서는 기존 저널 디렉터리가 필요하며 dry-run이 디렉터리·저널·DB 행을 만들지 않는다. `*_REVOCATION_JOURNAL_DIRECTORY`에는 native와 lifecycle 저널이 있고 키는 `*_REVOCATION_JOURNAL_SECRET`이다. 새 운영 환경의 빈 디렉터리도 운영자가 권한을 제한해 먼저 준비해야 한다. 키가 없거나 저널 서명/DB 영수증이 불일치하면 성공으로 간주하지 않는다.
+
+AP 예시(환경의 `AP_DATABASE_URL`은 실제 대상 DB를 가리켜야 한다):
+
+```bash
+AP_PROFILE=live NODE_ENV=production node --env-file=infra/agent/.env.live apps/agent-api/dist/oauth-lifecycle-cli.js --baseline-quiesced --dry-run
+```
+
+출력은 `{product,databaseFingerprint,planDigest,counts}`다. `product=agent`와 예상 행 수를 검토하고 출력의 두 hash를 아래 자리표시에 넣는다. 토큰·암호문·연락처·DB URL은 출력하지 않는다. apply는 advisory/table 잠금과 시간 제한 아래 계획·저널·writer 상태를 다시 확인한다. DB 재기동/대상 변경/행 변경/만료 토큰 변화로 계획이 달라지면 새 dry-run을 수행한다. `--confirm-writers-stopped`는 운영자의 정지 확인이며 잠금이 없는 유휴 서버가 정지됐음을 DB만으로 증명하지 않는다.
+
+```bash
+AP_PROFILE=live NODE_ENV=production node --env-file=infra/agent/.env.live apps/agent-api/dist/oauth-lifecycle-cli.js --baseline-quiesced --confirm-product=agent --confirm-database=<databaseFingerprint> --confirm-writers-stopped --expected-plan=<planDigest>
+```
+
+baseline 성공 후 writer를 계속 정지한 채 **두** 보호 체크포인트를 내보낸다. 각각 새 출력 파일(`AP_REVOCATION_CHECKPOINT_OUTPUT`, `AP_OAUTH_LIFECYCLE_CHECKPOINT_OUTPUT`)을 지정한다. 출력 부모 디렉터리는 기존 저널 밖의 접근 제한된 별도 저장소여야 한다. CLI는 기존 파일을 덮어쓰지 않고 `0600`으로 생성해 파일·부모 디렉터리를 fsync한다.
+
+```bash
+AP_PROFILE=live NODE_ENV=production node --env-file=infra/agent/.env.live apps/agent-api/dist/revocation-checkpoint-cli.js --quiesced --confirm-product=agent --confirm-database=<databaseFingerprint> --confirm-writers-stopped
+AP_PROFILE=live NODE_ENV=production node --env-file=infra/agent/.env.live apps/agent-api/dist/oauth-lifecycle-cli.js --checkpoint-quiesced --confirm-product=agent --confirm-database=<databaseFingerprint> --confirm-writers-stopped
+```
+
+Field는 위 명령의 `AP_PROFILE`을 `FIELD_PROFILE`, `infra/agent`를 `infra/field`, `apps/agent-api`를 `apps/field-api`, `--confirm-product=agent`를 `--confirm-product=field`로 바꾼다. 출력 변수는 `FIELD_REVOCATION_CHECKPOINT_OUTPUT`와 `FIELD_OAUTH_LIFECYCLE_CHECKPOINT_OUTPUT`이다. Field의 별도 dry-run에서 받은 hash만 사용한다.
+
+두 export·서명·파일 보관을 확인한 뒤 자기 API readiness와 OAuth 제공 상태를 확인하고 writer를 재개한다. 실패/시간 초과/해시 불일치/체크포인트 누락은 정지를 유지하고 원인부터 조사한다. 준비된 signed intent를 임의 삭제해 연속성 검사를 통과시키지 않는다. 이 절차는 baseline과 export만 live에서 허용하며 오프라인 restore CLI는 계속 격리 mock 복원 DB로 제한한다. 격리 DB의 live 프로필 회귀는 운영 DB 실행·PITR 리허설을 대신하지 않는다.
 
 ## 5.2 agent용 런타임 의존 금지선
 
@@ -65,6 +94,8 @@ AP 입장에서 Field 커넥터는 one adapter implementation이다. `if (provid
 두 제품에 이메일·카카오 로그인을 각각 제공한다. 이메일 소유 확인과 카카오 ID 검증, 명시적 계정 연결, 관리자의 추가 인증, 세션 회수·CSRF·출력 이스케이프·허용 리디렉션 검수를 유지한다. AP 계정/Field 계정이 동일인이라도 membership과 이용 동의는 별도다.
 
 제품별 관리자 권한은 각각 부여한다. 하나의 회사 운영자가 두 콘솔을 사용할 수는 있지만 Field admin 토큰으로 AP 대화 원문을 열지 못한다. 지원 접근은 사유·요청·기간·감사 로그를 요구하며 무제한 impersonate를 제공하지 않는다.
+
+관리자 MFA가 필요한 프로필에서는 세션 `createdAt`부터 최대 8시간만 관리자 권한을 인정한다. 슬라이딩 `updatedAt` 갱신은 이 상한을 늘리지 않고, 미래/누락/잘못된 생성 시각도 `mfa_required`로 거절한다. 다시 로그인해 추가 인증을 완료해야 한다. mock의 명시적인 MFA 비활성 검수는 운영 MFA 검수와 구분한다.
 
 모든 비공개 API·파일·큐 작업·캐시·export·LLM 근거에 조직 scope와 원본 제품을 반영한다. DB RLS만으로 보안이 끝났다고 보지 않고 서비스 권한·DB role·우회 권한·테스트를 함께 둔다. 상대 토큰을 고객의 신원 인증이나 대화 접근용 bearer로 재사용하지 않는다.
 
@@ -107,6 +138,10 @@ Field 인증 메일 outbox(`field.email_outbox`)는 발송 완료(`sent`) 인증
 법정 거래 기록은 해당 제품의 구독·청구 원장으로 분리 보존한다. 전체 채팅을 무조건 법정 기간 동안 보관하는 방식으로 확대하지 않는다. 상대가 적법하게 수신한 데이터의 삭제 결과는 별도 작업과 증빙으로 관리한다.
 
 ## 5.6 운영 목표와 관측
+
+Toss webhook은 결제 성공 확정이 아닌 조회 힌트다. `AP_BILLING_WEBHOOK_IP_LIMIT`/`FIELD_BILLING_WEBHOOK_IP_LIMIT`은 IPv4 또는 IPv6 /64별 15분 수신 한도이며 기본 120, 허용 범위 1~100000 정수다. 운영 피크·재전송을 관측해 각 제품이 독립적으로 상향하고 429 지표를 확인한다. 힌트가 없어도 기존 결제 worker의 공급사 조회 대조는 유지한다. 공급사 발신 IP 허용 목록을 추정해 넣지 않는다.
+
+HEIC는 양 API 이미지의 Debian `libheif-examples`(libheif/libde265 decode)와 `util-linux`의 `prlimit`로 실제 해독한 뒤 기존 sharp 경로에서 WebP로 재인코딩하고 메타데이터를 제거한다. 디코더는 shell/실행 파일 환경변수 없이 고정 경로를 사용하며 512MiB 주소 공간·CPU 10초·15초 timeout·100MiB 파일·동시 2건으로 제한한다. 복수 이미지/비정상 출력은 거절한다. decoder가 없는 개발 호스트나 변환 실패는 415로 표시한다. Linux arm64 합성 HEVC fixture 실행은 운영 amd64·모든 실폰 HEIC·HEVC 특허/LGPL 법무 검토를 대신하지 않는다(C-07).
 
 제안 목표: 각 제품 일반 접수 저장 p95 2초(파일/모델 제외), 정상 큐 발송 시도 p95 10초(묶음/공급사 제외), 각 제품 DB RPO15분·객체60분·핵심복구 RTO4시간. 계약상 SLA나 실측 성과가 아니다.
 

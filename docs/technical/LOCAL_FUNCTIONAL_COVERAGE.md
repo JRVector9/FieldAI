@@ -1,4 +1,43 @@
-# 로컬 기능 검수 현황 — 2026-09-27
+# 로컬 기능 검수 현황 — 2026-10-04
+
+
+## 최신 A절 검수 — 2026-10-04 (내부 완료)
+
+코드 `a5eac8c`, 외부 `a9fea58` 보존 병합 `0507bfc`, 전용 branch `fix/remaining-a-20261004`. A-01~A-25 원장은 TASKS/18/phase. 아래09-29 기록은 이력이며 최신 결과를 대체하지 않는다. 원본main/서버/컨테이너/실제 원장을 수정하지 않았다.
+
+최종 Linux arm64/Node24.18.0/pnpm10.33.4/PG17.11/Chromium153 격리 DIND: 독립성 양방향 exit0(사업자/고객 Chromium 각1/1), E2E AP12·Field11·매체2, 보안 410/410(AP DB49파일191/191·Field DB42파일215/215, UUID DB 전부 제거), 통합 장애 26/26 exit0. Host lint/typecheck/unit408pass·환경 조건skip2, 계약 static14+DB18/UUID9제거·실제 응답43/43, actionlint exit0. API/web4종 build는 새 격리 mock stack 기동에서 exit0.
+
+최종 로그 `/private/tmp/fieldai-a-final-independence-v3-logs`, `/private/tmp/fieldai-a-final-e2e-v3-logs`(E2E), `/private/tmp/fieldai-a-final-e2e-v4-logs`(security/faults), `/private/tmp/fieldai-a-final-contracts.log`, `/private/tmp/fieldai-a-final-{lint-v3,typecheck-v2,unit-v3}.log`. final tar SHA256 `e9475d7b6c9ffe2b5a92ff5295ed1429baccc64fea92cbbcc54bbb83f566ce3d`, 코드990파일과 현재 내용 동일.
+
+- A07/08/09/10: live Origin localhost 거부, 삭제유예 catalog/customhost404, callback삭제/race409. Caddy DNS/TLS만 제외한 사본 validate exit0·publicask404/내부ask 유지, Next normalized alias proxy6/6. 실제 DNS/ACME 검수가 아니다.
+- A02/03/06/25: 관리자 목록/종결/마스킹outbox/패널, 사업자 삭제안내·logout 한국어. boundary삭제 cursor/로그인전환 notice 회귀 수정 완료.
+- A04/05: 양제품 live프로필 격리 DB baseline/보호export 각1/1, mockOAuth AP13/Field14, offline10CLI guard. APfsync 잠금·Fieldnative audit파일누락 회귀 완료. 실제 운영DB 미실행.
+- A11~17/23/24: NUL400(서명/binary 유지), queue교대, IPenv1~100000/DBlimit+1, 100FK후cursor, to_regclass제거/legacyAI, mock절대경로·키보존, deleting placeholder/polling, authHMAC문서, admin8h/future거부·발급DBclock. bootstrap20/20와 실제 TOTP 검사.
+- A18: signedintent·receipt/epoch·warm1SQL/60s·API/worker failclose·prepared/applied. 실제dump→restore503→재정리→반복0. ownedclient grant/부분복원/rollback intent/identity·role경합/child교착/MFAterminal/사진symlink·없는org를 actualPG red→green. 마지막 UPDATE SHARE NOWAIT/INSERT SHARE, 제한된 재리뷰에 남은P1/P2없음. 원본고객/청구/audit보존, 새원격발송/청구없음.
+- A19: 실제API Docker2종 build와 Linux arm64/nodeUID1000/network none HEVC505B→WebP16×16, metadata 제거·손상3/8MiB초과거부·tmp정리 proof exit0. `/private/tmp/fieldai-a19-isolated-20261004/logs`; libheif-examples1.15.1-1+deb12u1/prlimit 실제사용. decoder없는 개발호스트415. HEVC/LGPL/amd64/실폰은 별도.
+- A20: photo202→404→file/outbox, domain등록/ask/health/HMAC/primary/resolve/disconnect(mock synthetic DNS/edge), human_active, Toss/legal200. 연결제안 생성·customer-decisions·production sender의 실제 HTTP/v2 replay/conflict/signature/reflection 모두 최신E2E exit0. mockDNS를 실제TLS성공으로 쓰지 않는다.
+- A21/22: actual onSend AP23+Field15 operation/status-media43/43·headers/route대조. object/array/all 미등록 method red→green, unknown404방어·syntheticassert coverage금지. closedAt은 wire/pin불변erratum. QA31개 refs 파일존재·160status not_run.
+
+QA 매핑(각 ID 전체 인수 통과를 뜻하지 않음):
+
+| A 범위 | 적용 QA | 실행 파일/검수 |
+|---|---|---|
+| A-01·A-16 | QA80/81/121/122/160 | `tools/run-independence.mjs`, `tools/test/independence-runner.test.mjs`, `mock-run.test.mjs` |
+| A-02·A-03·A-25 | QA02/49/139/149/157/159 | AP `admin-operations.db.test.ts`, 양 웹 관리자 운영 unit, Field `email-outbox-admin.db.test.ts` |
+| A-04·A-05 | QA47/129/131/150/153/160 | 양 `oauth-live-baseline.db.test.ts`, `oauth-lifecycle.db.test.ts`, `production-profile.test.ts` |
+| A-06·A-08 | QA43/46/65/79 | 양 웹 `deletion-scheduled.test.tsx`, Field `account-deletion.db.test.ts`, `custom-domains.db.test.ts` |
+| A-07·A-09·A-24 | QA14/49/65/157 | Field `retention.db.test.ts`, 웹 `ask-proxy.test.tsx`, 양 `auth-email-mfa.db.test.ts`·관리자 절대 session 나이 회귀 |
+| A-10 | QA129/131/150/153 | AP `field-connection.db.test.ts`, Field `ap-connection.db.test.ts` |
+| A-11·A-13·A-14 | QA02/48/159 | 양 `logging.test.ts`/`health.test.ts`, `billing-webhook*.test.ts`, `email-outbox-retention.db.test.ts` |
+| A-12 | QA138/140/149 | AP `field-event-cycle.test.ts` |
+| A-15 | QA43/46/47 | Field `subscription-access.db.test.ts`, 양 `ai-entitlement.db.test.ts`의 legacy migration 증거 보존 |
+| A-17·A-19 | QA20/56 | Field 웹 `site-photo-delete.test.tsx`, Field API `image-format.test.ts`, AP `heic-decoder.test.ts` 및 실제 Linux HEIC proof |
+| A-18 | QA47/157/159 | 양 account-deletion/restore DB, signed checkpoint/receipt·복원 재익명화·정상 캐시/실패 닫힘 검사·auth/grant/race/media 복원회귀 |
+| A-20 | QA13/15/20/21/31/43/56/140/149 | `tools/spikes/remaining-core-http.test.mjs`, `ap-field-connection-http.test.mjs` |
+| A-21 | QA131/139/140/149/158/159 | `tools/run-integrator-contracts.mjs`, 양 integrator static/DB consumers |
+| A-22·A-23 | QA47/158/160 | 본 매핑·acceptance catalog 연결, Field auth secret HMAC 용도 문서 |
+
+실 공급사 SMTP/MFA/카카오 spike, 운영/PITR/RPO/RTO, 모든 사용자 동선·기기·접근성·법무·출시는 별도 미완료다. `acceptance_catalog.json`의 160개 `status=not_run`은 보존하고 내부 test reference만 추가했다.
 
 ## 최신 AP·Field 재감사 보완 검수 — 2026-09-29
 

@@ -867,11 +867,40 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 | `infra/agent/compose.live.yaml`, `infra/field/compose.live.yaml` | 제품 단독 live 실행(자기 PostgreSQL 17, Field는 Valkey 추가, migrate→api→web·worker). retention worker는 기본 서비스(계정·조직 삭제·outbox·웹훅 정리 담당, S3 없으면 사진 파일 삭제 단계만 `blocked_integration`), Field site-ai·ap-event worker만 profile |
 | `infra/agent/.env.live.example`, `infra/field/.env.live.example` | 제품별 환경변수 목록(부팅 필수/`blocked_integration`/정책 구분). 실제 `.env.live`는 git 무시 |
 | `infra/edge/Caddyfile.example`, `infra/edge/.env.example` | TLS 종료·제품별 upstream 분리·X-Forwarded-For 재작성·Field 와일드카드(DNS-01)·Field 사업자 자체 도메인 on-demand TLS(`ask` → `GET /v1/public/site-hosts/allow?domain=`) |
-| `.github/workflows/ci.yml` | lint·typecheck·unit, 제품별 DB job(로컬과 같은 `compose.mock.yaml`), 계약 검사, `e2e` job(`test:e2e:*`·`test:security`·`test:integration:faults`, Playwright+`mock:run`), 이미지 빌드(push 없음). `test:independence:*`는 CI 밖이라 수동 증거가 필요 |
+| `.github/workflows/ci.yml` | lint·typecheck·unit, 제품별 DB job(로컬과 같은 `compose.mock.yaml`), 모든 공개 연동 성공 응답의 계약 검사, 제품별 독립 runner의 `independence` matrix, `e2e` job(`test:e2e:*`·`test:security`·`test:integration:faults`, Playwright+`mock:run`), 이미지 빌드(push 없음). GitHub 실제 실행과 실 공급사 검수는 별도 증거가 필요 |
 
 Field 사업자 자체 도메인의 TLS 준비 확인은 `FIELD_DOMAIN_EDGE=caddy`(선택 `FIELD_DOMAIN_EDGE_PROBE_TIMEOUT_MS`, 기본 5000ms)일 때만 켜진다. 도메인 작업자는 `https://<도메인>/.well-known/field-site-health`를 SNI로 요청해 기본 신뢰 저장소로 인증서 체인·이름을 검증하고(자체 서명 거절), Field API가 ask와 같은 조건(tls_pending·connected·TLS 실패 error)에서 돌려준 증명값 `proof`(= `FIELD_AUTH_SECRET` 하위 키로 만든 HMAC-SHA256(도메인 + ':' + 조직 ID), 공개 조직 ID만으로는 만들 수 없음)가 도메인 행으로 계산한 값과 같을 때만 connected로 바꾼다. 확인 실패는 tls_pending에서 처음 실패한 시각(`checked_at`, `last_error='domain_tls_unconfirmed'`, DB 기록이라 여러 작업자·재시작이 같은 시각을 봄)부터 15분 동안 tls_pending, 그 뒤 error(`domain_tls_failed`)로 남긴다. verifying 등에서 막 넘어온 첫 확인 실패는 유예에 넣지 않는다. error는 다음 확인이 성공할 때까지 유지하며(tls_pending과 왕복하지 않음) 상태가 실제로 바뀔 때만 `field.site.domain.status` 사건을 남긴다. 사업자 도메인 설정 화면은 `last_error`를 한국어 원인 안내로 보여 준다. 연결된 도메인은 마지막 확정 점검 뒤 15분 안의 실패에서 연결을 유지한다. Caddy는 이 경로만 Host를 유지해 Field API로 넘겨야 한다(`infra/edge/Caddyfile.example`). 값이 없으면 기존처럼 `blocked_integration`이며, 실제 Caddy·ACME·공인 DNS 환경의 발급·갱신 검수는 아직 수행하지 않았다.
 
 production 이미지는 `NODE_ENV=production`이며 `AP_PROFILE`/`FIELD_PROFILE`이 `live`가 아니면 부팅하지 않는다. 각 compose는 상대 제품의 서비스·DB·환경변수를 참조하지 않는다. E2E·보안·독립성·장애 주입 검사, 실제 TLS·레지스트리 push·운영 서버 검수는 이 산출물로 통과 처리하지 않는다.
+
+#### 5.1.2 live OAuth baseline·보호 체크포인트 절차 (A-04)
+
+이 절차는 제품별로 실행한다. API·web·OAuth 발급/연결/회수·사건·보존 작업자와 다른 관리 CLI를 정지하고 DB만 유지한다. 로드밸런서에서 신규 요청을 막고 진행 중인 요청/트랜잭션의 종료를 확인한다. 다른 제품의 중지는 필요하지 않다. 대상 DB와 기존 저널·서명키를 별도로 백업한다. 승인된 secret 관리 도구에서 자기 제품의 live 환경을 주입하고, 동일 호스트/컨테이너·DB role·연결 주소로 아래 모든 명령을 실행한다. compose 내부 DB URL을 호스트용 URL로 임의 바꿔 확인값을 재사용하지 않는다.
+
+live에서는 기존 저널 디렉터리가 필요하며 dry-run이 디렉터리·저널·DB 행을 만들지 않는다. `*_REVOCATION_JOURNAL_DIRECTORY`에는 native와 lifecycle 저널이 있고 키는 `*_REVOCATION_JOURNAL_SECRET`이다. 새 운영 환경의 빈 디렉터리도 운영자가 권한을 제한해 먼저 준비해야 한다. 키가 없거나 저널 서명/DB 영수증이 불일치하면 성공으로 간주하지 않는다.
+
+AP 예시(환경의 `AP_DATABASE_URL`은 실제 대상 DB를 가리켜야 한다):
+
+```bash
+AP_PROFILE=live NODE_ENV=production node --env-file=infra/agent/.env.live apps/agent-api/dist/oauth-lifecycle-cli.js --baseline-quiesced --dry-run
+```
+
+출력은 `{product,databaseFingerprint,planDigest,counts}`다. `product=agent`와 예상 행 수를 검토하고 출력의 두 hash를 아래 자리표시에 넣는다. 토큰·암호문·연락처·DB URL은 출력하지 않는다. apply는 advisory/table 잠금과 시간 제한 아래 계획·저널·writer 상태를 다시 확인한다. DB 재기동/대상 변경/행 변경/만료 토큰 변화로 계획이 달라지면 새 dry-run을 수행한다. `--confirm-writers-stopped`는 운영자의 정지 확인이며 잠금이 없는 유휴 서버가 정지됐음을 DB만으로 증명하지 않는다.
+
+```bash
+AP_PROFILE=live NODE_ENV=production node --env-file=infra/agent/.env.live apps/agent-api/dist/oauth-lifecycle-cli.js --baseline-quiesced --confirm-product=agent --confirm-database=<databaseFingerprint> --confirm-writers-stopped --expected-plan=<planDigest>
+```
+
+baseline 성공 후 writer를 계속 정지한 채 **두** 보호 체크포인트를 내보낸다. 각각 새 출력 파일(`AP_REVOCATION_CHECKPOINT_OUTPUT`, `AP_OAUTH_LIFECYCLE_CHECKPOINT_OUTPUT`)을 지정한다. 출력 부모 디렉터리는 기존 저널 밖의 접근 제한된 별도 저장소여야 한다. CLI는 기존 파일을 덮어쓰지 않고 `0600`으로 생성해 파일·부모 디렉터리를 fsync한다.
+
+```bash
+AP_PROFILE=live NODE_ENV=production node --env-file=infra/agent/.env.live apps/agent-api/dist/revocation-checkpoint-cli.js --quiesced --confirm-product=agent --confirm-database=<databaseFingerprint> --confirm-writers-stopped
+AP_PROFILE=live NODE_ENV=production node --env-file=infra/agent/.env.live apps/agent-api/dist/oauth-lifecycle-cli.js --checkpoint-quiesced --confirm-product=agent --confirm-database=<databaseFingerprint> --confirm-writers-stopped
+```
+
+Field는 위 명령의 `AP_PROFILE`을 `FIELD_PROFILE`, `infra/agent`를 `infra/field`, `apps/agent-api`를 `apps/field-api`, `--confirm-product=agent`를 `--confirm-product=field`로 바꾼다. 출력 변수는 `FIELD_REVOCATION_CHECKPOINT_OUTPUT`와 `FIELD_OAUTH_LIFECYCLE_CHECKPOINT_OUTPUT`이다. Field의 별도 dry-run에서 받은 hash만 사용한다.
+
+두 export·서명·파일 보관을 확인한 뒤 자기 API readiness와 OAuth 제공 상태를 확인하고 writer를 재개한다. 실패/시간 초과/해시 불일치/체크포인트 누락은 정지를 유지하고 원인부터 조사한다. 준비된 signed intent를 임의 삭제해 연속성 검사를 통과시키지 않는다. 이 절차는 baseline과 export만 live에서 허용하며 오프라인 restore CLI는 계속 격리 mock 복원 DB로 제한한다. 격리 DB의 live 프로필 회귀는 운영 DB 실행·PITR 리허설을 대신하지 않는다.
 
 ### 5.2 agent용 런타임 의존 금지선
 
@@ -886,6 +915,8 @@ AP 입장에서 Field 커넥터는 one adapter implementation이다. `if (provid
 두 제품에 이메일·카카오 로그인을 각각 제공한다. 이메일 소유 확인과 카카오 ID 검증, 명시적 계정 연결, 관리자의 추가 인증, 세션 회수·CSRF·출력 이스케이프·허용 리디렉션 검수를 유지한다. AP 계정/Field 계정이 동일인이라도 membership과 이용 동의는 별도다.
 
 제품별 관리자 권한은 각각 부여한다. 하나의 회사 운영자가 두 콘솔을 사용할 수는 있지만 Field admin 토큰으로 AP 대화 원문을 열지 못한다. 지원 접근은 사유·요청·기간·감사 로그를 요구하며 무제한 impersonate를 제공하지 않는다.
+
+관리자 MFA가 필요한 프로필에서는 세션 `createdAt`부터 최대 8시간만 관리자 권한을 인정한다. 슬라이딩 `updatedAt` 갱신은 이 상한을 늘리지 않고, 미래/누락/잘못된 생성 시각도 `mfa_required`로 거절한다. 다시 로그인해 추가 인증을 완료해야 한다. mock의 명시적인 MFA 비활성 검수는 운영 MFA 검수와 구분한다.
 
 모든 비공개 API·파일·큐 작업·캐시·export·LLM 근거에 조직 scope와 원본 제품을 반영한다. DB RLS만으로 보안이 끝났다고 보지 않고 서비스 권한·DB role·우회 권한·테스트를 함께 둔다. 상대 토큰을 고객의 신원 인증이나 대화 접근용 bearer로 재사용하지 않는다.
 
@@ -928,6 +959,10 @@ Field 인증 메일 outbox(`field.email_outbox`)는 발송 완료(`sent`) 인증
 법정 거래 기록은 해당 제품의 구독·청구 원장으로 분리 보존한다. 전체 채팅을 무조건 법정 기간 동안 보관하는 방식으로 확대하지 않는다. 상대가 적법하게 수신한 데이터의 삭제 결과는 별도 작업과 증빙으로 관리한다.
 
 ### 5.6 운영 목표와 관측
+
+Toss webhook은 결제 성공 확정이 아닌 조회 힌트다. `AP_BILLING_WEBHOOK_IP_LIMIT`/`FIELD_BILLING_WEBHOOK_IP_LIMIT`은 IPv4 또는 IPv6 /64별 15분 수신 한도이며 기본 120, 허용 범위 1~100000 정수다. 운영 피크·재전송을 관측해 각 제품이 독립적으로 상향하고 429 지표를 확인한다. 힌트가 없어도 기존 결제 worker의 공급사 조회 대조는 유지한다. 공급사 발신 IP 허용 목록을 추정해 넣지 않는다.
+
+HEIC는 양 API 이미지의 Debian `libheif-examples`(libheif/libde265 decode)와 `util-linux`의 `prlimit`로 실제 해독한 뒤 기존 sharp 경로에서 WebP로 재인코딩하고 메타데이터를 제거한다. 디코더는 shell/실행 파일 환경변수 없이 고정 경로를 사용하며 512MiB 주소 공간·CPU 10초·15초 timeout·100MiB 파일·동시 2건으로 제한한다. 복수 이미지/비정상 출력은 거절한다. decoder가 없는 개발 호스트나 변환 실패는 415로 표시한다. Linux arm64 합성 HEVC fixture 실행은 운영 amd64·모든 실폰 HEIC·HEVC 특허/LGPL 법무 검토를 대신하지 않는다(C-07).
 
 제안 목표: 각 제품 일반 접수 저장 p95 2초(파일/모델 제외), 정상 큐 발송 시도 p95 10초(묶음/공급사 제외), 각 제품 DB RPO15분·객체60분·핵심복구 RTO4시간. 계약상 SLA나 실측 성과가 아니다.
 
@@ -1068,6 +1103,8 @@ Apple 계열의 단순한 화이트·밝은 그레이, 시스템 폰트, 여백,
 **기존 QA01~QA120의 ID를 보존하고 제품 경계에 맞게 기대값을 개정했으며, 독립성·연동 QA121~QA160을 추가했다. 아래는 실행해야 할 인수 명세이고 이번 문서 작성 중 실서비스 테스트가 통과했다는 뜻이 아니다.**
 
 제품별/공통으로 표시한 행은 해당 제품에서 각각 검수한다. AP 승인으로 Field 검수를 대신하지 않는다. Core 릴리스에 없는 매체/연동 QA는 적용 외로 구분하고, 전체 Suite에서는 해당 항목도 실행한다. provider credential 부재는 적용 외가 아니라 blocked_integration이다.
+
+2026-10-04 A절의 QA ID↔실행 파일 매핑은 `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`의 최신 섹션과 `contracts/acceptance_catalog.json`의 `implementation_test_refs`에 기록한다. 이는 해당 인수 시나리오의 내부 회귀 검사 연결이며, 160개 최종 서비스 인수의 `not_run` 상태를 바꾸지 않는다. 실제 명령·환경·실패·남은 공급사/운영 검수는 해당 증거를 함께 확인한다.
 
 ### 기존 테스트의 중요한 개정
 
@@ -1271,7 +1308,11 @@ Owner / reviewed_at / blocker / next action:
 
 ### 완료 체크 — 재작업 방지 기준 (2026-09-27)
 
-**[ ] 남은 작업 전체 목록(2026-10-04):** 코드 25건(A-01~A-25)·결정 대기 14건(B, `01_SUMMARY.md` §13)·외부 검증 9건(C)·문서 유지 4건(D)을 `docs/technical/review_2026-10-02/18_REMAINING_WORK.md`에 정리했다. 새 작업은 이 문서의 ID로 시작하고 완료 시 이 문서와 본 원장을 같은 커밋에서 갱신한다. 권장 순서: A-01 독립성 재실행 → A-07~A-10 경계 마감 → A-06·A-02·A-03 화면 공백 → A-04·A-05 live 절차 → A-20·A-21 검수 확대.
+**[x] A절 일괄 마감(2026-10-04, 내부 완료):** A-01~A-25 권장 순서 병렬 구현과 gpt-6.1-sol/xhigh 코드리뷰·수리 완료. 코드 `a5eac8c`, 외부 `a9fea58` 보존 병합 `0507bfc`, 전용 branch `fix/remaining-a-20261004`. 원본 main/서버/컨테이너/공유 원장 보존. 최종 Linux arm64/Node24.18.0/pnpm10.33.4/PG17.11/Chromium153 격리 DIND: 독립성 양방향 exit0(사업자/고객 Chromium 각1/1), E2E AP12·Field11·매체2, 보안 410/410(AP DB49파일191/191·Field DB42파일215/215, UUID DB 전부 제거), 통합 장애 26/26 exit0. Host lint/typecheck/unit408pass·환경 조건skip2, 계약 static14+DB18/UUID9제거·실제 응답43/43, actionlint exit0. API/web4종 build는 새 격리 mock stack 기동에서 exit0. 실제 HEIC API Docker2종 build/decode proof exit0. 상세 경로·QA·red→green·복구는 phase/19리뷰/coverage/인계. 기존 main a9fea58 GitHub run37196988683 전체 success는 확인했다. B #12(A04)는 해결돼 열린 결정13건. C01 새 CI 실제 Actions·C02공급사·C03live기동·C04운영/PITR/원장checkpoint 동시rollback/RPO/RTO·C05관측·C06실기기/접근성/최종시안·C07약관/HEVC-LGPL/amd64/실폰HEIC·C08외부보안·C09서명전환은 별도 미완료. 정식 인수160 status=not_run을 보존하며 QA31개 test reference만 연결했다.
+
+**[x] C-01 GitHub Actions 첫 실행 통과(2026-10-04, 커밋 c36a407·653de60·c135fbb·a9fea58):** 원격 push 후 CI 5회 실행으로 전 job success(`37196988683`). 수정: `setup-mock-env.mjs`에 `AP_PUBLIC_WEB_ORIGIN`·Field 회수 저널 디렉터리 생성, lifecycle CLI의 `realpath` 전 mkdir, same-page 브라우저 spike 선택자 2곳(고정 디자인에 맞춤, UI 변경 없음), Field facts stub 정규식 `/010-/`의 UUID 오탐 제거+stub 단언 기록(`assert.ifError`), lifecycle 테스트 연결 수 확인을 2초 대기로. 제품 코드 결함은 없었다. 세부는 `18_REMAINING_WORK.md` C-01.
+
+**[ ] 남은 작업 전체 목록(2026-10-04):** A절 내부 코드25건 완료(A-01~A-25)·결정 대기13건(B, `01_SUMMARY.md` §13)·외부 검증 9건(C)·문서 유지 4건(D)을 `docs/technical/review_2026-10-02/18_REMAINING_WORK.md`에 정리했다. 새 작업은 이 문서의 ID로 시작하고 완료 시 이 문서와 본 원장을 같은 커밋에서 갱신한다. A절 착수 순서(이력): A-01 독립성 재실행 → A-07~A-10 경계 마감 → A-06·A-02·A-03 화면 공백 → A-04·A-05 live 절차 → A-20·A-21 검수 확대.
 
 **[x] 종합 리뷰(놓친 것 점검)·반영(2026-10-03, commit은 이 항목 아래 실제 해시 참조):** 84af59a 이후 전체 변경을 5관점(AP API·Field API·웹·인프라/문서/CI·보안)으로 재검토하고 반영했다(`docs/technical/review_2026-10-02/13`~`17`, `01_SUMMARY.md` §14). 핵심: 삭제 유예 중 결제·체험·연결 시작 차단(양 제품 409 `deletion_scheduled`), retention worker S3 없이 기동+compose 상시 실행, 해제 연결의 미해결 요청 종결(AP 000094 `unresolved`), 삭제 시 통합 grant 회수·매체/OAuth client 차단 사유, Field 삭제 실행기 S3 I/O 제거, CI compose 기반 DB+e2e job, 5xx 원문 숨김·NUL 거부·인증 링크 자동 로그인 해제·미인증 계정 정리·DB rateLimit·메일 중복 억제·요청 timeout·IPv6 /64, 웹 삭제 유예 안내·오류 문구·처리방침·`/preview` live 숨김·사진 삭제 복구 패널, 마스터 문서·SHA256SUMS 재생성. Mac local mock 전체 검수 exit0: `test:db:agent` 177/177/`test:db:field` 200/200/contracts 14/14/`e2e` 10·8·2/`integration:faults` 15/15/`security` 381/381. 남긴 것은 §14.
 
@@ -1442,7 +1483,7 @@ Owner / reviewed_at / blocker / next action:
 - [x] **I06.AUTH-LIFECYCLE.UI** 기존 연결 기록에 실제 key상태 GET/명시closePOST `(추가)`·현재actor/session fence·서버ownpending UUID 복구·unknown동일UUID·정확한cancelled receipt 뒤에만 재확인 새UUID. **2362761**, consumer+API fence9/9·own PG17 route-key현재receipt1/1, review34899 clean .89(이전P2 .94/.91 보완), wholetype10588/lint45330·managed54544. 이전backend 원권한/잠금/worker/키보존 유지. 실운영복원·사용자최종인수는 I06부모에 남김. C03_FINAL_INTERNAL_UI_EXECUTION_PLAN.md.
 - [x] **AUTH.LIVE / PROVIDERS.LIVE (내부 코드)** 실 공급사 없이 닫히는 코드 경로: 인증 메일(SMTP provider+outbox, 미설정 시 blocked_integration)·관리자 2단계 인증 `c22b288`, 카카오 로그인(자동 병합 금지·2FA 브리지)·Toss 웹훅 inbox `b5df6af`, 연결 로그인 2FA·Caddy edge 어댑터 `196befc`, 연결 화면 카카오+2FA 연속성 `13bcd31`. 근거는 위 상단 항목과 `01_SUMMARY.md` §9~§12. 실 공급사 연결·검수는 아래 `[ ]`에 남긴다.
 - [ ] **AUTH.LIVE / PROVIDERS.LIVE (실 공급사)** 사용자가 후속으로 지정한 실메일/카카오/계정연결/번호변경/MFA·실LLM/PG/발송/DNS/TLS/운영저장소 연결·공급사 검수. 계정 연결은 현재 의도적으로 꺼져 있고(`auth.ts` accountLinking 비활성), 번호 변경 흐름은 코드에서 확인되지 않았다.
-- [ ] **R00.QA / R02.ACCEPTANCE** 추가 문서/역할 누락 대조·모든 적용QA evidence·사용자 최종 시안/동선/실기기·키보드/스크린리더/운영게이트. **2026-09-29 내부 mock 검수 완료 범위:** AP DB136/136·Field DB157/157·웹 AP55/55/Field98/98·계약·양제품 build/lint/typecheck, Field E2E7/7·AP8/8·매체2/2, 통합 장애·보안 전체 재실행, 상대 서비스/DB 없이 양방향 독립성 exit0. 보안 첫 실행의 Field DB 연결 종료 1건은 단독/전체 재실행에서 재현되지 않았고 원인 미확정이다. `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`와 인계 상단에 로그를 기록했다. **2026-09-28 이력:** Field 첫 사용자 조사·개선 계획과 PR1~PR4 후 검수는 `docs/technical/FIELD_FIRST_TIME_USABILITY_AND_FUNCTION_QA_2026-09-28.md`에 있다. 실기기·키보드/스크린리더, 실 공급사·운영 복구/출시, 사용자 최종 시안·동선 인수는 별도이므로 부모 전체 완료로 체크하지 않는다.
+- [ ] **R00.QA / R02.ACCEPTANCE** 추가 문서/역할 누락 대조·모든 적용QA evidence·사용자 최종 시안/동선/실기기·키보드/스크린리더/운영게이트. **2026-10-04 최신 내부 mock 검수:** 최종 Linux arm64/Node24.18.0/pnpm10.33.4/PG17.11/Chromium153 격리 DIND: 독립성 양방향 exit0(사업자/고객 Chromium 각1/1), E2E AP12·Field11·매체2, 보안 410/410(AP DB49파일191/191·Field DB42파일215/215, UUID DB 전부 제거), 통합 장애 26/26 exit0. Host lint/typecheck/unit408pass·환경 조건skip2, 계약 static14+DB18/UUID9제거·실제 응답43/43, actionlint exit0. API/web4종 build는 새 격리 mock stack 기동에서 exit0. QA31개 구현 refs·160개 정식인수 not_run 보존. **2026-09-29 이력:** AP DB136/136·Field DB157/157·웹 AP55/55/Field98/98·계약·양제품 build/lint/typecheck, Field E2E7/7·AP8/8·매체2/2, 통합 장애·보안 전체 재실행, 상대 서비스/DB 없이 양방향 독립성 exit0. 보안 첫 실행의 Field DB 연결 종료 1건은 단독/전체 재실행에서 재현되지 않았고 원인 미확정이다. `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`와 인계 상단에 로그를 기록했다. **2026-09-28 이력:** Field 첫 사용자 조사·개선 계획과 PR1~PR4 후 검수는 `docs/technical/FIELD_FIRST_TIME_USABILITY_AND_FUNCTION_QA_2026-09-28.md`에 있다. 실기기·키보드/스크린리더, 실 공급사·운영 복구/출시, 사용자 최종 시안·동선 인수는 별도이므로 부모 전체 완료로 체크하지 않는다.
 
 **재개 기록 규칙:** `[x]`를 다시 열어야 하면 동일 ID 아래 `재개 사유 / 현재 증거 / 추가 범위 / 이전 완료 commit`을 먼저 남긴다. compaction·다른 에이전트·오래된 문서의 “남음”만으로 재개하지 않는다. 무관한 테스트를 반복하지 않는다. 상세 사용범위는 `AGENTS.md`6.1과 audit/현재 handoff를 따른다.
 
@@ -1858,6 +1899,11 @@ Migration / rollback / handover:
 ---
 
 ## AGENTS.md — 독립 AI 플랫폼 + Field, 개발 기준 v3.0
+
+### 모델 규칙 (JR 지정, 2026-10-04)
+
+- 서브에이전트 생성과 `codex exec` / `codex review`의 모델은 `gpt-6.1-sol`, reasoning effort는 `xhigh`로 지정한다.
+- 다른 모델 또는 `high` 이하 effort를 지정하지 않는다. 예: `codex exec -m gpt-6.1-sol -c model_reasoning_effort=xhigh ...`.
 
 이 패키지는 **개발 명세**다. 운영 앱·실제 외부 연동·상용 배포가 이미 존재한다고 가정하지 않는다. 기존 PRD v2.0과 통합 AGENTS/TASKS는 이력 자료이며 이번 제품 경계와 충돌할 때 사용하지 않는다.
 

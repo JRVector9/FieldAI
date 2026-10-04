@@ -162,7 +162,7 @@ AP P2/P3·Field 중간/낮음 항목 전체는 `03_AP_CODE_REVIEW.md`, `04_FIELD
 **결정 필요 / 남은 공백** (현재 열린 항목은 §13)
 - (열림 → §13) 템플릿 초안에서 소개 문구가 hero 본문과 '소개' 섹션에 두 번 나온다(`layoutToSite` 기존 동작). 한 곳으로 줄일지 결정.
 - (해결 — `196befc`, 이미지 868→460MB) API 이미지에 better-auth의 선택 peer로 `next`가 포함된다(약 285MB). lockfile/peer 규칙 변경 필요.
-- (열림 → §13) live에서 공개 OAuth 연결 baseline을 만드는 `oauth-lifecycle-cli`가 mock 전용이라 live 공개 OAuth 연결은 blocked_integration.
+- (해결 — A04, `a5eac8c`) live baseline은 quiesced dry-run/명시 확인/보호 export·격리 live프로필 DB검수 완료. 실제 운영 실행은 C03/C04.
 - (해결 — `b5df6af` allow endpoint, `196befc` Caddy edge 어댑터. 실 Caddy/ACME는 공급사 검수로 남음) 사업자 자체 도메인 TLS(Caddy on-demand `ask`)는 Field API에 `?domain=` 형식 endpoint가 없어 초안만.
 - (해결 — `196befc` 연결 로그인 2FA·outbox 보존, 실 SMTP는 §13 공급사 항목) OAuth 연결 로그인 화면(`agent-connect.tsx`)은 2FA 확인 미처리. email_outbox의 주소 보존·삭제 정책 없음. 실 SMTP 미시험.
 - (열림 → §13) nodemailer 10.0.13(MIT-0, 2026-09-30 배포)은 공급망 검토 권장.
@@ -275,7 +275,7 @@ AP P2/P3·Field 중간/낮음 항목 전체는 `03_AP_CODE_REVIEW.md`, `04_FIELD
 
 실 Caddy/ACME·카카오·토스·S3·SMTP, 독립성 검사, 사용자 최종 화면 테스트는 미실행.
 
-## 13. 현재 열린 결정 — 단일 목록 (2026-10-03, HEAD `13bcd31` 기준)
+## 13. 현재 결정 — 열린13건과 해결1건 (2026-10-04, 코드 `a5eac8c`)
 
 TASKS 상단·HANDOFF가 말하는 "결정 필요 항목"은 이 목록이다. §3·§9·§10·§11에 흩어져 있던 항목 중 코드로 해결된 것은 각 절에 **해결** 표시를 붙였고, 아래에는 사용자·운영 결정 또는 외부 계약이 있어야 닫히는 것만 남긴다. 결정 전에는 현재 동작(괄호)을 유지한다.
 
@@ -289,10 +289,10 @@ TASKS 상단·HANDOFF가 말하는 "결정 필요 항목"은 이 목록이다. �
 | 6 | 운영 체험 정책 값 승인(`*_TRIAL_CONSENT_VERSION`·`*_TRIAL_DAYS`) | 값이 없으면 live 체험 시작이 닫힘 | §9 |
 | 7 | 운영자 법적 정보 입력(`NEXT_PUBLIC_LEGAL_*` 7종) | "운영자 정보 미설정" 표시 | §9 |
 | 8 | 공급사 키·계약(SMTP·카카오·토스·S3·LLM·솔라피/웹 푸시·DNS/Caddy·레지스트리) | 각 기능 `blocked_integration`. S3가 없으면 retention worker의 사진 파일 삭제 단계도 미실행 | §5·§9 |
-| 9 | 계정 삭제 시 사용자가 소유한 OAuth client 처리(삭제 차단 사유로 둘지, 삭제 트랜잭션에서 비활성화·토큰 회수할지) | 차단 사유는 refresh token만 봄. client는 남음 | `17_HOLISTIC_SECURITY.md` |
+| 9 | 계정 삭제 시 사용자가 소유한 OAuth client 처리(삭제 차단 사유로 둘지, 삭제 트랜잭션에서 비활성화·토큰 회수할지) | active owned client는 `oauth_clients_active`로 차단. 복원 시 승인된 과거 삭제의 client/grant를 회수하며 정상 정책 유지 | `17_HOLISTIC_SECURITY.md` |
 | 10 | 카카오 전용 계정의 관리자 2FA(`allowPasswordless` 허용 또는 비밀번호 추가 후 등록 안내) | 카카오 전용 계정은 2FA 등록 불가 → 비mock 관리자가 될 수 없음 | `13_HOLISTIC_AP_API.md`·`14_HOLISTIC_FIELD_API.md` |
 | 11 | 템플릿 초안의 소개 문구 중복(hero 본문과 '소개' 섹션) | 두 곳에 표시 | §9 |
-| 12 | live 공개 OAuth 연결 baseline 절차(`oauth-lifecycle-cli`는 mock 전용) | live 공개 OAuth 연결은 `blocked_integration` | §9 |
+| 12 | **해결** live 공개 OAuth baseline(사용자 A04 요청) | dry-run·제품/DB/정지 확인·보호 export, 격리DB 검수 `a5eac8c`; 실제 live실행 별도 | §9·A04 |
 | 13 | nodemailer 10.0.13 공급망 검토 | 검토 전 | §9 |
 | 14 | 같은 연결에 scope를 더하는 재동의 흐름 | 새 scope는 연결 해제 후 재연결로 안내 | §11 |
 
@@ -332,3 +332,11 @@ TASKS 상단·HANDOFF가 말하는 "결정 필요 항목"은 이 목록이다. �
 ## 15. 남은 작업 전체 목록 — 2026-10-04
 
 코드·결정·외부 검증·문서 유지 작업을 `18_REMAINING_WORK.md`에 ID(A/B/C/D)로 정리했다. 이후 작업은 그 문서 기준으로 시작한다.
+
+## 16. A절 코드·검수 마감 — 2026-10-04
+
+A-01~A-25 내부 완료. 코드 `a5eac8c`, 외부 `a9fea58` 보존 병합 `0507bfc`, 전용 branch `fix/remaining-a-20261004`. 원본 main/서버/공유 원장을 보존했다.
+
+최종 Linux arm64/Node24.18.0/pnpm10.33.4/PG17.11/Chromium153 격리 DIND: 독립성 양방향 exit0(사업자/고객 Chromium 각1/1), E2E AP12·Field11·매체2, 보안 410/410(AP DB49파일191/191·Field DB42파일215/215, UUID DB 전부 제거), 통합 장애 26/26 exit0. Host lint/typecheck/unit408pass·환경 조건skip2, 계약 static14+DB18/UUID9제거·실제 응답43/43, actionlint exit0. API/web4종 build는 새 격리 mock stack 기동에서 exit0.
+
+실 HEIC Linux API Docker2종 build/proof exit0. A18 실제PG red→green과 제한된 최종 재리뷰에 남은 P1/P2 없음. 상세 `19_A_SECTION_IMPLEMENTATION_REVIEW.md`, coverage/phase/handoff. 기존 main a9fea58 GitHub run37196988683 전체 success는 확인했다. B #12(A04)는 해결돼 열린 결정13건. C01 새 CI 실제 Actions·C02공급사·C03live기동·C04운영/PITR/원장checkpoint 동시rollback/RPO/RTO·C05관측·C06실기기/접근성/최종시안·C07약관/HEVC-LGPL/amd64/실폰HEIC·C08외부보안·C09서명전환은 별도 미완료. 정식 인수160 status=not_run을 보존하며 QA31개 test reference만 연결했다.

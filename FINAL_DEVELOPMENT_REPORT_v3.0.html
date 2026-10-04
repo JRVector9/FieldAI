@@ -1,7 +1,7 @@
 <!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>독립 AI 플랫폼 × Field · 최종 개발 계획 v3.0</title><style>
 :root{--ink:#1d1d1f;--muted:#5f6571;--line:#e5e7eb;--blue:#0066cc;--paper:#fff;--bg:#f5f5f7}
 *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:98px}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Noto Sans CJK KR','Noto Sans KR','Segoe UI',sans-serif;font-size:16px;line-height:1.8;-webkit-font-smoothing:antialiased}a{color:var(--blue);text-decoration:none;overflow-wrap:anywhere}a:hover{text-decoration:underline}button,input{font:inherit}button{min-height:44px;background:white;border:1px solid var(--line);border-radius:11px;padding:8px 16px;color:var(--ink);cursor:pointer;font-size:14px}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #88b8ee;outline-offset:3px}.top{position:sticky;top:0;background:#ffffffef;backdrop-filter:blur(14px);z-index:5;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:20px;padding:18px 30px}.word{font-weight:700;font-size:20px;letter-spacing:-.7px}.word span{color:var(--muted);font-weight:400;font-size:14px;margin-left:12px}.actions{display:flex;gap:9px;align-items:center}.actions a{font-size:14px;min-height:44px;padding:8px 14px;border-radius:11px;background:#0066cc;color:white;display:inline-flex;align-items:center}.frame{display:grid;grid-template-columns:255px minmax(0,1fr);gap:35px;max-width:1490px;margin:auto;padding:32px 30px 80px}.nav{position:sticky;top:107px;align-self:start;max-height:calc(100vh - 132px);overflow:auto;padding:0 8px 20px 0}.nav .label{font-size:14px;font-weight:600;letter-spacing:.08em;color:var(--muted);margin-bottom:15px}.nav input{font-size:16px;border:1px solid var(--line);width:100%;border-radius:10px;padding:10px 12px;background:white;margin-bottom:15px}.nav a{display:block;padding:10px 12px;color:#434b58;font-size:14px;border-radius:9px;line-height:1.6;word-break:keep-all}.nav a:hover{background:white;text-decoration:none;color:var(--blue)}.nav .hint{font-size:14px;color:var(--muted);padding:18px 10px}.paper{min-width:0;background:white;border:1px solid var(--line);border-radius:22px;padding:45px 48px;box-shadow:0 8px 35px #151a2105}h1{font-size:40px;line-height:1.2;letter-spacing:-1.8px;margin:0 0 20px;word-break:keep-all}h2{font-size:29px;line-height:1.45;letter-spacing:-.85px;margin:45px 0 20px;word-break:keep-all}h3{font-size:22px;line-height:1.5;letter-spacing:-.5px;margin:32px 0 14px;word-break:keep-all}h4{font-size:18px;line-height:1.5;margin:25px 0 12px}p{margin:16px 0;overflow-wrap:anywhere;word-break:normal}strong{font-weight:650}blockquote{margin:24px 0;padding:19px 23px;border-left:4px solid var(--blue);background:#f1f6fc;border-radius:0 13px 13px 0;color:#284765}blockquote p{margin:0}ul,ol{padding-left:26px}li{padding:4px 0;font-size:16px;overflow-wrap:anywhere}.table-scroll{width:100%;overflow:auto;border:1px solid var(--line);border-radius:13px;margin:20px 0}table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.65;min-width:560px}.table-scroll.compact table{min-width:0;table-layout:fixed}.table-scroll.compact th:first-child{width:28%}thead{background:#f6f7f9}th{text-align:left;font-weight:600;padding:13px 15px;border-bottom:1px solid var(--line);font-size:14px}td{padding:13px 15px;border-bottom:1px solid #eef0f3;vertical-align:top;font-size:14px;overflow-wrap:anywhere}tr:last-child td{border-bottom:0}table p{margin:0;font-size:14px}pre{padding:20px;background:#f6f7f9;border:1px solid var(--line);border-radius:13px;overflow:auto;font-size:14px;line-height:1.8;tab-size:2;max-width:100%}code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px}p code,li code,td code{background:#f1f2f4;padding:2px 4px;border-radius:4px;overflow-wrap:anywhere}hr{border:0;border-top:1px solid var(--line);margin:44px 0}.version{font-size:14px;color:var(--muted);padding-top:25px;text-align:center}.mobile-toggle{display:none}.top .small{font-size:14px}.note{font-size:14px;padding:14px 17px;background:#eef4fb;border-radius:12px;color:#345677;margin:0 0 28px}.hidden{display:none!important}@media(max-width:1050px){.frame{grid-template-columns:210px minmax(0,1fr);gap:20px;padding:23px 20px}.paper{padding:32px 28px}.top{padding:15px 20px}.word span{display:none}}@media(max-width:760px){.top{padding:12px 16px;gap:8px;flex-wrap:wrap}.word{font-size:18px}.actions{gap:5px;flex-wrap:wrap}.actions a,button{padding:7px 10px;font-size:14px}.mobile-toggle{display:inline-flex;align-items:center}.frame{display:block;padding:15px 12px 35px}.nav{position:static;max-height:430px;padding:15px;background:white;border:1px solid var(--line);border-radius:14px;margin-bottom:16px;display:none}.nav.open{display:block}.paper{padding:25px 20px;border-radius:16px}h1{font-size:31px;letter-spacing:-1px}h2{font-size:25px;margin-top:35px}h3{font-size:20px}.table-scroll{margin-left:0;margin-right:0}pre{padding:14px}.note{font-size:14px}.actions .md-link{display:none}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{body{background:white;font-size:11pt}.top,.nav,.note,.version{display:none}.frame{display:block;padding:0;max-width:none}.paper{border:0;padding:0;box-shadow:none}h2{page-break-before:always}h2:first-of-type{page-break-before:auto}h2,h3,h4{break-after:avoid}tr,blockquote{break-inside:avoid}.table-scroll{overflow:visible;border-radius:0}table{min-width:0;font-size:10.5pt}pre{white-space:pre-wrap;overflow-wrap:anywhere;break-inside:auto}a{color:inherit}a[href^="http"]{text-decoration:underline}}
-</style></head><body><header class="top"><div class="word">AI Platform × Field <span>Development plan / v3.0</span></div><div class="actions"><button id="menu" class="mobile-toggle" aria-expanded="false" aria-controls="toc">목차</button><a class="md-link" href="AI_Field_Service_Operator_Final_Development_Plan_v3.0.md">Markdown 원문</a><button id="print">인쇄</button></div></header><div class="frame"><nav class="nav" id="toc" aria-label="개발 계획 목차"><div class="label">DEVELOPMENT PLAN</div><input id="filter" aria-label="목차 검색" placeholder="목차 검색"><a href="#section-4">01. 최종 제품 구조와 변경 기준</a><a href="#section-12">02. Agent Platform 독립 제품 PRD</a><a href="#section-25">03. Field 독립 제품 PRD</a><a href="#section-36">04. 공식 연동 계약 — AP ↔ Field</a><a href="#section-57">05. 구현 구조·운영·제품별 출시</a><a href="#section-69">06. 기존 역할과 UI v3의 개정 지도</a><a href="#section-75">07. 요구사항 추적과 인수 검수 160개</a><a href="#section-79">TASKS — 독립 제품 개발 작업 보드 v3.0</a><a href="#section-88">AGENTS.md — 독립 AI 플랫폼 + Field, 개발 기준 v3.0</a><div class="hint">본문 검색은 브라우저의 찾기를 이용하세요.<br>문서·계약 예제 검수와 실서비스 인수는 별개입니다.</div></nav><main class="paper"><div class="note">최종 기준: 두 독립 제품 + 공식 연동 계약. 기존 UI v3는 화면 참고이며, 이 보고서는 새 앱 시안이 아닙니다.</div><h1 id="section-1">독립 AI 플랫폼 × Field</h1>
+</style></head><body><header class="top"><div class="word">AI Platform × Field <span>Development plan / v3.0</span></div><div class="actions"><button id="menu" class="mobile-toggle" aria-expanded="false" aria-controls="toc">목차</button><a class="md-link" href="AI_Field_Service_Operator_Final_Development_Plan_v3.0.md">Markdown 원문</a><button id="print">인쇄</button></div></header><div class="frame"><nav class="nav" id="toc" aria-label="개발 계획 목차"><div class="label">DEVELOPMENT PLAN</div><input id="filter" aria-label="목차 검색" placeholder="목차 검색"><a href="#section-4">01. 최종 제품 구조와 변경 기준</a><a href="#section-12">02. Agent Platform 독립 제품 PRD</a><a href="#section-25">03. Field 독립 제품 PRD</a><a href="#section-36">04. 공식 연동 계약 — AP ↔ Field</a><a href="#section-57">05. 구현 구조·운영·제품별 출시</a><a href="#section-70">06. 기존 역할과 UI v3의 개정 지도</a><a href="#section-76">07. 요구사항 추적과 인수 검수 160개</a><a href="#section-80">TASKS — 독립 제품 개발 작업 보드 v3.0</a><a href="#section-89">AGENTS.md — 독립 AI 플랫폼 + Field, 개발 기준 v3.0</a><div class="hint">본문 검색은 브라우저의 찾기를 이용하세요.<br>문서·계약 예제 검수와 실서비스 인수는 별개입니다.</div></nav><main class="paper"><div class="note">최종 기준: 두 독립 제품 + 공식 연동 계약. 기존 UI v3는 화면 참고이며, 이 보고서는 새 앱 시안이 아닙니다.</div><h1 id="section-1">독립 AI 플랫폼 × Field</h1>
 <h2 id="section-2">최종 개발 계획 v3.0</h2>
 <p><strong>2026년 9월 24일 · 개발 에이전트 인계용 · 제품별 독립 출시 및 정식 연동 기준</strong></p>
 <blockquote>
@@ -1684,21 +1684,37 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 </tr>
 <tr>
 <td><code>.github/workflows/ci.yml</code></td>
-<td>lint·typecheck·unit, 제품별 DB job(로컬과 같은 <code>compose.mock.yaml</code>), 계약 검사, <code>e2e</code> job(<code>test:e2e:*</code>·<code>test:security</code>·<code>test:integration:faults</code>, Playwright+<code>mock:run</code>), 이미지 빌드(push 없음). <code>test:independence:*</code>는 CI 밖이라 수동 증거가 필요</td>
+<td>lint·typecheck·unit, 제품별 DB job(로컬과 같은 <code>compose.mock.yaml</code>), 모든 공개 연동 성공 응답의 계약 검사, 제품별 독립 runner의 <code>independence</code> matrix, <code>e2e</code> job(<code>test:e2e:*</code>·<code>test:security</code>·<code>test:integration:faults</code>, Playwright+<code>mock:run</code>), 이미지 빌드(push 없음). GitHub 실제 실행과 실 공급사 검수는 별도 증거가 필요</td>
 </tr>
 </tbody>
 </table></div>
 <p>Field 사업자 자체 도메인의 TLS 준비 확인은 <code>FIELD_DOMAIN_EDGE=caddy</code>(선택 <code>FIELD_DOMAIN_EDGE_PROBE_TIMEOUT_MS</code>, 기본 5000ms)일 때만 켜진다. 도메인 작업자는 <code>https://&lt;도메인&gt;/.well-known/field-site-health</code>를 SNI로 요청해 기본 신뢰 저장소로 인증서 체인·이름을 검증하고(자체 서명 거절), Field API가 ask와 같은 조건(tls_pending·connected·TLS 실패 error)에서 돌려준 증명값 <code>proof</code>(= <code>FIELD_AUTH_SECRET</code> 하위 키로 만든 HMAC-SHA256(도메인 + ':' + 조직 ID), 공개 조직 ID만으로는 만들 수 없음)가 도메인 행으로 계산한 값과 같을 때만 connected로 바꾼다. 확인 실패는 tls_pending에서 처음 실패한 시각(<code>checked_at</code>, <code>last_error='domain_tls_unconfirmed'</code>, DB 기록이라 여러 작업자·재시작이 같은 시각을 봄)부터 15분 동안 tls_pending, 그 뒤 error(<code>domain_tls_failed</code>)로 남긴다. verifying 등에서 막 넘어온 첫 확인 실패는 유예에 넣지 않는다. error는 다음 확인이 성공할 때까지 유지하며(tls_pending과 왕복하지 않음) 상태가 실제로 바뀔 때만 <code>field.site.domain.status</code> 사건을 남긴다. 사업자 도메인 설정 화면은 <code>last_error</code>를 한국어 원인 안내로 보여 준다. 연결된 도메인은 마지막 확정 점검 뒤 15분 안의 실패에서 연결을 유지한다. Caddy는 이 경로만 Host를 유지해 Field API로 넘겨야 한다(<code>infra/edge/Caddyfile.example</code>). 값이 없으면 기존처럼 <code>blocked_integration</code>이며, 실제 Caddy·ACME·공인 DNS 환경의 발급·갱신 검수는 아직 수행하지 않았다.</p>
 <p>production 이미지는 <code>NODE_ENV=production</code>이며 <code>AP_PROFILE</code>/<code>FIELD_PROFILE</code>이 <code>live</code>가 아니면 부팅하지 않는다. 각 compose는 상대 제품의 서비스·DB·환경변수를 참조하지 않는다. E2E·보안·독립성·장애 주입 검사, 실제 TLS·레지스트리 push·운영 서버 검수는 이 산출물로 통과 처리하지 않는다.</p>
-<h3 id="section-60">5.2 agent용 런타임 의존 금지선</h3>
+<h4 id="section-60">5.1.2 live OAuth baseline·보호 체크포인트 절차 (A-04)</h4>
+<p>이 절차는 제품별로 실행한다. API·web·OAuth 발급/연결/회수·사건·보존 작업자와 다른 관리 CLI를 정지하고 DB만 유지한다. 로드밸런서에서 신규 요청을 막고 진행 중인 요청/트랜잭션의 종료를 확인한다. 다른 제품의 중지는 필요하지 않다. 대상 DB와 기존 저널·서명키를 별도로 백업한다. 승인된 secret 관리 도구에서 자기 제품의 live 환경을 주입하고, 동일 호스트/컨테이너·DB role·연결 주소로 아래 모든 명령을 실행한다. compose 내부 DB URL을 호스트용 URL로 임의 바꿔 확인값을 재사용하지 않는다.</p>
+<p>live에서는 기존 저널 디렉터리가 필요하며 dry-run이 디렉터리·저널·DB 행을 만들지 않는다. <code>*_REVOCATION_JOURNAL_DIRECTORY</code>에는 native와 lifecycle 저널이 있고 키는 <code>*_REVOCATION_JOURNAL_SECRET</code>이다. 새 운영 환경의 빈 디렉터리도 운영자가 권한을 제한해 먼저 준비해야 한다. 키가 없거나 저널 서명/DB 영수증이 불일치하면 성공으로 간주하지 않는다.</p>
+<p>AP 예시(환경의 <code>AP_DATABASE_URL</code>은 실제 대상 DB를 가리켜야 한다):</p>
+<pre><code class="language-bash">AP_PROFILE=live NODE_ENV=production node --env-file=infra/agent/.env.live apps/agent-api/dist/oauth-lifecycle-cli.js --baseline-quiesced --dry-run
+</code></pre>
+<p>출력은 <code>{product,databaseFingerprint,planDigest,counts}</code>다. <code>product=agent</code>와 예상 행 수를 검토하고 출력의 두 hash를 아래 자리표시에 넣는다. 토큰·암호문·연락처·DB URL은 출력하지 않는다. apply는 advisory/table 잠금과 시간 제한 아래 계획·저널·writer 상태를 다시 확인한다. DB 재기동/대상 변경/행 변경/만료 토큰 변화로 계획이 달라지면 새 dry-run을 수행한다. <code>--confirm-writers-stopped</code>는 운영자의 정지 확인이며 잠금이 없는 유휴 서버가 정지됐음을 DB만으로 증명하지 않는다.</p>
+<pre><code class="language-bash">AP_PROFILE=live NODE_ENV=production node --env-file=infra/agent/.env.live apps/agent-api/dist/oauth-lifecycle-cli.js --baseline-quiesced --confirm-product=agent --confirm-database=&lt;databaseFingerprint&gt; --confirm-writers-stopped --expected-plan=&lt;planDigest&gt;
+</code></pre>
+<p>baseline 성공 후 writer를 계속 정지한 채 <strong>두</strong> 보호 체크포인트를 내보낸다. 각각 새 출력 파일(<code>AP_REVOCATION_CHECKPOINT_OUTPUT</code>, <code>AP_OAUTH_LIFECYCLE_CHECKPOINT_OUTPUT</code>)을 지정한다. 출력 부모 디렉터리는 기존 저널 밖의 접근 제한된 별도 저장소여야 한다. CLI는 기존 파일을 덮어쓰지 않고 <code>0600</code>으로 생성해 파일·부모 디렉터리를 fsync한다.</p>
+<pre><code class="language-bash">AP_PROFILE=live NODE_ENV=production node --env-file=infra/agent/.env.live apps/agent-api/dist/revocation-checkpoint-cli.js --quiesced --confirm-product=agent --confirm-database=&lt;databaseFingerprint&gt; --confirm-writers-stopped
+AP_PROFILE=live NODE_ENV=production node --env-file=infra/agent/.env.live apps/agent-api/dist/oauth-lifecycle-cli.js --checkpoint-quiesced --confirm-product=agent --confirm-database=&lt;databaseFingerprint&gt; --confirm-writers-stopped
+</code></pre>
+<p>Field는 위 명령의 <code>AP_PROFILE</code>을 <code>FIELD_PROFILE</code>, <code>infra/agent</code>를 <code>infra/field</code>, <code>apps/agent-api</code>를 <code>apps/field-api</code>, <code>--confirm-product=agent</code>를 <code>--confirm-product=field</code>로 바꾼다. 출력 변수는 <code>FIELD_REVOCATION_CHECKPOINT_OUTPUT</code>와 <code>FIELD_OAUTH_LIFECYCLE_CHECKPOINT_OUTPUT</code>이다. Field의 별도 dry-run에서 받은 hash만 사용한다.</p>
+<p>두 export·서명·파일 보관을 확인한 뒤 자기 API readiness와 OAuth 제공 상태를 확인하고 writer를 재개한다. 실패/시간 초과/해시 불일치/체크포인트 누락은 정지를 유지하고 원인부터 조사한다. 준비된 signed intent를 임의 삭제해 연속성 검사를 통과시키지 않는다. 이 절차는 baseline과 export만 live에서 허용하며 오프라인 restore CLI는 계속 격리 mock 복원 DB로 제한한다. 격리 DB의 live 프로필 회귀는 운영 DB 실행·PITR 리허설을 대신하지 않는다.</p>
+<h3 id="section-61">5.2 agent용 런타임 의존 금지선</h3>
 <p>AP Core CI는 Field 디렉터리와 환경변수를 제외하고 build/migrate/test할 수 있어야 한다. Field Core CI는 AP domain/db를 제외하고 동일 검사를 수행한다. public client 생성물을 읽는 것은 가능하지만 상대 앱 실행이나 마이그레이션이 필수가 되어서는 안 된다.</p>
 <p>금지 예: <code>agent-domain</code>이 Field 예약 service를 import, AP가 Field users를 JOIN, Field가 AP 조직 존재를 검사해 자기 로그인 허용, AP 설치 SDK가 Field 도메인에서만 발급, AP 위젯이 campaign/publisher 엔터티 없이는 로드되지 않는 것.</p>
 <p>AP 입장에서 Field 커넥터는 one adapter implementation이다. <code>if (provider === 'field')</code> 분기 자체를 모두 금지할 필요는 없지만, core 도메인의 조직·상담·빌링이 그 provider를 필수로 요구하면 안 된다. provider 전용 매핑은 connector 경계 안에 둔다.</p>
-<h3 id="section-61">5.3 독립 계정·보안</h3>
+<h3 id="section-62">5.3 독립 계정·보안</h3>
 <p>두 제품에 이메일·카카오 로그인을 각각 제공한다. 이메일 소유 확인과 카카오 ID 검증, 명시적 계정 연결, 관리자의 추가 인증, 세션 회수·CSRF·출력 이스케이프·허용 리디렉션 검수를 유지한다. AP 계정/Field 계정이 동일인이라도 membership과 이용 동의는 별도다.</p>
 <p>제품별 관리자 권한은 각각 부여한다. 하나의 회사 운영자가 두 콘솔을 사용할 수는 있지만 Field admin 토큰으로 AP 대화 원문을 열지 못한다. 지원 접근은 사유·요청·기간·감사 로그를 요구하며 무제한 impersonate를 제공하지 않는다.</p>
+<p>관리자 MFA가 필요한 프로필에서는 세션 <code>createdAt</code>부터 최대 8시간만 관리자 권한을 인정한다. 슬라이딩 <code>updatedAt</code> 갱신은 이 상한을 늘리지 않고, 미래/누락/잘못된 생성 시각도 <code>mfa_required</code>로 거절한다. 다시 로그인해 추가 인증을 완료해야 한다. mock의 명시적인 MFA 비활성 검수는 운영 MFA 검수와 구분한다.</p>
 <p>모든 비공개 API·파일·큐 작업·캐시·export·LLM 근거에 조직 scope와 원본 제품을 반영한다. DB RLS만으로 보안이 끝났다고 보지 않고 서비스 권한·DB role·우회 권한·테스트를 함께 둔다. 상대 토큰을 고객의 신원 인증이나 대화 접근용 bearer로 재사용하지 않는다.</p>
-<h3 id="section-62">5.4 두 제품의 구독·비용</h3>
+<h3 id="section-63">5.4 두 제품의 구독·비용</h3>
 <div class="table-scroll compact" tabindex="0"><table>
 <thead>
 <tr>
@@ -1743,7 +1759,7 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 </table></div>
 <p>과금은 각 제품의 <code>(subscription_id, billing_period)</code> 유일 원장과 동의 버전으로 처리한다. 공급사 timeout은 같은 거래 조회 후 해결하며 새 주문으로 이중 청구하지 않는다. 환불/해지는 명확히 구분하고 하나의 제품 해지로 상대를 자동 취소하지 않는다.</p>
 <p>PG가 동일 사업자 계약을 사용할 수 있는지, 메시지 발신 주체/채널/템플릿이 두 제품에 적합한지 공급사와 확인한다. 같은 회사이니 승인이 자동 승계된다고 가정하지 않는다. 키와 내부 비용 원장은 계약 형태와 무관하게 제품별이다.</p>
-<h3 id="section-63">5.5 개인정보·약관·보존</h3>
+<h3 id="section-64">5.5 개인정보·약관·보존</h3>
 <p>AP 회원·Field 회원·AP 상담·Field 직접 상담·고객이 Field에 제출한 작업 스냅샷을 구분해 목적·주체·위탁/제공 관계를 실제 계약으로 검수한다. 제품이 분리되었다는 이유만으로 모든 이동이 반드시 제3자 제공이라고 단정하지도, 같은 회사라는 이유로 고지가 필요 없다고 단정하지도 않는다. 외부 LLM·파일·CDN·로그·백업의 처리 위치·재학습·보존·하위 처리자도 검수한다.</p>
 <p>고객에게 전달 목적·대상 사업자·제품·필드·필요 고지와 동의를 명확히 제공한다. 제품 간 공통 고객 번호 DB·고객 프로파일 판매·학습자료 자동 공동 사용은 금지다. AI 고지·광고 표시·소비자 권리·구독 약관은 실제 출시 법령과 계약을 별도 법무 게이트로 확인한다. 이번 문서는 법률 준수 인증이나 법률 의견서가 아니다.</p>
 <div class="table-scroll" tabindex="0"><table>
@@ -1799,11 +1815,13 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 </table></div>
 <p>Field 인증 메일 outbox(<code>field.email_outbox</code>)는 발송 완료(<code>sent</code>) 인증 메일만 7일 뒤 수신 주소를 익명화한다. <code>pending</code> 행은 30일, <code>failed</code>·<code>blocked_integration</code> 행은 90일 동안 운영자 장애·재발송 확인을 위해 수신 주소를 그대로 보관한 뒤 행째 삭제한다(본문에는 주소가 없다).</p>
 <p>법정 거래 기록은 해당 제품의 구독·청구 원장으로 분리 보존한다. 전체 채팅을 무조건 법정 기간 동안 보관하는 방식으로 확대하지 않는다. 상대가 적법하게 수신한 데이터의 삭제 결과는 별도 작업과 증빙으로 관리한다.</p>
-<h3 id="section-64">5.6 운영 목표와 관측</h3>
+<h3 id="section-65">5.6 운영 목표와 관측</h3>
+<p>Toss webhook은 결제 성공 확정이 아닌 조회 힌트다. <code>AP_BILLING_WEBHOOK_IP_LIMIT</code>/<code>FIELD_BILLING_WEBHOOK_IP_LIMIT</code>은 IPv4 또는 IPv6 /64별 15분 수신 한도이며 기본 120, 허용 범위 1~100000 정수다. 운영 피크·재전송을 관측해 각 제품이 독립적으로 상향하고 429 지표를 확인한다. 힌트가 없어도 기존 결제 worker의 공급사 조회 대조는 유지한다. 공급사 발신 IP 허용 목록을 추정해 넣지 않는다.</p>
+<p>HEIC는 양 API 이미지의 Debian <code>libheif-examples</code>(libheif/libde265 decode)와 <code>util-linux</code>의 <code>prlimit</code>로 실제 해독한 뒤 기존 sharp 경로에서 WebP로 재인코딩하고 메타데이터를 제거한다. 디코더는 shell/실행 파일 환경변수 없이 고정 경로를 사용하며 512MiB 주소 공간·CPU 10초·15초 timeout·100MiB 파일·동시 2건으로 제한한다. 복수 이미지/비정상 출력은 거절한다. decoder가 없는 개발 호스트나 변환 실패는 415로 표시한다. Linux arm64 합성 HEVC fixture 실행은 운영 amd64·모든 실폰 HEIC·HEVC 특허/LGPL 법무 검토를 대신하지 않는다(C-07).</p>
 <p>제안 목표: 각 제품 일반 접수 저장 p95 2초(파일/모델 제외), 정상 큐 발송 시도 p95 10초(묶음/공급사 제외), 각 제품 DB RPO15분·객체60분·핵심복구 RTO4시간. 계약상 SLA나 실측 성과가 아니다.</p>
 <p>별도 지표: AP 첫 AI 활성화, 외부 사이트 설치 성공, 상담 인계율, 답변 지연, 모델 비용, Field 사이트 공개 완료, 실제 문의 처리, 예약 확정, connector 전달 지연/unknown/중복 차단, 승인 source 최신성, 중복 알림, 서로 독립인 구독 전환·재결제. 매체는 집계만 보고 예약 확정을 실제 매출·수금으로 표시하지 않는다.</p>
 <p>AP 장애가 Field 직접 접수 오류율로 번지지 않는지, Field 장애가 AP native 질의를 끊는지 별도 synthetic probe로 확인한다. 제품별 이벤트·로그·원가를 보되 correlation_id로 허용된 장애 추적을 가능하게 한다. 상관 ID에 전화번호를 넣지 않는다.</p>
-<h4 id="section-65">5.6.1 API 구조화 로그와 개인정보 가림</h4>
+<h4 id="section-66">5.6.1 API 구조화 로그와 개인정보 가림</h4>
 <p>AP API와 Field API는 각자 <code>apps/agent-api/src/logging.ts</code>, <code>apps/field-api/src/logging.ts</code>로 Fastify(pino) JSON 로그를 표준 출력에 쓴다. 두 제품은 설정 코드를 공유하지 않는다.</p>
 <div class="table-scroll compact" tabindex="0"><table>
 <thead>
@@ -1840,7 +1858,7 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 </tbody>
 </table></div>
 <p>가림은 정규식 기반의 2차 방어다. 코드는 고객 입력·비밀값을 로그에 넘기지 않는 것을 1차 원칙으로 한다. 로그 수집·보관 기간(위 표의 기술 로그 30일)·접근 권한·삭제는 로그를 받는 호스트(컨테이너 런타임 로그 드라이버·수집기)의 책임이며 이 저장소는 보관을 구현하지 않는다. worker 진입점은 고정 문구만 <code>console</code>로 쓰며 이번 설정의 대상이 아니다.</p>
-<h3 id="section-66">5.7 출시 게이트</h3>
+<h3 id="section-67">5.7 출시 게이트</h3>
 <div class="table-scroll" tabindex="0"><table>
 <thead>
 <tr>
@@ -1919,7 +1937,7 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 </table></div>
 <p>G-I1 배포 순서: Field에 등록된 AP OAuth client의 scope에 <code>field.proposals.respond</code>·<code>field.notification_route.read</code>를 먼저 추가한 뒤 AP를 배포한다(미갱신 시 AP는 <code>invalid_scope</code>를 받으면 기본 scope로 한 번 다시 동의하고 연결을 <code>scope_missing</code>으로 표시한다).</p>
 <p>각 독립 릴리스는 자기 게이트와 공통 법무·보안 적용 항목만으로 판단한다. 예를 들어 AP Core가 G-D1을 기다릴 필요는 없지만 Distribution을 완료했다고 주장할 수는 없다. 전체 Suite 완료는 모든 적용 게이트를 요구한다. credential 없음·법무 검수 미완료·테스트 skip은 통과가 아니다.</p>
-<h3 id="section-67">5.8 마이그레이션 — 이미 구현된 경우만</h3>
+<h3 id="section-68">5.8 마이그레이션 — 이미 구현된 경우만</h3>
 <p>현재 자료는 기획/시안이므로 운영 DB가 존재한다고 가정하지 않는다. 신규 개발은 두 DB로 시작한다. 기존 v2.0 서버가 실제 존재한다면 먼저 read-only 인벤토리·백업·보존 근거·원본 건수를 확보한다.</p>
 <ol>
 <li>cross-product schema·mapping·인증·버전 계약을 추가하고 기존 서비스는 즉시 삭제하지 않는다.</li>
@@ -1931,7 +1949,7 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 <li>이전 URL은 원본 권한을 검사하는 안전 전환/안내를 제공한다. 전화번호로 새 세션을 발급하지 않는다.</li>
 <li>법적 보존·대조·복구 검수가 끝난 뒤 중복 필드를 제거하고 이행 종료 증빙을 남긴다.</li>
 </ol>
-<h3 id="section-68">5.9 공식 기술 참고자료</h3>
+<h3 id="section-69">5.9 공식 기술 참고자료</h3>
 <p>확인일 2026-09-24. 아래는 표준/브라우저/벤치마크 확인이며 우리 구현의 승인·보안 인증을 의미하지 않는다. 문서의 구체적인 제품 경계·기간·스키마·알림 소유 규칙은 별도 실행 설계다.</p>
 <div class="table-scroll" tabindex="0"><table>
 <thead>
@@ -1976,9 +1994,9 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 </table></div>
 <p>기존 PRD의 법령·메시지 단가·구체 라이브러리 선택은 최신 가격/계약 승인이 아니다. 공개 출시의 G-L1 및 제품별 공급사 게이트에서 재확인한다.</p>
 <hr />
-<h2 id="section-69">06. 기존 역할과 UI v3의 개정 지도</h2>
+<h2 id="section-70">06. 기존 역할과 UI v3의 개정 지도</h2>
 <p>이번 작업은 개발 계획 개정이다. 기존 <code>field_ui_prototype_v3.html</code>을 새 제품 구조로 재구현했다고 표시하지 않는다. 기존 디자인·사이트 제작·고객·사업자·매체·관리자 기능을 보존하되 소유 제품과 이동 경로를 아래처럼 고친다.</p>
-<h3 id="section-70">6.1 역할·제품별 화면</h3>
+<h3 id="section-71">6.1 역할·제품별 화면</h3>
 <div class="table-scroll" tabindex="0"><table>
 <thead>
 <tr>
@@ -2060,7 +2078,7 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 </tr>
 </tbody>
 </table></div>
-<h3 id="section-71">6.2 Field에 표시할 연결 화면의 필수 상태</h3>
+<h3 id="section-72">6.2 Field에 표시할 연결 화면의 필수 상태</h3>
 <div class="table-scroll" tabindex="0"><table>
 <thead>
 <tr>
@@ -2107,23 +2125,24 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 </tr>
 </tbody>
 </table></div>
-<h3 id="section-72">6.3 승인/정상 상태를 과장하지 않는다</h3>
+<h3 id="section-73">6.3 승인/정상 상태를 과장하지 않는다</h3>
 <p>‘연결됨’은 모든 source가 최신 승인이라는 뜻이 아니다. ‘요청 저장’은 외부 Field 접수 완료가 아니며, 외부 접수도 예약 확정이 아니다. ‘원격 이벤트 수신’은 고객 알림 전달이 아니다. 외부 callback 대기나 stale 상태를 초록 체크 하나로 대체하지 않는다.</p>
 <p>AI가 설치되지 않은 Field 사이트에는 동작하지 않는 ‘AI에게 문의’ 버튼을 노출하지 않는다. 실제 앱에서 시안 상단 역할 탭은 제거하고 로그인·권한별 제품 라우팅을 적용한다. 검토용 UI가 필요하면 별도 데모 배너와 합성 데이터 환경에 한정한다.</p>
-<h3 id="section-73">6.4 디자인 계약 유지</h3>
+<h3 id="section-74">6.4 디자인 계약 유지</h3>
 <p>Apple 계열의 단순한 화이트·밝은 그레이, 시스템 폰트, 여백, 블루 주요 행동, 최소 경계를 유지한다. 모든 표시 텍스트 최소14px, 본문/입력16px, 조작 영역44px급을 지향한다. 외부 위젯도 14px 미만으로 축소하지 않는다. macOS/iOS 기본 폰트를 참조하되 폰트 파일을 배포하지 않는다.</p>
 <p>320/390/768/1440px·200% 확대·키보드·스크린리더·동작 감소를 검수한다. Field 모바일 오늘/문의/예약/내 사이트/더보기는 유지한다. AP 모바일은 AI/문의/설치/더보기 중심으로 별도 구성하고, 매체도 운영/위치/요청/성과/설정을 유지한다. 화면마다 빈 상태·저장·오류·미연결·권한 거부·한도·동기화 지연을 구현한다.</p>
-<h3 id="section-74">6.5 실제 사용자 인수 시나리오</h3>
+<h3 id="section-75">6.5 실제 사용자 인수 시나리오</h3>
 <p><strong>외부 사업자:</strong> AP 가입 → 직접 정보 등록 → AI 승인 → Field와 무관한 기존 사이트 설치 → 고객 질문 → AP 문의함에서 답변 → AP 구독.</p>
 <p><strong>Field만 쓰는 사업자:</strong> Field 가입 → 자기 사이트 제작 → 공개 → 직접 문의와 두 예약 방식 → 자체 알림 → Field 구독. AP가 없다는 이유로 메뉴를 막지 않음.</p>
 <p><strong>두 제품을 쓰는 사업자:</strong> 각 제품의 조직·요금 확인 → 공식 연결 승인 → Field 공개 정보 동기화 검토 → 같은 AP SDK 설치 → 고객 상담 → Field 업무 요청 → Field 관리실에서 API 답변·예약 승인 → 고객은 원래 대화에서 결과 확인.</p>
 <p><strong>매체:</strong> AP 매체 조직 → 도메인/위치 확인 → 사업자 공개 카드의 정확한 버전 승인 → 별도 origin에서 표시 → AP 안전 접수 → 집계만 조회. Field가 없어도 일반 상담 광고 실험 완료.</p>
 <p><strong>운영자:</strong> 제품별 콘솔 → 자기 권한 범위의 장애/신고 확인 → 사유·기간·증빙으로 조치 → 연동 문제는 correlation_id와 최소 메타데이터로 협업. 관리자 세션을 다른 제품에 그대로 제출하지 않음.</p>
 <hr />
-<h2 id="section-75">07. 요구사항 추적과 인수 검수 160개</h2>
+<h2 id="section-76">07. 요구사항 추적과 인수 검수 160개</h2>
 <p><strong>기존 QA01~QA120의 ID를 보존하고 제품 경계에 맞게 기대값을 개정했으며, 독립성·연동 QA121~QA160을 추가했다. 아래는 실행해야 할 인수 명세이고 이번 문서 작성 중 실서비스 테스트가 통과했다는 뜻이 아니다.</strong></p>
 <p>제품별/공통으로 표시한 행은 해당 제품에서 각각 검수한다. AP 승인으로 Field 검수를 대신하지 않는다. Core 릴리스에 없는 매체/연동 QA는 적용 외로 구분하고, 전체 Suite에서는 해당 항목도 실행한다. provider credential 부재는 적용 외가 아니라 blocked_integration이다.</p>
-<h3 id="section-76">기존 테스트의 중요한 개정</h3>
+<p>2026-10-04 A절의 QA ID↔실행 파일 매핑은 <code>docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md</code>의 최신 섹션과 <code>contracts/acceptance_catalog.json</code>의 <code>implementation_test_refs</code>에 기록한다. 이는 해당 인수 시나리오의 내부 회귀 검사 연결이며, 160개 최종 서비스 인수의 <code>not_run</code> 상태를 바꾸지 않는다. 실제 명령·환경·실패·남은 공급사/운영 검수는 해당 증거를 함께 확인한다.</p>
+<h3 id="section-77">기존 테스트의 중요한 개정</h3>
 <p>공유 DB 원자성→제품내 원자성+동기화 상태, AI-only 동일 조직→별도 제품 조직+동의 mapping, 통합 과금→독립 원장, 동일 브라우저 시안→실제 독립 서버/기기 검수로 바꿨다. 전체 기존 21개 요구의 삭제는 없다.</p>
 <div class="table-scroll" tabindex="0"><table>
 <thead>
@@ -3097,7 +3116,7 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 </tr>
 </tbody>
 </table></div>
-<h3 id="section-77">확정 요구와 검수의 연결</h3>
+<h3 id="section-78">확정 요구와 검수의 연결</h3>
 <div class="table-scroll compact" tabindex="0"><table>
 <thead>
 <tr>
@@ -3144,7 +3163,7 @@ ops/                     # 제품별 runbook·게이트·실행 증빙
 </tr>
 </tbody>
 </table></div>
-<h3 id="section-78">실제 테스트 결과 기록 형식</h3>
+<h3 id="section-79">실제 테스트 결과 기록 형식</h3>
 <pre><code class="language-text">QA ID / Product / Release / Commit:
 Environment / Browser / Device / Provider mode:
 Fixture (synthetic only):
@@ -3156,9 +3175,11 @@ Owner / reviewed_at / blocker / next action:
 </code></pre>
 <p>현재 이 패키지의 160개 서비스 인수 항목은 <strong>not_run</strong>이다. 문서·JSON 예제·작업 DAG·HTML 보고서 표시 검사는 별도의 <code>quality_checks/DOCUMENT_QA.md</code>에만 기록한다.</p>
 <hr />
-<h2 id="section-79">TASKS — 독립 제품 개발 작업 보드 v3.0</h2>
-<h3 id="section-80">완료 체크 — 재작업 방지 기준 (2026-09-27)</h3>
-<p><strong>[ ] 남은 작업 전체 목록(2026-10-04):</strong> 코드 25건(A-01~A-25)·결정 대기 14건(B, <code>01_SUMMARY.md</code> §13)·외부 검증 9건(C)·문서 유지 4건(D)을 <code>docs/technical/review_2026-10-02/18_REMAINING_WORK.md</code>에 정리했다. 새 작업은 이 문서의 ID로 시작하고 완료 시 이 문서와 본 원장을 같은 커밋에서 갱신한다. 권장 순서: A-01 독립성 재실행 → A-07~A-10 경계 마감 → A-06·A-02·A-03 화면 공백 → A-04·A-05 live 절차 → A-20·A-21 검수 확대.</p>
+<h2 id="section-80">TASKS — 독립 제품 개발 작업 보드 v3.0</h2>
+<h3 id="section-81">완료 체크 — 재작업 방지 기준 (2026-09-27)</h3>
+<p><strong>[x] A절 일괄 마감(2026-10-04, 내부 완료):</strong> A-01~A-25 권장 순서 병렬 구현과 gpt-6.1-sol/xhigh 코드리뷰·수리 완료. 코드 <code>a5eac8c</code>, 외부 <code>a9fea58</code> 보존 병합 <code>0507bfc</code>, 전용 branch <code>fix/remaining-a-20261004</code>. 원본 main/서버/컨테이너/공유 원장 보존. 최종 Linux arm64/Node24.18.0/pnpm10.33.4/PG17.11/Chromium153 격리 DIND: 독립성 양방향 exit0(사업자/고객 Chromium 각1/1), E2E AP12·Field11·매체2, 보안 410/410(AP DB49파일191/191·Field DB42파일215/215, UUID DB 전부 제거), 통합 장애 26/26 exit0. Host lint/typecheck/unit408pass·환경 조건skip2, 계약 static14+DB18/UUID9제거·실제 응답43/43, actionlint exit0. API/web4종 build는 새 격리 mock stack 기동에서 exit0. 실제 HEIC API Docker2종 build/decode proof exit0. 상세 경로·QA·red→green·복구는 phase/19리뷰/coverage/인계. 기존 main a9fea58 GitHub run37196988683 전체 success는 확인했다. B #12(A04)는 해결돼 열린 결정13건. C01 새 CI 실제 Actions·C02공급사·C03live기동·C04운영/PITR/원장checkpoint 동시rollback/RPO/RTO·C05관측·C06실기기/접근성/최종시안·C07약관/HEVC-LGPL/amd64/실폰HEIC·C08외부보안·C09서명전환은 별도 미완료. 정식 인수160 status=not_run을 보존하며 QA31개 test reference만 연결했다.</p>
+<p><strong>[x] C-01 GitHub Actions 첫 실행 통과(2026-10-04, 커밋 c36a407·653de60·c135fbb·a9fea58):</strong> 원격 push 후 CI 5회 실행으로 전 job success(<code>37196988683</code>). 수정: <code>setup-mock-env.mjs</code>에 <code>AP_PUBLIC_WEB_ORIGIN</code>·Field 회수 저널 디렉터리 생성, lifecycle CLI의 <code>realpath</code> 전 mkdir, same-page 브라우저 spike 선택자 2곳(고정 디자인에 맞춤, UI 변경 없음), Field facts stub 정규식 <code>/010-/</code>의 UUID 오탐 제거+stub 단언 기록(<code>assert.ifError</code>), lifecycle 테스트 연결 수 확인을 2초 대기로. 제품 코드 결함은 없었다. 세부는 <code>18_REMAINING_WORK.md</code> C-01.</p>
+<p><strong>[ ] 남은 작업 전체 목록(2026-10-04):</strong> A절 내부 코드25건 완료(A-01~A-25)·결정 대기13건(B, <code>01_SUMMARY.md</code> §13)·외부 검증 9건(C)·문서 유지 4건(D)을 <code>docs/technical/review_2026-10-02/18_REMAINING_WORK.md</code>에 정리했다. 새 작업은 이 문서의 ID로 시작하고 완료 시 이 문서와 본 원장을 같은 커밋에서 갱신한다. A절 착수 순서(이력): A-01 독립성 재실행 → A-07~A-10 경계 마감 → A-06·A-02·A-03 화면 공백 → A-04·A-05 live 절차 → A-20·A-21 검수 확대.</p>
 <p><strong>[x] 종합 리뷰(놓친 것 점검)·반영(2026-10-03, commit은 이 항목 아래 실제 해시 참조):</strong> 84af59a 이후 전체 변경을 5관점(AP API·Field API·웹·인프라/문서/CI·보안)으로 재검토하고 반영했다(<code>docs/technical/review_2026-10-02/13</code>~<code>17</code>, <code>01_SUMMARY.md</code> §14). 핵심: 삭제 유예 중 결제·체험·연결 시작 차단(양 제품 409 <code>deletion_scheduled</code>), retention worker S3 없이 기동+compose 상시 실행, 해제 연결의 미해결 요청 종결(AP 000094 <code>unresolved</code>), 삭제 시 통합 grant 회수·매체/OAuth client 차단 사유, Field 삭제 실행기 S3 I/O 제거, CI compose 기반 DB+e2e job, 5xx 원문 숨김·NUL 거부·인증 링크 자동 로그인 해제·미인증 계정 정리·DB rateLimit·메일 중복 억제·요청 timeout·IPv6 /64, 웹 삭제 유예 안내·오류 문구·처리방침·<code>/preview</code> live 숨김·사진 삭제 복구 패널, 마스터 문서·SHA256SUMS 재생성. Mac local mock 전체 검수 exit0: <code>test:db:agent</code> 177/177/<code>test:db:field</code> 200/200/contracts 14/14/<code>e2e</code> 10·8·2/<code>integration:faults</code> 15/15/<code>security</code> 381/381. 남긴 것은 §14.</p>
 <p><strong>[x] 남은 코드 작업 4건(5단계, 2026-10-03, 실 공급사 별도):</strong> 코드 commit <code>13bcd31</code>. 연결 화면 카카오 로그인+2FA 경로 보존(서명 <code>oauth_query</code> 유지, 같은 origin <code>/connect/sign-in</code>만 복귀 허용), 사이트 사진 2단계 삭제(Field 000083, <code>deleting</code>→워커 저장소 삭제, 202), Field→AP push 경로 알림 경로 확인(잠금 밖 조회·배치 캐시·24시간 한도 미루기, AP 000093), 서명 사건 채널 v2 방향 접두사(계약 AP preview.11/Field preview.10, 수신 <code>*_EVENT_SIGNATURE_ACCEPT_V1</code>·발신 <code>*_EVENT_SIGNATURE_SEND_VERSION</code>, 해제 채널 포함). 제품별 리뷰(<code>docs/technical/review_2026-10-02/11</code>, <code>12</code>) Medium 전부와 Low 반영(<code>01_SUMMARY.md</code> §12). Mac local mock 전체 검수 exit0: lint/typecheck/unit/build 4종/<code>test:db:agent</code> 171/171/<code>test:db:field</code> 194/194/contracts/<code>e2e</code> 9·7·2/<code>integration:faults</code> 12/12/<code>security</code> 368/368(<code>01_SUMMARY.md</code> §12). 4단계 &quot;남긴 것&quot; 중 코드 항목은 모두 처리됐고, 결정 필요 항목(현재 목록은 <code>01_SUMMARY.md</code> §13)과 실 공급사·운영 검증만 남는다.</p>
 <p><strong>[x] 남은 작업 일괄 구현(4단계, 2026-10-03, 실 공급사 별도):</strong> 코드 commit <code>196befc</code>. 조직 삭제 예약 재인증·여러 조직 선택·운영자 복구(<code>/v1/admin/organization-deletions</code>), 직접 응대 행위자 기록(AP 000088), 연결 로그인 2FA, AP의 Field 공개 API 소비(제안 읽기·고객 결정·알림 경로·서명 웹훅 발신, AP 000090), 사이트 사진 삭제, Caddy edge 어댑터(<code>FIELD_DOMAIN_EDGE=caddy</code>, HMAC health 증명), 인증 메일 outbox 보존(양 제품), lifecycle 저널 요청당 전체 스캔 제거(식 인덱스 AP 000091/Field 000081, 캐시 식별값·60초 상한·TRUNCATE 가드 AP 000092/Field 000082), API 이미지 next 제외(868→460MB), owner 발송 기록 암호문 정리(AP 000089). 제품별 리뷰(<code>docs/technical/review_2026-10-02/09</code>, <code>10</code>)의 높음·중간 전부와 낮음 대부분 반영(<code>01_SUMMARY.md</code> §11). Mac local mock 전체 검수 exit0: lint/typecheck/unit/build 4종/<code>test:db:agent</code> 169/169/<code>test:db:field</code> 192/192/contracts/<code>e2e</code> 9·7·2/<code>integration:faults</code> 10/10/<code>security</code> 364/364, API 이미지 2종 빌드(<code>01_SUMMARY.md</code> §11). 남긴 것(이력): 연결 화면 카카오 버튼(서버 2FA 이동 주소가 OAuth 쿼리를 잃음), 사진 삭제 중 sites 잠금 유지, push 경로의 알림 경로 미확인, 서명 방향 접두사(계약 변경 필요) — 코드 항목은 <code>13bcd31</code>에서 해결. 실 Caddy/ACME·실 공급사 검증만 남는다.</p>
@@ -3199,7 +3220,7 @@ Owner / reviewed_at / blocker / next action:
 <p><strong>같은 UI 세부 ID의 추가 계약 보완(2026-09-27):</strong> 관리자의 승인 조건 textarea/API는 여러 문단을 허용하지만 양웹 parseBillingPlan은 termsText/refundText의 LF/CR/tab까지거부한다. custom_domain의새consumer에서실제10/12 red와현재백엔드조건검증으로확인했다. 추가범위는이두정책문구의일반줄바꿈허용뿐이며name/version/id/권한/secret검사는유지한다. root가양기존helper에정확한최소patch를적용하고같은consumer로검수한다. 기존5ceec42[x]는보존한다.</p>
 <p><strong>C02.LOCAL 추가 오류 재개(2026-09-27, 기존[x] 유지):</strong> delivery Field fixture가 peer 제품의 migration 인자를 넘겼고 <code>tools/run-migrations.mjs</code>의 무조건 own .env fallback으로 AP mock에73~75가 적용됐다. 실제 own pgmigrations/catalog 조회와 Public Agent 호출부 read-only 조사로 확인했다. 변경 전 추가 범위는 <code>.env</code> 읽기 전에 own URL 부재+peer URL 명시를 거부하는 최소 guard와 새 <code>tools/test/migration-selection.test.mjs</code>다. 양URL 부재인 정상 managed는 기존 fallback 유지, own UUID 명시도 유지. 양URL 모두 명시된 잘못된 product는 이 guard만으로 구별하지 못한다. 검수는 실제 runner를 child에서 import하고 loadEnvFile canary로 DB에 접근하지 않은 채 잘못된제품이 먼저 거부되는지 확인한다. 기존 환경/DB/서버를 재구현하거나 완료 체크를 되돌리지 않는다.</p>
 <p><strong>F09.TRIAL / F09.AI-ENTITLEMENT 화면 스타일 추가 재개(2026-09-28):</strong> 같은 사용자 요청의 다른 페이지 조사에서 <code>/workspace/usage</code>와 <code>/workspace/subscription</code>의 새로고침·체험·내보내기 버튼이 Chrome에서 시스템 기본 스타일로 보였다. 카드와 유료 billing-settings의 기존 디자인은 정상이다. 추가 범위는 해당 두 화면의 누락된 버튼·카드 간격·동의 checkbox 정렬에만 한정하고 기존[x]/a974b90/5ceec42 및 체험·결제 API를 보존한다. 위 F02 실행 계획에서 함께 검수한다.</p>
-<h4 id="section-81">완료된 내부 세부 작업 — 같은 범위를 다시 구현하지 않는다</h4>
+<h4 id="section-82">완료된 내부 세부 작업 — 같은 범위를 다시 구현하지 않는다</h4>
 <p><strong>F07.BOOKING 스타일 누락 재개(2026-09-28, 기존[x] 유지):</strong> 실제 사업자 예약·일정 화면에서 상단 일정 카드는 정상이나 하단 <code>booking-columns</code>의 수동 일정 추가 버튼이 native 회색으로 표시되고 하단 두 영역에 카드 구성이 없다. <code>site.css</code>의 해당 영역은 grid/li/margin만 정의되어 있다. 추가 범위는 기존 하단 예약·수동 일정 카드와 폼/버튼의 scoped CSS뿐이다. Field booking API·일정 입력·확정/차단/해제 handler·기존 native 완료를 변경하지 않는다. F02 실행 계획의 다른 화면 조사 근거로 연결한다.</p>
 <p><strong>F01.CATALOG 스타일 누락 재개(2026-09-28, 기존[x] 유지):</strong> 서비스 카드/사업 정보 입력 폼은 정상이나 실제 펼친 공개 관리의 <code>현재 초안 승인</code> 버튼은 native 기본 스타일이다. 추가 범위는 <code>.field-owner-catalog-editor button</code>의 기본/disabled 및 관련 공개 관리 링크·설명 간격만이다. 기존 폼 submit의 blue 스타일과 서비스 카드 디자인·승인/자동저장/충돌 handler는 보존한다.</p>
 <p><strong>2026-09-28 위 스타일 보완 구현 완료 — f1f4f0a:</strong> F02.EDITOR/F04.BASIC-PUBLISH의 wizard/실제 상호3개 template card·F09.TRIAL/F09.AI-ENTITLEMENT의 usage/subscription 버튼·F07.BOOKING 하단 카드/폼·F01.CATALOG 승인 버튼 scoped CSS를 반영했다. API/state handler prefix 실제 비교 동일, 계약/schema 변경 없음. Field 웹 단위76/76(새3개 포함)·typecheck·lint·최종web build exit0. Chrome에서 wizard5단계·usage/subscription·관리실 today/inbox/services/notifications/more/domain을 실제 확인했고 design320/390/768/1440px 확인. 마지막 booking/catalog 추가 CSS는 build/실제 제공 CSS 확인까지 완료했으나 Chrome cgWindowNotFound·browser unavailable로 최종 시각 재확인은 미실행이다. 실계정 입력/승인/공개/예약/체험/내보내기 제출은 하지 않았다. 기존52[x]/7pending·최종 사용자 인수/전체 QA는 유지하며 상세 evidence는 phase/coverage/인계에 기록한다.</p>
@@ -3352,7 +3373,7 @@ Owner / reviewed_at / blocker / next action:
 <p>[x] <strong>C03.AP-HOME-LINKS</strong> 기존 본문 안내에 실제 /workspace/deployments·/workspace/subscription 진입 <code>(추가)</code>만 연결. <strong>a974b90</strong>, agent-home.tsx, CSS/header/reference 변경없음. static42088 clean .94·wholetype·최신build·실제SSR anchor 확인. 사용자 클릭/최종 화면은 미검수.</p>
 </li>
 </ul>
-<h4 id="section-82">남은 작업 — 여기서 다음 세부 ID를 선택한다</h4>
+<h4 id="section-83">남은 작업 — 여기서 다음 세부 ID를 선택한다</h4>
 <p><strong>현재 checkpoint / 다음:</strong> source <strong>2362761</strong>, 기존49[x]를 보존하고 마지막 내부3개를 체크해 **52[x]/7[ ]**다. 허용폰트·source 상태/실제 수신 시각·연결 키 상태/명시 종료 UI를 완료했다. managed54544 최신 양API/web build/ready, AP81/Field73 유지·새schema없음. 현재 확정 내부 누락은 없으며 다음은 사용자의 최종 기능/화면 테스트 지원과 실공급사 연결·출시 검수다. 완료52개를 기억 부재/아래 이력으로 다시 작업하지 않는다. 원본 디자인 고정, 새기능만 <code>(추가)</code>. 다음schema가 실제 필요하면 AP82/Field74부터 Coordinator 승인 후 예약한다.</p>
 <p><strong>착수/병렬 소유 이력 (2026-09-27, HEAD9a7fe33/clean, 아래4범위 현재5ceec42로 완료):</strong> 기존40[x]는 유지한다. root는 <strong>A07.F09.BILLING-UI-CALLBACK</strong>의 양제품 web/src/*-subscription.tsx·새 billing UI/client/callback 및 app/billing/return·필요한 admin 화면 부분만 소유한다. 추가 <strong>AI-ENTITLEMENT</strong>는 각 새 helper/native 검사와 agents/site-generation/usage 연결이며 기존 billing/refund 모듈을 직접 수정하지 않는다. Refund Agent(custom_domain)는 양API 신규 refund routes/worker/domain/Toss port와 charge 확정오류 소비·<strong>AP79/Field70</strong>만 소유한다(기존 적용78/69 수정 금지). Public Agent는 새 Field durable public-write BFF/intent·<strong>Field72</strong> 및 Field 사이트의 새 설치 component만 소유하고 root workspace/site shell 변경은 요청한다. Delivery Agent는 새 고객 채널동의 component·receipt 관련 삽입·서비스워커와 own push 설정 연결만 소유한다. root entitlement schema 필요 시 <strong>AP80/Field71</strong> 예약. Delivery 추가 schema 필요 시 먼저 Coordinator에 요청한다. 공통 app/server/BusinessRuntime/package/lockfile/mock-run·체크원장/인계/master/runtime/git는 root만 통합한다. 각 agent는 수정 전 계획/요구/QA/명령을 기록하고 계약/등록 patch를 제출한다. 완료 backend/고정 디자인을 재구현하지 않는다. 실제 공급사 발송/청구/운영 삭제는 수행하지 않는다.</p>
 <p><strong>병렬 소유/착수 이력(2026-09-27, 현재3agent 완료)/Coordinator=root:</strong> 구독 RENEW-CANCEL-ACCESS는 root가 기존 billing/subscription/trial-access·AP73/Field67을 소유한다. Delivery Agent는 A06.F08.DELIVERY의 신규 provider/발송 worker/별도 실행·콜백 모듈과 AP74/Field68만, Domain Agent는 F04.CUSTOM-DOMAIN의 신규 domain 모듈·Field69와 Field sites의 domain 연결부만, Public API Agent는 A09.PUBLIC-WRITE 계약/consumer·별도 public write 모듈과 필요 시 AP75/Field70만 소유한다. 각 Agent가 먼저 세부 파일/관련 요구/QA/명령을 기록한다. 공통 app.ts/server.ts/package.json/tools/mock-run.mjs·완료 원장·인계·runtime 재기동·git add/commit은 root만 변경한다. 다른 소유 파일 변경이 필요하면 Coordinator에 요청하고 먼저 덮어쓰지 않는다. 각 Agent는 자신의 scope 결과/실제검수/미검수/등록 patch를 제출하며 전체 출시 완료로 체크하지 않는다.</p>
@@ -3370,7 +3391,7 @@ Owner / reviewed_at / blocker / next action:
 <li>[x] <strong>I06.AUTH-LIFECYCLE.UI</strong> 기존 연결 기록에 실제 key상태 GET/명시closePOST <code>(추가)</code>·현재actor/session fence·서버ownpending UUID 복구·unknown동일UUID·정확한cancelled receipt 뒤에만 재확인 새UUID. <strong>2362761</strong>, consumer+API fence9/9·own PG17 route-key현재receipt1/1, review34899 clean .89(이전P2 .94/.91 보완), wholetype10588/lint45330·managed54544. 이전backend 원권한/잠금/worker/키보존 유지. 실운영복원·사용자최종인수는 I06부모에 남김. C03_FINAL_INTERNAL_UI_EXECUTION_PLAN.md.</li>
 <li>[x] <strong>AUTH.LIVE / PROVIDERS.LIVE (내부 코드)</strong> 실 공급사 없이 닫히는 코드 경로: 인증 메일(SMTP provider+outbox, 미설정 시 blocked_integration)·관리자 2단계 인증 <code>c22b288</code>, 카카오 로그인(자동 병합 금지·2FA 브리지)·Toss 웹훅 inbox <code>b5df6af</code>, 연결 로그인 2FA·Caddy edge 어댑터 <code>196befc</code>, 연결 화면 카카오+2FA 연속성 <code>13bcd31</code>. 근거는 위 상단 항목과 <code>01_SUMMARY.md</code> §9~§12. 실 공급사 연결·검수는 아래 <code>[ ]</code>에 남긴다.</li>
 <li>[ ] <strong>AUTH.LIVE / PROVIDERS.LIVE (실 공급사)</strong> 사용자가 후속으로 지정한 실메일/카카오/계정연결/번호변경/MFA·실LLM/PG/발송/DNS/TLS/운영저장소 연결·공급사 검수. 계정 연결은 현재 의도적으로 꺼져 있고(<code>auth.ts</code> accountLinking 비활성), 번호 변경 흐름은 코드에서 확인되지 않았다.</li>
-<li>[ ] <strong>R00.QA / R02.ACCEPTANCE</strong> 추가 문서/역할 누락 대조·모든 적용QA evidence·사용자 최종 시안/동선/실기기·키보드/스크린리더/운영게이트. <strong>2026-09-29 내부 mock 검수 완료 범위:</strong> AP DB136/136·Field DB157/157·웹 AP55/55/Field98/98·계약·양제품 build/lint/typecheck, Field E2E7/7·AP8/8·매체2/2, 통합 장애·보안 전체 재실행, 상대 서비스/DB 없이 양방향 독립성 exit0. 보안 첫 실행의 Field DB 연결 종료 1건은 단독/전체 재실행에서 재현되지 않았고 원인 미확정이다. <code>docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md</code>와 인계 상단에 로그를 기록했다. <strong>2026-09-28 이력:</strong> Field 첫 사용자 조사·개선 계획과 PR1~PR4 후 검수는 <code>docs/technical/FIELD_FIRST_TIME_USABILITY_AND_FUNCTION_QA_2026-09-28.md</code>에 있다. 실기기·키보드/스크린리더, 실 공급사·운영 복구/출시, 사용자 최종 시안·동선 인수는 별도이므로 부모 전체 완료로 체크하지 않는다.</li>
+<li>[ ] <strong>R00.QA / R02.ACCEPTANCE</strong> 추가 문서/역할 누락 대조·모든 적용QA evidence·사용자 최종 시안/동선/실기기·키보드/스크린리더/운영게이트. <strong>2026-10-04 최신 내부 mock 검수:</strong> 최종 Linux arm64/Node24.18.0/pnpm10.33.4/PG17.11/Chromium153 격리 DIND: 독립성 양방향 exit0(사업자/고객 Chromium 각1/1), E2E AP12·Field11·매체2, 보안 410/410(AP DB49파일191/191·Field DB42파일215/215, UUID DB 전부 제거), 통합 장애 26/26 exit0. Host lint/typecheck/unit408pass·환경 조건skip2, 계약 static14+DB18/UUID9제거·실제 응답43/43, actionlint exit0. API/web4종 build는 새 격리 mock stack 기동에서 exit0. QA31개 구현 refs·160개 정식인수 not_run 보존. <strong>2026-09-29 이력:</strong> AP DB136/136·Field DB157/157·웹 AP55/55/Field98/98·계약·양제품 build/lint/typecheck, Field E2E7/7·AP8/8·매체2/2, 통합 장애·보안 전체 재실행, 상대 서비스/DB 없이 양방향 독립성 exit0. 보안 첫 실행의 Field DB 연결 종료 1건은 단독/전체 재실행에서 재현되지 않았고 원인 미확정이다. <code>docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md</code>와 인계 상단에 로그를 기록했다. <strong>2026-09-28 이력:</strong> Field 첫 사용자 조사·개선 계획과 PR1~PR4 후 검수는 <code>docs/technical/FIELD_FIRST_TIME_USABILITY_AND_FUNCTION_QA_2026-09-28.md</code>에 있다. 실기기·키보드/스크린리더, 실 공급사·운영 복구/출시, 사용자 최종 시안·동선 인수는 별도이므로 부모 전체 완료로 체크하지 않는다.</li>
 </ul>
 <p><strong>재개 기록 규칙:</strong> <code>[x]</code>를 다시 열어야 하면 동일 ID 아래 <code>재개 사유 / 현재 증거 / 추가 범위 / 이전 완료 commit</code>을 먼저 남긴다. compaction·다른 에이전트·오래된 문서의 “남음”만으로 재개하지 않는다. 무관한 테스트를 반복하지 않는다. 상세 사용범위는 <code>AGENTS.md</code>6.1과 audit/현재 handoff를 따른다.</p>
 <hr />
@@ -3886,7 +3907,7 @@ Owner / reviewed_at / blocker / next action:
 </tr>
 </tbody>
 </table></div>
-<h3 id="section-83">실행 현황 — 2026-09-25</h3>
+<h3 id="section-84">실행 현황 — 2026-09-25</h3>
 <p>C03/I04/QA136·143 복구: 고객이 Field <code>/me</code> 503을 한 번 받았다는 이유로 AP 연결이 영구 <code>degraded</code>가 되던 문제를 고쳤다. 격리 AP DB에서 실패 표시·기존 <code>review_required</code> 보존→재조회 <code>available</code> 복구를 red/green으로 확인했다. 새 양제품 mock HTTP/320px 연결 1/1, 최종 <code>pnpm test:security</code> 전체와 lint/typecheck exit 0. 실 운영 장기 장애·정식 QA/G-I2는 남아 C03/I04 <code>in_progress</code>다.</p>
 <p>C03/I04/QA143 AP DB/API 추가 근거: 같은 AP 조직·배포의 실제 연결 원장 세 건(정상·facts 503·scope 재동의)을 격리 AP DB에서 고객 <code>/field-services</code>로 조회했다. 정상 연결의 25,000원 확인→동의/전달은 계속되고, 나머지는 각각 오류 상태/빈 서비스로 표시된다. 잘못된 고객 확인키 401, 권한 연결 직접 가용성 403, 다른 연결 조직 사실 502를 확인했다. <code>pnpm test:db:agent</code> 20/20, lint/typecheck exit 0. Field 공개 전송은 테스트 stub이므로 실제 두 Field 조직 HTTP 장애와 정식 QA143/G-I2는 미검수, C03/I04 <code>in_progress</code>다.</p>
 <p>C02/C03/A10/F10 독립 실행 재검수: 전체 mock을 내리고 상대 제품 compose 컨테이너/포트가 실제 없는 상태에서 <code>pnpm test:independence:agent</code>와 <code>pnpm test:independence:field</code>가 각각 exit 0이었다. AP 외부 위젯→고객 문의/답변, Field 사이트→직접 문의/두 예약 방식의 320px 브라우저 각 1/1을 포함한다. 볼륨을 삭제하지 않고 전체 mock을 다시 기동했다. 이는 로컬 mock 검수이며 실 LLM·알림·결제/운영 독립성·정식 QA121~124/143/G 게이트 완료가 아니므로 관련 Task는 <code>in_progress</code>다.</p>
@@ -4107,14 +4128,14 @@ Owner / reviewed_at / blocker / next action:
 </tbody>
 </table></div>
 <p>실행 명령·환경·결과·미실행 항목은 <code>DEVELOPMENT_STATUS.md</code>, <code>docs/technical/SPIKE_REPORT.md</code>, <code>docs/CODEX_HANDOFF.md</code>에 기록한다. 현재 Git 저장소가 있으며 최신 코드/저장 상태는 <code>git log -3 --oneline</code>과 <code>git status --short</code>로 확인한다. 아래 실행 현황의 오래된 검사 개수는 당시 증거이며 맨 위 후속 기록/coverage와 구분한다.</p>
-<h3 id="section-84">실행 순서와 독립 출시</h3>
+<h3 id="section-85">실행 순서와 독립 출시</h3>
 <p><strong>C00 → C01 → C02/C03 → A 트랙과 F 트랙 병렬.</strong> AP Core는 A11에서 Field/매체 없이 출시할 수 있다. Field Core는 F11에서 AP 없이 출시할 수 있다. I 트랙은 두 제품의 공개 계약을 이용해 통합하며 I08에서 별도로 승인한다. D05는 AP의 매체 확장 출시이며 Field/연동을 선행으로 요구하지 않는다.</p>
 <p>AP A09가 일반 통합자에게 제공하는 인가/API이고, I00는 Field가 외부 리소스 서버로 제공하는 역방향 구현이다. 이를 서로의 런타임 의존으로 합치지 않는다. 실제 API/인증을 구현하기 전에 UI 목업을 만들 수 있으나 해당 task를 verified로 표시할 수는 없다.</p>
 <p>R01은 운영 서버/DB가 없다는 인벤토리 증빙이 있으면 not_applicable로 종료한다. 있는 경우 이행 검수는 생략하지 않는다. R02는 모든 제품의 기존 요구가 충족됐는지 검수하며 독립 Core 출시에 영향을 주는 선행 작업이 아니다.</p>
-<h3 id="section-85">모든 작업의 Definition of Done</h3>
+<h3 id="section-86">모든 작업의 Definition of Done</h3>
 <p>UI·API·도메인·DB·권한·이벤트·사용량·오류·보안·테스트·롤백이 해당 범위에서 연결되어야 한다. <code>implemented</code>는 코드 완료이며 <code>verified</code>는 실행 증빙이 있는 상태다. 외부 승인 부재는 blocked_integration이다. QA의 제품별 적용을 생략하거나 다른 제품의 완료로 대체하지 않는다.</p>
 <p>API/스키마 변경은 Coordinator가 계약을 승인하고 AP/Field 각 consumer 테스트를 통과한 뒤 병합한다. 공통 migration을 두 제품이 동시에 쓰지 않는다.</p>
-<h3 id="section-86">에이전트별 소유 경로</h3>
+<h3 id="section-87">에이전트별 소유 경로</h3>
 <div class="table-scroll" tabindex="0"><table>
 <thead>
 <tr>
@@ -4156,7 +4177,7 @@ Owner / reviewed_at / blocker / next action:
 </tr>
 </tbody>
 </table></div>
-<h3 id="section-87">작업 카드 기본 형식</h3>
+<h3 id="section-88">작업 카드 기본 형식</h3>
 <pre><code class="language-text">Task / Parent / Product:
 State / Owner:
 Dependencies / Requirement / QA / Gate:
@@ -4168,9 +4189,14 @@ Provider approvals / blockers:
 Migration / rollback / handover:
 </code></pre>
 <hr />
-<h2 id="section-88">AGENTS.md — 독립 AI 플랫폼 + Field, 개발 기준 v3.0</h2>
+<h2 id="section-89">AGENTS.md — 독립 AI 플랫폼 + Field, 개발 기준 v3.0</h2>
+<h3 id="section-90">모델 규칙 (JR 지정, 2026-10-04)</h3>
+<ul>
+<li>서브에이전트 생성과 <code>codex exec</code> / <code>codex review</code>의 모델은 <code>gpt-6.1-sol</code>, reasoning effort는 <code>xhigh</code>로 지정한다.</li>
+<li>다른 모델 또는 <code>high</code> 이하 effort를 지정하지 않는다. 예: <code>codex exec -m gpt-6.1-sol -c model_reasoning_effort=xhigh ...</code>.</li>
+</ul>
 <p>이 패키지는 <strong>개발 명세</strong>다. 운영 앱·실제 외부 연동·상용 배포가 이미 존재한다고 가정하지 않는다. 기존 PRD v2.0과 통합 AGENTS/TASKS는 이력 자료이며 이번 제품 경계와 충돌할 때 사용하지 않는다.</p>
-<h3 id="section-89">1. 먼저 읽을 것</h3>
+<h3 id="section-91">1. 먼저 읽을 것</h3>
 <ol>
 <li><code>docs/00_PRODUCT_ARCHITECTURE.md</code>의 B01~B12와 21개 결정.</li>
 <li>본인이 담당하는 <code>docs/01_AGENT_PLATFORM_PRD.md</code> 또는 <code>docs/02_FIELD_PRD.md</code>.</li>
@@ -4179,7 +4205,7 @@ Migration / rollback / handover:
 <li><code>docs/06_REQUIREMENTS_QA.md</code>의 적용 QA, <code>docs/04_SECURITY_OPERATIONS_RELEASE.md</code>의 게이트.</li>
 </ol>
 <p>마스터 문서는 <code>AI_Field_Service_Operator_Final_Development_Plan_v3.0.md</code>다. 분할 문서와 내용은 동일 기준이며 변경 시 분할 원문→마스터 재생성 순서를 유지한다. UI v3는 시각·기능 참고일 뿐, 단일 계정·공유 DB·로컬 저장·역할 탭은 운영 아키텍처가 아니다.</p>
-<h3 id="section-90">2. 가장 중요한 구현 규칙</h3>
+<h3 id="section-92">2. 가장 중요한 구현 규칙</h3>
 <ul>
 <li>AP는 Field가 없는 환경에서 가입·AI·지식·외부 설치·상담·알림·결제까지 동작한다.</li>
 <li>Field는 AP가 없는 환경에서 사이트 제작(자체 제작 LLM 포함)·직접 문의·예약·알림·결제까지 동작한다.</li>
@@ -4197,14 +4223,14 @@ Migration / rollback / handover:
 <li>고객 OTP·회원가입을 새로 강제하지 않는다. 번호/알림 링크만으로 대화 권한을 주지도 않는다.</li>
 <li>외부 문서 자동 수집·사진 진단·고객 결제·광고비 정산·임의 MCP 도구는 범위 밖이다.</li>
 </ul>
-<h3 id="section-91">3. 작업과 소유 경로</h3>
+<h3 id="section-93">3. 작업과 소유 경로</h3>
 <p>Coordinator는 schema/API/event/권한 변경과 ADR 병합을 조율한다. AP Agent는 AP 앱/도메인/DB, Field Agent는 Field 앱/도메인/DB, Connector Agent는 공개 HTTP client/bridge/권한 매핑만 담당한다. Distribution Agent는 AP의 campaign/publisher 기능만 다룬다. 한 사람이 순차 실행해도 같은 작업 ID를 사용한다.</p>
 <p>공통 UI는 데이터 접근 없는 컴포넌트다. 생성 클라이언트는 버전이 고정된 계약에서만 만든다. 다른 worktree가 수정 중인 migration·DTO를 임의 덮어쓰지 않는다. 변경이 필요한 경우 계약 PR→consumer test→구현 PR 순서다.</p>
 <p>저장소가 이미 있으면 구조·잠금 파일·테스트·마이그레이션·운영 데이터 유무부터 조사한다. 기존 코드를 지우고 새 monorepo를 만드는 일을 자동으로 수행하지 않는다. 실제 운영 데이터 복제·삭제·계정 이전·카드 청구·고객 메시지 발송은 별도 권한 없이는 하지 않는다.</p>
-<h3 id="section-92">4. 환경과 상태</h3>
+<h3 id="section-94">4. 환경과 상태</h3>
 <p><code>mock</code>, <code>sandbox</code>, <code>live</code>를 분리한다. production에 mock·예시 로그인·고정 모델 답변·localStorage 원장·가짜 DNS/결제 성공이 들어가면 부팅/CI가 실패해야 한다.</p>
 <p>외부 credential/계약이 없으면 상태는 <code>blocked_integration</code>이다. 내부 단위 테스트는 진행할 수 있지만 출시 게이트를 통과 처리하지 않는다. 다른 제품 장애를 검증할 때는 환경변수 제거·네트워크 거부·서버 미배포로 실제 독립성을 검사한다. 빈 fixture를 서버 장애로 대체하지 않는다.</p>
-<h3 id="section-93">5. 저장소에 마련할 검수 명령 계약</h3>
+<h3 id="section-95">5. 저장소에 마련할 검수 명령 계약</h3>
 <p>다음 명령은 구현팀이 실제 스크립트로 만들어야 한다. 현재 문서 패키지에 서비스 테스트가 구현되어 있다는 뜻이 아니다.</p>
 <pre><code class="language-bash">pnpm lint
 pnpm typecheck
@@ -4224,17 +4250,17 @@ pnpm build:field
 </code></pre>
 <p><code>test:independence:agent</code>는 Field 서비스·DB·비밀값 없이 실제 AP 서버/DB로, 반대도 동일하게 실행한다. <code>test:integration:faults</code>는 지연·순서 역전·중복·revoke·scope 거부·결과 미상을 재현한다. 프로덕션 공급사 검수는 별도 gate/evidence로 분리한다.</p>
 <p>실패한 테스트를 삭제하거나 기대값을 현재 버그에 맞추지 않는다. 미실행·skip은 그대로 보고한다. 실패가 CI non-zero로 전파되어야 한다. pass 개수만 보고하지 말고 어떤 제품/환경/커밋인지 남긴다.</p>
-<h3 id="section-94">6. UI 및 완료 조건</h3>
+<h3 id="section-96">6. UI 및 완료 조건</h3>
 <p>고객·사업자/서비스 제공자·매체·각 제품 관리자 화면을 유지한다. 글자 최소14px, 본문/입력16px, 모바일320px부터 검수한다. 조작 가능한 버튼에는 실제 API 또는 비활성 사유가 필요하다. UI 입력·저장·반영·공개·전달·확정·발송·열람 상태를 구분한다.</p>
 <p>한 작업의 Done은 UI+API+domain+DB+권한+이벤트+사용량+오류+테스트+복구가 연결된 상태다. 코드 완료와 출시 승인은 분리한다. 모든 작업 시작 전 파일 범위·관련 요구/QA·명령을 기록한다.</p>
-<h3 id="section-95">6.0 고정 디자인 기준 — 사용자 필수 지침 (2026-09-27)</h3>
+<h3 id="section-97">6.0 고정 디자인 기준 — 사용자 필수 지침 (2026-09-27)</h3>
 <ul>
 <li>화면 디자인 원본은 <code>reference/field_ui_prototype_v3.html</code>이다. 사용자 지시로 디자인 자체를 고정한다. 기존 배치·색상·글자·메뉴·반응형 규칙을 임의로 재설계하거나 반복 조정하지 않는다.</li>
 <li>원본에 있는 화면을 처음 구현할 때 해당 HTML/CSS를 그대로 기준으로 사용한다. 이미 구현 완료된 화면은 새 오류·요구 변경의 구체적 근거 없이 다시 작업하지 않는다.</li>
 <li>시안에 없는 새 기능은 기존 디자인 안에 추가하고 사용자에게 보이는 기능 이름에 **<code>(추가)</code>**를 표시한다. 기존 시안에 있는 기능에는 추가 표시를 붙이지 않는다.</li>
 <li>API·권한·원장·실제 상태는 v3.0 개발 문서에 연결하며 제품 경계를 지킨다. 시안의 고정 예시 데이터/가짜 성공을 서비스 결과로 승계하지 않는다.</li>
 </ul>
-<h3 id="section-96">6.1 완료 체크와 재작업 금지 — 사용자 필수 지침</h3>
+<h3 id="section-98">6.1 완료 체크와 재작업 금지 — 사용자 필수 지침</h3>
 <ul>
 <li><strong>모든 작업 시작 전에 <code>TASKS.md</code> 상단의 <code>완료 체크 — 재작업 방지 기준</code>을 먼저 읽는다.</strong> 이어서 <code>docs/CODEX_HANDOFF.md</code> 현재 상태, <code>git status</code>/<code>git log</code>와 해당 구현을 확인한다.</li>
 <li><code>[x]</code>인 세부 작업은 완료 범위다. 에이전트 교체·컨텍스트 압축·기억 부재만으로 재구현하거나 처음부터 검수를 반복하지 않는다. 새 작업은 미완료 <code>[ ]</code> 세부 ID에서 선택하고 phase plan에 그 ID/범위/관련 요구/검수 명령을 기록한다.</li>
@@ -4244,7 +4270,7 @@ pnpm build:field
 <li>완료 체크의 기준 원장은 <code>TASKS.md</code> 상단이다. 상세 증거는 <code>LOCAL_FUNCTIONAL_COVERAGE.md</code>와 인계/실제 검사 기록에 연결한다. 중복 목록의 오래된 “남음” 문구보다 최신 체크/코드 상태를 우선한다.</li>
 <li>단계별 체크박스 하나에 완료 범위와 미완료 범위가 섞이면 같은 세부 ID/근거를 유지한 채 <code>[x]</code>와 <code>[ ]</code>로 나눈다. 과거 착수·“다음 작업” 기록은 <strong>이력</strong>으로 표시하고, 현재 다음 작업에는 미완료 범위만 적는다.</li>
 </ul>
-<h3 id="section-97">7. 작업 보고 템플릿</h3>
+<h3 id="section-99">7. 작업 보고 템플릿</h3>
 <pre><code class="language-text">Task ID / Product / Owner:
 State: planned | in_progress | implemented | blocked | blocked_integration | verified
 Requirements / QA / Gate:
@@ -4256,7 +4282,7 @@ Failure cases and rollback:
 External approvals still needed:
 Next dependency:
 </code></pre>
-<h3 id="section-98">8. 에이전트 최초 실행 프롬프트</h3>
+<h3 id="section-100">8. 에이전트 최초 실행 프롬프트</h3>
 <pre><code class="language-text">AGENTS.md와 최종 개발 계획 v3.0, TASKS.md를 읽고 현재 저장소를 조사하라.
 C00부터 작업한다. AP와 Field는 별도 제품·DB·로그인·구독·배포다.
 Field는 정식 외부 클라이언트이고 두 제품 domain/db를 직접 import하지 않는다.

@@ -37,6 +37,7 @@ AP 삭제 원장의 모든 작성자를 중단한 뒤 최신 전체 checkpoint�
 cd /Users/jr/Desktop/projects/FieldAI
 # AP_PROFILE=mock, 기존 AP_RETENTION_JOURNAL_DIRECTORY/SECRET,
 # AP_RETENTION_CHECKPOINT_OUTPUT=/absolute/protected/separate/ap-deletions-latest.json
+# AP_ACCOUNT_DELETION_CHECKPOINT_OUTPUT=/absolute/protected/separate/ap-identity-deletions-latest.json
 # 모든 AP 삭제 원장 작성자가 중단된 상태에서 실행한다.
 node --env-file=/absolute/protected/path/ap-journal.env \
   apps/agent-api/dist/retention-checkpoint-cli.js --quiesced
@@ -50,7 +51,8 @@ cd /Users/jr/Desktop/projects/FieldAI
 # AP_INQUIRY_MEDIA_DIRECTORY(현재 파일 식별), 기존 AP_RETENTION_JOURNAL_DIRECTORY/SECRET,
 # AP_RETENTION_RESTORE_DATABASE_URL(별도 복원 DB),
 # AP_RETENTION_RESTORE_MEDIA_DIRECTORY(별도 복원 파일),
-# AP_RETENTION_RESTORE_CHECKPOINT_FILE(따로 보관한 최신 checkpoint)를 지정한다.
+# AP_RETENTION_RESTORE_CHECKPOINT_FILE(따로 보관한 최신 checkpoint),
+# AP_ACCOUNT_DELETION_RESTORE_CHECKPOINT_FILE(최신 계정·조직 삭제 checkpoint)를 지정한다.
 node --env-file=/absolute/protected/path/ap-restored.env \
   apps/agent-api/dist/retention-restore-cli.js --offline-restored
 ```
@@ -68,6 +70,7 @@ cd /Users/jr/Desktop/projects/FieldAI
 # Field retention worker 등 모든 삭제 원장 작성자를 중단한 상태에서 실행한다.
 # 기존 DIRECTORY/SECRET, FIELD_PROFILE=mock, 아래 별도 새 출력 경로를 보호된 env에 지정한다.
 # FIELD_RETENTION_CHECKPOINT_OUTPUT=/absolute/protected/separate/field-deletions-latest.json
+# FIELD_ACCOUNT_DELETION_CHECKPOINT_OUTPUT=/absolute/protected/separate/field-identity-deletions-latest.json
 node --env-file=/absolute/protected/path/field-journal.env \
   apps/field-api/dist/retention-checkpoint-cli.js --quiesced
 ```
@@ -87,6 +90,9 @@ cd /Users/jr/Desktop/projects/FieldAI
 # FIELD_RETENTION_JOURNAL_DIRECTORY=...
 # FIELD_RETENTION_JOURNAL_SECRET=... (기존 키)
 # FIELD_RETENTION_RESTORE_CHECKPOINT_FILE=/absolute/protected/separate/field-deletions-latest.json
+# FIELD_ACCOUNT_DELETION_RESTORE_CHECKPOINT_FILE=/absolute/protected/separate/field-identity-deletions-latest.json
+# FIELD_ACCOUNT_DELETION_RESTORE_SITE_MEDIA_DIRECTORY=별도 복원 사이트 사진 디렉터리
+# FIELD_MEDIA_DIRECTORY=현재 사이트 사진 디렉터리(식별 전용)
 # FIELD_PROFILE=mock
 node --env-file=/absolute/protected/path/field-restored.env \
   apps/field-api/dist/retention-restore-cli.js --offline-restored
@@ -95,6 +101,19 @@ node --env-file=/absolute/protected/path/field-restored.env \
 CLI는 로컬 Field mock binding(127.0.0.1/localhost:55432, field_local)과 별도 `fieldai_field_restore_<hex>` DB만 허용한다. checkpoint 출력은 journal 밖의 새 0600 파일이어야 하며 기존 checkpoint/원장 파일을 덮어쓰지 않는다.
 
 실제 검수는 `pnpm test:db:field`의 합성 fixture로 한다. 격리 Field DB를 `pg_dump -Fc`로 백업하고 새 임시 DB에 PG17 `pg_restore`한 뒤, 정리 전 사진을 별도 파일 경로에 복원한다. 전체 directory/entry 부재·미대조 추가·서명 변조/미확인 의도는 실패하고 원문/사진을 유지한다. checkpoint export/restore CLI 실제 적용 후 파일 부재/원문 제거/재저장 거부/반복0을 검사한다. active DB localhost alias·active media symlink alias/잘못된 local port/원장 안의 checkpoint 출력도 실제 거절한다. 이 삭제 검사는 회수 원장을 포함하지 않으며 아래 절의 별도 명령/검사를 함께 수행해야 한다. 운영 S3·보관 공급사·checkpoint/원장 동시 과거 교체·legacy 누락·삭제 결과 미상의 추가 대조·실 RPO/RTO·운영 복원 인증은 여전히 남아 있다.
+
+
+## 계정·조직 삭제 결정 재적용 — A-18
+
+업무/문의 사진 삭제 원장과 별도로 각 제품의 `*_RETENTION_JOURNAL_DIRECTORY/account-deletion`에 계정·조직 삭제 결정을 보관한다. 같은 retention secret의 별도 HMAC 용도를 사용하고 raw 이메일/본문/토큰을 기록하지 않는다. 이메일 대조는 별도 HMAC fingerprint다. 기존 retention checkpoint CLI는 위 두 출력 파일을 모두 요구하며 restore CLI도 업무 원장과 계정·조직 원장의 두 최신 보호 checkpoint를 먼저 검증한다. 하나라도 누락되면 성공이 아니다. Field 조직 삭제 기록에는 복원 사이트 사진 ID/key가 있으므로 active 사진과 다른 별도 실제 복원 사이트 사진 디렉터리도 제공한다. 현재 서비스 DB/파일이나 상대 제품 데이터는 정리 대상으로 사용하지 않는다.
+
+처음 배포하는 빈 volume에는 이미지가 하위 디렉터리를 준비한다. 기존 배포를 처음 이 저널로 전환할 때는 writer를 정지하고 새 migration·빈 receipts·저널이 아직 기록된 적 없음을 확인한 후 운영자가 빈 하위 디렉터리를 `0700`으로 준비한다. 이미 key/삭제 증거가 있는 환경에서 디렉터리가 사라진 경우에는 원래 signed journal 보관본을 복구한다. runtime과 setup이 빈 원장을 자동 재생성해 유실을 감추지 않는다. 새 cutover 이전의 삭제 사건은 이 저널에 소급 기록됐다고 주장하지 않는다.
+
+이 저널의 signed intent는 재인증/권한/삭제 전제 조건과 대상 잠금 이후 승인된 삭제 결정이다. fsync 뒤 DB commit이 실패해도 intent를 지워서 통과시키지 않는다. receipt와 적용 상태가 불일치하면 API/worker가 실패로 닫히고 오프라인 재적용이 필요하다. 복원 DB가 삭제 전 상태이면 첫 serving guard가 503을 반환하므로 원문을 노출한 뒤 정리하지 않는다. 파일 서명·전체 목록·DB binding·receipt·대상을 검증한 후 원래 승인된 삭제 효과를 재적용하고 반복은 0건이다. 새로운 원격 revoke/청구/고객 발송은 시작하지 않는다.
+
+Field 조직 삭제는 사진 삭제 때문에 prepared/applied 두 단계다. prepared는 원래 삭제 요청과 executionStarted, 사이트 draft/release 부재, 남은 사진 deleting 상태가 일치할 때만 진행 중으로 인정한다. 신규 쓰기와 공개 노출은 차단하고 기존 업무 열람은 유지한다. 사진 삭제/부재 확인이 실패하면 applied 성공으로 기록하지 않는다. 최종 applied에서 조직/알림 연락처·membership/session 등의 삭제 효과를 검증하며 고객 문의/예약·청구/감사 원장은 보존한다.
+
+이 CLI는 계속 **mock 격리 복원**으로 제한한다. 실제 운영/PITR/RPO/RTO·저널/checkpoint 동시 과거 교체 탐지와 외부 보관 증빙은 C-04의 별도 검수다. live OAuth baseline·native/lifecycle checkpoint export 절차는 `../04_SECURITY_OPERATIONS_RELEASE.md` 5.1.2를 따른다.
 
 ## Field 연결·OAuth 권한 회수 원장 재적용
 

@@ -4,6 +4,8 @@
 
 제품별/공통으로 표시한 행은 해당 제품에서 각각 검수한다. AP 승인으로 Field 검수를 대신하지 않는다. Core 릴리스에 없는 매체/연동 QA는 적용 외로 구분하고, 전체 Suite에서는 해당 항목도 실행한다. provider credential 부재는 적용 외가 아니라 blocked_integration이다.
 
+2026-10-04 A절의 QA ID↔실행 파일 매핑은 `docs/technical/LOCAL_FUNCTIONAL_COVERAGE.md`의 최신 섹션과 `contracts/acceptance_catalog.json`의 `implementation_test_refs`에 기록한다. 이는 해당 인수 시나리오의 내부 회귀 검사 연결이며, 160개 최종 서비스 인수의 `not_run` 상태를 바꾸지 않는다. 실제 명령·환경·실패·남은 공급사/운영 검수는 해당 증거를 함께 확인한다.
+
 ## 기존 테스트의 중요한 개정
 
 공유 DB 원자성→제품내 원자성+동기화 상태, AI-only 동일 조직→별도 제품 조직+동의 mapping, 통합 과금→독립 원장, 동일 브라우저 시안→실제 독립 서버/기기 검수로 바꿨다. 전체 기존 21개 요구의 삭제는 없다.

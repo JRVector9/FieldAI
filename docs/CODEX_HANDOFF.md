@@ -1,4 +1,51 @@
-# CODEX 인수인계 — 2026-10-03
+# CODEX 인수인계 — 2026-10-04
+
+## A절 구현·리뷰·전체 검수 완료 — 2026-10-04
+
+- Current objective/state: 사용자 A-01~A-25 내부 범위 완료. 코드 `a5eac8c`, 외부 `a9fea58` 보존 병합 `0507bfc`, 전용 branch `fix/remaining-a-20261004`. worktree `/private/tmp/fieldai-remaining-a-20261004`. 원본main/서버/컨테이너/공유 원장 보존. 새작업은 remaining만 따르고 완료A를 이유없이 다시 구현하지 않는다.
+- Completed/modified: 양제품 src/web/test·AP95~98/Field85~88, CI/Caddy/proxy/Docker, mock/DB/independence/E2E/OpenAPI runners, contract erratum/QArefs, release/backup/phase/review/원장. 파일은 gitshow a5eac8c/phase/19리뷰 참조.
+- Design: 제품별DB/session/secret/queue/journal; signedintent rollback보존·canonicalreuse; Fieldprepared/applied+disjointmedia; ownedclient 모든grant/currentproof; INSERT SHARE·UPDATE SHARE NOWAIT로삭제직렬화/정상동시OAuth/교착차단; terminalMFAfalse; 불변epoch/TTL60s; 정상OAuthclient blocker와고정시안 보존, 추가기능(추가).
+- Tests actually run: 최종 Linux arm64/Node24.18.0/pnpm10.33.4/PG17.11/Chromium153 격리 DIND: 독립성 양방향 exit0(사업자/고객 Chromium 각1/1), E2E AP12·Field11·매체2, 보안 410/410(AP DB49파일191/191·Field DB42파일215/215, UUID DB 전부 제거), 통합 장애 26/26 exit0. Host lint/typecheck/unit408pass·환경 조건skip2, 계약 static14+DB18/UUID9제거·실제 응답43/43, actionlint exit0. API/web4종 build는 새 격리 mock stack 기동에서 exit0. A19 실제API Docker2종 HEVC/metadata/invalid/tmp proof exit0. HostAP49files190/190·Field42files213/213은 마지막 작은review추가 전이라 보존하며 최신DB수치는 위security 결과다. 최종 로그 `/private/tmp/fieldai-a-final-independence-v3-logs`, `/private/tmp/fieldai-a-final-e2e-v3-logs`(E2E), `/private/tmp/fieldai-a-final-e2e-v4-logs`(security/faults), `/private/tmp/fieldai-a-final-contracts.log`, `/private/tmp/fieldai-a-final-{lint-v3,typecheck-v2,unit-v3}.log`. final tar SHA256 `e9475d7b6c9ffe2b5a92ff5295ed1429baccc64fea92cbbcc54bbb83f566ce3d`, 코드990파일과 현재 내용 동일.
+- Failed approaches/review: 첫 clock/fakePool/legacy fixture/customdomain continuity 실패 보존. 첫 DIND security/faults는 검수 이미지에 ps가 없어 process inspection에서 중단되어 procps를 추가한 같은 source의 새 격리환경에서 재실행했다(V3실패/V4최종 로그 보존). actualPG ownedgrant/부분복원/identity·orgrole/교착/Fieldsymlink·없는org사진/canonicalintent/APorgMFA red→green. UPDATE FOR UPDATE NOWAIT가 정상 동시 mint를 막아 FOR SHARE NOWAIT로 교정하고 AP13/Field14기존OAuth검수. rootunknownURL404는정적방어며 초기실제404도pass였다. gpt-6.1-sol/xhigh/read-only CLI+bounded재리뷰에서 해당범위 남은P1/P2없음.
+- Remaining/not tested: 기존 main a9fea58 GitHub run37196988683 전체 success는 확인했다. B #12(A04)는 해결돼 열린 결정13건. C01 새 CI 실제 Actions·C02공급사·C03live기동·C04운영/PITR/원장checkpoint 동시rollback/RPO/RTO·C05관측·C06실기기/접근성/최종시안·C07약관/HEVC-LGPL/amd64/실폰HEIC·C08외부보안·C09서명전환은 별도 미완료. 정식 인수160 status=not_run을 보존하며 QA31개 test reference만 연결했다. 기존retentionkey 환경의 최초A18 cutover는 backup runbook대로 writer정지·빈receipt·최초저널확인 후 운영자가 준비하며 유실저널을 자동재생성하지 않는다. 원본 실행환경 재시작/migration·운영복구/발송/청구/배포 없음.
+- Document checks: docs 전용 Python 환경에서 tools/build_report.py와 tools/check_package.py exit0. 최초 검사는 분할 docs/06의 상대 링크가 마스터에서 다른 경로로 해석되어 실패했다. 참조를 저장소 경로 표기로 바꾼 뒤 통과했다. 서비스 코드 수정은 없고, HTML 디자인/과거 스크린샷도 재검수 완료로 표시하지 않았다. SHA256SUMS는 이번 문서·QA 참조·원장까지 재생성한다.
+- Final isolation check: 원본 최신 HEAD 4ddf93b는 기존 CI 성공 기록만 추가한 문서 커밋이며 그 완료 이력을 보존했다. 원본 working tree clean, mock-run PID42001과 AP/Field DB·Field queue 모두 계속 실행 중이다. 이번 검수의 별도 DIND만 정상 종료했다. 문서 패키지 검사·checksum46/46 exit0, 런타임990파일 동일·A25개 내부 완료·QA31개 refs/160not_run 검증 exit0.
+- Exact next commands: `cd /private/tmp/fieldai-remaining-a-20261004`; `git status --short --branch`; `git log -4 --oneline`; `cat /private/tmp/fieldai-a-final-independence-v3-logs/independence-{agent,field}.exit`; `cat /private/tmp/fieldai-a-final-e2e-v3-logs/{e2e-agent,e2e-field,e2e-distribution}.exit`; `cat /private/tmp/fieldai-a-final-e2e-v4-logs/{security,integration-faults}.exit`; `shasum -a 256 -c SHA256SUMS.txt`. 원본 통합 전 다른agent의 새commit/dirty/server를 다시 확인하고 실행환경cutover를 임의 수행하지 않는다.
+
+## 이력 — 아래 A절 checkpoint는 당시 진행 상태
+
+## A절 코드 commit·독립성/E2E 완료, 보안/장애 재실행 — 2026-10-04
+
+- Current objective: A-01~25 최종 전체 검수와 원장/문서 마감. 전용 worktree `/private/tmp/fieldai-remaining-a-20261004`, branch `fix/remaining-a-20261004`. 원본 main `a9fea58` clean이며 서버/컨테이너/공유 원장은 유지한다.
+- Completed/modified: 코드 `a5eac8c`(177files), 외부 a9fea58 병합 `0507bfc`(tree 차이 없음). AP95~98/Field85~88, 앱/웹/CI/infra/tools/contracts 전체 A 구현. 마지막 AP 조직 expiry MFAfalse·양 UPDATE FOR SHARE NOWAIT actualPG 회귀 완료. 최종 bounded 재리뷰 해당 범위 P1/P2 없음.
+- Tests actually run: 최신 root lint/typecheck/unit408pass/skip2 exit0; 계약 static14+DB18/UUID9제거·actual43/43 exit0; actionlint0. 최종 strict DIND 양방향 independence exit0·사업자/고객 Chromium 각1/1(`/private/tmp/fieldai-a-final-independence-v3-logs`). 동일 final source의 E2E AP/Field/distribution 모두 exit0(`/private/tmp/fieldai-a-final-e2e-v3-logs`), API/web4종 stack build0. A19 실제 HEVC native Docker2종 build/proof0.
+- Failed approach: V3 security/faults는 검수용 bookworm-slim 이미지에 ps가 없어 group inspection 단계에서 중단(exit1). 제품 expectation/가드를 수정하지 않고 procps를 추가한 image `fieldai-a-final-verify-20261004`로 freshsource/DB V4 재실행 중이다. V3 실패 로그 보존. V4 runner `fieldai-a-final-security-v4-20261004`, session86660, console `/private/tmp/fieldai-a-final-security-v4-console.log`, container log `/harness/final-e2e-v4-logs`. 진행중 통과로 적지 않는다.
+- Design decisions: 서명 intent rollback보존/canonicalreuse, prepared/applied와 disjoint media, ownedclient grant/currentproof, INSERT SHARE와 UPDATE SHARE NOWAIT, MFAterminalfalse/발급DBclock, 불변epoch/60s. 정상client삭제 blocker·고정시안 유지. 원본을 자동 통합/재시작하거나 첫 A18 cutover/migration을 하지 않는다.
+- Remaining: V4 security/faults exit0 확인→로그copy→gated docs finalizer→master/check/SHA→문서commit. 사용자 A는 내부완료, B13/C외부/QA160not_run은 남긴다. 기존 main a9fea58 GitHub run37196988683 전체success를 확인했다. 신규 A절 CI job 실제Actions는 미실행. 다른agent원본보존 위해 완성 branch를 별도 유지한다.
+- Exact next commands: `docker exec fieldai-a-final-security-v4-20261004 bash -c 'tail -n 20 /harness/final-e2e-v4-logs/security.log'`; 종료 후 `docker cp fieldai-a-final-security-v4-20261004:/harness/final-e2e-v4-logs /private/tmp/fieldai-a-final-e2e-v4-logs`; `python3 /private/tmp/fieldai-finalize-a-docs.py`(allzero/codehash 검증을 통과해야 문서 쓰기); docs venv `/private/tmp/claude-501/-Users-jr-Desktop-projects-FieldAI/96603d97-39e3-4e39-9b8a-323af8a9aa5c/scratchpad/docs-venv/bin/python`로 build_report/check_package; SHA 목록을 다시 계산·검사. `build_planning_tables.py` 금지.
+
+
+## A절 최종 source 고정 후 검수 — 2026-10-04 (진행 중)
+
+- **Current objective:** A-01~A-25 내부 완료와 지정 모델 코드리뷰·전체 게이트·원장 마감. 별도 worktree `/private/tmp/fieldai-remaining-a-20261004`/`fix/remaining-a-20261004`, 원본 main 최신 `a9fea58` clean. 해당 외부 test patch4파일은 ownworktree에 그대로 apply했고 A21 observer 보존을 별도 확인했다.
+- **Completed work / key decisions:** 양제품 A18 auth/grant DB fence·canonical signed intent·부분 복원 현재 proof·owned-client 타 actor grant 회수; Field disjoint restore media symlink/hardlink 거부·org 없는 사진 삭제; receipt generation singleton으로 warm1SQL. UPDATE는 **FOR SHARE NOWAIT**(INSERT SHARE와 정상 concurrent mint 호환, deleter FOR UPDATE와는 충돌), INSERT FOR SHARE 대기. 실제 PG 교착/red→green AP21/21·Field20/20 후 기존 OAuth AP13+races5/Field14+races4 추가 green. AP 조직 session 만료의 2FA flag terminal cleanup 1곳이 마지막 리뷰에서 발견되어 수리 중이다.
+- **Actually run:** root 최신 lint/typecheck/unit exit0(`/private/tmp/fieldai-a-final-lint-v3.log`, `-typecheck-v2.log`, `-unit-v3.log`). 최신 contracts exit0(`/private/tmp/fieldai-a-final-contracts.log`), actual43/43 응답·static14/14. Field 전체42파일213/213·DB42/42제거 exit0(v2 log, 마지막 role/NOWAIT 추가 이전). 초기/후속 Field 독립성 exit0이나 최종 role/NOWAIT 이후 재실행은 남아 있다.
+- **Failed approaches:** 첫 full AP3파일/Field2파일 실패는 clock/legacy fixture/continuity로 분리 수리. 실제 concurrent OAuth 검사에서 UPDATE FOR UPDATE NOWAIT가 정상 INSERT SHARE와 충돌하여55P03/500, SHARE NOWAIT로 최소 보정해 green. final DIND `fieldai-a-final-gates-20261004` snapshot은 이 보정 전에 capture되어 outer runner만 정상 stop했다; inner **own** AP DB가 남아 새 runner script에서 old env 기반 compose down -v 후 새 source/env/db를 만든다. 원본 Docker daemon DB는 건드리지 않는다.
+- **Root review repairs:** object/array/all route AST 누락은 red→green, observer undefined URL 방어/실제404회귀(초기404는 이미green), webhook10초 timeout·domain finally disconnect. 정적 리뷰 요약 `docs/technical/review_2026-10-02/19_A_SECTION_IMPLEMENTATION_REVIEW.md`. 최종 HTTP spike로 마지막2개 검수 예정.
+- **Remaining work:** AP terminal-session race 최종green→fresh final-source.tar→strict independence2→fresh mock suite E2E3/security/faults; host fullAPDB v2 process36487 완료 확인. TASKS/18/phase/coverage/01 summary 완료+마스터/check/SHA, ownbranch commit와 external a9fea58 ancestry merge, 원본 clean일 때만 통합. C01새Actions·C02~09·B13개 결정은 열어 둔다.
+- **Exact next commands:** `cd /private/tmp/fieldai-remaining-a-20261004`; `tail -30 /private/tmp/fieldai-a-final-agent-db-v2.log`; `cat /private/tmp/fieldai-a18-ap-recheck-result-20261004.md`; `rg -n 'for share nowait' apps/agent-api/migrations/000098* apps/field-api/migrations/000088*`; `cat /private/tmp/fieldai-a01-isolated-20261004/run-final-independence.sh`; `cat /private/tmp/fieldai-a01-isolated-20261004/run-final-e2e.sh`. 새source는 tracked+untracked(notignored)에서 tar로 만들고 fresh source dir를 쓴다. .env/journal/node_modules 제외.
+
+## A절 최종 검수·복원 리뷰 후속 — 2026-10-04 (진행 중)
+
+- **Current objective:** 별도 worktree `/private/tmp/fieldai-remaining-a-20261004`/`fix/remaining-a-20261004`에서 A-01~A-25 마감. 원본 main `c135fbb`는 clean이며 실행 서버·원장을 유지한다. 새 에이전트/CLI 모델은 gpt-6.1-sol/xhigh.
+- **Completed evidence:** strict DIND 초기 독립성 양제품 exit0; A21 실제 HTTP 응답 43/43 계약 대조 exit0; A20 HTTP AP2/2·Field3/3 및 연결1/1 exit0; A19 Linux arm64 실제 Docker API 이미지2종 빌드·HEVC→WebP·메타데이터 제거 exit0. 구체 로그는 아래 앞선 A절 checkpoint 참조.
+- **Review / modified scopes:** AP/Field 앱 담당이 자기 제품만 수정, root는 infra/tools/contracts/docs. A18 리뷰에서 OAuth client의 다른 actor grant 복원, 로그인·계정 갱신과 삭제 경합, target_absent 반복 복원 결함이 발견되어 AP98/Field88 DB fence를 구현 중. Field 추가 리뷰는 media root nested symlink escape와 조직 부재 media 복원 삭제 누락을 검증 중. 최종 source snapshot은 이 수리 완료 후 새로 만든다.
+- **Tests actually run:** root typecheck exit0(`/private/tmp/fieldai-a-final-typecheck.log`). 첫 full lint는 AP unused cursor 2건, full unit은 Field fakePool 6건, full AP DB는 3/48파일 실패(`/private/tmp/fieldai-a-final-agent-db.log`). cursor·fakePool fixture·기존 삭제 fixture 수리는 담당이 반영/표적 재검수 중. AP actual TOTP admin test line204의 403 vs200은 DB/Node clock basis 측정 후 수리 요청했다. full lint/unit v2 로그 `/private/tmp/fieldai-a-final-{lint,unit}-v2.log`는 process 완료 확인 전 통과로 적지 않는다.
+- **CI observed:** 기존 main c135fbb GitHub Actions run37195003617은 실제 실행됐다. static/contracts/DB/build6images/e2e3/security 성공, integration:faults에서 Field ap-connection line335 retry!=acked 실패. 원문 `/private/tmp/fieldai-existing-ci-faults.log`, https://github.com/JRVector9/FieldAI/actions/runs/37195003617. 이번 새 independence matrix는 아직 push/Actions 실행 안 됐으며 actionlint만 exit0이다.
+- **추가 검수 checkpoint:** `pnpm lint` v2 exit0, `pnpm test:unit` v2 exit0(AP API46·Field API61·AP web97·Field web153·추가4·tools44/46, 환경 조건 skip2). 최초 full Field DB는 2/42파일 실패(auth-email-mfa 미래 clock, custom-domains 11건503/workerempty); epoch schema/source가 실행 중 수정되어 최종 고정 source에서 재실행한다. AP98/Field88에 per-request count(*) 대신 singleton receipt epoch를 추가 중이다. A18 signed intent rollback 뒤 대기 중 같은 계정 삭제 재시도는 AP canonical reuse가 이미 있고 Field에 해당 실 PG 회귀를 보강한다.
+- **Remaining work:** A18 실제 PG red→green와 수정 후 읽기 전용 리뷰; 모든 최신 lint/unit/DB/contracts/build; 새 DIND source에서 independence/E2E/security/faults; TASKS·18·phase·coverage·01_SUMMARY 현재 상태 갱신; master/check/SHA 재생성; 전용 branch 커밋·원본 main 변경 충돌 점검. 실 SMTP/Kakao/Toss/S3/Caddy/ACME·운영 restore·HEIC 법무/amd64·실기기 최종 인수는 별도 미완료.
+- **Exact next commands:** `cd /private/tmp/fieldai-remaining-a-20261004`; `tail -30 /private/tmp/fieldai-a-final-unit-v2.log`; `tail -30 /private/tmp/fieldai-a-final-lint-v2.log`; `rg -n -C 5 'auth-email-mfa|FAIL|ERR_ASSERTION' /private/tmp/fieldai-a-final-agent-db.log`; `cat /private/tmp/fieldai-a18-ap-review-result-20261004.md`; `cat /private/tmp/fieldai-a18-field-review-result-20261004.md`. 실패한 실행을 삭제하거나 기대값을 버그에 맞추지 않는다.
+
 
 ## 사용자 지정 기준 시안 — 작업 재개 시 필수 확인
 
@@ -8,6 +55,51 @@
 - 원본에 있는 화면을 처음 구현할 때 해당 HTML/CSS를 직접 읽고 그대로 기준으로 사용한다. 이미 완료된 화면은 구체적 새 오류/요구 변경 없이 다시 작업하지 않는다. 제품별 API·권한·실제 상태는 v3.0 독립 제품 경계를 따른다.
 - 현재 CUA의 file:// 시안 열기는 브라우저 URL 보안정책이 거부했다. 우회 실행하지 않고 로컬 HTML/CSS 원문을 읽어 구현 기준을 확인한다. 이번 턴 시안을 브라우저로 열었다고 보고하지 않는다. 기존 시안 스크린샷 증빙은 과거 실행 이력으로만 보존한다.
 - **사용자 요청:** 이 시안 경로와 고정 디자인/`(추가)` 원칙을 인계파일 상단에 계속 유지한다.
+
+## A절 병렬 실행 중 — 2026-10-04
+
+- **Current objective:** `18_REMAINING_WORK.md` A절을 사용자 지정 순서로 병렬 구현·검수·코드리뷰. 사용자 모델 규칙: 새 서브에이전트와 CLI 호출은 `gpt-6.1-sol`/`xhigh`.
+- **Isolation / repository:** 기준 `653de60`, 별도 worktree `/private/tmp/fieldai-remaining-a-20261004`, branch `fix/remaining-a-20261004`. 원본 main의 외부 에이전트 브라우저 수정은 `c135fbb`로 commit됐고 전용 branch에 fast-forward 반영했다. 마지막 관측 원본 working tree는 clean이며 원본 HEAD는 `c135fbb`다. 원본 파일·mock-run PID42001·기존 컨테이너/볼륨은 변경·중지하지 않았다. 외부 담당 범위 질문 대기; 원본 통합 전 다시 diff를 대조한다.
+- **Completed evidence (code not committed yet):** A-01 기준선 독립성 두 명령 exit0. HEAD `653de60` git archive를 Linux arm64 별도 DIND29.5.2/Node24.18.0/pnpm10.33.4/PG17.11/Chromium153에서 실행했고 반대 제품 서비스·DB·포트 부재를 시작·끝 모두 검사했다. 실제 Chromium owner/guest 각각1/1. 로그 `/private/tmp/fieldai-a01-isolated-20261004/logs/independence-agent.log`, `independence-field.log`, 각 `.exit`. 새 CI independence matrix는 전용 runner마다 자기 env/DB만 생성; `actionlint .github/workflows/ci.yml` exit0(실 GitHub 실행 미실행).
+- **Boundary evidence:** A-07 Field retention Origin red→green1/1; A-08 account-deletion9/9+기존 custom-domains15/15; A-10 양제품 callback red→green 각2/2(조직 잠금 경합·completed replay·토큰교환0 포함). AP `/private/tmp/fieldai-a10-ap-{red,green}.log`, Field `/private/tmp/fieldai-a07-{red,green}.log`, `fieldai-a08-{red,green}.log`, `fieldai-a10-field-{red,green}.log`. A-09 Caddy2.10.2 DNS 모듈 블록만 제외한 사본 validate exit0 및 API/web/wildcard/custom 공개 호스트 ask HTTP4/4→404. 내부 loopback ask 주소는 유지. A-23 Field secret의 health proof 하위 키 용도 주석 추가.
+- **UI/API evidence:** AP A-02/A-03/A-06/A-25 표적 DB4파일10/10·UUID DB4/4 제거(`/private/tmp/fieldai-ap-phase-db.log`), APIunit38/38·webunit97/97·API/web typecheck exit0. Field A-03 API1/1+기존admin1/1(`/private/tmp/fieldai-a03-field-final.log`), APIunit57/57·webunit149/149·API typecheck/build·web typecheck·표적 eslint exit0. 신규 관리자 패널 `(추가)`, 서버 마스킹 `maskedTo`, 메일 본문/인증링크/공급사ID 비노출. AP95/Field85 제품 내부 감사 resource+cursor index migrations. 전체 최신 통합 검수/브라우저/실SMTP는 아직 미실행.
+- **Modified files / plan:** 정확 경로·태스크·QA·검수는 `docs/technical/REMAINING_A_EXECUTION_2026-10-04.md`와 `git status --short` 참조. AP/Field 담당은 자기 apps만 수정하고 Coordinator는 CI/infra/tools/contracts/원장을 관리한다. A-21 담당만 두 제품 공개API tests를 수정한다. root dev dependencies Ajv8.20.0+ajv-formats3.0.1 고정 추가(기존 lock snapshots 재사용).
+- **Design decisions:** Field resolvedCustomHost의 삭제 유예 필터+테스트는 이미 있어 재구현하지 않음. callback은 로컬 조직 잠금 아래 유예를 차단하고 상대 제품에서 이미 승인한 grant 회수 안내를 반환하며 원격 발신은 하지 않음. Field 모든 workspace 화면의 공통 유예 안내와 새 쓰기 거절 문구는 고정 시안 CSS/배치를 유지한다. 인증 메일 `sent`는 SMTP 접수이며 고객 수신으로 표시하지 않는다.
+- **Failed approaches:** Colima는 `/private/tmp` bind 경로를 공유하지 않아 초기 Caddy 파일 mount가 실패; 전용 container에 `docker cp`로 전달해 해결. DNS 줄만 제거하면 빈 tls block이라 validate 실패; 검수 사본의 DNS tls block 전체를 제외. catchall에서 top-level respond는 handle 우선순위에 가려져 ask502가 재현됨; path handle로 바꾼 뒤4호스트404. 양 웹 dynamic import 확장자 누락 TS2835를 `.js`로 수정 후 typecheck 통과. `review` 스킬 필수 gstack checklist가 설치되지 않아 자동 skill 절차는 적용 불가; 지정 모델 CLI 읽기 전용 리뷰로 진행했다. boundary 리뷰 P2 Next data alias ask 우회는 early proxy404+6/6로 수정. UI 리뷰 P2 in-place login notice는 Field 이벤트/sequence guard+7/7, AP email cursor boundary 삭제는 self-contained timestamp/id로 수정 중. A04 리뷰 P1 Field native 파일 누락/audit continuity와 P2 AP fsync 전 잠금 해제를 수정·검수 중. 로그 `/private/tmp/fieldai-a01-boundary-review-20261004.md`, `fieldai-a02-a06-review-20261004.md`, `fieldai-a04-a05-review-20261004.md`.
+- **A21 verified:** `node tools/run-integrator-contracts.mjs` exit0 `/private/tmp/fieldai-a21-contracts-review-final-20261004.log`: static12/12+AP13/13+Field5/5, UUID DB9/9 제거, 실제 onSend 성공 응답38operation/43status-media와 headers 대조. 합성 validator 호출이 coverage를 채우지 못하도록 red→green. `closedAt` allOf 오류는 explicit object로 수정하고 preview.11 핀 유지 erratum. root `test:contracts`는 wrapper에 연결했다.
+- **A20 verified (captured pre-A18 source):** core AP2/2·Field3/3 exit0 `/private/tmp/fieldai-a20-core-v7-logs/spike-{agent,field}.log`; 신규 customer-decisions/서명 webhook 연결 HTTP1/1 exit0 `/private/tmp/fieldai-a20-core-v5-logs/connection-spike.log`. mock DNS/edge 증거만 synthetic DB 행으로 주입하며 실제 DNS/ACME가 아니다. Node24 fetch가 Host를 무시하는 것을 실제 임시 HTTP로 확인해 health helper는 node:http로 바꿨다. Field immutable domain audit은 지우지 않고 합성 fixture를 격리 DB 회수까지 보존한다. early failures는 `/private/tmp/fieldai-a20-core-v{3,4,5,6}-logs`; fixture MIME/PNG/origin/reserved TLD, cleanup FK/retained audit, domain worker race와 Host helper 오류였으며 기대값을 제품 버그에 맞추지 않았다. 첫 connection 실행의 잘못된 Python 경로는 `/opt/playwright/bin/python`으로 수정 후 통과했다.
+- **A16/A01 runner followup verified:** 외부653de60은 mkdir만 했고 Field journal env는 여전히 상대 경로였음. 새 설정·기존 상대 경로를 절대화하고 key/내용 보존, own retention/revocation env를 independence child에 전달(상대secret 제외 유지). `node --test tools/test/{mock-run,independence-runner,db-suite-env,db-suite-process}.test.mjs` 합계20/20 exit0 `/private/tmp/fieldai-a01-a16-a18-bootstrap.log`. setup 첫 retention key 생성/UUID DB runner/Docker empty volume seed만 account-deletion 하위디렉터리를 준비하며 기존 key의 missing journal은 자동 복원하지 않음.
+- **A19 verified runtime:** 양 API bounded prlimit/heif-convert decoder+자기 Dockerfile 실제 이미지 build/proof exit0. Linux arm64/node UID1000/networknone HEVC505B sha712fc6…d2929→WebP16×16, metadata 제거, corrupt3/oversize/TMPcleanup. `/private/tmp/fieldai-a19-isolated-20261004/logs/{build,proof,image}-{agent,field}.log`. AP image sha256 ff86ec88…dabf, Field d5eeb9b4…611. mac tool없음은 415. C07HEVC/LGPL 법무·운영amd64·다양한실폰HEIC 별도.
+- **Later product evidence:** Field A11 unit7/7, A13 configured121/122 limit3/3, A14 cursor FK101명뒤cleanup3/3, A15 query1/1+legacy entitlement15/15, A17 placeholder/poll6/6, A24 createdAt8h/futuredeny1/1+TOTP4/4. Field 전체 API61/61·web153/153·양typecheck exit0(A18 전). AP A11/A12 unit8/8, A04/A05 live1/1+profile1/1+legacy lifecycle13/13/native1/1. AP A18 실제삭제전PG17 backuprestore+기존사진CLI 등8/8 첫green, 추가binding/guard비용회귀 중. Field A18 구현 중.
+- **Current design / A18:** 자기 RETENTION root/account-deletion, 동일 secret의 별도 HMAC domain·email HMAC fingerprint, 승인/잠금/전제조건 뒤 fsync signed decision intent→동일 DB tx cleanup+immutable receipt. DB rollback 후 남은 intent는 승인된 삭제결정이며 fail-closed 복구 대상. AP96/Field86 예약. startup/HTTP/worker cache≤60초+receipt/binding/applied proof로 복원정보 재노출503; protected 최신 checkpoint의 offline 재익명화는 기존 고객/청구 이력 보존. Field는 photo2단계 prepared receipt/executionStarted/assetsdeleting/draft-release0/newwrite·public denial 후 final applied에서 membership/session 제거. AP/Field `*_ACCOUNT_DELETION_CHECKPOINT_OUTPUT`와 `*_ACCOUNT_DELETION_RESTORE_CHECKPOINT_FILE`을 기존 retention CLI에 추가, mock restore 제한 유지. cutover 이전 삭제는 소급 저널 증거가 없음.
+- **Docs modified in progress:** docs/04 live OAuth baseline+양protected exports runbook, env webhook IP limit1..100000/default120, docs/06/acceptance_catalog implementation_test_refs31 QA IDs(status160개 not_run 보존), coverage 최신 진행 증거. 코드/원장 commit은 아직 없음.
+- **Remaining:** AP A13/A14/A15/A24 마감 보고, 양 A18 구현/보안 리뷰/회귀 및 A04·UI review fix 최종 확인, A22 최종증거와 TASKS/18/phase 체크 갱신, 최종 lint/typecheck/unit/양DB/contracts/build/E2E/security/faults/최신 양독립성, 코드 commit·마스터/check/SHA256SUMS·원본main충돌대조/통합. 실 공급사/운영/법무/최종 인수 C절은 미완료 유지.
+
+### Exact commands — A절 전용 worktree
+
+```bash
+cd /private/tmp/fieldai-remaining-a-20261004
+sed -n '1,24p' TASKS.md
+cat docs/technical/REMAINING_A_EXECUTION_2026-10-04.md
+git status --short && git log -4 --oneline
+actionlint .github/workflows/ci.yml
+pnpm lint
+pnpm typecheck
+pnpm test:unit
+node tools/run-db-suite.mjs agent test/field-connection.db.test.ts test/admin-operations.db.test.ts
+node tools/run-db-suite.mjs field test/retention.db.test.ts test/account-deletion.db.test.ts test/ap-connection.db.test.ts test/email-outbox-admin.db.test.ts
+# 원본 mock 서버를 내려서 독립성/E2E를 실행하지 않는다. 격리 DIND harness 사용:
+cat /private/tmp/fieldai-a01-isolated-20261004/run-suite.sh
+cat /private/tmp/fieldai-a01-isolated-20261004/logs/independence-agent.exit
+cat /private/tmp/fieldai-a01-isolated-20261004/logs/independence-field.exit
+# 지정 모델 읽기 전용 리뷰 로그(완료 여부는 process exit와 최종 파일로 확인):
+cat /private/tmp/fieldai-a01-boundary-review-20261004.md
+cat /private/tmp/fieldai-a02-a06-review-20261004.md
+cat /private/tmp/fieldai-a04-a05-review-20261004.md
+# 문서 의존성 있는 Python(원본 main 파일을 쓰지 않고 여기 cwd에서 실행):
+/private/tmp/claude-501/-Users-jr-Desktop-projects-FieldAI/96603d97-39e3-4e39-9b8a-323af8a9aa5c/scratchpad/docs-venv/bin/python tools/build_report.py
+/private/tmp/claude-501/-Users-jr-Desktop-projects-FieldAI/96603d97-39e3-4e39-9b8a-323af8a9aa5c/scratchpad/docs-venv/bin/python tools/check_package.py
+```
 
 ## 종합 리뷰 비앱 영역 반영(CI·infra·도구·문서) — 2026-10-03
 
