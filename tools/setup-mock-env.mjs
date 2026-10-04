@@ -32,6 +32,10 @@ for (const product of requested.length ? [...new Set(requested)] : ['agent', 'fi
   if (!isAgent && !content.includes('FIELD_PUBLIC_WEB_ORIGIN=')) {
     appendFileSync(path, 'FIELD_PUBLIC_WEB_ORIGIN=http://127.0.0.1:3002\n', { mode: 0o600 });
   }
+  // AP도 sandbox 프로필 DB 테스트(auth-email-mfa·auth-kakao)가 웹 origin을 요구한다. 로컬 .env에는 손으로 넣었지만 CI가 새로 만드는 .env에는 없어서 실패했다(2026-10-04 CI 첫 실행).
+  if (isAgent && !content.includes('AP_PUBLIC_WEB_ORIGIN=')) {
+    appendFileSync(path, 'AP_PUBLIC_WEB_ORIGIN=http://localhost:3001\n', { mode: 0o600 });
+  }
   if (!isAgent && !content.includes('FIELD_MEDIA_DIRECTORY=')) {
     appendFileSync(path, 'FIELD_MEDIA_DIRECTORY=infra/field/media\n', { mode: 0o600 });
   }
