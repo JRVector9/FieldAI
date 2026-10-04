@@ -61,6 +61,12 @@ for (const product of requested.length ? [...new Set(requested)] : ['agent', 'fi
     appendFileSync(path, 'FIELD_REVOCATION_JOURNAL_DIRECTORY=infra/field/revocation-journal\n', { mode: 0o600 });
   }
   if (!isAgent && !content.includes('FIELD_REVOCATION_JOURNAL_SECRET=')) {
+    // AP와 같이 회수 저널 디렉터리를 먼저 만든다. CI처럼 빈 checkout에서는 디렉터리가 없어 lifecycle CLI의 realpath가 ENOENT로 실패했다(2026-10-04 CI e2e).
+    const directory = parseEnv(readFileSync(path, 'utf8')).FIELD_REVOCATION_JOURNAL_DIRECTORY;
+    if (!directory) throw new Error('Field mock revocation directory is required before first initialization');
+    const root = resolve(directory);
+    if (existsSync(root) && readdirSync(root).length) throw new Error('Field existing revocation journal requires its original key');
+    mkdirSync(root, { recursive: true, mode: 0o700 });
     appendFileSync(path, `FIELD_REVOCATION_JOURNAL_SECRET=${randomBytes(32).toString('base64url')}\n`, { mode: 0o600 });
   }
   if (isAgent && !content.includes('AP_RETENTION_JOURNAL_DIRECTORY=')) {

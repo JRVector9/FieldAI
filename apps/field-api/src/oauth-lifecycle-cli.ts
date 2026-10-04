@@ -1,4 +1,4 @@
-import { open, readFile, realpath } from 'node:fs/promises';
+import { mkdir, open, readFile, realpath } from 'node:fs/promises';
 import { basename, dirname, relative, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { lifecycleJournalFromEnvironment } from './oauth-lifecycle-journal.js';
@@ -14,6 +14,8 @@ const current=new URL(active);
 const own=(url:URL)=>['postgres:','postgresql:'].includes(url.protocol)&&['127.0.0.1','localhost'].includes(url.hostname)&&url.port==='55432'&&url.username==='field_local';
 if(!own(current)||!/^\/fieldai_field_(mock|test_[a-f0-9]+)$/.test(current.pathname))throw new Error('own local field database required');
 const journal=lifecycleJournalFromEnvironment();if(!journal)throw new Error('existing own journal/key required');
+// mock 전용 CLI다. 빈 checkout에서는 저널 디렉터리가 아직 없을 수 있으므로 realpath 전에 만든다(기존 내용은 건드리지 않음).
+await mkdir(resolve(process.env.FIELD_REVOCATION_JOURNAL_DIRECTORY!),{recursive:true,mode:0o700});
 const root=await realpath(resolve(process.env.FIELD_REVOCATION_JOURNAL_DIRECTORY!));
 const native=new FieldRevocationJournal(root,process.env.FIELD_REVOCATION_JOURNAL_SECRET!);
 if(mode==='--offline-restored'){
