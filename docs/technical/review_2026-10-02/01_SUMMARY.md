@@ -328,3 +328,7 @@ TASKS 상단·HANDOFF가 말하는 "결정 필요 항목"은 이 목록이다. �
 | `test:security` | 0 | 381/381 (TLS ask·health 404 추가) |
 
 실 Caddy/ACME·카카오·토스·S3·SMTP, GitHub Actions 실제 실행, 독립성 검사, 사용자 최종 화면 테스트는 미실행.
+
+## 15. 남은 작업 전체 목록 — 2026-10-04
+
+코드·결정·외부 검증·문서 유지 작업을 `18_REMAINING_WORK.md`에 ID(A/B/C/D)로 정리했다. 이후 작업은 그 문서 기준으로 시작한다.
