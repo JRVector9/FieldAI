@@ -6,6 +6,8 @@ test('independent AP child receives only its own runtime settings', () => {
   const environment = isolatedApiEnvironment('agent', {
     AP_DATABASE_URL: 'postgresql://own', AP_AUTH_SECRET: 'own-secret',
     AP_REVOCATION_JOURNAL_DIRECTORY: '/synthetic/ap-journal', AP_REVOCATION_JOURNAL_SECRET: 'synthetic-own-journal-secret',
+    AP_RETENTION_JOURNAL_DIRECTORY: '/synthetic/ap-retention', AP_RETENTION_JOURNAL_SECRET: 'synthetic-own-retention-secret',
+    FIELD_RETENTION_JOURNAL_SECRET: 'synthetic-other-retention-secret',
     FIELD_REVOCATION_JOURNAL_SECRET: 'synthetic-other-secret',
     AP_AUTH_BASE_URL: 'http://127.0.0.1:4311', AP_OPENAI_API_KEY: 'model-secret',
     AP_FIELD_CLIENT_SECRET: 'connector-secret', FIELD_DATABASE_URL: 'postgresql://other',
@@ -13,6 +15,9 @@ test('independent AP child receives only its own runtime settings', () => {
   assert.equal(environment.AP_DATABASE_URL, 'postgresql://own');
   assert.equal(environment.AP_REVOCATION_JOURNAL_DIRECTORY, '/synthetic/ap-journal');
   assert.equal(environment.AP_REVOCATION_JOURNAL_SECRET, 'synthetic-own-journal-secret');
+  assert.equal(environment.AP_RETENTION_JOURNAL_DIRECTORY, '/synthetic/ap-retention');
+  assert.equal(environment.AP_RETENTION_JOURNAL_SECRET, 'synthetic-own-retention-secret');
+  assert.equal(environment.FIELD_RETENTION_JOURNAL_SECRET, undefined);
   assert.equal(environment.FIELD_REVOCATION_JOURNAL_SECRET, undefined);
   assert.equal(environment.AP_PROFILE, 'mock');
   assert.equal(environment.PATH, '/bin');
@@ -29,9 +34,18 @@ test('independent Field child drops AP connector and fails without own secret', 
   const environment = isolatedApiEnvironment('field', {
     FIELD_DATABASE_URL: 'postgresql://own', FIELD_AUTH_SECRET: 'own-secret',
     FIELD_AUTH_BASE_URL: 'http://127.0.0.1:4321', FIELD_VALKEY_URL: 'valkey://own',
+    FIELD_REVOCATION_JOURNAL_DIRECTORY: '/synthetic/field-revocation', FIELD_REVOCATION_JOURNAL_SECRET: 'synthetic-own-revocation-secret',
+    FIELD_RETENTION_JOURNAL_DIRECTORY: '/synthetic/field-retention', FIELD_RETENTION_JOURNAL_SECRET: 'synthetic-own-retention-secret',
+    AP_REVOCATION_JOURNAL_SECRET: 'synthetic-other-revocation-secret', AP_RETENTION_JOURNAL_SECRET: 'synthetic-other-retention-secret',
     FIELD_AP_CLIENT_SECRET: 'connector-secret', AP_DATABASE_URL: 'postgresql://other',
   });
   assert.equal(environment.FIELD_VALKEY_URL, 'valkey://own');
+  assert.equal(environment.FIELD_REVOCATION_JOURNAL_DIRECTORY, '/synthetic/field-revocation');
+  assert.equal(environment.FIELD_REVOCATION_JOURNAL_SECRET, 'synthetic-own-revocation-secret');
+  assert.equal(environment.FIELD_RETENTION_JOURNAL_DIRECTORY, '/synthetic/field-retention');
+  assert.equal(environment.FIELD_RETENTION_JOURNAL_SECRET, 'synthetic-own-retention-secret');
+  assert.equal(environment.AP_REVOCATION_JOURNAL_SECRET, undefined);
+  assert.equal(environment.AP_RETENTION_JOURNAL_SECRET, undefined);
   assert.equal(environment.FIELD_AP_CLIENT_SECRET, undefined);
   assert.equal(environment.AP_DATABASE_URL, undefined);
   assert.deepEqual(oppositePorts('field'), [4311, 3001, 55431]);

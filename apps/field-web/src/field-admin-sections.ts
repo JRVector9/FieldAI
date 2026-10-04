@@ -7,6 +7,11 @@ export const fieldAdminSections = [
   { id: "audit", title: "Field 신고·감사", description: "운영 조회 기록을 확인합니다." },
 ] as const;
 export type FieldAdminSection = typeof fieldAdminSections[number]["id"];
+export function adminSignOutFailure(status: number) {
+  if (status === 403) return '로그아웃 보안 확인에 실패했습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.';
+  if (status === 429) return '요청이 많아 로그아웃을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+  return '로그아웃하지 못했습니다. 다시 시도해 주세요.';
+}
 export function isFieldAdminSection(value: string): value is FieldAdminSection {
   return fieldAdminSections.some(item => item.id === value);
 }

@@ -35,3 +35,8 @@ Schema/example 검사는 문서 패키지 품질 검사이며 서비스 인수 �
 - 발신자는 기본 v2로 서명한다. Field 발신 버전은 `FIELD_EVENT_SIGNATURE_SEND_VERSION`(`1`|`2`, 미설정 `2`, 다른 값은 worker 시작 실패)이고 `1`은 구버전 수신자가 남은 전환 기간에만 쓴다. AP 발신 버전도 같은 규칙으로 `AP_EVENT_SIGNATURE_SEND_VERSION`(`1`|`2`, 미설정 `2`, 다른 값은 부팅 실패)을 따른다(`apps/agent-api/src/field-signature.ts`, AP→Field 사건·해제 발신). 401에 v1로 자동 하향하지 않는다. 배포 순서와 blocked 재큐 절차는 `docs/03_INTEGRATION_CONTRACT.md` 서명 계약 절을 따른다. 헤더·접두사 없는 v1은 전환 기간에만 받는다: AP `AP_EVENT_SIGNATURE_ACCEPT_V1`, Field `FIELD_EVENT_SIGNATURE_ACCEPT_V1`. 미설정이면 mock/sandbox `true`, live `false`이고 다른 값은 부팅 실패다. 시작 로그에 수용 모드를 남긴다. 버전 헤더가 `2` 외 값이거나 v1 원문에 v2 헤더를 붙이면 401이다.
 - 복구 조회(`notification-status`)·알림 경로 종료(`route-close`)는 Field→AP 단방향 전용 원문 접미사라 이번 버전에서 바꾸지 않았다.
 - 서명 helper는 제품마다 따로 둔다(`apps/agent-api/src/field-signature.ts`, `apps/field-api/src/ap-signature.ts`). 상대 제품 코드를 import하지 않는다. 전환 기간 종료(live에서 v1 허용 해제 확인)는 운영 승인 대상이며 이 미리보기는 출시 승인이 아니다.
+
+## 2026-10-04 A-21 응답 스키마 정정
+
+- AP `FieldNotificationRouteClosure`의 `allOf`가 `additionalProperties:false`인 요청 스키마를 확장해 필수 `closedAt`까지 금지했다. UUID DB consumer 검사 `test/field-actions.db.test.ts`의 실제 200 응답과 `QA149/QA158` 계약 단위 검사에서 재현했다(첫 실패 로그 `/private/tmp/fieldai-a21-field-actions-first-20261004.log`). 기존 7개 종료 식별값과 `closedAt`을 명시한 object 스키마로 정정하며 다른 필드는 계속 거부한다.
+- 기존 API·문서에 이미 있는 응답을 정확히 검증하는 정정이며 wire shape·DTO·scope·상태 전이 변경은 없다. AP `1.0.0-preview.11`/Field `1.0.0-preview.10` pin은 유지한다. 실제 응답 대조는 Ajv2020+형식 검증과 `test:contracts`의 전 경로·2xx status/media coverage gate로 확인한다.

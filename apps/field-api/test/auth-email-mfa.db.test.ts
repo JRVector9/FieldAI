@@ -228,3 +228,25 @@ test('Field sandbox admin needs 2FA enrollment and a session established through
     await app.close();
   }
 });
+
+test('actual TOTP session uses the database clock even when the Node clock runs one minute ahead',async(t)=>{
+  authEmail.provider=blockedProvider;const jar:Jar=new Map(),{email,password}=await signUp(jar);
+  await pool.query('update "user" set "emailVerified"=true where email=$1',[email]);
+  assert.equal((await call(jar,'/sign-in/email',{email,password})).status,200);
+  const userId=(await pool.query<{id:string}>('select id from "user" where email=$1',[email])).rows[0]!.id;
+  await pool.query("insert into field.platform_admin_memberships(user_id,role) values($1,'operator')",[userId]);
+  const enabled=await call(jar,'/two-factor/enable',{password});assert.equal(enabled.status,200);
+  const enrollment=await enabled.json() as {totpURI:string};
+  process.env.FIELD_PROFILE='mock';
+  const app=createFieldApp(async()=>undefined,auth.handler,base,{pool,
+    resolveUserId:async headers=>(await auth.api.getSession({headers:fromNodeHeaders(headers)}))?.user.id??null,
+    resolveSession:async headers=>{const current=await auth.api.getSession({headers:fromNodeHeaders(headers)});return current?{id:current.session.id,userId:current.user.id}:null;}});
+  process.env.FIELD_PROFILE='sandbox';
+  t.mock.timers.enable({apis:['Date'],now:Date.now()+60_000});
+  try {
+    const confirmed=await call(jar,'/two-factor/verify-totp',{code:totp(enrollment.totpURI)});assert.equal(confirmed.status,200,await confirmed.clone().text());
+    const current=await auth.api.getSession({headers:new Headers({cookie:cookie(jar)})});assert.ok(current);
+    assert.equal((await pool.query('select "createdAt"<=clock_timestamp() as valid from "session" where id=$1',[current.session.id])).rows[0].valid,true,'Node-created timestamps currently place a valid TOTP session in the database future');
+    const allowed=await app.inject({url:'/v1/admin/overview',headers:{cookie:cookie(jar)}});assert.equal(allowed.statusCode,200,allowed.body);
+  }finally{t.mock.timers.reset();await app.close();process.env.FIELD_PROFILE='sandbox';}
+});

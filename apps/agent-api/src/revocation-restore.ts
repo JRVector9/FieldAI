@@ -1,5 +1,5 @@
-import type { Pool } from 'pg';
-import { agentRevocationEntryHash, verifyAgentRevocationJournal, type AgentRevocationJournal } from './revocation-journal.js';
+import type { Pool, PoolClient } from 'pg';
+import { agentRevocationEntryHash, verifyAgentRevocationJournal, type AgentRevocationEntry, type AgentRevocationJournal } from './revocation-journal.js';
 
 export async function reapplyAgentRevocationJournal(pool: Pool, journal: AgentRevocationJournal, checkpoint: string) {
   const entries = await journal.verifiedEntries(checkpoint);
@@ -10,8 +10,16 @@ export async function reapplyAgentRevocationJournal(pool: Pool, journal: AgentRe
     if (!namespaces.includes('ap') || namespaces.includes('field')) throw new Error('revocation restore requires an isolated AP database');
     await db.query("select pg_advisory_xact_lock(hashtext('ap-revocation-restore'))");
     await verifyAgentRevocationJournal(db, journal);
+    const applied = await applyAgentRevocationEntries(db, entries);
+    await db.query('commit');
+    return { entries: entries.length, applied };
+  } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
+}
+
+// The live baseline already owns its bounded transaction and relation locks.
+// Keep native replay in that transaction instead of releasing the fence first.
+export async function applyAgentRevocationEntries(db: PoolClient, entries: AgentRevocationEntry[]) {
     let applied = 0;
-    // 전체 원장/namespace 검증 이후 한 transaction으로 처리한다. 중간 오류는 모두 rollback한다.
     for (const entry of entries) {
       if ((await db.query('select 1 from ap.revocation_restore_audit where entry_id=$1', [entry.id])).rowCount) continue;
       let found: boolean;
@@ -56,7 +64,5 @@ export async function reapplyAgentRevocationJournal(pool: Pool, journal: AgentRe
         [entry.id, agentRevocationEntryHash(entry)]);
       applied++;
     }
-    await db.query('commit');
-    return { entries: entries.length, applied };
-  } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
+    return applied;
 }

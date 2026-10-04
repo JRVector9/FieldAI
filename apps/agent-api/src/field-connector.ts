@@ -561,6 +561,22 @@ export function registerFieldConnectorRoutes(app: FastifyInstance, runtime: Busi
         await db.query('rollback');
         return reply.code(400).send({ error: 'invalid_oauth_state' });
       }
+      // A-10: consent may finish after deletion was scheduled. Serialize with the organization
+      // deletion transaction before replay, scope fallback, or any remote token exchange.
+      const organization = (await db.query<{ deleted: boolean }>(
+        'select deleted_at is not null as deleted from ap.organizations where id=$1 for share',
+        [attempt.ap_organization_id])).rows[0];
+      const deletion = organization?.deleted !== false || Boolean((await db.query(
+        "select 1 from ap.organization_deletion_requests where organization_id=$1 and status in ('scheduled','executed') limit 1",
+        [attempt.ap_organization_id])).rowCount);
+      if (deletion) {
+        if (attempt.status === 'pending')
+          await db.query("update ap.field_oauth_attempts set status='denied' where id=$1", [attempt.id]);
+        await db.query('commit');
+        return reply.header('Cache-Control', 'no-store').code(409).send({ error: 'deletion_scheduled',
+          remoteGrantRevocationRequired: true,
+          message: '삭제 예정 AP 조직의 연결을 완료할 수 없습니다. Field에서 이미 승인한 연결 동의를 확인하고 회수해 주세요.' });
+      }
       if (attempt.status !== 'pending') {
         await db.query('commit');
         const result = attempt.status === 'denied' ? 'denied' : attempt.status === 'unknown'

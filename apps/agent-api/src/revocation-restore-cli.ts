@@ -3,7 +3,9 @@ import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { agentRevocationJournalFromEnvironment } from './revocation-journal.js';
 import { reapplyAgentRevocationJournal } from './revocation-restore.js';
+import { assertProductionProfile } from './production-profile.js';
 
+assertProductionProfile();
 if (!process.argv.includes('--offline-restored')) throw new Error('explicit --offline-restored is required before replaying revocations');
 const database = process.env.AP_REVOCATION_RESTORE_DATABASE_URL, active = process.env.AP_DATABASE_URL;
 const checkpointFile = process.env.AP_REVOCATION_RESTORE_CHECKPOINT_FILE;

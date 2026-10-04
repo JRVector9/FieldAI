@@ -1,3 +1,4 @@
+import { accountDeletionJournalFromEnvironment, assertAccountDeletionServing } from './account-deletion-journal.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { billingContextFromEnvironment } from './billing-context.js';
@@ -10,11 +11,14 @@ const billing = billingContextFromEnvironment();
 const pool = new Pool({ connectionString: process.env.AP_DATABASE_URL });
 const controller = new AbortController();
 for (const signal of ['SIGINT','SIGTERM'] as const) process.on(signal,() => controller.abort());
+const deletionJournal=accountDeletionJournalFromEnvironment();
 try {
+  await assertAccountDeletionServing(pool,deletionJournal);
   await pool.query('select claim_token,next_attempt_at from ap.billing_authorizations limit 1');
   process.stdout.write(`AP billing authorization worker ready (${billing ? billing.provider.mode : 'blocked_integration'})\n`);
   do {
     try {
+      await assertAccountDeletionServing(pool,deletionJournal);
       const result = await runBillingAuthorizationOnce({ pool,billing });
       if (result !== 'empty' || process.argv.includes('--once')) process.stdout.write(`AP billing authorization: ${result}\n`);
       if (process.argv.includes('--once')) break;

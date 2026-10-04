@@ -22,6 +22,15 @@ test('AP Toss webhook parser keeps only identifier hints', () => {
     assert.equal(parseTossWebhook(invalid), null, JSON.stringify(invalid));
 });
 
+test('AP billing webhook IP limit can be raised explicitly and rejects malformed limits',async()=>{
+  const {billingWebhookIpLimitFromEnvironment}=await import('../src/billing-webhook.js');
+  assert.equal(billingWebhookIpLimitFromEnvironment(undefined),120);
+  assert.equal(billingWebhookIpLimitFromEnvironment(''),120);
+  assert.equal(billingWebhookIpLimitFromEnvironment('1000'),1000);
+  assert.equal(billingWebhookIpLimitFromEnvironment('100000'),100000);
+  for(const invalid of ['0','100001','-1','1.5','1e3',' 120 ','invalid'])assert.throws(()=>billingWebhookIpLimitFromEnvironment(invalid),/AP_BILLING_WEBHOOK_IP_LIMIT/);
+});
+
 // 보안 #4: 웹훅 IP 창은 IPv6를 /64로 묶고, IPv4 매핑 주소는 IPv4로 본다.
 test('AP Toss webhook IP window groups IPv6 by /64 and unwraps IPv4-mapped addresses', () => {
   assert.equal(webhookIpBucket('203.0.113.9'), '203.0.113.9');

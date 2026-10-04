@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
-import { agentAdminSections as sections, deletionResumeBlockReason, stoppedDeletionReason, type AgentAdminSection } from "./agent-admin-sections";
+import { agentAdminSections as sections, adminResourceLabel, adminSignOutFailureMessage, deletionResumeBlockReason, stoppedDeletionReason, type AgentAdminSection } from "./agent-admin-sections";
 import "./agent-admin.css";
 import { AgentModerationAdmin } from './AgentModerationAdmin';
 import { AgentCustomerSupport } from './AgentCustomerSupport';
@@ -11,6 +11,8 @@ import { BillingAdmin } from './billing-admin';
 import './billing-admin.css';
 import { signInOutcome } from './auth-flow';
 import { TwoFactorChallenge } from './agent-auth-pages';
+import { AgentUnknownFieldActions } from './AgentUnknownFieldActions';
+import { AgentEmailOutboxAdmin } from './AgentEmailOutboxAdmin';
 
 type Overview = {
   product: "agent";
@@ -151,7 +153,7 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
     setBusy(true); setStatus("");
     try {
       const result = await request("/api/auth/sign-out", "POST", {});
-      if (result.status !== 200) { setStatus(`로그아웃하지 못했습니다 (${result.status}).`); return; }
+      if (result.status !== 200) { setStatus(adminSignOutFailureMessage); return; }
       setOverview(null); setPhase("auth"); setEmail(""); setPassword("");
     } catch { setStatus("로그아웃 응답을 받지 못했습니다. 다시 시도해 주세요."); }
     finally { setBusy(false); }
@@ -215,13 +217,15 @@ export function AgentAdmin({ section = "operations" }: { section?: AgentAdminSec
             </article>)}</div>}
         </section>}
         {section === "organizations" && <OrganizationDeletionRecovery role={overview.role} />}
+        {section === "notifications" && <AgentUnknownFieldActions role={overview.role} />}
+        {section === "notifications" && <AgentEmailOutboxAdmin />}
         {section === "audit" && <AgentModerationAdmin actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <AgentCustomerSupport actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <AgentRetentionAdmin actorUserId={overview.actorUserId} role={overview.role} />}
         {section === "audit" && <section className="special-panel" aria-label="최근 관리자 조회"><h2>최근 관리자 조회</h2>
           {overview.recentAdminAccesses.length === 0 ? <p>조회 기록이 없습니다.</p>
             : <div className="agent-admin-list">{overview.recentAdminAccesses.map((item, index) => <article key={`${item.actorUserId}-${item.accessedAt}-${index}`}>
-              <h3>운영 상태 조회</h3><p>{new Date(item.accessedAt).toLocaleString("ko-KR")}</p>
+              <h3>{adminResourceLabel(item.resource)}</h3><p>{new Date(item.accessedAt).toLocaleString("ko-KR")}</p>
               <p>운영자 ID {item.actorUserId}</p>
             </article>)}</div>}
         </section>}</>}

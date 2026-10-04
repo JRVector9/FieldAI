@@ -1,5 +1,10 @@
 # AGENTS.md — 독립 AI 플랫폼 + Field, 개발 기준 v3.0
 
+## 모델 규칙 (JR 지정, 2026-10-04)
+
+- 서브에이전트 생성과 `codex exec` / `codex review`의 모델은 `gpt-6.1-sol`, reasoning effort는 `xhigh`로 지정한다.
+- 다른 모델 또는 `high` 이하 effort를 지정하지 않는다. 예: `codex exec -m gpt-6.1-sol -c model_reasoning_effort=xhigh ...`.
+
 이 패키지는 **개발 명세**다. 운영 앱·실제 외부 연동·상용 배포가 이미 존재한다고 가정하지 않는다. 기존 PRD v2.0과 통합 AGENTS/TASKS는 이력 자료이며 이번 제품 경계와 충돌할 때 사용하지 않는다.
 
 ## 1. 먼저 읽을 것

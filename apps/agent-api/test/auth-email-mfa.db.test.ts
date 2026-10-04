@@ -200,6 +200,9 @@ test('AP sandbox admin needs 2FA enrollment and a session established through TO
     assert.equal((await call(first, '/two-factor/verify-totp', { code: String((Number(totp(enrollment.totpURI)) + 500_000) % 1_000_000).padStart(6, '0') })).status, 401);
     const confirmed = await call(first, '/two-factor/verify-totp', { code: totp(enrollment.totpURI) });
     assert.equal(confirmed.status, 200, await confirmed.clone().text());
+    const issued = await auth.api.getSession({ headers: new Headers({cookie:cookie(first)}) });
+    assert.equal((await pool.query('select "createdAt"<=clock_timestamp() as valid from "session" where id=$1',[issued!.session.id])).rows[0].valid,true,
+      'auth issuance must use the database clock used by the absolute MFA age fence');
     const allowed = await overview(first);
     assert.equal(allowed.statusCode, 200, allowed.body);
     assert.equal(allowed.json().role, 'operator');

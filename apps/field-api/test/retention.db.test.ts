@@ -184,6 +184,30 @@ test('Field retention uses approved immutable periods and real closure, with nat
     for (const id of pagedIds) assert.ok(seen.includes(id), 'microsecond ordered work must not be skipped');
     process.env.FIELD_PROFILE = 'sandbox';
     assert.deepEqual((await app.inject({ url: '/v1/admin/retention/policies', headers: headers(approver) })).json(), { error: 'mfa_required' });
+    // A-07 / QA49, QA157: live 관리자 쓰기는 제품 웹 Origin만 허용하고 로컬 예외는 mock에만 둔다.
+    const webOrigin = process.env.FIELD_PUBLIC_WEB_ORIGIN;
+    try {
+      process.env.FIELD_PROFILE = 'live';
+      process.env.FIELD_PUBLIC_WEB_ORIGIN = 'https://field.example.invalid';
+      for (const origin of ['http://localhost:3002', 'http://127.0.0.1:3002', 'https://other.example.invalid']) {
+        const deniedOrigin = await app.inject({ method: 'POST', url: '/v1/admin/retention/policies',
+          headers: { ...headers(operator, randomUUID()), origin }, payload: requestPolicy });
+        assert.deepEqual([deniedOrigin.statusCode, deniedOrigin.json()], [403, { error: 'origin_denied' }]);
+      }
+      const ownOrigin = await app.inject({ method: 'POST', url: '/v1/admin/retention/policies',
+        headers: { ...headers(operator, randomUUID()), origin: process.env.FIELD_PUBLIC_WEB_ORIGIN }, payload: requestPolicy });
+      assert.deepEqual(ownOrigin.json(), { error: 'mfa_required' });
+      process.env.FIELD_PROFILE = 'mock';
+      for (const origin of ['http://localhost:3002', 'http://127.0.0.1:3002']) {
+        const localOrigin = await app.inject({ method: 'POST', url: '/v1/admin/retention/policies',
+          headers: { ...headers(operator, randomUUID()), origin }, payload: {} });
+        assert.equal(localOrigin.statusCode, 400);
+        assert.equal(localOrigin.json().error, 'invalid_retention_policy');
+      }
+    } finally {
+      if (webOrigin === undefined) delete process.env.FIELD_PUBLIC_WEB_ORIGIN;
+      else process.env.FIELD_PUBLIC_WEB_ORIGIN = webOrigin;
+    }
   } finally {
     process.env.FIELD_PROFILE = previous; await app.close();
     await pool.query('delete from field.organizations where owner_user_id=any($1::text[])', [users]);

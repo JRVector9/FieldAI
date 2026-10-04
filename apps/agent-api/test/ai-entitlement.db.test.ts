@@ -22,6 +22,9 @@ async function fixture(units=1,legacy=false,anchor=new Date(Date.now()-1000),cus
  if(legacy)await runner({databaseUrl:u.toString(),dir:resolve('migrations'),direction:'up',count:79,migrationsTable:'pgmigrations',log:()=>undefined});
  const migration=legacy?{status:0,stderr:Buffer.alloc(0)}:spawnSync(process.execPath,['tools/run-migrations.mjs','agent'],{cwd:resolve('../..'),env:{...process.env,AP_DATABASE_URL:u.toString()},stdio:'pipe'});assert.equal(migration.status,0,migration.stderr.toString());
  const pool=new Pool({connectionString:u.toString()}),owner=randomUUID(),operator=randomUUID(),approver=randomUUID();
+ // Preserve the real pre-000080 quota migration exercise. Only its unrelated
+ // deletion fixture is supplied here, never by an operational schema lookup.
+ if(legacy)await pool.query('create table ap.organization_deletion_requests(organization_id uuid not null,status text not null)');
  for(const id of [owner,operator,approver])await pool.query('insert into "user"(id,name,email,"emailVerified") values($1,$2,$3,false)',[id,'Synthetic AI',id+'@example.invalid']);
  let actor=owner;let payment:BillingPayment;
  const billing:BillingContext={credentialKey:randomBytes(32),webOrigin:'http://localhost:3001',provider:{mode:'test',mid:'synthetic-mid',clientKey:'test_ck_synthetic',keyFingerprint:'a'.repeat(64),issue:async()=>'synthetic-billing',charge:async()=>{throw Error('unused');},lookup:async()=>structuredClone(payment),refund:async input=>{payment={...payment,status:'CANCELED',balanceAmount:0,suppliedAmount:0,vat:0,cancels:[{transactionKey:'synthetic-cancel-'+randomUUID(),cancelAmount:input.amount,taxFreeAmount:input.taxFreeAmount,cancelReason:input.reason,canceledAt:new Date().toISOString(),cancelStatus:'DONE',refundableAmount:0}]};return structuredClone(payment);}}};

@@ -7,6 +7,8 @@ import { Pool } from 'pg';
 import { createFieldApp } from '../src/app.js';
 import { runOrganizationDeletionOnce } from '../src/account-deletion.js';
 import { MediaPermissionError, runSiteAssetDeletionOnce, type FieldSiteMediaStore } from '../src/site-media.js';
+import { readdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 const user = (headers: IncomingHttpHeaders) =>
   typeof headers['x-test-user'] === 'string' ? headers['x-test-user'] : null;
@@ -86,6 +88,7 @@ test('Field organization deletion unpublishes, cools, cancels, removes site data
       values ($1,$2,1,$3,$4::jsonb,'request','Customer','010-4567-7891',$5,'Asia/Seoul','requested',now(),'Morning','Please','Seoul')`,
     [reservation, org, service, snapshot, hash(reservationKey)]);
     assert.equal((await call('GET', `/v1/public/sites/${slug}`)).statusCode, 200);
+    assert.equal((await call('GET', `/v1/public/catalog/${org}`)).statusCode, 200);
     // owner 발송 기록(M3 후속): 미시작 건·종료 건은 암호문을 지우고, 결과 미상 건은 공급사 대조를 위해 남긴다.
     const [ownerEvent, ownerEvent2] = [randomUUID(), randomUUID()];
     for (const id of [ownerEvent, ownerEvent2]) {
@@ -129,6 +132,9 @@ test('Field organization deletion unpublishes, cools, cancels, removes site data
     // 예약: 공개 사이트·사진 즉시 비공개, 새 업무 차단, 고객 확인키 열람 유지. 취소하면 다시 공개된다.
     const scheduled = await call('POST', '/v1/organizations/current/deletion-requests', owner, confirm);
     assert.equal(scheduled.statusCode, 201, scheduled.body);
+    // A-08 / QA47, QA79: 삭제 유예 조직의 승인 카탈로그도 공개 조회로 노출하지 않는다.
+    const hiddenCatalog = await call('GET', `/v1/public/catalog/${org}`);
+    assert.deepEqual([hiddenCatalog.statusCode, hiddenCatalog.json()], [404, { error: 'not_found' }]);
     assert.equal((await call('GET', `/v1/public/sites/${slug}`)).statusCode, 404);
     assert.equal((await call('GET', `/v1/public/site-assets/${asset}`)).statusCode, 404);
     const access = (await call('GET', '/v1/subscription', owner)).json().access;
@@ -136,6 +142,7 @@ test('Field organization deletion unpublishes, cools, cancels, removes site data
     assert.equal((await app.inject({ url: `/v1/inquiries/${inquiry}`, headers: { authorization: `Bearer ${inquiryKey}` } })).statusCode, 200);
     assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'empty');
     assert.equal((await call('DELETE', '/v1/organizations/current/deletion-requests/current', owner)).json().request.status, 'canceled');
+    assert.equal((await call('GET', `/v1/public/catalog/${org}`)).statusCode, 200);
     assert.equal((await call('GET', `/v1/public/sites/${slug}`)).statusCode, 200);
     const again = await call('POST', '/v1/organizations/current/deletion-requests', owner, confirm);
     assert.equal(again.statusCode, 201);
@@ -167,6 +174,7 @@ test('Field organization deletion unpublishes, cools, cancels, removes site data
     assert.equal(await runOrganizationDeletionOnce({ pool, siteMedia }), 'empty');
     const steps = (await pool.query('select status,steps from field.organization_deletion_requests where id=$1', [requestId])).rows[0];
     assert.equal(steps.status, 'executed');
+    assert.equal((await call('GET', `/v1/public/catalog/${org}`)).statusCode, 404);
     assert.equal(steps.steps.executed.siteAssetsDeleted, 2);
     assert.equal(files.size, 0);
     for (const table of ['site_releases', 'site_drafts'])
@@ -204,6 +212,8 @@ test('Field organization deletion unpublishes, cools, cancels, removes site data
     const deleted = await call('POST', '/v1/account/deletion-requests', owner,
       { password, confirmText: `${owner}@example.invalid`, acknowledgement: true });
     assert.equal(deleted.statusCode, 200, deleted.body);
+    const signedDeletions=await readdir(resolve(process.env.FIELD_RETENTION_JOURNAL_DIRECTORY!,'account-deletion')).catch(()=>[]);
+    assert.ok(signedDeletions.some(name=>name.endsWith('.json')),'approved identity/site deletion needs independent signed restore proof');
     assert.match((await pool.query('select email from "user" where id=$1', [owner])).rows[0].email, /@deleted\.invalid$/);
     assert.equal((await pool.query('select count(*)::int as n from "account" where "userId"=$1', [owner])).rows[0].n, 0);
     assert.equal((await pool.query('select count(*)::int as n from field.account_deletion_audit where user_id=$1', [owner])).rows[0].n, 1);
@@ -339,6 +349,11 @@ test('Field organization deletion waits on stopped photo deletions without count
   } finally {
     await pool.query(`drop trigger if exists ${trigger} on field.organizations`);
     await pool.query(`drop function if exists field.${trigger}()`);
+    // The signed organization decision is irreversible once execution starts.
+    // Finish that synthetic decision after removing the injected failure so the
+    // next scenario does not inherit a deliberately pending recovery proof.
+    await pool.query('update field.organization_deletion_requests set next_attempt_at=now() where id=$1',[requestId]);
+    await runOrganizationDeletionOnce({pool,siteMedia});
     await pool.query('delete from field.organization_deletion_requests where id=$1', [requestId]);
     await pool.end();
   }

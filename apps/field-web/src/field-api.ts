@@ -113,5 +113,9 @@ export async function requestJson(path: string, method = "GET", body?: unknown, 
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
+  if(typeof window!=='undefined'&&response.ok&&method!=='GET'&&(
+    ['/api/auth/sign-in/email','/api/auth/sign-up/email','/api/auth/sign-out','/v1/organizations','/v1/account/deletion-requests'].includes(path)
+    ||path==='/v1/organizations/current/deletion-requests/current'))
+    window.dispatchEvent(new Event('field-owner-session-changed'));
   return { status: response.status, data };
 }

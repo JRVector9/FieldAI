@@ -17,6 +17,8 @@ const suites = {
     ['AP native widget retention end, explicit new consultation and stale response isolation', 'ap-widget-ended-http.test.mjs'],
     ['AP organization deletion re-auth schedule, blocked trial start and cancel', 'account-deletion-http.test.mjs',
       { ACCOUNT_DELETION_PRODUCT: 'agent' }],
+    ['AP direct human handling, Toss webhook hints and legal pages', 'remaining-core-http.test.mjs',
+      { CORE_SPIKE_PRODUCT: 'agent' }],
   ],
   field: [
     ['Field owner, public site, inquiry, and two booking modes', 'field-owner-flow-http.test.mjs'],
@@ -28,6 +30,8 @@ const suites = {
     ['Field retention policies, holds, job cancellation/approval, independent purge worker and ended receipt', 'field-retention-http.test.mjs'],
     ['Field organization deletion re-auth schedule, blocked trial start and cancel', 'account-deletion-http.test.mjs',
       { ACCOUNT_DELETION_PRODUCT: 'field' }],
+    ['Field photo deletion, domain HTTP boundary, Toss hints and legal pages', 'remaining-core-http.test.mjs',
+      { CORE_SPIKE_PRODUCT: 'field' }],
   ],
   distribution: [
     ['AP publisher recovery', 'publisher-recovery-http.test.mjs'],

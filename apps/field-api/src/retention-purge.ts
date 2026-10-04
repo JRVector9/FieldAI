@@ -67,28 +67,42 @@ export async function purgeFieldEmailOutbox(pool: Pool) {
 
 // Security #2: 이메일 미인증·비밀번호(credential) 계정만 있고 조직·관리자 자격·OAuth client가 없는 사용자를 48시간 뒤 지운다.
 // 남의 주소로 가입만 해 두어 실제 주인의 카카오 가입을 막는 선점을 풀기 위함이다. 비mock 전용(작업자가 판단)이며,
-// 업무·감사 원장이 FK로 참조하는 사용자는 삭제가 거부되므로(23503) 건너뛰고 남긴다. 한 번에 100명까지 처리한다.
+// 업무·감사 원장이 FK로 참조하는 사용자는 삭제가 거부되므로(23503) 건너뛰고 남긴다.
+// 100행씩 (createdAt,id) cursor를 전진시켜 오래된 FK 보존 계정이 뒷쪽 후보를 막지 않게 한다.
 export async function purgeUnverifiedCredentialUsers(pool: Pool) {
-  const candidates = (await pool.query<{ id: string }>(`select u.id from "user" u
-    where u."emailVerified" = false and u."createdAt" < now() - interval '48 hours'
+  const cutoff=(await pool.query<{cutoff:string}>("select to_char(now() at time zone 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') as cutoff")).rows[0]!.cutoff;
+  let cursor:{id:string;at:string}|undefined,deleted=0,retained=0;
+  while(true){
+    const candidates = (await pool.query<{ id: string; at:string }>(`select u.id,
+      to_char(u."createdAt" at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as at from "user" u
+    where u."emailVerified" = false and u."createdAt" < $1::timestamptz - interval '48 hours'
+      and ($2::timestamptz is null or (u."createdAt",u.id)>($2::timestamptz,$3::text))
       and exists(select 1 from "account" a where a."userId" = u.id and a."providerId" = 'credential')
       and not exists(select 1 from "account" a where a."userId" = u.id and a."providerId" <> 'credential')
       and not exists(select 1 from field.memberships m where m.user_id = u.id)
       and not exists(select 1 from field.organizations o where o.owner_user_id = u.id)
       and not exists(select 1 from field.platform_admin_memberships p where p.user_id = u.id)
       and not exists(select 1 from "oauthClient" c where c."userId" = u.id)
-    order by u."createdAt" limit 100`)).rows;
-  let deleted = 0, retained = 0;
+    order by u."createdAt",u.id limit 100`,[cutoff,cursor?.at??null,cursor?.id??null])).rows;
+    if(!candidates.length)break;
   for (const { id } of candidates) {
     // 조회와 삭제 사이에 인증·조직 생성이 끝났으면 같은 조건을 다시 확인해 지우지 않는다.
     try {
       deleted += (await pool.query(`delete from "user" u where u.id = $1 and u."emailVerified" = false
+        and u."createdAt" < $2::timestamptz - interval '48 hours'
+        and exists(select 1 from "account" a where a."userId"=u.id and a."providerId"='credential')
         and not exists(select 1 from field.memberships m where m.user_id = u.id)
-        and not exists(select 1 from "account" a where a."userId" = u.id and a."providerId" <> 'credential')`, [id])).rowCount ?? 0;
+        and not exists(select 1 from field.organizations o where o.owner_user_id=u.id)
+        and not exists(select 1 from field.platform_admin_memberships p where p.user_id=u.id)
+        and not exists(select 1 from "oauthClient" c where c."userId"=u.id)
+        and not exists(select 1 from "account" a where a."userId" = u.id and a."providerId" <> 'credential')`, [id,cutoff])).rowCount ?? 0;
     } catch (error) {
       if ((error as { code?: string }).code !== '23503') throw error;
       retained += 1;
     }
+  }
+    const last=candidates.at(-1)!;cursor={id:last.id,at:last.at};
+    if(candidates.length<100)break;
   }
   return { unverifiedUsersDeleted: deleted, unverifiedUsersRetained: retained };
 }

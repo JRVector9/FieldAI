@@ -44,6 +44,41 @@ type AdminIncident = {
 };
 
 export function registerFieldAdminRoutes(app: FastifyInstance, runtime: FieldBusinessRuntime) {
+  // A-03: 인증 메일 장애 확인용 목록. 인증 본문·링크·발송 공급사 ID·주소 원문은 응답에 넣지 않는다.
+  app.get<{ Querystring: { state?: string; before?: string } }>('/v1/admin/email-outbox', async (request, reply) => {
+    reply.headers({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' });
+    const admin = await requireAdmin(request, reply, runtime);
+    if (!admin) return reply;
+    const state = request.query.state ?? 'all';
+    if (!['all','pending','sent','failed','blocked_integration','suppressed_duplicate'].includes(state))
+      return reply.code(400).send({ error: 'invalid_email_state' });
+    let before: { at: string; id: string; state: string } | null = null;
+    if (request.query.before !== undefined) {
+      try {
+        const encoded = request.query.before;
+        if (typeof encoded !== 'string' || encoded.length > 512 || !/^[A-Za-z0-9_-]+$/.test(encoded)) throw new Error('invalid_cursor');
+        const decoded = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+        if (!decoded || typeof decoded.at !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(decoded.at)
+          || decoded.at.startsWith('0000') || !Number.isFinite(Date.parse(decoded.at))
+          || new Date(decoded.at).toISOString() !== `${decoded.at.slice(0,23)}Z`
+          || typeof decoded.id !== 'string' || !uuid.test(decoded.id) || decoded.state !== state) throw new Error('invalid_cursor');
+        before = decoded;
+      } catch { return reply.code(400).send({ error: 'invalid_cursor' }); }
+    }
+    const rows = (await runtime.pool.query<{ id: string; to: string; purpose: string; state: string; errorCode: string | null;
+      createdAt: Date; sentAt: Date | null; cursorAt: string }>(`select id,"to",purpose,state,error_code as "errorCode",
+      created_at as "createdAt",sent_at as "sentAt",to_char(created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "cursorAt"
+      from field.email_outbox where ($1::text is null or state=$1)
+        and ($2::timestamptz is null or (created_at,id)<($2::timestamptz,$3::uuid))
+      order by created_at desc,id desc limit 101`, [state === 'all' ? null : state, before?.at ?? null, before?.id ?? null])).rows;
+    const page = rows.slice(0,100), last = page[page.length - 1];
+    await runtime.pool.query("insert into field.admin_access_audit(actor_user_id,resource) values ($1,'email_outbox')", [admin.userId]);
+    return { product: 'field', role: admin.role, emails: page.map(row => ({ id: row.id,
+      maskedTo: row.to.includes('@') ? `${row.to.slice(0,1)}***@${row.to.slice(row.to.lastIndexOf('@') + 1, row.to.lastIndexOf('@') + 2)}***` : '***',
+      purpose: row.purpose, state: row.state, errorCode: row.errorCode, createdAt: row.createdAt, sentAt: row.sentAt })),
+      nextCursor: rows.length > 100 && last ? Buffer.from(JSON.stringify({ at: last.cursorAt, id: last.id, state })).toString('base64url') : null };
+  });
+
   app.get('/v1/admin/overview', async (request, reply) => {
     const admin = await requireAdmin(request, reply, runtime);
     if (!admin) return reply;

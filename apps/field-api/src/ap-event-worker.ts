@@ -1,3 +1,4 @@
+import { assertAccountDeletionServing } from './account-deletion-journal.js';
 import { Pool } from 'pg';
 import { apConnectorFromEnvironment } from './ap-connector.js';
 import { deliverApEventOnce, reconcileApEventDeliveries } from './ap-event-delivery.js';
@@ -30,6 +31,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => {
 
 try {
   while (!stopping) {
+    await assertAccountDeletionServing(pool);
     try {
       if (Date.now() >= nextReconcileAt) {
         await reconcileApEventDeliveries(pool);

@@ -42,6 +42,8 @@ import { registerFieldRetentionPurgeRoutes } from './retention-purge-routes.js';
 import { registerFieldRetentionConsumers } from './retention-consumers.js';
 import { fieldRevocationJournalFromEnvironment } from './revocation-journal.js';
 import { registerAuthProviderRoutes } from './kakao-provider.js';
+import { containsNul } from './invalid-text.js';
+import { assertAccountDeletionServing } from './account-deletion-journal.js';
 
 // 브라우저 요청은 Next rewrite를 거쳐 오므로 앞단 프록시가 보낸 X-Forwarded-For로 고객 IP를 구한다.
 // 기본값은 같은 장비의 프록시(loopback)만 신뢰해 외부에서 직접 보낸 헤더로 IP를 바꿀 수 없게 한다.
@@ -72,9 +74,20 @@ export function createFieldApp(
     ...loggingOptionsFromEnvironment() });
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 8 * 1024 * 1024 },
     (_request, body, done) => done(null, body));
+  app.addHook('preValidation',async(request,reply)=>{
+    const body=typeof request.body==='string'&&request.headers['content-type']?.split(';')[0]==='application/x-www-form-urlencoded'
+      ? [...new URLSearchParams(request.body)] : request.body;
+    if(containsNul(body)||containsNul(request.query)||containsNul(request.params))
+      return reply.header('Cache-Control','no-store').code(400).send({error:'invalid_text'});
+  });
   // 업무 라우트가 있으면 retention-consumers.ts가 같은 공통 처리를 포함한 오류 처리기를 등록한다(범위당 하나만 허용).
   if (!businessRuntime) app.setErrorHandler(sendPublicError);
   if (businessRuntime) {
+    const pool=businessRuntime.pool;
+    app.addHook('preHandler',async(request,reply)=>{
+      if(request.url==='/health')return;
+      try{await assertAccountDeletionServing(pool);}catch{return reply.header('Cache-Control','no-store').code(503).send({error:'deletion_recovery_required'});}
+    });
     businessRuntime = { ...businessRuntime, revocationJournal: businessRuntime.revocationJournal ?? fieldRevocationJournalFromEnvironment() };
     registerFieldAdminRoutes(app, businessRuntime);
     registerFieldModerationRoutes(app, businessRuntime);

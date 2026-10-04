@@ -4,6 +4,7 @@ import { recordFieldRevocation, type FieldRevocationJournal } from './revocation
 import { familyIntent, tokenIntent } from './oauth-lifecycle-provider.js';
 import type { Pool, PoolClient } from 'pg';
 import { fingerprint, persistLifecycle, verifyLifecycle, type LifecycleEntry, type LifecycleJournal } from './oauth-lifecycle-journal.js';
+import { liveBaselinePlan, lockLiveBaseline, unlockLiveBaseline } from './oauth-live-baseline.js';
 
 export async function applyLifecycleEntry(db:PoolClient,entry:LifecycleEntry) {
   if(entry.kind==='route-key') {
@@ -36,10 +37,17 @@ export async function reapplyLifecycleJournal(pool:Pool,journal:LifecycleJournal
   }catch(error){await db.query('rollback');throw error;}finally{db.release();}
 }
 
-// Local CLI only: callers must stop issuer/connector writers before collecting a legacy baseline.
-export async function baselineLifecycle(pool:Pool,journal:LifecycleJournal,native:FieldRevocationJournal) {
+// Callers must stop issuer/connector writers before collecting a legacy baseline.
+export async function baselineLifecycle(pool:Pool,journal:LifecycleJournal,native:FieldRevocationJournal,
+  confirmation?:{databaseFingerprint:string;planDigest:string}) {
   const db=await pool.connect();try{
-    await db.query('begin');const entries=await verifyLifecycle(db,journal);const nativeEntries=await native.read();
+    await db.query('begin');
+    if(confirmation){
+      await lockLiveBaseline(db);const plan=await liveBaselinePlan(db,journal,native);
+      if(plan.databaseFingerprint!==confirmation.databaseFingerprint)throw new Error('database confirmation mismatch');
+      if(plan.planDigest!==confirmation.planDigest)throw new Error('baseline plan changed; run --dry-run again');
+    }
+    const entries=await verifyLifecycle(db,journal);const nativeEntries=await native.read();
     await db.query('lock table "oauthAccessToken","oauthRefreshToken",field.oauth_selections,field.ap_connections in share row exclusive mode');
     for(const entry of entries){await persistLifecycle(db,entry);await applyLifecycleEntry(db,entry);}
     const selections=await db.query('select id,organization_id from field.oauth_selections where revoked_at is not null');
@@ -70,5 +78,5 @@ export async function baselineLifecycle(pool:Pool,journal:LifecycleJournal,nativ
     await db.query('commit');
     await reapplyFieldRevocationJournal(pool,native,await native.checkpoint());
     return {selections:selections.rowCount,connections:connections.rowCount,entries:entries.length};
-  }catch(error){await db.query('rollback');throw error;}finally{db.release();}
+  }catch(error){await db.query('rollback');throw error;}finally{try{if(confirmation)await unlockLiveBaseline(db);}finally{db.release();}}
 }

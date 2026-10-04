@@ -14,6 +14,9 @@ const unavailable = () => new Response("사업장 정보를 확인하지 못했�
 });
 
 export async function proxy(request: NextRequest) {
+  // Next data URLs are normalized before this proxy. Keep the certificate ask endpoint
+  // private even when the original URL does not match the edge's literal path deny.
+  if (request.nextUrl.pathname === "/v1/public/site-hosts/allow") return notFound();
   const domain = process.env.APP_PROFILE === "live" ? process.env.FIELD_SITE_BASE_DOMAIN : "localhost:3002";
   const host = (request.headers.get("host") ?? "").toLowerCase();
   const suffix = domain ? `.${domain.toLowerCase()}` : "";

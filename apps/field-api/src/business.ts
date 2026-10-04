@@ -164,6 +164,7 @@ export function registerFieldBusinessRoutes(app: FastifyInstance, runtime: Field
       return reply.code(201).send({ id });
     } catch (error) {
       await client.query('rollback');
+      if((error as {code?:string}).code==='PFA01')return reply.code(409).send({error:'account_deleted'});
       throw error;
     } finally { client.release(); }
   });
@@ -271,7 +272,9 @@ export function registerFieldBusinessRoutes(app: FastifyInstance, runtime: Field
   app.get<{ Params: { id: string } }>('/v1/public/catalog/:id', async (request, reply) => {
     if (!uuidPattern.test(request.params.id)) return reply.code(404).send({ error: 'not_found' });
     const result = await runtime.pool.query<{ revision: number; content: Catalog }>(
-      'select revision, content from field.catalog_releases where organization_id = $1 order by revision desc limit 1',
+      `select revision, content from field.catalog_releases r where organization_id = $1
+       and not exists(select 1 from field.organization_deletion_requests d where d.organization_id=r.organization_id
+         and d.status in ('scheduled','executed')) order by revision desc limit 1`,
       [request.params.id],
     );
     if (!result.rows[0]) return reply.code(404).send({ error: 'not_found' });

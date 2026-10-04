@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { mkdir, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { test } from 'node:test';
 import type { IncomingHttpHeaders } from 'node:http';
@@ -9,6 +11,10 @@ import { createAgentApp } from '../src/app.js';
 import { purgeAccountDeletionPasswordWindows, runOrganizationDeletionOnce } from '../src/account-deletion.js';
 
 process.loadEnvFile(resolve('../../infra/agent/.env'));
+const deletionRoot=await mkdtemp(resolve(tmpdir(),'agent-native-account-deletion-'));
+await mkdir(resolve(deletionRoot,'account-deletion'));
+process.env.AP_RETENTION_JOURNAL_DIRECTORY=deletionRoot;
+process.env.AP_RETENTION_JOURNAL_SECRET='synthetic-native-account-deletion-secret';
 const user = (headers: IncomingHttpHeaders) =>
   typeof headers['x-test-user'] === 'string' ? headers['x-test-user'] : null;
 

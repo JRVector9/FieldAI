@@ -4,8 +4,14 @@ import type { FastifyInstance } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
 import type { BusinessRuntime } from './business.js';
 
-// 토스 웹훅 수신 IP별 15분 한도(토스 재전송 최대 7회를 충분히 수용).
-const WEBHOOK_IP_LIMIT = 120;
+// Per-IP 15 minute abuse window. Operators can explicitly raise it for a busy
+// merchant without bypassing provider reconciliation or accepting payload claims.
+export function billingWebhookIpLimitFromEnvironment(value=process.env.AP_BILLING_WEBHOOK_IP_LIMIT){
+  if(value===undefined||value==='')return 120;
+  const limit=Number(value);
+  if(!/^[0-9]+$/.test(value)||!Number.isInteger(limit)||limit<1||limit>100_000)throw new Error('AP_BILLING_WEBHOOK_IP_LIMIT is invalid');
+  return limit;
+}
 const EVENT_TYPE = /^[A-Z][A-Z0-9_]{0,63}$/;
 const ORDER_ID = /^[A-Za-z0-9_-]{6,64}$/;
 const PAYMENT_KEY = /^[A-Za-z0-9_-]{1,200}$/;
@@ -43,7 +49,7 @@ export function webhookIpBucket(ip: string) {
 }
 
 // IP 창을 1 증가시키고 한도를 넘으면 남은 초를 돌려준다. 원문 IP는 저장하지 않는다.
-async function consumeWebhookWindow(db: PoolClient, ip: string): Promise<number | null> {
+async function consumeWebhookWindow(db: PoolClient, ip: string, limit:number): Promise<number | null> {
   const secret = process.env.AP_AUTH_SECRET;
   if (!secret) throw new Error('AP_AUTH_SECRET is required for billing webhook limits');
   const subject = createHmac('sha256', secret).update('ap-billing-webhook-ip-v1\0').update(webhookIpBucket(ip)).digest('hex');
@@ -58,11 +64,12 @@ async function consumeWebhookWindow(db: PoolClient, ip: string): Promise<number 
        updated_at = clock_timestamp()
      returning attempts,
        greatest(1, ceil(extract(epoch from (window_started_at + interval '15 minutes' - clock_timestamp())))::integer) as retry_after`,
-    [subject, WEBHOOK_IP_LIMIT])).rows[0]!;
-  return row.attempts > WEBHOOK_IP_LIMIT ? row.retry_after : null;
+    [subject, limit])).rows[0]!;
+  return row.attempts > limit ? row.retry_after : null;
 }
 
 export function registerAgentBillingWebhookRoute(app: FastifyInstance, runtime: BusinessRuntime) {
+  const ipLimit=billingWebhookIpLimitFromEnvironment();
   app.post('/v1/billing/webhooks/toss', { bodyLimit: 65_536 }, async (request, reply) => {
     reply.header('Cache-Control', 'no-store');
     const provider = runtime.billing?.provider;
@@ -71,7 +78,7 @@ export function registerAgentBillingWebhookRoute(app: FastifyInstance, runtime: 
     const db = await runtime.pool.connect();
     try {
       await db.query('begin');
-      const retryAfter = await consumeWebhookWindow(db, request.ip);
+      const retryAfter = await consumeWebhookWindow(db, request.ip,ipLimit);
       if (retryAfter !== null) {
         await db.query('commit');
         return reply.header('Retry-After', retryAfter).code(429).send({ error: 'webhook_rate_limited' });

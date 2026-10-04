@@ -1,3 +1,4 @@
+import { accountDeletionJournalFromEnvironment, assertAccountDeletionServing } from './account-deletion-journal.js';
 import { Pool } from 'pg';
 import { processFieldEventInboxOnce, type FieldRouteCache } from './field-event-inbox.js';
 import { fieldConnectorFromEnvironment } from './field-connector.js';
@@ -7,6 +8,7 @@ import { processFieldSourceRefreshOnce } from './source-refresh-worker.js';
 import { processFieldFactsEventOnce } from './field-facts-events.js';
 import { assertProductionProfile } from './production-profile.js';
 import { apToFieldSignatureSendVersion } from './field-signature.js';
+import { runFieldEventCycle } from './field-event-cycle.js';
 
 assertProductionProfile();
 if (!process.env.AP_DATABASE_URL) throw new Error('AP_DATABASE_URL is required');
@@ -26,20 +28,26 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => {
   wake?.();
 });
 
+const deletionJournal=accountDeletionJournalFromEnvironment();
 try {
+  await assertAccountDeletionServing(pool,deletionJournal);
   while (!stopping) {
-    try {
-      if (fieldConnector && await deliverFieldConnectionRevokeOnce(pool, fieldConnector) !== 'empty') continue;
-      if (fieldConnector && await deliverFieldAgentEventOnce(pool, fieldConnector) !== 'empty') continue;
-      if (await processFieldFactsEventOnce(pool) !== 'empty') continue;
-      if (fieldConnector && await processFieldSourceRefreshOnce({ pool,
-        resolveUserId: async () => null, fieldConnector }) !== 'empty') continue;
-      if (await processFieldEventInboxOnce(pool, fieldConnector, inboxRouteCache) !== 'empty') continue;
-      inboxRouteCache.clear();
-    } catch (error) {
+    await assertAccountDeletionServing(pool,deletionJournal);
+    const processed = await runFieldEventCycle([
+      ...(fieldConnector ? [() => deliverFieldConnectionRevokeOnce(pool, fieldConnector),
+        () => deliverFieldAgentEventOnce(pool, fieldConnector)] : []),
+      () => processFieldFactsEventOnce(pool),
+      ...(fieldConnector ? [() => processFieldSourceRefreshOnce({ pool, resolveUserId: async () => null, fieldConnector })] : []),
+      async () => {
+        const result = await processFieldEventInboxOnce(pool, fieldConnector, inboxRouteCache);
+        if (result === 'empty') inboxRouteCache.clear();
+        return result;
+      },
+    ], () => stopping, error => {
       inboxRouteCache.clear();
       process.stderr.write(`AP Field event worker failed: ${String(error)}\n`);
-    }
+    });
+    if (processed) continue;
     if (!stopping) await new Promise<void>(resolve => {
       wake = resolve;
       timer = setTimeout(resolve, 2000);

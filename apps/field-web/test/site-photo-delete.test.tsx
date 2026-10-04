@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { siteDraftSaveConflictNotice, sitePhotoDeleteBlockReason, sitePhotoDeletionBadge, sitePhotoSelectOptions,
   sitePublishConflictMessage } from "../src/site-editor";
 
@@ -70,4 +72,22 @@ test("draft save and publish 409 asset_deleting get their own notice instead of 
   assert.equal(sitePublishConflictMessage({ error: "booking_schedule_not_ready" }),
     "시간표 예약에 신청 가능한 영업시간이 없어 공개하지 못했습니다. 예약 정책을 확인해 주세요.");
   assert.equal(sitePublishConflictMessage({ error: "revision_conflict" }), "초안 충돌 또는 승인된 사업 정보가 없어 공개하지 못했습니다.");
+});
+
+test('assigned deleting and deleted photos render placeholders without 404 image requests',async()=>{
+  const feature=await import('../src/site-editor.js') as typeof import('../src/site-editor.js') & {
+    SiteSectionPhotoPreview?:(props:{assetId:string;alt:string;asset?:{state:'ready'|'deleting';deletionStopped?:boolean}})=>ReturnType<typeof createElement>;
+    sitePhotoPollingInterval?:(assets:{state:'ready'|'deleting';deletionStopped?:boolean}[])=>number|null;
+  };
+  assert.equal(typeof feature.SiteSectionPhotoPreview,'function');assert.equal(typeof feature.sitePhotoPollingInterval,'function');
+  for(const asset of [{state:'deleting' as const},{state:'deleting' as const,deletionStopped:true},undefined]){
+    const html=renderToStaticMarkup(createElement(feature.SiteSectionPhotoPreview!,{assetId:'removed-photo',alt:'작업 사진',asset}));
+    assert.doesNotMatch(html,/<img|\/v1\/sites\/assets\/removed-photo/);assert.match(html,/site-photo-placeholder/);
+  }
+  const ready=renderToStaticMarkup(createElement(feature.SiteSectionPhotoPreview!,{assetId:'ready-photo',alt:'작업 사진',asset:{state:'ready'}}));
+  assert.match(ready,/src="\/v1\/sites\/assets\/ready-photo"/);
+  assert.equal(feature.sitePhotoPollingInterval!([{state:'deleting'}]),3000);
+  assert.equal(feature.sitePhotoPollingInterval!([{state:'deleting',deletionStopped:true}]),null);
+  assert.equal(feature.sitePhotoPollingInterval!([{state:'ready'}]),null);
+  assert.equal(feature.sitePhotoPollingInterval!([]),null);
 });

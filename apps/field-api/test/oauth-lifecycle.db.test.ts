@@ -8,6 +8,12 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { after, test } from 'node:test';
 
+// pg-pool의 end()는 소켓 종료를 기다리지 않아 종료 직후 pg_stat_activity에 연결이 잠깐 남을 수 있다(CI 1회 재현). 최대 2초 기다린 뒤 0을 단언한다.
+async function assertNoConnections(admin:{query:(text:string,values:unknown[])=>Promise<{rows:{n:number}[]}>},databaseName:string){
+  let n=-1;for(let i=0;i<40;i++){n=(await admin.query('select count(*)::int n from pg_stat_activity where datname=$1',[databaseName])).rows[0]!.n;if(n===0)break;await new Promise(done=>setTimeout(done,50));}
+  assert.equal(n,0);
+}
+
 const root = await mkdtemp(resolve(tmpdir(), 'field-oauth-lifecycle-'));
 const journalRoot = resolve(root, 'journal'); await mkdir(journalRoot);
 process.env.FIELD_REVOCATION_JOURNAL_DIRECTORY = journalRoot;
@@ -190,7 +196,7 @@ test('Field keeps a route key while revoke/old work are unresolved and accepts a
       await reapplyLifecycleJournal(restored,checkpointJournal,checkpoint);await reapplyLifecycleJournal(restored,checkpointJournal,checkpoint);
       assert.equal((await restored.query('select event_secret_cipher from field.ap_connections where id=$1',[connection])).rows[0].event_secret_cipher,null);
       assert.equal((await restored.query('select visitor_key_hash from field.reservations where id=$1',[reservation])).rows[0].visitor_key_hash,createHash('sha256').update(receipt).digest('hex'));
-    }finally{await restored?.end();if(created){assert.equal((await admin.query('select count(*)::int n from pg_stat_activity where datname=$1',[restoreName])).rows[0].n,0);await admin.query(`drop database "${restoreName}"`);}await admin.end();}
+    }finally{await restored?.end();if(created){await assertNoConnections(admin,restoreName);await admin.query(`drop database "${restoreName}"`);}await admin.end();}
 
   }finally{await app.close();}
 });
@@ -260,7 +266,7 @@ test('actual pre-revoke PG17 backup restores active token then signed latest lif
     await assert.rejects(restored.query('delete from field.oauth_lifecycle_receipts'),{code:'POL01'});
   }finally{
     await app?.close();await restored?.end();
-    if(created){assert.equal((await admin.query('select count(*)::int n from pg_stat_activity where datname=$1',[restoreName])).rows[0].n,0);await admin.query(`drop database "${restoreName}"`);}
+    if(created){await assertNoConnections(admin,restoreName);await admin.query(`drop database "${restoreName}"`);}
     await admin.end();
   }
 });

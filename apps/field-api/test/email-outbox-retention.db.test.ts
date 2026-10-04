@@ -92,3 +92,23 @@ test('Field retention removes only stale unverified credential-only users withou
     await pool.query('delete from "user" where id = any($1::text[])', [Object.values(ids)]);
   }
 });
+
+test('Field unverified cleanup advances past over 100 FK-retained users with identical timestamps',async()=>{
+  const retained=Array.from({length:101},()=>randomUUID()).sort(),deletable='zz-'+randomUUID();
+  const ids=[...retained,deletable];
+  await pool.query(`insert into "user"(id,name,email,"emailVerified","createdAt","updatedAt")
+    select id,id,id||'@example.invalid',false,date_trunc('second',now())-interval '72 hours',now() from unnest($1::text[]) id`,[ids]);
+  await pool.query(`insert into "account"(id,"accountId","providerId","userId",password,"createdAt","updatedAt")
+    select gen_random_uuid()::text,id,'credential',id,'synthetic-hash',now(),now() from unnest($1::text[]) id`,[ids]);
+  for(const id of retained){
+    const owner=randomUUID(),org=randomUUID();
+    await pool.query('insert into "user"(id,name,email,"emailVerified") values($1,$1,$2,true)',[owner,`${owner}@example.invalid`]);
+    await pool.query('insert into field.organizations(id,owner_user_id,name) values($1,$2,$3)',[org,owner,'Synthetic cursor retention']);
+    await pool.query(`insert into field.trial_subscriptions(id,organization_id,consent_version,started_by,ends_at)
+      values($1,$2,'synthetic',$3,now()+interval '1 day')`,[randomUUID(),org,id]);
+  }
+  assert.deepEqual(await purgeUnverifiedCredentialUsers(pool),{unverifiedUsersDeleted:1,unverifiedUsersRetained:101});
+  assert.equal((await pool.query('select 1 from "user" where id=$1',[deletable])).rowCount,0);
+  assert.equal((await pool.query('select count(*)::int n from "user" where id=any($1::text[])',[retained])).rows[0].n,101);
+  assert.deepEqual(await purgeUnverifiedCredentialUsers(pool),{unverifiedUsersDeleted:0,unverifiedUsersRetained:101});
+});

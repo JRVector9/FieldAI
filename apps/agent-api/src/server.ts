@@ -12,6 +12,7 @@ import { assertLifecycleServing, lifecycleJournalFromEnvironment } from './oauth
 import { fieldConnectorFromEnvironment } from './field-connector.js';
 import { assertProductionProfile } from './production-profile.js';
 import { createGracefulShutdown } from './shutdown.js';
+import { accountDeletionJournalFromEnvironment, assertAccountDeletionServing } from './account-deletion-journal.js';
 
 assertProductionProfile();
 
@@ -20,6 +21,8 @@ if (!connectionString) throw new Error('AP_DATABASE_URL is required');
 
 const pool = new Pool({ connectionString });
 const revocationJournal = agentRevocationJournalFromEnvironment();
+const accountDeletionJournal = accountDeletionJournalFromEnvironment();
+await assertAccountDeletionServing(pool,accountDeletionJournal);
 const app = createAgentApp(
   async () => { await pool.query('SELECT 1'); },
   auth.handler,
@@ -30,6 +33,8 @@ const app = createAgentApp(
     billing: billingContextFromEnvironment(),
     notification: notificationContextFromEnvironment(),
     revocationJournal,
+    accountDeletionJournal,
+    accountDeletionGuard:()=>assertAccountDeletionServing(pool,accountDeletionJournal),
     oauthLifecycleGuard: () => assertLifecycleServing(pool, lifecycleJournalFromEnvironment()),
     resolveUserId: async (headers) =>
       (await auth.api.getSession({ headers: fromNodeHeaders(headers) }))?.user.id ?? null,

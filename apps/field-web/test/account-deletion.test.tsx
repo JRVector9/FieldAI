@@ -3,6 +3,16 @@ import test from "node:test";
 import { deletionMessage, organizationChoices } from "../src/field-account";
 import { deletionResumeBlockReason, stoppedAssetDeletionReason, stoppedDeletionReason } from "../src/field-admin-sections";
 
+// A-25: 상태코드를 그대로 보여 주지 않고 재시도 가능한 한국어 안내를 제공한다.
+test('Field admin logout refusal gives Korean recovery guidance', async () => {
+  const feature = await import('../src/field-admin-sections.js');
+  assert.equal(typeof feature.adminSignOutFailure, 'function');
+  assert.match(feature.adminSignOutFailure(403), /보안 확인/);
+  assert.match(feature.adminSignOutFailure(429), /잠시 후/);
+  assert.match(feature.adminSignOutFailure(500), /다시 시도/);
+  for (const code of [400,401,403,429,500]) assert.doesNotMatch(feature.adminSignOutFailure(code), /\(\d{3}\)/);
+});
+
 test("Field deletion blockers map to actionable Korean guidance and unknown codes stay visible", () => {
   assert.match(deletionMessage("open_reservations"), /예약/);
   assert.match(deletionMessage("connections_active"), /AP 연결/);

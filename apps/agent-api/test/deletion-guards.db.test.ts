@@ -373,9 +373,22 @@ test('AP retention worker boots without media store or retention journal and run
   const env: Record<string, string | undefined> = { ...process.env, AP_PROFILE: 'mock' };
   for (const key of Object.keys(env))
     if (key.startsWith('AP_INQUIRY_') || key.startsWith('AP_RETENTION_JOURNAL_') || key === 'NODE_TEST_CONTEXT') delete env[key];
+  // A-18: a database with prior approved deletion history must not silently
+  // boot without its independent proof. The original no-media housekeeping
+  // requirement is exercised on a fresh isolated database below.
+  const lostProof=spawnSync('tsx',['src/retention-purge-worker.ts','--once'],{cwd:resolve('.'),env,encoding:'utf8',timeout:60_000});
+  assert.notEqual(lostProof.status,0);assert.match(lostProof.stderr,/deletion journal unavailable; recovery required/);
+  const source=new URL(process.env.AP_DATABASE_URL!);assert.match(source.pathname,/^\/fieldai_agent_test_[a-f0-9]+$/);
+  const database=`fieldai_agent_test_${randomUUID().replaceAll('-','')}`,adminUrl=new URL(source);adminUrl.pathname='/postgres';
+  const admin=new Pool({connectionString:adminUrl.toString()});await admin.query(`create database "${database}"`);
+  source.pathname=`/${database}`;env.AP_DATABASE_URL=source.toString();
+  const migrations=spawnSync(process.execPath,['tools/run-migrations.mjs','agent'],{cwd:resolve('../..'),env,encoding:'utf8'});
+  assert.equal(migrations.status,0,migrations.stderr);
+  const housekeepingPool=new Pool({connectionString:source.toString()});
+  try{
   // 지난 15분 창 행은 이번 주기에 지워져야 한다
   const subject = hex();
-  await pool.query(`insert into ap.billing_webhook_ip_windows(subject_hash,attempts,window_started_at,updated_at)
+  await housekeepingPool.query(`insert into ap.billing_webhook_ip_windows(subject_hash,attempts,window_started_at,updated_at)
     values ($1,1,now()-interval '1 hour',now()-interval '1 hour')`, [subject]);
   const run = (extra: Record<string, string> = {}) => spawnSync('tsx', ['src/retention-purge-worker.ts', '--once'],
     { cwd: resolve('.'), env: { ...env, ...extra }, encoding: 'utf8', timeout: 60_000 });
@@ -383,9 +396,10 @@ test('AP retention worker boots without media store or retention journal and run
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /agent retention worker ready \(media retention: blocked_integration\)/);
   assert.match(result.stdout, /media retention blocked_integration/);
-  assert.equal((await pool.query('select count(*)::int as n from ap.billing_webhook_ip_windows where subject_hash=$1', [subject])).rows[0].n, 0);
+  assert.equal((await housekeepingPool.query('select count(*)::int as n from ap.billing_webhook_ip_windows where subject_hash=$1', [subject])).rows[0].n, 0);
   // 저널 설정이 반쪽이면 설정 오류로 부팅을 거부한다
   const partial = run({ AP_RETENTION_JOURNAL_DIRECTORY: resolve('.') });
   assert.notEqual(partial.status, 0);
   assert.match(partial.stderr, /directory and secret must be configured together/);
+  }finally{await housekeepingPool.end();await admin.query(`drop database "${database}" with(force)`);await admin.end();}
 });

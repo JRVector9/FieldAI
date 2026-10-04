@@ -6,6 +6,7 @@ import type { FieldBusinessRuntime } from './business.js';
 import { disconnectSiteDomain } from './custom-domains.js';
 import type { FieldSiteMediaStore } from './site-media.js';
 import { recordFieldRevocation, type FieldRevocationJournal } from './revocation-journal.js';
+import { accountDeletionJournalFromEnvironment, deletionDatabaseBinding, persistDeletionReceipt } from './account-deletion-journal.js';
 
 // F-O16 조직·계정 삭제(추가). 조직 삭제는 owner 명시 확인 → 14일 유예 → 작업자 실행 순서이며,
 // 문의·예약 원본·청구 원장·감사 기록은 지우지 않고 기존 보존 정책 경로에 맡긴다.
@@ -307,26 +308,16 @@ export function registerFieldAccountDeletionRoutes(app: FastifyInstance, runtime
       if (hash ? password === null || !await verifyPassword({ hash, password }) : hasPassword) {
         await db.query('rollback'); return reply.code(403).send({ error: 'invalid_password' });
       }
-      const anonymousEmail = `deleted-${randomUUID()}@deleted.invalid`;
-      const removed = {
-        memberships: (await db.query('delete from field.memberships where user_id=$1', [userId])).rowCount ?? 0,
-        // 세션은 즉시 만료로 폐기한다(oauth_selections는 세션 삭제에도 남도록 000080에서 set null로 바꿨다).
-        sessions: (await db.query('update "session" set "expiresAt"=now(),"updatedAt"=now() where "userId"=$1 and "expiresAt">now()', [userId])).rowCount ?? 0,
-        twoFactor: (await db.query('delete from "twoFactor" where "userId"=$1', [userId])).rowCount ?? 0,
-        verifications: (await db.query('delete from "verification" where value=$1', [userId])).rowCount ?? 0,
-        credentials: (await db.query('delete from "account" where "userId"=$1', [userId])).rowCount ?? 0,
-        // 인증 메일 감사 행의 수신 주소를 익명 주소로 바꾸고, 본문에 주소가 있으면 본문도 지운다.
-        emailOutboxAnonymized: (await db.query(`update field.email_outbox set "to"=$2,
-          text=case when strpos(lower(text),lower($1))>0 then $3 else text end,
-          html=case when html is not null and strpos(lower(html),lower($1))>0 then $3 else html end
-          where lower("to")=lower($1)`, [user.email, anonymousEmail, DELETED_TEXT])).rowCount ?? 0,
-        passwordWindows: (await db.query('delete from field.account_deletion_password_windows where user_id=$1', [userId])).rowCount ?? 0,
-      };
-      // "user" 행은 청구·승인·감사 기록이 FK로 참조하므로 지우지 않고 식별정보를 익명화한다.
-      await db.query(`update "user" set name='삭제된 사용자',email=$2,"emailVerified"=false,image=null,
-        "twoFactorEnabled"=false,"updatedAt"=now() where id=$1`, [userId, anonymousEmail]);
-      await db.query(`insert into field.account_deletion_audit(id,user_id,mode,removed) values ($1,$2,'anonymized',$3::jsonb)`,
-        [randomUUID(), userId, JSON.stringify(removed)]);
+      const journal=accountDeletionJournalFromEnvironment();if(!journal)throw new Error('deletion journal unavailable');
+      const binding=await deletionDatabaseBinding(db),emailFingerprint=journal.emailFingerprint(user.email);
+      // A request already waiting on this user lock can outlive a prior fsync
+      // intent whose DB transaction rolled back. Reuse its canonical tombstone.
+      const approved=(await journal.read(true)).filter(e=>e.targetKind==='account'&&e.targetId===userId);
+      if(approved.length>1||approved.some(e=>e.databaseBinding!==binding||e.emailFingerprint!==emailFingerprint))throw new Error('deletion account intent binding mismatch');
+      const entry=approved[0]??await journal.append({targetKind:'account',targetId:userId,databaseBinding:binding,
+        requestId:null,emailFingerprint,memberIds:[],assets:[]});
+      await anonymizeFieldAccount(db,userId,user.email,`deleted-${entry.id}@deleted.invalid`,entry.id);
+      await persistDeletionReceipt(db,entry,'applied');
       await db.query('commit');
       return { product: 'field', deleted: true, mode: 'anonymized' };
     } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
@@ -368,6 +359,14 @@ export async function runOrganizationDeletionOnce(runtime: { pool: Pool; siteMed
         next_attempt_at=clock_timestamp()+interval '1 hour' where id=$1`, [row.id, [...failed].join(',')]);
       await db.query('commit'); return 'blocked';
     }
+    const journal=accountDeletionJournalFromEnvironment();if(!journal)throw new Error('deletion journal unavailable');
+    const entries=await journal.read();
+    const entry=entries.find(e=>e.targetKind==='organization'&&e.requestId===row.id)??await journal.append({
+      targetKind:'organization',targetId:organizationId,requestId:row.id,emailFingerprint:null,
+      databaseBinding:await deletionDatabaseBinding(db),
+      memberIds:(await db.query<{user_id:string}>('select user_id from field.memberships where organization_id=$1 order by user_id',[organizationId])).rows.map(r=>r.user_id),
+      assets:(await db.query<{id:string;objectKey:string}>('select id,object_key as "objectKey" from field.site_assets where organization_id=$1 order by id',[organizationId])).rows});
+    if(entry.databaseBinding!==await deletionDatabaseBinding(db)||entry.targetId!==organizationId)throw new Error('deletion database binding mismatch');
     const count = async (sql: string, params: unknown[]) => (await db.query(sql, params)).rowCount ?? 0;
     const sites = 'select id from field.sites where organization_id=$1';
     const started = object(object(row.steps)?.executionStarted);
@@ -390,16 +389,104 @@ export async function runOrganizationDeletionOnce(runtime: { pool: Pool; siteMed
             'siteReleasesDeleted',$3::int,'siteDraftsDeleted',$4::int,'siteAssetsQueued',$5::int))
         where id=$1`, [row.id, stopped ? 'asset_deletion_stopped' : 'assets_pending', startedCount('siteReleasesDeleted') + releases,
         startedCount('siteDraftsDeleted') + drafts, startedCount('siteAssetsQueued') + queued]);
+      await persistDeletionReceipt(db,entry,'prepared');
       await db.query('commit'); return 'blocked';
     }
-    const at = (await db.query<{ now: Date }>('select clock_timestamp() as now')).rows[0]!.now;
-    const members = (await db.query<{ user_id: string }>('select user_id from field.memberships where organization_id=$1',
+    await completeFieldOrganizationDeletion(db,row,runtime);
+    await persistDeletionReceipt(db,entry,'applied');
+    await db.query('commit');
+    return 'executed';
+  } catch {
+    await db.query('rollback');
+    if (!requestId) return 'retry';
+    // 실행 실패는 상한까지만 재시도한다. 멈춘 요청은 status='scheduled'를 유지해 공개 차단·도메인 차단을 계속하며
+    // 운영자가 원인 해결 뒤 다시 실행한다(/v1/admin/organization-deletions/:id/resume).
+    // 상한은 전제 조건·사진 삭제 대기(blocked)와 섞이지 않도록 실행 실패 횟수(steps.executionFailures)만 센다.
+    const stopped = (await runtime.pool.query<{ stopped: boolean }>(`with failure as (
+        select id,coalesce((steps->>'executionFailures')::int,0)+1 as failures from field.organization_deletion_requests
+        where id=$1 and status='scheduled')
+      update field.organization_deletion_requests r set attempt_count=attempt_count+1,
+        steps=steps||jsonb_build_object('executionFailures',f.failures),
+        last_error=case when f.failures>=$2 then 'execution_failed,execution_attempts_stopped' else 'execution_failed' end,
+        next_attempt_at=case when f.failures>=$2 then 'infinity'::timestamptz else clock_timestamp()+interval '5 minutes' end
+      from failure f where r.id=f.id returning r.next_attempt_at='infinity'::timestamptz as stopped`,
+    [requestId, MAX_EXECUTION_ATTEMPTS])).rows[0]?.stopped;
+    return stopped ? 'blocked' : 'retry';
+  } finally { db.release(); }
+}
+
+// M1: 조직이 외부·AP 통합자에게 준 선택(grant)을 회수한다. owner 해제 경로(integrator-routes.ts)와 같이 회수 원장에 먼저 남긴 뒤
+// 선택·access/refresh 토큰·동의를 같은 트랜잭션에서 지운다. 이미 회수된 선택에 남은 토큰도 함께 회수한다.
+async function revokeIntegrationGrants(db: PoolClient, journal: Pick<FieldRevocationJournal, 'append'> | undefined, organizationId: string,signedDeletion=false) {
+  const selections = (await db.query<{ id: string; revoked: boolean }>(
+    'select id,revoked_at is not null as revoked from field.oauth_selections where organization_id=$1 order by id for update',
+    [organizationId])).rows;
+  if (!selections.length) return { selections: 0, accessTokens: 0, refreshTokens: 0, consents: 0 };
+  for (const selection of selections) if (!selection.revoked&&!signedDeletion) await recordFieldRevocation(journal, { targetKind: 'selection',
+    targetId: selection.id, organizationId, selectionId: selection.id, source: 'owner', revocationId: null });
+  const ids = selections.map(selection => selection.id);
+  const count = async (sql: string, params: unknown[]) => (await db.query(sql, params)).rowCount ?? 0;
+  return {
+    selections: await count('update field.oauth_selections set revoked_at=now() where organization_id=$1 and revoked_at is null', [organizationId]),
+    accessTokens: await count('update "oauthAccessToken" set revoked=now() where "referenceId"=any($1::text[]) and revoked is null', [ids]),
+    refreshTokens: await count('update "oauthRefreshToken" set revoked=now() where "referenceId"=any($1::text[]) and revoked is null', [ids]),
+    consents: await count('delete from "oauthConsent" where "referenceId"=any($1::text[])', [ids]),
+  };
+}
+
+async function disconnectDomains(db: PoolClient, organizationId: string) {
+  const domains = (await db.query<{ id: string; site_id: string; hostname: string; desired_state: string }>(
+    `select id,site_id,hostname,desired_state from field.site_domains where organization_id=$1 and desired_state='active'
+     order by id for update`, [organizationId])).rows;
+  for (const domain of domains) await disconnectSiteDomain(db, domain);
+  return domains.length;
+}
+
+export async function anonymizeFieldAccount(db:PoolClient,userId:string,originalEmail:string,anonymousEmail:string,auditId:string) {
+      // B9 still blocks deleting an account with active clients/grants online.
+      // This also closes expired grants and every actor of a restored owned client.
+      await db.query('update "oauthClient" set disabled=true where "userId"=$1',[userId]);
+      for(const table of ['oauthAccessToken','oauthRefreshToken'])await db.query(`update "${table}" t set revoked=coalesce(revoked,now())
+        where "userId"=$1 or exists(select 1 from "oauthClient" c where c."clientId"=t."clientId" and c."userId"=$1)`,[userId]);
+      await db.query('delete from "oauthConsent" t where "userId"=$1 or exists(select 1 from "oauthClient" c where c."clientId"=t."clientId" and c."userId"=$1)',[userId]);
+      const removed = {
+        memberships: (await db.query('delete from field.memberships where user_id=$1', [userId])).rowCount ?? 0,
+        adminMemberships:(await db.query('delete from field.platform_admin_memberships where user_id=$1',[userId])).rowCount??0,
+        // 세션은 즉시 만료로 폐기한다(oauth_selections는 세션 삭제에도 남도록 000080에서 set null로 바꿨다).
+        sessions: (await db.query('update "session" set "expiresAt"=now(),"updatedAt"=now() where "userId"=$1 and "expiresAt">now()', [userId])).rowCount ?? 0,
+        twoFactor: (await db.query('delete from "twoFactor" where "userId"=$1', [userId])).rowCount ?? 0,
+        verifications: (await db.query('delete from "verification" where value=$1', [userId])).rowCount ?? 0,
+        credentials: (await db.query('delete from "account" where "userId"=$1', [userId])).rowCount ?? 0,
+        // 인증 메일 감사 행의 수신 주소를 익명 주소로 바꾸고, 본문에 주소가 있으면 본문도 지운다.
+        emailOutboxAnonymized: (await db.query(`update field.email_outbox set "to"=$2,
+          text=case when strpos(lower(text),lower($1))>0 then $3 else text end,
+          html=case when html is not null and strpos(lower(html),lower($1))>0 then $3 else html end
+          where lower("to")=lower($1)`, [originalEmail, anonymousEmail, DELETED_TEXT])).rowCount ?? 0,
+        passwordWindows: (await db.query('delete from field.account_deletion_password_windows where user_id=$1', [userId])).rowCount ?? 0,
+      };
+      // "user" 행은 청구·승인·감사 기록이 FK로 참조하므로 지우지 않고 식별정보를 익명화한다.
+      await db.query(`update "user" set name='삭제된 사용자',email=$2,"emailVerified"=false,image=null,
+        "twoFactorEnabled"=false,"updatedAt"=now() where id=$1`, [userId, anonymousEmail]);
+      await db.query(`insert into field.account_deletion_audit(id,user_id,mode,removed) values ($1,$2,'anonymized',$3::jsonb) on conflict(user_id) do nothing`,
+        [auditId, userId, JSON.stringify(removed)]);
+  return removed;
+}
+
+export async function completeFieldOrganizationDeletion(db:PoolClient,row:Pick<DeletionRow,'id'|'organization_id'|'steps'>,
+  runtime:{revocationJournal?:Pick<FieldRevocationJournal,'append'>},restoreMembers?:string[],applyAt?:Date,restoring=false) {
+  const organizationId=row.organization_id;
+  const count=async(sql:string,params:unknown[])=>(await db.query(sql,params)).rowCount??0;
+  const sites='select id from field.sites where organization_id=$1';
+  const started=object(object(row.steps)?.executionStarted);
+  const startedCount=(key:string)=>typeof started?.[key]==='number'?started[key] as number:0;
+    const at = applyAt ?? (await db.query<{ now: Date }>('select clock_timestamp() as now')).rows[0]!.now;
+    const members = restoreMembers ?? (await db.query<{ user_id: string }>('select user_id from field.memberships where organization_id=$1',
       [organizationId])).rows.map(member => member.user_id);
     const siteReleasesDeleted = startedCount('siteReleasesDeleted')
       + await count(`delete from field.site_releases where site_id in (${sites})`, [organizationId]);
     const siteDraftsDeleted = startedCount('siteDraftsDeleted')
       + await count(`delete from field.site_drafts where site_id in (${sites})`, [organizationId]);
-    const integrationGrantsRevoked = await revokeIntegrationGrants(db, runtime.revocationJournal, organizationId);
+    const integrationGrantsRevoked = await revokeIntegrationGrants(db, runtime.revocationJournal, organizationId,restoring);
     // 조직을 먼저 삭제됨으로 표시한다(같은 트랜잭션). owner 알림 연락처 정리 guard가 이 표시를 조건으로 쓴다.
     await db.query('update field.organizations set deleted_at=$2 where id=$1 and deleted_at is null', [organizationId, at]);
     const blankCatalog = `jsonb_build_object('businessName',coalesce(content->>'businessName',''),'industry','','introduction','',
@@ -438,50 +525,5 @@ export async function runOrganizationDeletionOnce(runtime: { pool: Pool; siteMed
     };
     await db.query(`update field.organization_deletion_requests set status='executed',executed_at=$2,steps=steps||jsonb_build_object('executed',$3::jsonb),
       last_error=null,attempt_count=attempt_count+1 where id=$1`, [row.id, at, JSON.stringify(executed)]);
-    await db.query('commit');
-    return 'executed';
-  } catch {
-    await db.query('rollback');
-    if (!requestId) return 'retry';
-    // 실행 실패는 상한까지만 재시도한다. 멈춘 요청은 status='scheduled'를 유지해 공개 차단·도메인 차단을 계속하며
-    // 운영자가 원인 해결 뒤 다시 실행한다(/v1/admin/organization-deletions/:id/resume).
-    // 상한은 전제 조건·사진 삭제 대기(blocked)와 섞이지 않도록 실행 실패 횟수(steps.executionFailures)만 센다.
-    const stopped = (await runtime.pool.query<{ stopped: boolean }>(`with failure as (
-        select id,coalesce((steps->>'executionFailures')::int,0)+1 as failures from field.organization_deletion_requests
-        where id=$1 and status='scheduled')
-      update field.organization_deletion_requests r set attempt_count=attempt_count+1,
-        steps=steps||jsonb_build_object('executionFailures',f.failures),
-        last_error=case when f.failures>=$2 then 'execution_failed,execution_attempts_stopped' else 'execution_failed' end,
-        next_attempt_at=case when f.failures>=$2 then 'infinity'::timestamptz else clock_timestamp()+interval '5 minutes' end
-      from failure f where r.id=f.id returning r.next_attempt_at='infinity'::timestamptz as stopped`,
-    [requestId, MAX_EXECUTION_ATTEMPTS])).rows[0]?.stopped;
-    return stopped ? 'blocked' : 'retry';
-  } finally { db.release(); }
-}
-
-// M1: 조직이 외부·AP 통합자에게 준 선택(grant)을 회수한다. owner 해제 경로(integrator-routes.ts)와 같이 회수 원장에 먼저 남긴 뒤
-// 선택·access/refresh 토큰·동의를 같은 트랜잭션에서 지운다. 이미 회수된 선택에 남은 토큰도 함께 회수한다.
-async function revokeIntegrationGrants(db: PoolClient, journal: Pick<FieldRevocationJournal, 'append'> | undefined, organizationId: string) {
-  const selections = (await db.query<{ id: string; revoked: boolean }>(
-    'select id,revoked_at is not null as revoked from field.oauth_selections where organization_id=$1 order by id for update',
-    [organizationId])).rows;
-  if (!selections.length) return { selections: 0, accessTokens: 0, refreshTokens: 0, consents: 0 };
-  for (const selection of selections) if (!selection.revoked) await recordFieldRevocation(journal, { targetKind: 'selection',
-    targetId: selection.id, organizationId, selectionId: selection.id, source: 'owner', revocationId: null });
-  const ids = selections.map(selection => selection.id);
-  const count = async (sql: string, params: unknown[]) => (await db.query(sql, params)).rowCount ?? 0;
-  return {
-    selections: await count('update field.oauth_selections set revoked_at=now() where organization_id=$1 and revoked_at is null', [organizationId]),
-    accessTokens: await count('update "oauthAccessToken" set revoked=now() where "referenceId"=any($1::text[]) and revoked is null', [ids]),
-    refreshTokens: await count('update "oauthRefreshToken" set revoked=now() where "referenceId"=any($1::text[]) and revoked is null', [ids]),
-    consents: await count('delete from "oauthConsent" where "referenceId"=any($1::text[])', [ids]),
-  };
-}
-
-async function disconnectDomains(db: PoolClient, organizationId: string) {
-  const domains = (await db.query<{ id: string; site_id: string; hostname: string; desired_state: string }>(
-    `select id,site_id,hostname,desired_state from field.site_domains where organization_id=$1 and desired_state='active'
-     order by id for update`, [organizationId])).rows;
-  for (const domain of domains) await disconnectSiteDomain(db, domain);
-  return domains.length;
+  return executed;
 }

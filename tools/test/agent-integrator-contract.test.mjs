@@ -1,8 +1,84 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
 import { test } from 'node:test';
+import { createRequire } from 'node:module';
+import { createContractVerifier, assertSourceRoutes, assertCoverage, successResponseKeys, observeContractResponses, sourceRoutes } from './integrator-contract.mjs';
 
 const document = JSON.parse(readFileSync(new URL('../../contracts/agent-integrator-v1.openapi.json', import.meta.url), 'utf8'));
+
+test('QA158 AP success schemas reject forged boolean receipts and malformed nullable timestamps', () => {
+  const verifier = createContractVerifier('agent');
+  assert.throws(() => verifier.assertResponse('/integrations/v1/field-events', 'post', 202,
+    { received: 'true' }), /boolean/);
+  assert.throws(() => verifier.assertResponse('/integrations/v1/field-events', 'post', 202,
+    { received: true, customerPhone: '010-0000-0000' }), /additional properties/);
+  const source = { connectionId: '00000000-0000-4000-8000-000000000001', sourceRevision: 1,
+    approvedSourceRevision: null, state: 'pending_review', syncedAt: 'invalid-date' };
+  assert.throws(() => verifier.assertResponse('/integrations/v1/connections/{id}/source', 'get', 200,
+    source), /date-time/);
+  verifier.assertResponse('/integrations/v1/connections/{id}/source', 'get', 200,
+    { ...source, syncedAt: null });
+});
+
+test('QA158 AP route methods and paths match actual source registrations', () => {
+  assertSourceRoutes('agent');
+});
+
+test('QA158 the response observer preserves actual Fastify 404s', async () => {
+  const require = createRequire(new URL('../../apps/agent-api/package.json', import.meta.url));
+  const app = require('fastify')();
+  for (const route of sourceRoutes('agent')) app.route({ url: route.path, method: route.method,
+    handler: (_request, reply) => reply.code(501).send({ error: 'test_handler_unused' }) });
+  observeContractResponses(app, 'agent');
+  try {
+    for (const url of ['/not-a-route', '/integrations/v1/unknown', '/integrations/v1/me']) {
+      const response = await app.inject({ method: 'POST', url });
+      assert.equal(response.statusCode, 404, response.body);
+    }
+  } finally { await app.close(); }
+});
+
+test('QA158 object and all-method route registrations cannot add undocumented public operations', () => {
+  for (const source of [
+    `app.route({ method: 'POST', url: '/integrations/v1/me', handler });`,
+    `app.route({ method: ['POST', 'PATCH'], url: '/integrations/v1/me', handler });`,
+    `app.all('/integrations/v1/me', handler);`,
+  ]) assert.throws(() => assertSourceRoutes('agent', undefined, [source]), /registered public route declarations|duplicate public route/);
+});
+
+test('QA149/QA158 the current notification closure receipt permits its required closedAt field', () => {
+  const uuid = '00000000-0000-4000-8000-000000000001';
+  const receipt = { transferId: uuid, connectionId: uuid, actionRequestId: uuid, reservationId: uuid,
+    latestRevision: 1, latestEventId: uuid, routeGeneration: 2, closedAt: '2026-10-04T00:00:00.000Z' };
+  const verifier = createContractVerifier('agent');
+  verifier.assertResponse('/integrations/v1/notification-routes/close', 'post', 200, receipt);
+  assert.throws(() => verifier.assertResponse('/integrations/v1/notification-routes/close', 'post', 200,
+    { ...receipt, customerPhone: '010-0000-0000' }), /additional properties/);
+});
+
+test('QA158 coverage gate fails when an accepted source-refresh response was never verified', () => {
+  const expected = successResponseKeys('agent');
+  const missing = expected.filter(key => !key.includes('POST /integrations/v1/connections/{id}/source-refreshes 202'));
+  assert.throws(() => assertCoverage([{ verified: missing }], ['agent']), /source-refreshes 202/);
+  assert.throws(() => assertCoverage([{ verified: expected, failures: ['invalid response'] }], ['agent']), /actual OpenAPI response mismatches/);
+  assert.equal(assertCoverage([{ verified: expected }], ['agent']), expected.length);
+});
+
+test('QA158 synthetic schema assertions cannot satisfy actual HTTP response coverage', () => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'fieldai-synthetic-contract-'));
+  try {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+      import { createContractVerifier } from ${JSON.stringify(new URL('./integrator-contract.mjs', import.meta.url).href)};
+      createContractVerifier('agent').assertResponse('/integrations/v1/field-events', 'post', 202, { received: true });
+    `], { encoding: 'utf8', env: { ...process.env, INTEGRATOR_CONTRACT_COVERAGE_DIRECTORY: directory } });
+    assert.equal(result.status, 0, result.stderr);
+    const receipts = readdirSync(directory).map(file => JSON.parse(readFileSync(resolve(directory, file), 'utf8')));
+    assert.deepEqual(receipts, [{ verified: [], failures: [] }]);
+  } finally { rmSync(directory, { recursive: true }); }
+});
 
 test('AP public integrator preview contract has resolvable schemas and explicit scopes', () => {
   assert.equal(document.openapi, '3.1.0');

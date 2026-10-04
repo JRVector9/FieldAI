@@ -81,7 +81,9 @@ ENV NODE_ENV=production \
     AP_PORT=4311
 WORKDIR /app
 # 서명 저널(revocation/retention)은 볼륨으로 붙인다. 빈 볼륨이 node 소유로 초기화되도록 미리 만든다.
-RUN mkdir -p /var/lib/fieldai/agent/revocation-journal /var/lib/fieldai/agent/retention-journal \
+RUN apt-get update && apt-get install -y --no-install-recommends libheif-examples util-linux \
+    && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /var/lib/fieldai/agent/revocation-journal /var/lib/fieldai/agent/retention-journal/account-deletion \
     && chown -R node:node /var/lib/fieldai && chmod -R 700 /var/lib/fieldai/agent
 COPY --from=build --chown=node:node /out/package.json ./package.json
 COPY --from=build --chown=node:node /out/node_modules ./node_modules

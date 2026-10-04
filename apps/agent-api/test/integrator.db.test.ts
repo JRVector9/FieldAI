@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { after, test } from 'node:test';
 import { fromNodeHeaders } from 'better-auth/node';
 import { Pool } from 'pg';
 import { agentRevocationJournalFromEnvironment } from '../src/revocation-journal.js';
-import { createAgentApp } from '../src/app.js';
+import { createAgentApp as createUnobservedApp } from '../src/app.js';
+import { createContractVerifier, observeContractResponses } from '../../../tools/test/integrator-contract.mjs';
+
+// QA158: compare every emitted public success response with the pinned OpenAPI contract.
+const createAgentApp: typeof createUnobservedApp = (...args) => {
+  const app = createUnobservedApp(...args);
+  observeContractResponses(app, 'agent');
+  return app;
+};
 
 process.loadEnvFile(resolve('../../infra/agent/.env'));
 process.env.AP_PROFILE = 'mock';
@@ -14,55 +21,9 @@ const { auth, authPool } = await import('../src/auth.js');
 const pool = new Pool({ connectionString: process.env.AP_DATABASE_URL });
 after(async () => { await Promise.all([pool.end(), authPool.end()]); });
 const authBase = 'http://127.0.0.1:4311/api/auth';
-type ResponseSchema = { $ref?: string; type?: string | string[]; required?: string[];
-  properties?: Record<string, ResponseSchema>; additionalProperties?: boolean;
-  items?: ResponseSchema; pattern?: string; format?: string; enum?: unknown[] };
-type ContractDocument = { paths: Record<string, Record<string, { responses: Record<string,
-  { content?: { 'application/json'?: { schema?: ResponseSchema } } }> }>>;
-  components: { schemas: Record<string, ResponseSchema> } };
-const contract = JSON.parse(readFileSync(resolve('../../contracts/agent-integrator-v1.openapi.json'),
-  'utf8')) as ContractDocument;
-
+const contractVerifier = createContractVerifier('agent');
 function assertContract(path: string, method: 'get' | 'post', status: number, value: unknown) {
-  const declared = contract.paths[path]?.[method]?.responses?.[String(status)]?.content?.['application/json']?.schema;
-  assert.ok(declared, `OpenAPI ${method.toUpperCase()} ${path} ${status}`);
-  function check(schema: ResponseSchema, actual: unknown, location: string): void {
-    if (schema.$ref) {
-      const name = String(schema.$ref).split('/').at(-1);
-      assert.ok(name);
-      const referenced = contract.components.schemas[name];
-      assert.ok(referenced);
-      check(referenced, actual, location);
-      return;
-    }
-    if (schema.type === 'object') {
-      assert.ok(actual !== null && typeof actual === 'object' && !Array.isArray(actual), location);
-      const item = actual as Record<string, unknown>;
-      for (const key of schema.required ?? []) assert.ok(key in item, `${location}.${key}`);
-      if (schema.additionalProperties === false)
-        for (const key of Object.keys(item)) assert.ok(key in (schema.properties ?? {}), `${location}.${key}`);
-      for (const [key, entry] of Object.entries(schema.properties ?? {}))
-        if (key in item) check(entry, item[key], `${location}.${key}`);
-      return;
-    }
-    if (schema.type === 'array') {
-      assert.ok(Array.isArray(actual), location);
-      const element = schema.items;
-      assert.ok(element, `${location}.items`);
-      actual.forEach((item, index) => check(element, item, `${location}[${index}]`));
-      return;
-    }
-    if (Array.isArray(schema.type) && actual === null && schema.type.includes('null')) return;
-    if (schema.type === 'integer') assert.ok(Number.isInteger(actual), location);
-    else if (schema.type === 'string' || (Array.isArray(schema.type) && schema.type.includes('string'))) {
-      assert.equal(typeof actual, 'string', location);
-      if (schema.pattern) assert.match(actual as string, new RegExp(schema.pattern), location);
-      if (schema.format === 'uuid') assert.match(actual as string, /^[0-9a-f-]{36}$/i, location);
-      if (schema.format === 'date-time') assert.ok(!Number.isNaN(Date.parse(actual as string)), location);
-    }
-    if (schema.enum) assert.ok(schema.enum.includes(actual), location);
-  }
-  check(declared, value, `${method.toUpperCase()} ${path}`);
+  contractVerifier.assertResponse(path, method, status, value);
 }
 
 async function actor() {

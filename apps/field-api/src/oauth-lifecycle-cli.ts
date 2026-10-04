@@ -4,8 +4,37 @@ import { Pool } from 'pg';
 import { lifecycleJournalFromEnvironment } from './oauth-lifecycle-journal.js';
 import { baselineLifecycle, reapplyLifecycleJournal } from './oauth-lifecycle-restore.js';
 import { FieldRevocationJournal } from './revocation-journal.js';
+import { inspectLiveBaseline } from './oauth-live-baseline.js';
+import { assertProductionProfile } from './production-profile.js';
+import { exportLiveCheckpoint } from './oauth-live-checkpoint.js';
 
+assertProductionProfile();
 const mode=process.argv[2];
+if(process.env.FIELD_PROFILE==='live'&&mode==='--checkpoint-quiesced'){
+  await exportLiveCheckpoint('lifecycle',process.argv.slice(2));
+}else if(process.env.FIELD_PROFILE==='live'){
+  const args=process.argv.slice(2),dryRun=args.length===2&&args[0]==='--baseline-quiesced'&&args[1]==='--dry-run';
+  const value=(prefix:string)=>args.find(a=>a.startsWith(prefix))?.slice(prefix.length);
+  const databaseFingerprint=value('--confirm-database='),planDigest=value('--expected-plan=');
+  const apply=args.length===5&&args[0]==='--baseline-quiesced'&&new Set(args).size===5
+    &&args.includes('--confirm-product=field')&&args.includes('--confirm-writers-stopped')
+    &&/^[a-f0-9]{64}$/.test(databaseFingerprint??'')&&/^[a-f0-9]{64}$/.test(planDigest??'');
+  if(!dryRun&&!apply)throw new Error('live baseline requires --dry-run or --confirm-product=field --confirm-database=<fingerprint> --confirm-writers-stopped --expected-plan=<digest>');
+  const active=process.env.FIELD_DATABASE_URL;
+  if(!active)throw new Error('explicit own active database binding required');
+  const journal=lifecycleJournalFromEnvironment();
+  if(!journal)throw new Error('existing own journal/key required');
+  const root=await realpath(resolve(process.env.FIELD_REVOCATION_JOURNAL_DIRECTORY!));
+  await realpath(journal.root);
+  const native=new FieldRevocationJournal(root,process.env.FIELD_REVOCATION_JOURNAL_SECRET!);
+  const pool=new Pool({connectionString:active,application_name:'field-oauth-baseline-cli',connectionTimeoutMillis:5000,max:2,
+    options:'-c statement_timeout=15000 -c lock_timeout=1000'});
+  try {
+    if(dryRun)process.stdout.write(`${JSON.stringify(await inspectLiveBaseline(pool,journal,native))}\n`);
+    else {await baselineLifecycle(pool,journal,native,{databaseFingerprint:databaseFingerprint!,planDigest:planDigest!});
+      process.stdout.write('field legacy lifecycle baseline recorded; export both native and lifecycle latest checkpoints\n');}
+  }finally{await pool.end();}
+}else{
 if(process.argv.length!==3||!['--baseline-quiesced','--checkpoint-quiesced','--offline-restored'].includes(mode??'')||process.env.FIELD_PROFILE!=='mock')
   throw new Error('local lifecycle CLI requires mock and an explicit quiesced/offline mode');
 const active=process.env.FIELD_DATABASE_URL;
@@ -41,4 +70,5 @@ if(mode==='--offline-restored'){
     const directory=await open(dirname(destination),'r');try{await directory.sync();}finally{await directory.close();}
     process.stdout.write('field lifecycle checkpoint exported; protect separately\n');
   }
+}
 }

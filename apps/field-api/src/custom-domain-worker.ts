@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
+import { assertAccountDeletionServing } from './account-deletion-journal.js';
 import { customDomainContextFromEnvironment } from './custom-domains.js';
 import { runCustomDomainOnce } from './custom-domain-execution.js';
 
@@ -12,6 +13,7 @@ try{
   await pool.query('select hostname,generation from field.site_domains limit 1');
   process.stdout.write(`Field custom domain worker ready (${context.edge?'configured':'blocked_integration'})\n`);
   do{
+    await assertAccountDeletionServing(pool);
     try{
       const result=await runCustomDomainOnce({pool,context});
       if(result!=='empty'||process.argv.includes('--once'))process.stdout.write(`Field custom domain: ${result}\n`);

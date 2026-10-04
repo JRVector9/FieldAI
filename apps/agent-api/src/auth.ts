@@ -79,9 +79,13 @@ export const auth = betterAuth({
     },
     session: {
       create: {
-        before: async (session, context) => ({
-          data: { ...session, twoFactorVerified: TWO_FACTOR_SESSION_PATHS.has(context?.path ?? '') },
-        }),
+        before: async (session, context) => {
+          // The absolute MFA age fence uses the database clock. The application
+          // host can be ahead even by milliseconds; establish sessions on that
+          // same authoritative clock without accepting future stored timestamps.
+          const createdAt = (await authPool.query<{at:Date}>('select clock_timestamp() as at')).rows[0]!.at;
+          return { data: { ...session, createdAt, twoFactorVerified: TWO_FACTOR_SESSION_PATHS.has(context?.path ?? '') } };
+        },
       },
     },
   },

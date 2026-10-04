@@ -1,3 +1,4 @@
+import { assertAccountDeletionServing } from './account-deletion-journal.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { billingContextFromEnvironment } from './billing-context.js';
@@ -14,6 +15,7 @@ try {
   await pool.query('select claim_token,next_attempt_at from field.billing_authorizations limit 1');
   process.stdout.write(`Field billing authorization worker ready (${billing ? billing.provider.mode : 'blocked_integration'})\n`);
   do {
+    await assertAccountDeletionServing(pool);
     try {
       const result = await runBillingAuthorizationOnce({ pool,billing });
       if (result !== 'empty' || process.argv.includes('--once')) process.stdout.write(`Field billing authorization: ${result}\n`);

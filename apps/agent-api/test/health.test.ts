@@ -79,3 +79,30 @@ test('AP trust proxy and request timeout settings parse like Field and reject in
   // initialConfig 타입 정의에는 없지만 Fastify가 실제 적용한 값을 담는다
   try { assert.equal((app.initialConfig as { requestTimeout?: number }).requestTimeout, 30_000); } finally { await app.close(); }
 });
+
+test('AP rejects NUL in parsed text before business/auth handlers and preserves signed or binary bytes', async () => {
+  let authCalls = 0, textCalls = 0;
+  const app = createAgentApp(async () => undefined, async () => { authCalls++; return new Response('ok'); });
+  app.post('/text/:id', async () => { textCalls++; return { ok: true }; });
+  app.post('/bytes', async request => ({ bytes: [...request.body as Buffer] }));
+  try {
+    for (const payload of [{ message: 'hello\u0000world' }, { nested: ['fine', { note: '\u0000' }] }, { ['bad\u0000key']: 'value' }]) {
+      const response = await app.inject({ method: 'POST', url: '/text/a', payload });
+      assert.equal(response.statusCode, 400); assert.deepEqual(response.json(), { error: 'invalid_text' });
+    }
+    for (const url of ['/text/a?q=x%00y', '/text/x%00y']) {
+      const response = await app.inject({ method: 'POST', url, payload: { message: 'fine' } });
+      assert.equal(response.statusCode, 400); assert.equal(response.json().error, 'invalid_text');
+    }
+    for (const payload of ['email=bad%00value', 'bad%00key=value']) {
+      const response = await app.inject({ method: 'POST', url: '/api/auth/sign-in/email', headers: { 'content-type': 'application/x-www-form-urlencoded' }, payload });
+      assert.equal(response.statusCode, 400); assert.equal(response.json().error, 'invalid_text');
+    }
+    assert.equal(authCalls, 0); assert.equal(textCalls, 0);
+    assert.equal((await app.inject({ method: 'POST', url: '/text/a', payload: { message: 'literal \\u0000 is text' } })).statusCode, 200);
+    for (const type of ['application/octet-stream', 'application/vnd.field-event+json']) {
+      const response = await app.inject({ method: 'POST', url: '/bytes', headers: { 'content-type': type }, payload: Buffer.from([0, 1, 2]) });
+      assert.equal(response.statusCode, 200); assert.deepEqual(response.json(), { bytes: [0, 1, 2] });
+    }
+  } finally { await app.close(); }
+});

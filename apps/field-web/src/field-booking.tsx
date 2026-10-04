@@ -1,7 +1,10 @@
 "use client";
 
+import { IMAGE_UPLOAD_ACCEPT } from "./image-upload-format";
+
 import { FieldCustomerNotificationConsent } from "./field-customer-notification-consent";
 import { PrivacyNotice } from "./legal";
+import { ownerFailureNotice } from './deletion-scheduled-copy';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
@@ -328,7 +331,7 @@ export function PublicBookingPanel({ catalog, onServiceChange, onTimeChange, onR
         <label>요청 내용<textarea required maxLength={2000} value={requestMessage} onChange={event => setRequestMessage(event.target.value)} placeholder="서비스 조건이나 요청 사항을 알려 주세요." /></label>
         <label className="booking-visit-region">지역·이용 장소 (선택)<input maxLength={200} value={visitRegion} onChange={event => setVisitRegion(event.target.value)} placeholder="상세 주소는 사업자와 조율할 수 있습니다." /></label>
         {service?.bookingMode === "request" && <label>희망 시간<textarea required={!(preferredDate && preferredWindow)} maxLength={400} value={preferred} onChange={event => setPreferred(event.target.value)} placeholder="날짜와 시간대 대신 자유롭게 쓰거나, 다른 가능한 시간을 알려 주세요." /></label>}
-        <label className="inquiry-photo-label"><span aria-hidden="true">▧</span> 사진 첨부 (최대 5장, 장당 8MB)<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={event => {
+        <label className="inquiry-photo-label"><span aria-hidden="true">▧</span> 사진 첨부 (최대 5장, 장당 8MB)<input type="file" multiple accept={IMAGE_UPLOAD_ACCEPT} disabled={busy} onChange={event => {
           const result = selectedBookingPhotos(event.currentTarget.files);
           if (result.error) { event.currentTarget.value = ""; setStatus(result.error); return; }
           setPhotos(result.selected); setStatus("");
@@ -813,7 +816,7 @@ export function OwnerBookingPanel({ organizationId, releaseRevision, releaseStat
           : "전화 예약이 달력에 기록됐습니다. 고객에게 자동 알림을 보내지 않았습니다.");
         try { await load(); }
         catch { setStatus("전화 예약은 기록됐지만 목록을 다시 읽지 못했습니다. 새로고침으로 확인해 주세요."); }
-      } else setStatus(`전화 예약 기록에 실패했습니다 (${result.status}): ${(result.data as { error?: string }).error ?? ""}`);
+      } else setStatus(ownerFailureNotice(result.status, result.data, `전화 예약 기록에 실패했습니다 (${result.status}): ${(result.data as { error?: string }).error ?? ""}`));
     } catch { setStatus("전화 예약 기록 결과를 확인할 수 없습니다. 입력 내용 그대로 다시 제출하면 같은 요청 키로 기존 예약을 확인합니다."); }
     finally { setBusy(false); }
   }
@@ -1285,7 +1288,7 @@ export function ReservationPage({ id, initialKey }: { id: string; initialKey?: s
     </section>}
     <details key={reservation ? "loaded" : "entry"} ref={toolsRef} className="field-reservation-tools" open={!reservation}><summary>{reservation ? "확인키·사진·변경·취소 관리" : "확인키로 예약 열기"}</summary><section className="special-panel">{issuedKey && <div className="customer-banner"><strong>Field 예약 확인키</strong><p>지금 이 키를 보관하세요. AP가 중단돼도 Field에서 이 예약을 열 수 있습니다. 새 코드를 교환하면 이전 Field 키는 폐기됩니다.</p><code>{issuedKey}</code><p><a href={`/reservation/${id}`}>나중에 Field 예약 열기</a></p></div>}<form className="form-fields field-reservation-key-form" onSubmit={event => void open(event)}><label>예약 확인키<input required value={key} disabled={Boolean(pendingCustomerMessage || pendingMessageRecovery)} onChange={event => { setKey(event.target.value); setIssuedKey(""); setReservation(null); setNotificationRoute(null); setReview(null); setPendingCustomerMutation(null); clearPhotoSelection(); }} /></label><button type="submit" disabled={busy || !!pendingCustomerMutation || !!pendingCustomerMessage || !!pendingMessageRecovery}>예약 열기</button></form>
       {reservation && <div className="form-fields"><h2>{reservation.service.name} · {stateLabel(reservation.state)}</h2>{!pendingCustomerMutation && !pendingCustomerMessage && !pendingMessageRecovery && <ReceiptRotationPanel path={`/v1/reservations/${id}/receipt-key/rotate`} label="예약" currentKey={key} onRotated={nextKey => { setKey(nextKey); setIssuedKey(nextKey); setReservation(null); setNotificationRoute(null); setReview(null); setPendingCustomerMutation(null); clearPhotoSelection(); setStatus("새 확인키로 예약을 다시 열어 최신 상태를 확인해 주세요."); }} />}<p>접수 가격: {reservation.service.priceAmount === null ? "미정" : `${reservation.service.priceAmount.toLocaleString("ko-KR")}원`}</p><p>요청: {reservation.requestedStartAt ? formatTime(reservation.requestedStartAt, reservation.timezone) : reservation.preferredTimeText}</p>{reservation.requestMessage && <p>내 요청 내용: {reservation.requestMessage}</p>}{reservation.visitRegion && <p>지역·이용 장소: {reservation.visitRegion}</p>}<p>{["canceled", "completed", "no_show"].includes(reservation.state) ? "기존 확정 시간" : "확정"}: {reservation.confirmedStartAt ? formatTime(reservation.confirmedStartAt, reservation.timezone) : "사업자 확인 전"}</p>
-        <div className="knowledge-source"><h3>예약 사진</h3>{reservation.attachments ? (reservation.attachments.length ? reservation.attachments.map((attachment, index) => <PrivateReservationPhoto key={attachment.id} reservationId={id} attachmentId={attachment.id} receiptKey={key} label={`예약 첨부 사진 ${index + 1}`} />) : <p>첨부된 사진이 없습니다.</p>) : <p>사진 목록을 다시 확인해 주세요.</p>}<label className="inquiry-photo-label">사진 추가 (최대 5장, 장당 8MB)<input ref={photoInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy || Boolean(reservation.retention?.workPurgedAt)} onChange={event => {
+        <div className="knowledge-source"><h3>예약 사진</h3>{reservation.attachments ? (reservation.attachments.length ? reservation.attachments.map((attachment, index) => <PrivateReservationPhoto key={attachment.id} reservationId={id} attachmentId={attachment.id} receiptKey={key} label={`예약 첨부 사진 ${index + 1}`} />) : <p>첨부된 사진이 없습니다.</p>) : <p>사진 목록을 다시 확인해 주세요.</p>}<label className="inquiry-photo-label">사진 추가 (최대 5장, 장당 8MB)<input ref={photoInputRef} type="file" multiple accept={IMAGE_UPLOAD_ACCEPT} disabled={busy || Boolean(reservation.retention?.workPurgedAt)} onChange={event => {
           const result = selectedBookingPhotos(event.currentTarget.files);
           if (result.error) { event.currentTarget.value = ""; setStatus(result.error); return; }
           setPhotos(result.selected); setStatus("");

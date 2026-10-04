@@ -1,3 +1,4 @@
+import { assertAccountDeletionServing } from './account-deletion-journal.js';
 import { readdir } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
@@ -42,6 +43,7 @@ try {
   if (journal) await verifyFieldRetentionJournal(pool, journal);
   process.stdout.write('field retention worker ready\n');
   do {
+    await assertAccountDeletionServing(pool);
     // 단계마다 예외를 따로 잡는다. 조직 삭제·사진 삭제·outbox 정리 중 하나가 실패해도 같은 주기의 다른 단계와 법정 보존 작업은 실행한다.
     let failed = false;
     const step = <T>(name: string, run: () => Promise<T>) => runIsolatedStep(name, run, failedStep => {

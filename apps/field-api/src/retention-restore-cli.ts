@@ -4,7 +4,13 @@ import { Pool } from 'pg';
 import { createFieldInquiryMediaStore } from './inquiry-media.js';
 import { FieldRetentionJournal } from './retention-journal.js';
 import { reapplyFieldRetentionJournal } from './retention-restore.js';
+import { assertProductionProfile } from './production-profile.js';
+import { accountDeletionJournalFromEnvironment } from './account-deletion-journal.js';
+import { reapplyFieldAccountDeletions } from './account-deletion-restore.js';
+import type { FieldSiteMediaStore } from './site-media.js';
+import { createRestoredSiteMediaStore } from './restored-site-media.js';
 
+assertProductionProfile();
 if (!process.argv.includes('--offline-restored')) throw new Error('explicit --offline-restored is required before reapplying deletion records');
 const database = process.env.FIELD_RETENTION_RESTORE_DATABASE_URL;
 const directory = process.env.FIELD_RETENTION_JOURNAL_DIRECTORY;
@@ -30,8 +36,21 @@ process.env.FIELD_INQUIRY_MEDIA_DIRECTORY = restoredMedia;
 const media = createFieldInquiryMediaStore()!, journal = new FieldRetentionJournal(directory, secret);
 const checkpoint = await readFile(checkpointFile,'utf8');
 await journal.verifiedEntries(checkpoint);
+const deletionJournal=accountDeletionJournalFromEnvironment(),deletionCheckpointFile=process.env.FIELD_ACCOUNT_DELETION_RESTORE_CHECKPOINT_FILE;
+if(!deletionJournal||!deletionCheckpointFile)throw new Error('account deletion journal and trusted separate checkpoint required');
+const deletionCheckpoint=await readFile(deletionCheckpointFile,'utf8');
+const deletionEntries=await deletionJournal.verifiedEntries(deletionCheckpoint);
+let restoredSiteMedia:FieldSiteMediaStore|undefined;
+if(deletionEntries.some(entry=>entry.targetKind==='organization')){
+  const siteRoot=process.env.FIELD_ACCOUNT_DELETION_RESTORE_SITE_MEDIA_DIRECTORY,activeSiteRoot=process.env.FIELD_MEDIA_DIRECTORY;
+  if(!siteRoot||!activeSiteRoot)throw new Error('separate restored and active site media bindings required');
+  const restoredRoot=await realpath(resolve(siteRoot));
+  if(restoredRoot===await realpath(resolve(activeSiteRoot)))throw new Error('restore site media must differ from active Field site media');
+  restoredSiteMedia=await createRestoredSiteMediaStore(restoredRoot,activeSiteRoot);
+}
 const pool = new Pool({ connectionString: database });
 try {
+  const deletions=await reapplyFieldAccountDeletions({pool,journal:deletionJournal,checkpoint:deletionCheckpoint,siteMedia:restoredSiteMedia});
   const result = await reapplyFieldRetentionJournal({ pool, media, journal, checkpoint });
-  process.stdout.write(`Field restored deletion journal applied: ${result.applied}; entries: ${result.entries}\n`);
+  process.stdout.write(`Field restored deletion journal applied: ${result.applied}; entries: ${result.entries}; identity/site deletions: ${deletions.applied}\n`);
 } finally { await pool.end(); }

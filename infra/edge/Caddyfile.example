@@ -50,11 +50,15 @@
 # ───────────── Field ─────────────
 {$FIELD_WEB_HOST} {
 	encode zstd gzip
+	# Next의 /v1 rewrite도 내부 TLS ask를 외부에 노출하지 않는다.
+	respond /v1/public/site-hosts/allow 404
 	reverse_proxy 127.0.0.1:3002
 }
 
 {$FIELD_API_HOST} {
 	encode zstd gzip
+	# 발급 전 ask는 위 on_demand_tls의 내부 4321 주소에서만 호출한다.
+	respond /v1/public/site-hosts/allow 404
 	reverse_proxy 127.0.0.1:4321
 }
 
@@ -64,6 +68,7 @@
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
 	encode zstd gzip
+	respond /v1/public/site-hosts/allow 404
 	reverse_proxy 127.0.0.1:3002
 }
 
@@ -86,6 +91,9 @@ https:// {
 		on_demand
 	}
 	encode zstd gzip
+	handle /v1/public/site-hosts/allow {
+		respond 404
+	}
 	handle /.well-known/field-site-health {
 		reverse_proxy 127.0.0.1:4321
 	}

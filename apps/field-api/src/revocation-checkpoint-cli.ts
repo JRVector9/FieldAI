@@ -1,7 +1,12 @@
 import { open, realpath } from 'node:fs/promises';
 import { basename, dirname, relative, resolve } from 'node:path';
 import { fieldRevocationJournalFromEnvironment } from './revocation-journal.js';
+import { assertProductionProfile } from './production-profile.js';
+import { exportLiveCheckpoint } from './oauth-live-checkpoint.js';
 
+assertProductionProfile();
+if(process.env.FIELD_PROFILE==='live')await exportLiveCheckpoint('revocation',process.argv.slice(2));
+else{
 if (!process.argv.includes('--quiesced') || process.env.FIELD_PROFILE !== 'mock')
   throw new Error('local checkpoint export requires mock and explicit --quiesced after stopping journal writers');
 const journal = fieldRevocationJournalFromEnvironment(), output = process.env.FIELD_REVOCATION_CHECKPOINT_OUTPUT;
@@ -17,3 +22,4 @@ try { await file.writeFile(data); await file.sync(); } finally { await file.clos
 const directory = await open(dirname(destination), 'r');
 try { await directory.sync(); } finally { await directory.close(); }
 process.stdout.write('Field revocation checkpoint exported; protect it independently and use the latest quiesced export\n');
+}

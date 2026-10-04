@@ -10,6 +10,7 @@ import { signInOutcome } from "./auth-flow";
 import { previewLinksVisible } from "./preview-visibility";
 import { TwoFactorChallenge, VerificationEmailNotice } from "./agent-auth-pages";
 import { AgentKakaoSignIn } from "./agent-kakao-sign-in";
+import { DELETION_SCHEDULED_OWNER_MESSAGE, isDeletionScheduledError } from "./deletion-scheduled-copy";
 
 type Draft = {
   organizationId: string;
@@ -426,7 +427,8 @@ export function AgentWorkspace() {
         setReleaseRevision(release.revision);
         setApprovedDraftRevision(draft.revision);
         setStatus(`지식 공개 버전 ${release.revision}번이 승인되었습니다.`);
-      } else if (result.status === 409) setStatus("초안이 미완성이거나 버전이 달라 승인하지 못했습니다. 내용을 확인해 주세요.");
+      } else if (isDeletionScheduledError(result.status, result.data)) setStatus(DELETION_SCHEDULED_OWNER_MESSAGE);
+      else if (result.status === 409) setStatus("초안이 미완성이거나 버전이 달라 승인하지 못했습니다. 내용을 확인해 주세요.");
       else if (result.status === 404) {
         setDraft(current => current ? { ...current, role: null } : current);
         setStatus('승인 권한이 변경됐습니다. 현재 계정 권한을 다시 확인해 주세요.');

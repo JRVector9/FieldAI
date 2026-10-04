@@ -43,7 +43,7 @@ for (const product of requested.length ? [...new Set(requested)] : ['agent', 'fi
     appendFileSync(path, 'FIELD_INQUIRY_MEDIA_DIRECTORY=infra/field/inquiry-media\n', { mode: 0o600 });
   }
   if (!isAgent && !content.includes('FIELD_RETENTION_JOURNAL_DIRECTORY=')) {
-    appendFileSync(path, 'FIELD_RETENTION_JOURNAL_DIRECTORY=infra/field/retention-journal\n', { mode: 0o600 });
+    appendFileSync(path, `FIELD_RETENTION_JOURNAL_DIRECTORY=${resolve('infra/field/retention-journal')}\n`, { mode: 0o600 });
   }
   function initializeFreshRetentionJournal() {
     const directory = parseEnv(readFileSync(path, 'utf8'))[`${upper}_RETENTION_JOURNAL_DIRECTORY`];
@@ -52,13 +52,14 @@ for (const product of requested.length ? [...new Set(requested)] : ['agent', 'fi
     if (existsSync(root) && readdirSync(root).length)
       throw new Error(`${upper} existing journal requires its original key; first setup cannot replace it`);
     mkdirSync(root, { recursive: true, mode: 0o700 });
+    mkdirSync(resolve(root, 'account-deletion'), { mode: 0o700 });
   }
   if (!isAgent && !content.includes('FIELD_RETENTION_JOURNAL_SECRET=')) {
     initializeFreshRetentionJournal();
     appendFileSync(path, `FIELD_RETENTION_JOURNAL_SECRET=${randomBytes(32).toString('base64url')}\n`, { mode: 0o600 });
   }
   if (!isAgent && !content.includes('FIELD_REVOCATION_JOURNAL_DIRECTORY=')) {
-    appendFileSync(path, 'FIELD_REVOCATION_JOURNAL_DIRECTORY=infra/field/revocation-journal\n', { mode: 0o600 });
+    appendFileSync(path, `FIELD_REVOCATION_JOURNAL_DIRECTORY=${resolve('infra/field/revocation-journal')}\n`, { mode: 0o600 });
   }
   if (!isAgent && !content.includes('FIELD_REVOCATION_JOURNAL_SECRET=')) {
     // AP와 같이 회수 저널 디렉터리를 먼저 만든다. CI처럼 빈 checkout에서는 디렉터리가 없어 lifecycle CLI의 realpath가 ENOENT로 실패했다(2026-10-04 CI e2e).
@@ -70,7 +71,7 @@ for (const product of requested.length ? [...new Set(requested)] : ['agent', 'fi
     appendFileSync(path, `FIELD_REVOCATION_JOURNAL_SECRET=${randomBytes(32).toString('base64url')}\n`, { mode: 0o600 });
   }
   if (isAgent && !content.includes('AP_RETENTION_JOURNAL_DIRECTORY=')) {
-    appendFileSync(path, 'AP_RETENTION_JOURNAL_DIRECTORY=infra/agent/retention-journal\n', { mode: 0o600 });
+    appendFileSync(path, `AP_RETENTION_JOURNAL_DIRECTORY=${resolve('infra/agent/retention-journal')}\n`, { mode: 0o600 });
   }
   if (isAgent && !content.includes('AP_RETENTION_JOURNAL_SECRET=')) {
     initializeFreshRetentionJournal();
@@ -97,5 +98,13 @@ for (const product of requested.length ? [...new Set(requested)] : ['agent', 'fi
   }
   if (isAgent && !content.includes('AP_INQUIRY_MEDIA_DIRECTORY=')) {
     appendFileSync(path, 'AP_INQUIRY_MEDIA_DIRECTORY=infra/agent/inquiry-media\n', { mode: 0o600 });
+  }
+  // Upgrade existing local settings without replacing keys or journal contents.
+  for (const kind of ['RETENTION', 'REVOCATION']) {
+    const name = `${upper}_${kind}_JOURNAL_DIRECTORY`;
+    const current = readFileSync(path, 'utf8');
+    const directory = parseEnv(current)[name];
+    if (directory && !isAbsolute(directory)) writeFileSync(path,
+      current.replace(new RegExp(`^${name}=.*$`, 'm'), `${name}=${resolve(directory)}`), { mode: 0o600 });
   }
 }

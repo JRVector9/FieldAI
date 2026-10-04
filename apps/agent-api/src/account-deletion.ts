@@ -5,6 +5,8 @@ import { verifyPassword } from 'better-auth/crypto';
 import type { BusinessRuntime } from './business.js';
 import { revokeIntegratorSelection } from './integrator-routes.js';
 import { UNRECONCILABLE_ACTION_SQL } from './work-retention.js';
+import { applyAccountDeletion, applyOrganizationDeletionCleanup } from './account-deletion-apply.js';
+import { accountDeletionJournalFromEnvironment, persistDeletionReceipt } from './account-deletion-journal.js';
 
 // AP-O09 조직·계정 삭제(추가). 조직 삭제는 owner 명시 확인 → 14일 유예 → 작업자 실행 순서이며,
 // 문의·상담 원본·청구 원장·감사 기록은 지우지 않고 기존 보존 정책 경로에 맡긴다.
@@ -15,7 +17,6 @@ export const REAUTH_WINDOW_MINUTES = 5;
 const PASSWORD_ATTEMPT_LIMIT = 5;
 // 실행 실패 재시도 상한(Field와 동일). 넘으면 next_attempt_at을 infinity로 두어 운영자가 다시 실행할 때까지 멈춘다.
 const MAX_EXECUTION_ATTEMPTS = 12;
-const DELETED_TEXT = '[삭제됨]';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type Db = Pool | PoolClient;
 type DeletionRow = { id: string; organization_id: string; requested_by: string; reason: string | null; status: string;
@@ -336,23 +337,16 @@ export function registerAgentAccountDeletionRoutes(app: FastifyInstance, runtime
       if (blockers.length) { await db.query('rollback'); return reply.code(409).send({ error: blockers[0], blockers }); }
       const reauth = await reauthenticate(runtime, db, request, userId, body.password);
       if (reauth) { await db.query('rollback'); return sendReauthFailure(reply, reauth); }
-      const anonymousEmail = `deleted-${randomUUID()}@deleted.invalid`;
-      const removed = {
-        memberships: (await db.query('delete from ap.memberships where user_id=$1', [userId])).rowCount ?? 0,
-        // 세션 행은 지우지 않고 즉시 만료로 폐기한다(oauth_selections는 000087부터 세션 삭제에도 유지).
-        sessions: (await db.query('update "session" set "expiresAt"=now(),"updatedAt"=now() where "userId"=$1 and "expiresAt">now()', [userId])).rowCount ?? 0,
-        twoFactor: (await db.query('delete from "twoFactor" where "userId"=$1', [userId])).rowCount ?? 0,
-        verifications: (await db.query('delete from "verification" where value=$1', [userId])).rowCount ?? 0,
-        credentials: (await db.query('delete from "account" where "userId"=$1', [userId])).rowCount ?? 0,
-        // 인증 메일 감사 행의 수신 주소도 익명 주소로 바꾼다(발송 결과·시각은 감사용으로 유지).
-        emailOutboxAnonymized: (await db.query('update ap.email_outbox set "to"=$2 where lower("to")=lower($1)',
-          [user.email, anonymousEmail])).rowCount ?? 0,
-      };
-      // "user" 행은 청구·승인·감사 기록이 FK로 참조하므로 지우지 않고 식별정보를 익명화한다.
-      await db.query(`update "user" set name='삭제된 사용자',email=$2,"emailVerified"=false,image=null,
-        "twoFactorEnabled"=false,"updatedAt"=now() where id=$1`, [userId, anonymousEmail]);
+      const journal = runtime.accountDeletionJournal ?? accountDeletionJournalFromEnvironment();
+      if (!journal) { await db.query('rollback'); return reply.code(503).send({ error:'deletion_journal_unavailable' }); }
+      // Durable approved intent precedes mutation. A crash after fsync is
+      // recovery-required; it must never be mistaken for a completed deletion.
+      const entry = await journal.append({ targetKind:'account',targetId:userId,requestId:randomUUID(),ownerUserId:null,
+        memberUserIds:[],sourceEmailHmac:journal.emailFingerprint(user.email),anonymousEmail:`deleted-${randomUUID()}@deleted.invalid` });
+      const removed = await applyAccountDeletion(db,entry,journal);
       await db.query(`insert into ap.account_deletion_audit(id,user_id,mode,removed) values ($1,$2,'anonymized',$3::jsonb)`,
-        [randomUUID(), userId, JSON.stringify(removed)]);
+        [entry.requestId, userId, JSON.stringify(removed)]);
+      await persistDeletionReceipt(db,entry);
       await db.query('commit');
       return { product: 'agent', deleted: true, mode: 'anonymized' };
     } catch (error) { await db.query('rollback'); throw error; } finally { db.release(); }
@@ -361,7 +355,7 @@ export function registerAgentAccountDeletionRoutes(app: FastifyInstance, runtime
 
 // 유예가 끝난 조직 삭제 요청 하나를 실행한다. 전체를 한 트랜잭션으로 처리하므로 실패 시 아무것도 반영되지 않고 재시도한다.
 export async function runOrganizationDeletionOnce(runtime: { pool: Pool;
-  revocationJournal?: BusinessRuntime['revocationJournal'] }): Promise<'empty' | 'executed' | 'blocked' | 'retry'> {
+  revocationJournal?: BusinessRuntime['revocationJournal']; accountDeletionJournal?: BusinessRuntime['accountDeletionJournal'] }): Promise<'empty' | 'executed' | 'blocked' | 'retry'> {
   const db = await runtime.pool.connect();
   let requestId: string | undefined;
   try {
@@ -379,66 +373,28 @@ export async function runOrganizationDeletionOnce(runtime: { pool: Pool;
       `select s.id from ap.oauth_selections s where ${OPEN_INTEGRATOR_SELECTION_SQL} order by s.id for update`,
       [organizationId])).rows.map(selection => selection.id);
     const blockedCodes = [...failed.map(item => item.code),
-      ...(selections.length && !runtime.revocationJournal ? ['revocation_journal_unavailable'] : [])];
+      ...(selections.length && !runtime.revocationJournal ? ['revocation_journal_unavailable'] : []),
+      ...(!(runtime.accountDeletionJournal ?? accountDeletionJournalFromEnvironment()) ? ['deletion_journal_unavailable'] : [])];
     if (blockedCodes.length) {
       await db.query(`update ap.organization_deletion_requests set last_error=$2,attempt_count=attempt_count+1,
         next_attempt_at=clock_timestamp()+interval '1 hour' where id=$1`, [row.id, blockedCodes.join(',')]);
       await db.query('commit'); return 'blocked';
     }
     const at = (await db.query<{ now: Date }>('select clock_timestamp() as now')).rows[0]!.now;
-    const count = async (sql: string, params: unknown[]) => (await db.query(sql, params)).rowCount ?? 0;
+    const journal = (runtime.accountDeletionJournal ?? accountDeletionJournalFromEnvironment())!;
+    const organization = (await db.query('select owner_user_id from ap.organizations where id=$1',[organizationId])).rows[0];
+    const memberRows = (await db.query<{user_id:string}>('select user_id from ap.memberships where organization_id=$1 order by user_id',[organizationId])).rows;
+    const memberUserIds = [...new Set([organization.owner_user_id,...memberRows.map(member=>member.user_id)])];
+    const entry = await journal.append({targetKind:'organization',targetId:organizationId,requestId:row.id,ownerUserId:organization.owner_user_id,
+      memberUserIds,sourceEmailHmac:null,anonymousEmail:null});
     // 조직이 외부 통합에 내준 권한 선택·토큰·동의를 owner 회수와 같은 규칙으로 닫는다(멤버십 삭제 뒤에는 owner가 회수할 수 없음)
     let integratorSelectionsRevoked = 0;
     for (const selectionId of selections)
       if (await revokeIntegratorSelection(db, runtime.revocationJournal, organizationId, selectionId)) integratorSelectionsRevoked++;
-    const unresolvableActionRequestsSkipped = await unreconcilableActionCount(db, organizationId);
-    const members = (await db.query<{ user_id: string }>('select user_id from ap.memberships where organization_id=$1',
-      [organizationId])).rows.map(member => member.user_id);
-    // 조직을 먼저 삭제 표시한다(같은 트랜잭션). owner 수신처 연락처 정리 가드가 deleted_at을 확인한다.
-    await db.query('update ap.organizations set deleted_at=$2 where id=$1 and deleted_at is null', [organizationId, at]);
-    const executed = {
-      at: at.toISOString(),
-      deploymentsPaused: await count("update ap.deployments set status='paused',updated_at=now() where organization_id=$1 and status='active'", [organizationId]),
-      campaignsPaused: await count("update ap.campaigns set state='paused',updated_at=now() where organization_id=$1 and state='published'", [organizationId]),
-      // 상호명은 보존 중인 고객 접수 원본의 식별을 위해 남기고, 나머지 owner 입력 사업 정보는 비운다.
-      knowledgeDraftsCleared: await count(`update ap.knowledge_drafts set content=jsonb_build_object('businessName',coalesce(content->>'businessName',''),
-        'introduction','','region','','openingHours','','services','[]'::jsonb,'faqs','[]'::jsonb),updated_at=now() where organization_id=$1`, [organizationId]),
-      knowledgeReleasesCleared: await count(`update ap.knowledge_releases set content=jsonb_build_object('businessName',coalesce(content->>'businessName',''),
-        'introduction','','region','','openingHours','','services','[]'::jsonb,'faqs','[]'::jsonb) where organization_id=$1`, [organizationId]),
-      agentDraftsCleared: await count(`update ap.agent_drafts set content=jsonb_build_object('name',$2::text,'tone','clear','guideScope','','handoffText',''),
-        updated_at=now() where organization_id=$1`, [organizationId, DELETED_TEXT]),
-      agentReleasesCleared: await count(`update ap.agent_releases set content=jsonb_build_object('name',$2::text,'tone','clear','guideScope','','handoffText','')
-        where organization_id=$1`, [organizationId, DELETED_TEXT]),
-      ownerTestsCleared: await count("update ap.ai_runs set question=$2,answer=null where organization_id=$1 and kind='owner_test'", [organizationId, DELETED_TEXT]),
-      sourceSnapshotsDeleted: await count('delete from ap.knowledge_source_snapshots where source_id in (select id from ap.knowledge_sources where organization_id=$1)', [organizationId]),
-      sourceConflictsDeleted: await count('delete from ap.knowledge_source_integrity_conflicts where source_id in (select id from ap.knowledge_sources where organization_id=$1)', [organizationId]),
-      campaignsCleared: await count('update ap.campaigns set name=$2,updated_at=now() where organization_id=$1', [organizationId, DELETED_TEXT]),
-      campaignReleasesCleared: await count(`update ap.campaign_releases set content=content||jsonb_build_object('serviceName',$2::text,'description','')
-        where organization_id=$1`, [organizationId, DELETED_TEXT]),
-      ownerRecipientsRevoked: await count("update ap.notification_recipients set revoked_at=now() where organization_id=$1 and audience='owner' and revoked_at is null", [organizationId]),
-      // owner 발송 기록 암호문(추가, Field와 같은 규칙): 미시작 건은 suppressed로 닫고 지우며, 시작된 건은 sent/failed/suppressed
-      // 종료 건만 지운다. 결과 미상 등 진행 중 건은 공급사 대조를 위해 남긴다(000089 guard가 삭제된 조직 owner 건만 허용).
-      ownerDeliveriesPurged: await count(`update ap.notification_deliveries d set recipient_ciphertext=null,retention_purged_at=$2,
-        state=case when d.started_at is null then 'suppressed' else d.state end,
-        error_code=case when d.started_at is null then 'organization_deleted' else d.error_code end,claim_token=null,lease_expires_at=null
-        from ap.notification_recipients r where r.id=d.recipient_id and r.organization_id=$1 and r.target_kind='owner'
-          and d.retention_purged_at is null and (d.started_at is null or d.state in ('sent','failed','suppressed'))`, [organizationId, at]),
-      // 철회만으로는 연락처 암호문이 남으므로 owner 수신처 암호문도 지운다.
-      ownerRecipientsCleared: await count(`update ap.notification_recipients set recipient_ciphertext=null,retention_purged_at=now()
-        where organization_id=$1 and audience='owner' and retention_purged_at is null`, [organizationId]),
-      // 다른 조직 구성원 자격이 남은 사용자는 그 조직 업무를 계속하므로 세션을 유지한다(이 조직 접근은 멤버십 삭제로 차단).
-      // 세션 행은 지우지 않고 즉시 만료시킨다.
-      sessionsRevoked: await count(`update "session" s set "expiresAt"=now(),"updatedAt"=now() where s."userId"=any($1::text[])
-        and s."expiresAt">now() and not exists(select 1 from ap.memberships m where m.user_id=s."userId" and m.organization_id<>$2)`,
-      [members, organizationId]),
-      membershipsRemoved: await count('delete from ap.memberships where organization_id=$1', [organizationId]),
-      integratorSelectionsRevoked,
-      // 연결 해제·동의 24시간 경과로 다시 확인할 수 없어 전제 조건에서 뺀 결과 미상 전달 건수(원본은 보존 정책이 정리)
-      unresolvableActionRequestsSkipped,
-      retained: ['inquiries_and_consultations_under_retention_policy', 'billing_ledger', 'audit_logs', 'business_name'],
-    };
+    const executed = await applyOrganizationDeletionCleanup(db,organizationId,at,entry.memberUserIds,integratorSelectionsRevoked);
     await db.query(`update ap.organization_deletion_requests set status='executed',executed_at=$2,steps=steps||jsonb_build_object('executed',$3::jsonb),
       last_error=null,attempt_count=attempt_count+1 where id=$1`, [row.id, at, JSON.stringify(executed)]);
+    await persistDeletionReceipt(db,entry);
     await db.query('commit');
     return 'executed';
   } catch (error) {

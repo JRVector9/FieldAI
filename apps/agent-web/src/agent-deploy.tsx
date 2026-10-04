@@ -63,7 +63,8 @@ export function AgentDeployments() {
         setStatus("배포 생성 결과를 확인할 수 없습니다. 생성 결과 확인으로 같은 요청을 안전하게 다시 확인해 주세요.");
       } else {
         setPendingCreate(null);
-        setStatus(result.status === 409 ? "승인 지식·AI 설정 또는 생성 요청 키가 충돌했습니다. 목록을 다시 확인해 주세요."
+        setStatus(isDeletionScheduledError(result.status, result.data) ? DELETION_SCHEDULED_OWNER_MESSAGE
+          : result.status === 409 ? "승인 지식·AI 설정 또는 생성 요청 키가 충돌했습니다. 목록을 다시 확인해 주세요."
           : `배포를 만들지 못했습니다 (${result.status}). 정확한 사이트 origin을 입력해 주세요.`);
       }
     } catch { setStatus("배포 생성 결과를 확인할 수 없습니다. 생성 결과 확인으로 같은 요청을 안전하게 다시 확인해 주세요."); }

@@ -4,12 +4,14 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rename, rm, symlink, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { test } from 'node:test';
+import { after,test } from 'node:test';
 import { promisify } from 'node:util';
 import { Pool } from 'pg';
 import sharp from 'sharp';
 import { createFieldApp } from '../src/app.js';
 import { FieldFileMediaStore } from '../src/site-media.js';
+let workerProofRoot:string|undefined;
+after(async()=>{if(workerProofRoot)await rm(workerProofRoot,{recursive:true,force:true});});
 
 process.loadEnvFile(resolve('../../infra/field/.env'));
 const pool = new Pool({ connectionString: process.env.FIELD_DATABASE_URL });
@@ -17,6 +19,7 @@ const pool = new Pool({ connectionString: process.env.FIELD_DATABASE_URL });
 test('Field executes only separately approved retention jobs and confirms file absence before removing private originals', async () => {
   const previous = process.env.FIELD_PROFILE; process.env.FIELD_PROFILE = 'mock';
   const root = await mkdtemp(resolve(tmpdir(), 'field-retention-purge-'));
+  workerProofRoot=root;
   const media = new FieldFileMediaStore(resolve(root, 'photos'));
   const users = Array.from({ length: 4 }, () => randomUUID());
   const [owner, operator, approver, auditor] = users as [string, string, string, string];
@@ -193,9 +196,12 @@ test('Field executes only separately approved retention jobs and confirms file a
       await assert.rejects(recovery.reapplyFieldRetentionJournal({ pool: restored, media: restoreMedia, journal,
         checkpoint: checkpoint.replace('retention-checkpoint','revocation-checkpoint') }), /signature mismatch/);
       const checkpointFile = resolve(root,'trusted-retention-checkpoint');
+      await mkdir(resolve(journalRoot,'account-deletion'),{mode:0o700});
+      const accountCheckpoint=resolve(root,'trusted-account-checkpoint');
       const cliEnv = { ...process.env, FIELD_PROFILE: 'mock', FIELD_RETENTION_JOURNAL_DIRECTORY: journalRoot,
         FIELD_RETENTION_JOURNAL_SECRET: 'synthetic-field-journal-secret', FIELD_RETENTION_CHECKPOINT_OUTPUT: checkpointFile,
         FIELD_RETENTION_RESTORE_CHECKPOINT_FILE: checkpointFile, FIELD_RETENTION_RESTORE_DATABASE_URL: restoreUrl.toString(),
+        FIELD_ACCOUNT_DELETION_CHECKPOINT_OUTPUT:accountCheckpoint,FIELD_ACCOUNT_DELETION_RESTORE_CHECKPOINT_FILE:accountCheckpoint,
         FIELD_INQUIRY_MEDIA_DIRECTORY: resolve(root,'photos'), FIELD_RETENTION_RESTORE_MEDIA_DIRECTORY: resolve(root,'restored-photos') };
       await promisify(execFile)(process.execPath, ['--import','tsx','src/retention-checkpoint-cli.ts','--quiesced'], { env: cliEnv });
       assert.equal((await journal.verifiedEntries(await readFile(checkpointFile,'utf8'))).length, proof.length);
@@ -319,13 +325,13 @@ test('Field executes only separately approved retention jobs and confirms file a
     await pool.query('delete from field.organizations where owner_user_id=any($1::text[])', [users]);
     await pool.query('delete from field.work_retention_policies where requested_by=any($1::text[])', [users]);
     await pool.query('delete from "user" where id=any($1::text[])', [users]); await pool.end();
-    await rm(root, { recursive: true, force: true });
+    // Keep durable retention proof while later scenarios still use this DB.
   }
 });
 
 // M4: 문의 사진 저장소·보존 원장·사이트 사진 저장소가 없어도 작업자가 기동한다. 조직 삭제 실행·짧은 창 정리는 그대로 하고,
 // 사진 삭제·법정 보존은 건너뛰며 blocked_integration을 한 줄씩 알린다(완료를 주장하지 않는다).
-test('Field retention worker boots without private media or journals and still runs deletion and cleanup steps', async () => {
+test('Field retention worker independently cleans without private media but requires durable identity deletion proof', async () => {
   const pool = new Pool({ connectionString: process.env.FIELD_DATABASE_URL });
   const owner = randomUUID(), org = randomUUID(), requestId = randomUUID();
   try {
@@ -336,8 +342,14 @@ test('Field retention worker boots without private media or journals and still r
       values ($1,$2,$3,'{}'::jsonb,'scheduled',now()-interval '15 days',now()-interval '1 minute',now()-interval '1 minute')`, [requestId, org, owner]);
     await pool.query(`insert into field.public_submission_ip_windows(organization_id,subject_hash,attempts,window_started_at,updated_at)
       values ($1,$2,1,now()-interval '20 minutes',now()-interval '20 minutes')`, [org, 'b'.repeat(64)]);
+    // A-18: absent account/site proof must not allow an older backup to serve or
+    // delete. Private inquiry media remains independently optional.
+    await assert.rejects(promisify(execFile)(process.execPath,['--import','tsx','src/retention-purge-worker.ts','--once'],{
+      env:{PATH:process.env.PATH,FIELD_PROFILE:'mock',FIELD_DATABASE_URL:process.env.FIELD_DATABASE_URL},timeout:20000,
+    }),/deletion journal unavailable/);
     const worker = await promisify(execFile)(process.execPath, ['--import', 'tsx', 'src/retention-purge-worker.ts', '--once'], {
-      env: { PATH: process.env.PATH, FIELD_PROFILE: 'mock', FIELD_DATABASE_URL: process.env.FIELD_DATABASE_URL }, timeout: 20000,
+      env: { PATH: process.env.PATH, FIELD_PROFILE: 'mock', FIELD_DATABASE_URL: process.env.FIELD_DATABASE_URL,
+        FIELD_RETENTION_JOURNAL_DIRECTORY:resolve(workerProofRoot!,'journal'),FIELD_RETENTION_JOURNAL_SECRET:'synthetic-field-journal-secret' }, timeout: 20000,
     });
     assert.match(worker.stdout, /field retention worker ready/);
     assert.match(worker.stdout, /field organization deletion: executed/);

@@ -5,13 +5,13 @@
 # - agent:     AP mock compose(PostgreSQL)만 띄운 job에서 test:db:agent·AP 빌드. Field env·서비스 없음.
 # - field:     Field mock compose(PostgreSQL·Valkey)만 띄운 job에서 test:db:field·Field 빌드. AP env·서비스 없음.
 # - contracts: 두 제품 공개 계약·연결 소비자 DB 검사(두 mock compose 필요).
+# - independence: 제품별 새 runner에서 자기 env·DB만 생성해 API·웹·Chromium 독립 흐름 검사.
 # - e2e:       Playwright(Python)와 pnpm mock:run 전체 스택으로 test:e2e:*·test:security·test:integration:faults.
 # - images:    infra/*/Dockerfile.* 이미지 빌드만(push 없음).
 # DB 테스트는 로컬과 같은 compose 프로젝트 이름(fieldai-<product>-mock)으로 띄운다.
 #   일부 DB 테스트가 고정 컨테이너 이름(fieldai-<product>-mock-db-1)에 docker exec(pg_dump/pg_restore)를 하므로
 #   GitHub services:(자동 이름)로 바꾸지 않는다.
 # 실행하지 않는 것
-# - test:independence:*는 상대 제품 컨테이너·포트가 없는 상태가 전제라 아직 CI job이 없다(수동 증거 필요).
 # - mock env의 DB·Valkey 비밀번호는 setup-mock-env.mjs가 job마다 만드는 일회용 값이다. 실제 secret은 사용하지 않는다.
 name: ci
 
@@ -108,6 +108,61 @@ jobs:
               -f "infra/$product/compose.mock.yaml" up -d --wait
           done
       - run: pnpm test:contracts
+
+  # matrix의 각 runner에는 상대 제품 환경 파일·컨테이너·포트가 없다(B01/B02, QA121/122/160).
+  independence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        product: [agent, field]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: |
+          python -m venv "$RUNNER_TEMP/playwright-venv"
+          "$RUNNER_TEMP/playwright-venv/bin/pip" install playwright
+          "$RUNNER_TEMP/playwright-venv/bin/python" -m playwright install --with-deps chromium
+          python_bin="$RUNNER_TEMP/playwright-venv/bin/python"
+          {
+            echo "AP_BROWSER_PYTHON=$python_bin"
+            echo "FIELD_BROWSER_PYTHON=$python_bin"
+          } >> "$GITHUB_ENV"
+      - name: Write only the tested product environment
+        run: |
+          node tools/setup-mock-env.mjs "${{ matrix.product }}"
+          if [ "${{ matrix.product }}" = agent ]; then
+            test ! -e infra/field/.env
+          else
+            test ! -e infra/agent/.env
+          fi
+      - name: Run independent owner and guest flow
+        shell: bash
+        run: pnpm test:independence:${{ matrix.product }} 2>&1 | tee "$RUNNER_TEMP/independence.log"
+      - name: Show independence log
+        if: failure()
+        run: |
+          if [ -f "$RUNNER_TEMP/independence.log" ]; then
+            tail -n 300 "$RUNNER_TEMP/independence.log"
+          fi
+      - name: Stop this job's product containers
+        if: always()
+        run: |
+          product="${{ matrix.product }}"
+          if [ -f "infra/$product/.env" ]; then
+            docker compose --project-name "fieldai-$product-mock" --env-file "infra/$product/.env" \
+              -f "infra/$product/compose.mock.yaml" down -v
+          fi
 
   # mock 전체 스택(두 API·웹·worker, 포트 3001/3002/4311/4321)을 띄우고 브라우저 검사까지 실행한다.
   # 실패는 job 실패로 전파된다(continue-on-error 없음). 외부 공급사·출시 게이트는 여기서 통과 처리하지 않는다.

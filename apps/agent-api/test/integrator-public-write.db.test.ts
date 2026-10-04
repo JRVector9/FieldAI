@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { Pool } from 'pg';
-import { createAgentApp } from '../src/app.js';
+import { createAgentApp as createUnobservedApp } from '../src/app.js';
+import { observeContractResponses } from '../../../tools/test/integrator-contract.mjs';
+
+// QA158: compare every emitted public success response with the pinned OpenAPI contract.
+const createAgentApp: typeof createUnobservedApp = (...args) => {
+  const app = createUnobservedApp(...args);
+  observeContractResponses(app, 'agent');
+  return app;
+};
 
 const pool = new Pool({ connectionString: process.env.AP_DATABASE_URL });
 const scopes = ['ap.agent.read', 'ap.connections.create', 'ap.deployments.manage'];
@@ -77,9 +85,9 @@ async function connection(f: Fixture) {
   const r = await request(f, '/integrations/v1/connections', payload(f), randomUUID());
   assert.equal(r.status, 201, JSON.stringify(r.body)); return r.body.id as string;
 }
-async function deployment(f: Fixture, connectionId: string) {
+async function deployment(f: Fixture, connectionId: string, key = randomUUID()) {
   const r = await request(f, '/integrations/v1/deployments', { connectionId, organizationId: f.organizationId,
-    agentId: f.agentId, kind: 'owned_embed', origin: f.origin }, randomUUID());
+    agentId: f.agentId, kind: 'owned_embed', origin: f.origin }, key);
   assert.equal(r.status, 201, JSON.stringify(r.body)); return r;
 }
 
@@ -89,6 +97,9 @@ test('public installation creation is scoped, immutable and durable across lost 
   assert.equal(created.status, 201, JSON.stringify(created.body));
   assert.equal(created.body.state, 'installation_only');
   assert.equal(created.body.agentId, f.agentId);
+  const own = await request(f, `/integrations/v1/connections/${created.body.id}`);
+  assert.equal(own.status, 200, JSON.stringify(own.body));
+  assert.equal(own.body.id, created.body.id);
   assert.equal(created.body.retryable, false);
   assert.equal(typeof created.body.request_id, 'string');
   const replay = await request(f, '/integrations/v1/connections', payload(f), key);
@@ -126,7 +137,13 @@ test('write scope, current owner, token expiry, consent, client disable and revo
 
 test('owned embed stays pending until proof and explicit activation, revisions and operation replay preserve safety', async () => {
   const f = await fixture(), cid = await connection(f);
-  const created = await deployment(f, cid), did = created.body.id as string;
+  const creationKey = randomUUID();
+  const created = await deployment(f, cid, creationKey), did = created.body.id as string;
+  const creationReplay = await request(f, '/integrations/v1/deployments', {
+    connectionId: cid, organizationId: f.organizationId, agentId: f.agentId,
+    kind: 'owned_embed', origin: f.origin }, creationKey);
+  assert.equal(creationReplay.status, 200, JSON.stringify(creationReplay.body));
+  assert.equal(creationReplay.body.id, did);
   assert.equal(created.body.state, 'pending'); assert.equal(created.body.revision, 1);
   assert.equal(created.etag, '"1"');
   assert.equal((await request(f, `/integrations/v1/deployments/${did}/activate`, {}, randomUUID(), 1)).status, 409);

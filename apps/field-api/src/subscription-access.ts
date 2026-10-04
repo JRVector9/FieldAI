@@ -4,9 +4,7 @@ import { periodAt } from './billing-period.js';
 export async function subscriptionAccess(db:Pool|PoolClient,organizationId:string,at?:Date) {
   const clock=(await db.query<{now:Date}>('select coalesce($1::timestamptz,now()) as now',[at??null])).rows[0]!.now;
   // 조직 삭제 예약·완료 뒤에는 새 업무를 막는다. 기존 업무 열람·처리·내보내기는 cleanup_only 규칙대로 유지한다.
-  // 이전 스키마를 재현하는 마이그레이션 검사(count 지정)에서는 표가 아직 없으므로 존재를 먼저 확인한다(트랜잭션 중단 방지).
-  const deletionTable=(await db.query<{present:boolean}>("select to_regclass('field.organization_deletion_requests') is not null as present")).rows[0]!.present;
-  if(deletionTable&&(await db.query("select 1 from field.organization_deletion_requests where organization_id=$1 and status in ('scheduled','executed') limit 1",[organizationId])).rowCount)
+  if((await db.query("select 1 from field.organization_deletion_requests where organization_id=$1 and status in ('scheduled','executed') limit 1",[organizationId])).rowCount)
     return {mode:'cleanup_only' as const,canStartNew:false,endsAt:null,graceEndsAt:null,reason:'deletion_scheduled'};
   const mode=['mock','sandbox'].includes(process.env.FIELD_PROFILE??'')?'test':'live';
   const paid=(await db.query(`select p.id,p.subscription_id,p.billing_period,p.starts_at,p.ends_at,
@@ -36,11 +34,6 @@ export async function subscriptionAccess(db:Pool|PoolClient,organizationId:strin
 // H1: 조직 삭제 예약·완료(또는 deleted_at) 조직에는 새 결제·체험·연결·통합 grant를 만들지 않는다.
 // 호출자 트랜잭션에서 조직 행을 FOR SHARE로 잡아 삭제 예약 생성(조직 FOR UPDATE)과 직렬화한다.
 export async function organizationDeletionScheduled(db:PoolClient,organizationId:string) {
-  // 이전 스키마(000077 이전)를 재현하는 마이그레이션 검사에서는 삭제 표·deleted_at이 없으므로 조직 잠금만 잡는다(subscriptionAccess와 같은 이유).
-  if(!(await db.query<{present:boolean}>("select to_regclass('field.organization_deletion_requests') is not null as present")).rows[0]!.present) {
-    await db.query('select 1 from field.organizations where id=$1 for share',[organizationId]);
-    return false;
-  }
   const org=(await db.query<{deleted:boolean}>('select deleted_at is not null as deleted from field.organizations where id=$1 for share',[organizationId])).rows[0];
   if(!org||org.deleted)return true;
   return Boolean((await db.query("select 1 from field.organization_deletion_requests where organization_id=$1 and status in ('scheduled','executed') limit 1",[organizationId])).rowCount);

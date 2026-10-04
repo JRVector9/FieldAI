@@ -2,17 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createFieldApp} from '../src/app.js';
 import type { FieldBusinessRuntime } from '../src/business.js';
+import { emptyDeletionProofFixture } from './empty-deletion-proof-fixture.js';
 process.env.FIELD_AUTH_SECRET='synthetic-admin-billing-secret-32-bytes-immutable';
 const id='00000000-0000-4000-8000-000000000001';
 async function module(){const m=await import('../src/admin-billing-routes.js').catch(()=>null);assert.ok(m,'new redacted admin billing read route is absent');return m;}
 async function fixture(options:{user?:string|null;session?:string|null;role?:string|null;changedRole?:string|null;mfa?:boolean}={}){
- const m=await module(),queries:string[]=[],user=options.user===undefined?'operator-a':options.user,role=options.role===undefined?'operator':options.role;
- const query=async(sql:string)=>{queries.push(sql);if(sql.includes('"twoFactorVerified"'))return{rows:options.mfa?[{enabled:true,verified:true}]:[],rowCount:options.mfa?1:0};if(sql.includes('platform_admin_memberships'))return{rows:role?[{role:sql.includes('for share')&&options.changedRole!==undefined?options.changedRole:role}]:[],rowCount:role?1:0};
+ const proof=await emptyDeletionProofFixture(),m=await module(),queries:string[]=[],user=options.user===undefined?'operator-a':options.user,role=options.role===undefined?'operator':options.role;
+ const query=async(sql:string)=>{queries.push(sql);const metadata=proof.query(sql);if(metadata)return metadata;if(sql.includes('"twoFactorVerified"'))return{rows:options.mfa?[{enabled:true,verified:true}]:[],rowCount:options.mfa?1:0};if(sql.includes('platform_admin_memberships'))return{rows:role?[{role:sql.includes('for share')&&options.changedRole!==undefined?options.changedRole:role}]:[],rowCount:role?1:0};
  if(sql.includes('as "unconfirmedCharges"'))return{rows:[{unconfirmedCharges:'2',renewalFailures:'1',refundRequests:'1'}],rowCount:1};
  if(sql.includes('t.id as "id"'))return{rows:[{id,organizationId:id,organizationName:'합성 사업체',periodId:id,billingPeriod:1,amount:11000,state:'unknown',mode:'test',createdAt:new Date(),completedAt:null,errorCode:null}],rowCount:1};
  if(sql.includes('dispatched_at'))return{rows:[{id,mode:'test',dispatchedAt:null}],rowCount:1};return{rows:[],rowCount:0};};
  const db={query,release:()=>{}},runtime={pool:{query,connect:async()=>db},resolveUserId:async()=>user,resolveSession:async()=>options.session===null?null:{id:options.session??'current-session',userId:user}} as unknown as FieldBusinessRuntime;
- assert.equal(typeof m.registerAdminBillingRoutes,'function');const app=createFieldApp(async()=>{},undefined,undefined,runtime);return{app,queries};
+ assert.equal(typeof m.registerAdminBillingRoutes,'function');const app=createFieldApp(async()=>{},undefined,undefined,runtime);app.addHook('onClose',()=>proof.close());return{app,queries};
 }
 test('redacted own ledger read requires current operator session and records audit without provider access',async()=>{
  process.env.FIELD_PROFILE='mock';const {app,queries}=await fixture();try{const response=await app.inject('/v1/admin/billing/overview');assert.equal(response.statusCode,200);const b=response.json();assert.equal(b.product,'field');assert.equal(b.sessionId,'current-session');assert.equal(b.counts.unconfirmedCharges,'2');assert.equal(b.transactions[0].amount,11000);

@@ -1,3 +1,4 @@
+import { accountDeletionJournalFromEnvironment, assertAccountDeletionServing } from './account-deletion-journal.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { billingContextFromEnvironment } from './billing-context.js';
@@ -8,11 +9,14 @@ if(!process.env.AP_DATABASE_URL)throw new Error('AP billing requires its own dat
 const billing=billingContextFromEnvironment(),pool=new Pool({connectionString:process.env.AP_DATABASE_URL});
 const controller=new AbortController();
 for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>controller.abort());
+const deletionJournal=accountDeletionJournalFromEnvironment();
 try {
+  await assertAccountDeletionServing(pool,deletionJournal);
   await pool.query('select provider_mid,claim_token from ap.billing_transactions limit 1');
   process.stdout.write(`AP billing charge worker ready (${billing?billing.provider.mode:'blocked_integration'})\n`);
   do {
     try {
+      await assertAccountDeletionServing(pool,deletionJournal);
       const result=await runBillingChargeOnce({pool,billing});
       if(result!=='empty'||process.argv.includes('--once'))process.stdout.write(`AP billing charge: ${result}\n`);
       if(process.argv.includes('--once'))break;

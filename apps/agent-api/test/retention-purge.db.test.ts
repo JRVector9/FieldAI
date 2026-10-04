@@ -130,10 +130,13 @@ test('AP independently approves and executes retained inquiry cleanup with real 
    assert.equal((await restored.query('select customer_name from ap.inquiries where id=$1',[inquiry.id])).rows[0].customer_name,'PRIVATE_PURGE_CUSTOMER');
    const result=await reapplyAgentRetentionJournal(restoreRuntime);assert.ok(result.applied>0);
    const checkpointFile=resolve(root,'protected-checkpoint.json');
+   await mkdir(resolve(root,'journal','account-deletion'));
+   const accountCheckpointFile=resolve(root,'protected-account-checkpoint.json');
    const baseEnv=Object.fromEntries(['PATH','HOME','TMPDIR','LANG'].filter(key=>process.env[key]!==undefined).map(key=>[key,process.env[key]]));
    const cliEnv={...baseEnv,AP_PROFILE:'mock',AP_DATABASE_URL:source.toString(),AP_RETENTION_JOURNAL_DIRECTORY:resolve(root,'journal'),AP_RETENTION_JOURNAL_SECRET:journalSecret,
     AP_INQUIRY_MEDIA_DIRECTORY:resolve(root,'media'),AP_RETENTION_RESTORE_DATABASE_URL:restoreUrl.toString(),AP_RETENTION_RESTORE_MEDIA_DIRECTORY:resolve(root,'restored-media'),
-    AP_RETENTION_RESTORE_CHECKPOINT_FILE:checkpointFile,AP_RETENTION_CHECKPOINT_OUTPUT:checkpointFile};
+    AP_RETENTION_RESTORE_CHECKPOINT_FILE:checkpointFile,AP_RETENTION_CHECKPOINT_OUTPUT:checkpointFile,
+    AP_ACCOUNT_DELETION_CHECKPOINT_OUTPUT:accountCheckpointFile,AP_ACCOUNT_DELETION_RESTORE_CHECKPOINT_FILE:accountCheckpointFile};
    await promisify(execFile)('pnpm',['exec','tsx','src/retention-checkpoint-cli.ts','--quiesced'],{env:cliEnv});
    const cli=await promisify(execFile)('pnpm',['exec','tsx','src/retention-restore-cli.ts','--offline-restored'],{env:cliEnv});assert.match(cli.stdout,/applied: 0/);
    await assert.rejects(promisify(execFile)('pnpm',['exec','tsx','src/retention-restore-cli.ts','--offline-restored'],{env:{...cliEnv,AP_RETENTION_RESTORE_DATABASE_URL:source.toString().replace('127.0.0.1','localhost')}}),/restore target must differ/);

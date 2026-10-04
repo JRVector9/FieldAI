@@ -24,7 +24,8 @@ const holdView = (h: Hold) => ({ id: h.id, organizationId: h.organization_id, ta
 export async function retentionAdminFor(request: FastifyRequest, reply: FastifyReply, runtime: FieldBusinessRuntime, edit = true) {
   reply.headers({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'no-referrer' });
   if (request.method !== 'GET' && request.headers.origin !== undefined && ![
-    process.env.FIELD_PUBLIC_WEB_ORIGIN ?? 'http://localhost:3002', 'http://localhost:3002', 'http://127.0.0.1:3002',
+    process.env.FIELD_PUBLIC_WEB_ORIGIN,
+    ...process.env.FIELD_PROFILE === 'mock' ? ['http://localhost:3002', 'http://127.0.0.1:3002'] : [],
   ].includes(request.headers.origin)) { fail(reply, 403, 'origin_denied'); return null; }
   return (await requireAdmin(request, reply, runtime, edit ? { role: 'operator' } : {}))?.userId ?? null;
 }

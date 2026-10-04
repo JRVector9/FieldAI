@@ -17,7 +17,7 @@
     "mock:admin:field": "node tools/mock-field-admin.mjs",
     "test:db:agent": "node tools/run-db-suite.mjs agent",
     "test:db:field": "node tools/run-db-suite.mjs field",
-    "test:contracts": "node --test tools/test/agent-integrator-contract.test.mjs tools/test/field-integrator-contract.test.mjs && node tools/run-db-suite.mjs agent test/integrator.db.test.ts test/field-connection.db.test.ts test/field-actions.db.test.ts test/field-customer-decisions.db.test.ts test/revocation-restore.db.test.ts && node tools/run-db-suite.mjs field test/integrator.db.test.ts test/ap-connection.db.test.ts test/revocation-restore.db.test.ts",
+    "test:contracts": "node tools/run-integrator-contracts.mjs",
     "test:independence:agent": "node tools/run-independence.mjs agent",
     "test:independence:field": "node tools/run-independence.mjs field",
     "test:integration:faults": "node tools/run-integration-faults.mjs",
@@ -96,6 +96,8 @@
   "devDependencies": {
     "@types/node": "26.6.2",
     "@types/pg": "8.23.1",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "auth": "1.7.5",
     "eslint": "10.11.0",
     "node-pg-migrate": "9.0.0",

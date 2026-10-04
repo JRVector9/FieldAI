@@ -5,7 +5,15 @@ import { after, test } from 'node:test';
 import { fromNodeHeaders } from 'better-auth/node';
 import { Pool } from 'pg';
 import { agentRevocationJournalFromEnvironment } from '../src/revocation-journal.js';
-import { createAgentApp } from '../src/app.js';
+import { createAgentApp as createUnobservedApp } from '../src/app.js';
+import { observeContractResponses } from '../../../tools/test/integrator-contract.mjs';
+
+// QA158: compare every emitted public success response with the pinned OpenAPI contract.
+const createAgentApp: typeof createUnobservedApp = (...args) => {
+  const app = createUnobservedApp(...args);
+  observeContractResponses(app, 'agent');
+  return app;
+};
 import { approvedConnectorFacts } from '../src/agents.js';
 import { deliverFieldConnectionRevokeOnce } from '../src/field-connection-revoke-worker.js';
 
@@ -32,6 +40,84 @@ async function actor() {
   return { email, cookie: signed.headers.getSetCookie().map(value => value.split(';')[0]).join('; ') };
 }
 
+// A-10 / QA129, QA131, QA150: consent begun before deletion must not create a late connection.
+test('AP callback closes pending and replayed attempts during deletion without token exchange or scope fallback', async () => {
+  const owner = await actor();
+  const session = (await auth.api.getSession({ headers: new Headers({ cookie: owner.cookie }) }))!;
+  const organizationId = randomUUID(), agentId = randomUUID(), grantId = randomUUID();
+  const registered = await auth.handler(new Request(`${base}/api/auth/oauth2/create-client`, {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: base, cookie: owner.cookie },
+    body: JSON.stringify({ client_name: 'Callback deletion fixture', redirect_uris: ['http://127.0.0.1:4399/callback'],
+      application_type: 'native', token_endpoint_auth_method: 'client_secret_basic',
+      grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'],
+      scope: 'openid offline_access ap.agent.read ap.conversations.read' }),
+  }));
+  assert.equal(registered.status, 201);
+  const clientId = (await registered.json() as { client_id: string }).client_id;
+  await pool.query('insert into ap.organizations(id,owner_user_id,name) values ($1,$2,$3)', [organizationId, session.user.id, '삭제 callback']);
+  await pool.query("insert into ap.memberships(organization_id,user_id,role) values ($1,$2,'owner')", [organizationId, session.user.id]);
+  await pool.query(`insert into ap.oauth_selections(id,session_id,actor_user_id,client_id,organization_id,agent_id,requested_scopes,selection_expires_at)
+    values ($1,$2,$3,$4,$5,$6,$7,now()+interval '5 minutes')`,
+  [grantId, session.session.id, session.user.id, clientId, organizationId, agentId, ['ap.agent.read', 'ap.conversations.read']]);
+  await pool.query(`insert into ap.organization_deletion_requests(id,organization_id,requested_by,confirmation,status,scheduled_at,next_attempt_at)
+    values ($1,$2,$3,'{}','scheduled',now()+interval '14 days',now()+interval '14 days')`, [randomUUID(), organizationId, session.user.id]);
+  let networkCalls = 0;
+  const app = createAgentApp(async () => undefined, undefined, base, undefined, { pool, resolveUserId: async () => session.user.id,
+    fieldConnector: { issuer: fieldIssuer, clientId: 'fixture', clientSecret: 'fixture', tokenKey: randomBytes(32),
+      redirectUri: `${base}/v1/connections/field/callback`, webOrigin: 'http://localhost:3001',
+      fetcher: (async () => { networkCalls++; return Response.json({ error: 'invalid_grant' }, { status: 400 }); }) as typeof fetch } });
+  try {
+    for (const mode of ['code', 'invalid_scope', 'completed'] as const) {
+      const state = randomBytes(32).toString('base64url'), attemptId = randomUUID();
+      await pool.query(`insert into ap.field_oauth_attempts(id,field_connection_id,ap_grant_id,ap_organization_id,ap_agent_id,
+        initiator_user_id,state_hash,verifier_cipher,status,expires_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+interval '5 minutes')`,
+      [attemptId, randomUUID(), grantId, organizationId, agentId, session.user.id, createHash('sha256').update(state).digest('hex'),
+        Buffer.from('unused verifier'), mode === 'completed' ? 'completed' : 'pending']);
+      const params = new URLSearchParams({ state, iss: fieldIssuer, ...(mode === 'invalid_scope' ? { error: 'invalid_scope' } : { code: 'late-code' }) });
+      for (let replay = 0; replay < 2; replay++) {
+        const result = await app.inject({ url: `/v1/connections/field/callback?${params}` });
+        assert.equal(result.statusCode, 409, result.body);
+        assert.equal(result.json().error, 'deletion_scheduled');
+        assert.equal(result.json().remoteGrantRevocationRequired, true);
+        assert.match(result.json().message, /Field.*동의.*회수/);
+      }
+      assert.equal((await pool.query('select status from ap.field_oauth_attempts where id=$1', [attemptId])).rows[0].status,
+        mode === 'completed' ? 'completed' : 'denied');
+    }
+    assert.equal(networkCalls, 0);
+    assert.equal((await pool.query('select count(*)::int as n from ap.field_connections where ap_organization_id=$1', [organizationId])).rows[0].n, 0);
+    assert.equal((await pool.query('select count(*)::int as n from ap.field_oauth_attempts where ap_organization_id=$1', [organizationId])).rows[0].n, 3);
+    // Scheduling that already holds the organization lock must win over the returning callback.
+    await pool.query("update ap.organization_deletion_requests set status='canceled',canceled_at=now(),canceled_by=$2 where organization_id=$1",
+      [organizationId, session.user.id]);
+    const raceState = randomBytes(32).toString('base64url'), raceId = randomUUID();
+    await pool.query(`insert into ap.field_oauth_attempts(id,field_connection_id,ap_grant_id,ap_organization_id,ap_agent_id,
+      initiator_user_id,state_hash,verifier_cipher,expires_at) values ($1,$2,$3,$4,$5,$6,$7,$8,now()+interval '5 minutes')`,
+    [raceId, randomUUID(), grantId, organizationId, agentId, session.user.id,
+      createHash('sha256').update(raceState).digest('hex'), Buffer.from('unused verifier')]);
+    const scheduler = await pool.connect();
+    let committed = false;
+    try {
+      await scheduler.query('begin');
+      await scheduler.query('select id from ap.organizations where id=$1 for update', [organizationId]);
+      await scheduler.query("update ap.organization_deletion_requests set status='scheduled',canceled_at=null,canceled_by=null where organization_id=$1", [organizationId]);
+      const callback = app.inject({ url: `/v1/connections/field/callback?${new URLSearchParams({ state: raceState, code: 'late-code', iss: fieldIssuer })}` });
+      const deadline = Date.now() + 2000;
+      let waiting = false;
+      while (Date.now() < deadline && !waiting) {
+        waiting = Boolean((await pool.query(`select 1 from pg_stat_activity where datname=current_database()
+          and wait_event_type='Lock' and query like 'select deleted_at is not null as deleted from ap.organizations%'`)).rowCount);
+        if (!waiting) await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      assert.equal(waiting, true, 'callback must wait on the deletion scheduling organization lock');
+      await scheduler.query('commit'); committed = true;
+      assert.equal((await callback).statusCode, 409);
+      assert.equal(networkCalls, 0);
+      assert.equal((await pool.query('select status from ap.field_oauth_attempts where id=$1', [raceId])).rows[0].status, 'denied');
+    } finally { if (!committed) await scheduler.query('rollback'); scheduler.release(); }
+  } finally { await app.close(); }
+});
+
 test('AP BFF accepts a separate Field grant only for the AP actor and pending connection', async () => {
   const owner = await actor();
   const outsider = await actor();
@@ -53,6 +139,8 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
   let sentRevocationId = '';
   // 해제 발신마다 받은 서명 버전 헤더와 그 버전 원문으로 계산한 서명 일치 여부(호출 뒤 단언한다)
   const revokeSignatures: { version: string | null; valid: boolean }[] = [];
+  // 발신기가 fetcher 예외를 'retry'로 삼키므로 stub 안의 단언 실패를 기록해 호출 뒤 원인을 드러낸다
+  let revokeStubError: unknown;
   let factsCalls = 0;
   let refreshFails = false;
   // refresh 응답을 붙잡아 두는 관문. 갱신 중에 다른 요청이 같은 refresh token을 다시 쓰지 않는지(임대 CAS) 확인한다
@@ -74,15 +162,17 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
       revokeCalls++;
       const headers = init.headers as Record<string, string>;
       const revocationId = headers['x-revocation-id'];
-      assert.ok(revocationId);
-      assert.equal(headers['x-key-id'], eventKeyId);
-      // 발신 버전 2는 `v2:ap->field.` 방향 접두사, 1(전환 기간)은 버전 헤더와 접두사가 없는 원문으로 서명한다.
-      // fetcher 안의 단언 실패는 발신기가 전송 실패(retry)로 삼키므로 결과를 기록해 호출 뒤 단언한다
-      const version = headers['x-signature-version'] ?? null;
-      revokeSignatures.push({ version, valid: headers['x-signature'] === createHmac('sha256',
-        Buffer.from(eventSecret, 'base64url')).update(`${version === '2' ? 'v2:ap->field.' : ''}${
-        headers['x-timestamp']}.${revocationId}.${fieldConnectionId}.revoke`).digest('hex') });
-      assert.equal(sentRevocationId === '' || sentRevocationId === revocationId, true);
+      try {
+        assert.ok(revocationId);
+        assert.equal(headers['x-key-id'], eventKeyId);
+        // 발신 버전 2는 `v2:ap->field.` 방향 접두사, 1(전환 기간)은 버전 헤더와 접두사가 없는 원문으로 서명한다.
+        // fetcher 안의 단언 실패는 발신기가 전송 실패(retry)로 삼키므로 결과를 기록해 호출 뒤 단언한다
+        const version = headers['x-signature-version'] ?? null;
+        revokeSignatures.push({ version, valid: headers['x-signature'] === createHmac('sha256',
+          Buffer.from(eventSecret, 'base64url')).update(`${version === '2' ? 'v2:ap->field.' : ''}${
+          headers['x-timestamp']}.${revocationId}.${fieldConnectionId}.revoke`).digest('hex') });
+        assert.equal(sentRevocationId === '' || sentRevocationId === revocationId, true);
+      } catch (error) { revokeStubError ??= error; throw error; }
       sentRevocationId = revocationId;
       if (remoteRevokeDown) throw new Error('Field unavailable');
       return Response.json({ connectionId: fieldConnectionId, status: 'revoked', revocationId });
@@ -875,7 +965,9 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
     // 전환 기간 발신 버전 1: 버전 헤더 없이 v1 원문으로 서명한다(이번 시도는 Field 장애로 재시도)
     process.env.AP_EVENT_SIGNATURE_SEND_VERSION = '1';
     try {
-      assert.equal(await deliverFieldConnectionRevokeOnce(pool, runtime.fieldConnector), 'retry');
+      const firstRevoke = await deliverFieldConnectionRevokeOnce(pool, runtime.fieldConnector);
+      assert.ifError(revokeStubError);
+      assert.equal(firstRevoke, 'retry');
     } finally { delete process.env.AP_EVENT_SIGNATURE_SEND_VERSION; }
     assert.equal(revokeCalls, 1);
     assert.deepEqual(revokeSignatures, [{ version: null, valid: true }]);
@@ -883,7 +975,9 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
       where connection_id = $1`, [fieldConnectionId]);
     remoteRevokeDown = false;
     // 기본 발신 버전 2: X-Signature-Version: 2와 방향 접두사 원문으로 서명한다
-    assert.equal(await deliverFieldConnectionRevokeOnce(pool, runtime.fieldConnector), 'acked');
+    const retriedRevoke = await deliverFieldConnectionRevokeOnce(pool, runtime.fieldConnector);
+    assert.ifError(revokeStubError);
+    assert.equal(retriedRevoke, 'acked');
     assert.equal(revokeCalls, 2);
     assert.deepEqual(revokeSignatures, [{ version: null, valid: true }, { version: '2', valid: true }]);
     assert.equal(sentRevocationId, revoked.json().revocationId);

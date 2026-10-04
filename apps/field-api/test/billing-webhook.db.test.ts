@@ -10,6 +10,21 @@ process.loadEnvFile(resolve('../../infra/field/.env'));
 const pool = new Pool({ connectionString: process.env.FIELD_DATABASE_URL });
 after(async () => { await pool.end(); });
 
+test('Field Toss webhook accepts configured shared-sender volume above 120 and keeps a finite limit',async()=>{
+  const prior=process.env.FIELD_BILLING_WEBHOOK_IP_LIMIT;
+  process.env.FIELD_BILLING_WEBHOOK_IP_LIMIT='1002';
+  const app=createFieldApp(async()=>undefined,undefined,undefined,{pool,resolveUserId:async()=>null});
+  try {
+    await pool.query('delete from field.billing_webhook_ip_windows');
+    for(let count=0;count<1002;count++){
+      const response=await app.inject({method:'POST',url:'/v1/billing/webhooks/toss',remoteAddress:'198.51.100.219',payload:{eventType:'BILLING_DELETED',data:{}}});
+      assert.equal(response.statusCode,200,`configured request ${count+1}: ${response.body}`);
+    }
+    const limited=await app.inject({method:'POST',url:'/v1/billing/webhooks/toss',remoteAddress:'198.51.100.219',payload:{eventType:'BILLING_DELETED',data:{}}});
+    assert.equal(limited.statusCode,429);assert.ok(Number(limited.headers['retry-after'])>0);
+  }finally{await app.close();if(prior===undefined)delete process.env.FIELD_BILLING_WEBHOOK_IP_LIMIT;else process.env.FIELD_BILLING_WEBHOOK_IP_LIMIT=prior;}
+});
+
 // 토스 웹훅(추가): 공급사 미설정 시 mock은 차단 상태로 기록만 하고, 그 외 환경은 503으로 거절한다.
 test('Field Toss webhook records blocked_integration in mock, rejects elsewhere, and rate limits per IP', async () => {
   const profile = process.env.FIELD_PROFILE;

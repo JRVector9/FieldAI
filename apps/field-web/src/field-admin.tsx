@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
-import { deletionResumeBlockReason, fieldAdminSections as sections, stoppedAssetDeletionReason, stoppedDeletionReason, type FieldAdminSection } from "./field-admin-sections";
+import { adminSignOutFailure, deletionResumeBlockReason, fieldAdminSections as sections, stoppedAssetDeletionReason, stoppedDeletionReason, type FieldAdminSection } from "./field-admin-sections";
 import "./field-admin.css";
 import { FieldModerationAdmin } from './FieldModerationAdmin';
 import { FieldCustomerSupport } from './FieldCustomerSupport';
@@ -11,6 +11,7 @@ import { BillingAdmin } from './billing-admin';
 import './billing-admin.css';
 import { signInOutcome } from './auth-flow';
 import { TwoFactorChallenge } from './field-auth-pages';
+import { FieldEmailOutboxAdmin } from './FieldEmailOutboxAdmin';
 
 type Overview = {
   product: "field";
@@ -211,7 +212,7 @@ export function FieldAdmin({ section = "operations" }: { section?: FieldAdminSec
     setBusy(true); setStatus("");
     try {
       const result = await request("/api/auth/sign-out", "POST", {});
-      if (result.status !== 200) { setStatus(`로그아웃하지 못했습니다 (${result.status}).`); return; }
+      if (result.status !== 200) { setStatus(adminSignOutFailure(result.status)); return; }
       setOverview(null); setPhase("auth"); setEmail(""); setPassword("");
     } catch { setStatus("로그아웃 응답을 받지 못했습니다. 다시 시도해 주세요."); }
     finally { setBusy(false); }
@@ -274,6 +275,7 @@ export function FieldAdmin({ section = "operations" }: { section?: FieldAdminSec
               <p>사건 ID {item.eventId}</p>
             </article>)}</div>}
         </section>}
+        {section === "notifications" && <FieldEmailOutboxAdmin />}
         {section === "organizations" && <OrganizationDeletionRecovery role={overview.role} />}
         {section === "organizations" && <SiteAssetDeletionRecovery role={overview.role} />}
         {section === "audit" && <FieldModerationAdmin actorUserId={overview.actorUserId} role={overview.role} />}

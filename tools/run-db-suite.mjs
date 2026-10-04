@@ -230,6 +230,7 @@ async function runIsolatedSuite() {
         for (const kind of ['REVOCATION', 'RETENTION']) {
           const directory = resolve(journalRoot, kind.toLowerCase());
           mkdirSync(directory);
+          if (kind === 'RETENTION') mkdirSync(resolve(directory, 'account-deletion'), { mode: 0o700 });
           childEnv[`${prefix}_${kind}_JOURNAL_DIRECTORY`] = directory;
           childEnv[`${prefix}_${kind}_JOURNAL_SECRET`] = `synthetic-${randomUUID()}-${randomUUID()}`;
         }

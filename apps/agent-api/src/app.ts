@@ -42,6 +42,7 @@ import { registerAgentModerationRoutes } from './deployment-moderation.js';
 import { registerCustomerSupportRoutes } from './customer-support.js';
 import { registerSourceRefreshRoutes } from './source-refreshes.js';
 import { registerAuthProviderRoutes } from './kakao-provider.js';
+import { containsNulText } from './input-text.js';
 
 // 앞단 프록시 신뢰 설정(Field의 FIELD_TRUST_PROXY와 같은 규칙, 추가). 비우면 같은 호스트의 프록시(loopback)만 신뢰하고,
 // true/false 또는 쉼표로 구분한 IP·CIDR·이름(loopback 등)을 지정한다.
@@ -70,6 +71,10 @@ export function createAgentApp(
   // 구조화 로그(AP_LOG_LEVEL)와 PII 가림·requestId는 logging.ts가 정한다.
   const app = Fastify({ trustProxy: trustProxyFromEnvironment(), requestTimeout: requestTimeoutFromEnvironment(),
     ...loggingOptionsFromEnvironment() });
+  if (businessRuntime?.accountDeletionGuard) app.addHook('onRequest', async (_request,reply) => {
+    try { await businessRuntime.accountDeletionGuard!(); }
+    catch { return reply.header('Cache-Control','private, no-store').code(503).send({error:'deletion_recovery_required'}); }
+  });
   // 전역 오류 응답(추가): 보존 종료 가드(PAP01)는 410, 4xx는 Fastify 기본 본문, 5xx는 원문(DB 오류 문구·SQLSTATE·내부 메시지)을
   // 응답에 싣지 않고 {error:'internal_error'}만 돌려준다. 원문은 가림 처리된 구조화 로그에만 남긴다.
   app.setErrorHandler((error, _request, reply) => {
@@ -88,6 +93,13 @@ export function createAgentApp(
   });
   app.addContentTypeParser('application/vnd.field-event+json', { parseAs: 'buffer', bodyLimit: 65_536 },
     (_request, body, done) => done(null, body));
+  app.addHook('preValidation', async (request, reply) => {
+    const body = typeof request.body === 'string'
+      && request.headers['content-type']?.split(';')[0]?.trim() === 'application/x-www-form-urlencoded'
+      ? [...new URLSearchParams(request.body).entries()] : request.body;
+    if ([body, request.query, request.params].some(containsNulText))
+      return reply.code(400).send({ error: 'invalid_text' });
+  });
   if (embedSpikePool) {
     if (!businessRuntime) registerEmbedSpikeRoutes(app, embedSpikePool);
     registerConversationSpikeRoutes(app, embedSpikePool);

@@ -307,6 +307,14 @@ test('Field grace reuses the paid quota and only a confirmed new paid period rep
 
 test('Field migration keeps legacy paid known usage and unresolved calls instead of resetting quota', async () => {
   await withIsolatedDatabase(71, async (db, databaseUrl) => {
+    // This fixture intentionally stops before migration 72 to test its historical
+    // AI backfill. Supply only the later deletion guard's read schema for current
+    // routes; do not move the migration cutoff or bypass production checks.
+    await db.query('alter table field.organizations add column deleted_at timestamptz');
+    await db.query('create table field.organization_deletion_requests(organization_id uuid not null,status text not null)');
+    await db.query('create table field.account_deletion_journal_binding(id uuid not null,singleton boolean not null,receipt_generation bigint not null default 0)');
+    await db.query('insert into field.account_deletion_journal_binding(id,singleton) values(gen_random_uuid(),true)');
+    await db.query('create table field.account_deletion_receipts(entry_id uuid,entry_sha256 text,target_kind text,target_id text,stage text)');
     const clock = new Date();
     const initialAt = Array.from({length: 9}, (_,i) => new Date(clock.getTime()-(28+i)*86400000))
       .find(anchor => { const ends=periodAt(anchor,0).endsAt.getTime(); return ends<clock.getTime()-1000&&ends>clock.getTime()-2*86400000; });

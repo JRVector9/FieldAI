@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
+import { DELETION_SCHEDULED_OWNER_MESSAGE, isDeletionScheduledError } from "./deletion-scheduled-copy";
 
 type AgentDraft = {
   organizationId: string; agentId: string; revision: number;
@@ -154,7 +155,8 @@ export function AgentAiWorkspace() {
         }
         setRelease(active.data as AgentRelease);
         setStatus("AI 설정과 승인 지식 버전을 묶었습니다. 고객 자동 응답은 별도 활성화 단계가 필요합니다.");
-      } else if (result.status === 409) setStatus("설정 또는 지식 버전이 변경됐습니다. 최신 상태를 확인해 주세요.");
+      } else if (isDeletionScheduledError(result.status, result.data)) setStatus(DELETION_SCHEDULED_OWNER_MESSAGE);
+      else if (result.status === 409) setStatus("설정 또는 지식 버전이 변경됐습니다. 최신 상태를 확인해 주세요.");
       else setStatus(`AI 설정 승인이 실패했습니다 (${result.status}).`);
     } catch {
       setLoadState("failed");
@@ -167,6 +169,7 @@ export function AgentAiWorkspace() {
     try {
       const result = await requestJson("/v1/agents/test", "POST", { question });
       if (result.status === 200) { setAnswer(result.data as TestResult); setStatus("사업자 테스트 결과입니다. 고객 문의·알림은 만들지 않았습니다."); }
+      else if (isDeletionScheduledError(result.status, result.data)) setStatus(DELETION_SCHEDULED_OWNER_MESSAGE);
       else if (result.status === 503 && (result.data as { error?: string }).error === "blocked_integration")
         setStatus("실제 모델 공급사 설정이 없어 테스트를 실행할 수 없습니다. 연결 상태: blocked_integration.");
       else if (result.status === 422) setStatus("모델 답변의 근거 또는 숫자를 서버가 거부했습니다. 사람 안내 문구와 승인 지식을 점검해 주세요.");

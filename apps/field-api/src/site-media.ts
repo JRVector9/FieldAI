@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import type { Pool } from 'pg';
 import sharp from 'sharp';
+import { decodeHeicImage } from './heic-decoder.js';
 
 export type FieldSiteMediaStore = {
   put: (key: string, data: Buffer) => Promise<void>;
@@ -21,8 +22,8 @@ export class MediaPermissionError extends Error {
 
 const objectKeyPattern = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.webp$/;
 const maxInputBytes = 8 * 1024 * 1024;
-// 설치된 sharp(libheif)는 AVIF만 해독하고 아이폰 HEIC(HEVC)는 해독하지 못한다.
-// ISO BMFF ftyp 상자의 브랜드로 HEIC를 알아내 일반 실패 대신 형식 미지원 사유를 돌려준다.
+// HEVC HEIC is decoded by the bounded Linux helper before normalizing with sharp.
+// Without that helper, return the existing honest unsupported-format response.
 const HEIC_BRANDS = new Set(['heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'hevm', 'hevs']);
 export function isHeicImage(input: unknown) {
   if (!Buffer.isBuffer(input) || input.length < 16 || input.toString('latin1', 4, 8) !== 'ftyp') return false;
@@ -37,6 +38,7 @@ export function unsupportedImageError(input: unknown) {
 export async function normalizeSiteImage(input: Buffer) {
   if (!input.length || input.length > maxInputBytes) return null;
   try {
+    if(isHeicImage(input)){const decoded=await decodeHeicImage(input);if(!decoded)return null;input=decoded;}
     const decoder = sharp(input, { limitInputPixels: 25_000_000, failOn: 'error', animated: false });
     const metadata = await decoder.metadata();
     if (!['jpeg', 'png', 'webp', 'heif'].includes(metadata.format)

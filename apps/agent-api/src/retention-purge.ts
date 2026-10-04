@@ -112,27 +112,28 @@ export async function purgeAgentEmailOutbox(pool: Pool) {
 // 소속도 없는 계정을 지워 주소 선점(다른 사람 주소로 가입만 해 두기)으로 실제 주인의 가입이 막히지 않게 한다.
 // 세션·credential·2FA·OAuth 행은 FK cascade로 함께 지워진다. 다른 기록이 FK로 참조하는 계정은 건너뛴다(그 행만 되돌림).
 // 한 주기에 100명까지 처리한다. mock 프로필은 메일 인증을 요구하지 않으므로 작업자가 호출하지 않는다.
-export async function purgeUnverifiedCredentialUsers(pool: Pool) {
-  const candidates = (await pool.query<{ id: string }>(`select u.id from "user" u
-    where u."emailVerified"=false and u."createdAt"<now()-interval '48 hours'
+const unverifiedCleanupCursors=new WeakMap<Pool,{at:string;id:string}>();
+const UNVERIFIED_CANDIDATE_SQL=`u."emailVerified"=false and u."createdAt"<now()-interval '48 hours'
       and exists(select 1 from "account" a where a."userId"=u.id and a."providerId"='credential')
       and not exists(select 1 from "account" a where a."userId"=u.id and a."providerId"<>'credential')
       and not exists(select 1 from ap.memberships m where m.user_id=u.id)
       and not exists(select 1 from ap.organizations o where o.owner_user_id=u.id)
       and not exists(select 1 from ap.publishers p where p.owner_user_id=u.id)
       and not exists(select 1 from ap.publisher_memberships p where p.user_id=u.id)
-      and not exists(select 1 from ap.platform_admin_memberships p where p.user_id=u.id)
-    order by u."createdAt" limit 100`)).rows;
+      and not exists(select 1 from ap.platform_admin_memberships p where p.user_id=u.id)`;
+export async function purgeUnverifiedCredentialUsers(pool: Pool) {
+  const cursor=unverifiedCleanupCursors.get(pool);
+  const candidates = (await pool.query<{ id: string; at:string }>(`select u.id,u."createdAt"::text as at from "user" u
+    where ${UNVERIFIED_CANDIDATE_SQL} and ($1::timestamptz is null or (u."createdAt",u.id)>($1::timestamptz,$2::text))
+    order by u."createdAt",u.id limit 100`,[cursor?.at??null,cursor?.id??null])).rows;
+  if(!candidates.length){unverifiedCleanupCursors.delete(pool);return 0;}
   let deleted = 0;
   for (const candidate of candidates) {
     const db = await pool.connect();
     try {
       await db.query('begin');
       // 고른 뒤 인증·소속이 생겼으면 지우지 않도록 같은 조건을 잠금 아래 다시 확인한다
-      const removed = (await db.query(`delete from "user" u where u.id=$1 and u."emailVerified"=false
-        and u."createdAt"<now()-interval '48 hours'
-        and not exists(select 1 from "account" a where a."userId"=u.id and a."providerId"<>'credential')
-        and not exists(select 1 from ap.memberships m where m.user_id=u.id)`, [candidate.id])).rowCount ?? 0;
+      const removed = (await db.query(`delete from "user" u where u.id=$1 and ${UNVERIFIED_CANDIDATE_SQL}`, [candidate.id])).rowCount ?? 0;
       await db.query('commit');
       deleted += removed;
     } catch (error) {
@@ -141,5 +142,8 @@ export async function purgeUnverifiedCredentialUsers(pool: Pool) {
       if ((error as { code?: string }).code !== '23503') throw error;
     } finally { db.release(); }
   }
+  // The long-running worker carries the keyset across cycles. An empty page
+  // wraps around so newly eligible or newly unreferenced users are reconsidered.
+  const last=candidates.at(-1)!;unverifiedCleanupCursors.set(pool,{at:last.at,id:last.id});
   return deleted;
 }

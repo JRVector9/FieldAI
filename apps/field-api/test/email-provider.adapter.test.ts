@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import { createFieldApp } from '../src/app.js';
 import type { FieldBusinessRuntime } from '../src/business.js';
 import { createTransport } from 'nodemailer';
+import { emptyDeletionProofFixture } from './empty-deletion-proof-fixture.js';
 import { authEmailMessage, createSmtpEmailProvider, deliverAuthEmail, deliverAuthEmailInBackground, emailDeliveryState,
   emailProviderFromEnvironment, smtpTransportOptions, type EmailProvider } from '../src/email-provider.js';
 process.env.FIELD_AUTH_SECRET ??= 'synthetic-email-provider-secret-32-bytes-ok';
@@ -50,7 +51,8 @@ test('Field auth email outbox always records the attempt and redacts one-time to
 });
 
 test('Field readiness stays ready but reports unconfigured email as a blocked integration detail', async () => {
-  const runtime = { pool: { query: async () => ({ rows: [], rowCount: 0 }) }, resolveUserId: async () => null,
+  const proof = await emptyDeletionProofFixture();
+  const runtime = { pool: { query: async (sql: string) => proof.query(sql) ?? ({ rows: [], rowCount: 0 }) }, resolveUserId: async () => null,
     emailDeliveryState: () => 'blocked_integration' } as unknown as FieldBusinessRuntime;
   process.env.FIELD_PROFILE = 'mock';
   const app = createFieldApp(async () => undefined, undefined, undefined, runtime);
@@ -59,7 +61,7 @@ test('Field readiness stays ready but reports unconfigured email as a blocked in
     assert.equal(ready.statusCode, 200);
     assert.deepEqual(ready.json(), { product: 'field', status: 'ready', integrations: { email: 'blocked_integration' } });
     assert.deepEqual((await app.inject('/v1/auth/email-delivery')).json(), { product: 'field', state: 'blocked_integration' });
-  } finally { await app.close(); }
+  } finally { await app.close(); await proof.close(); }
 });
 
 // M5: SMTP 연결·인사·소켓 대기는 10초로 끊는다(nodemailer 기본 소켓 대기 10분). 실제 연결은 하지 않는다.

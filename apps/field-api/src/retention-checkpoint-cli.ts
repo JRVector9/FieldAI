@@ -1,7 +1,10 @@
 import { open, realpath } from 'node:fs/promises';
 import { basename, dirname, relative, resolve } from 'node:path';
 import { FieldRetentionJournal } from './retention-journal.js';
+import { assertProductionProfile } from './production-profile.js';
+import { accountDeletionJournalFromEnvironment } from './account-deletion-journal.js';
 
+assertProductionProfile();
 if (!process.argv.includes('--quiesced') || process.env.FIELD_PROFILE !== 'mock')
   throw new Error('local retention checkpoint export requires mock and explicit --quiesced after stopping journal writers');
 const directory = process.env.FIELD_RETENTION_JOURNAL_DIRECTORY, secret = process.env.FIELD_RETENTION_JOURNAL_SECRET;
@@ -13,8 +16,17 @@ const pathFromJournal = relative(root,destination);
 if (!pathFromJournal || (!pathFromJournal.startsWith('../') && pathFromJournal !== '..'))
   throw new Error('checkpoint must be stored outside the retention journal directory');
 const data = await new FieldRetentionJournal(directory,secret).checkpoint();
+const deletionJournal=accountDeletionJournalFromEnvironment(),deletionOutput=process.env.FIELD_ACCOUNT_DELETION_CHECKPOINT_OUTPUT;
+if(!deletionJournal||!deletionOutput)throw new Error('account deletion journal and separate protected checkpoint output required');
+const deletionDestination=resolve(await realpath(dirname(resolve(deletionOutput))),basename(deletionOutput)),deletionSubpath=relative(root,deletionDestination);
+if(deletionDestination===destination||!deletionSubpath||(!deletionSubpath.startsWith('../')&&deletionSubpath!=='..'))
+  throw new Error('account deletion checkpoint must be separate and outside the retention journal');
+const deletionData=await deletionJournal.checkpoint();
 const file = await open(destination,'wx',0o600);
 try { await file.writeFile(data); await file.sync(); } finally { await file.close(); }
 const parent = await open(dirname(destination),'r');
 try { await parent.sync(); } finally { await parent.close(); }
+const deletionFile=await open(deletionDestination,'wx',0o600);
+try{await deletionFile.writeFile(deletionData);await deletionFile.sync();}finally{await deletionFile.close();}
+const deletionParent=await open(dirname(deletionDestination),'r');try{await deletionParent.sync();}finally{await deletionParent.close();}
 process.stdout.write('Field retention checkpoint exported; protect it independently and use the latest quiesced export\n');

@@ -6,7 +6,15 @@ import { after, test } from 'node:test';
 import { fromNodeHeaders } from 'better-auth/node';
 import { Pool } from 'pg';
 import sharp from 'sharp';
-import { createFieldApp } from '../src/app.js';
+import { createFieldApp as createUnobservedApp } from '../src/app.js';
+import { createContractVerifier, observeContractResponses } from '../../../tools/test/integrator-contract.mjs';
+
+// QA158: compare every emitted public success response with the pinned OpenAPI contract.
+const createFieldApp: typeof createUnobservedApp = (...args) => {
+  const app = createUnobservedApp(...args);
+  observeContractResponses(app, 'field');
+  return app;
+};
 import { deliverApEventOnce, reconcileApEventDeliveries } from '../src/ap-event-delivery.js';
 import { acceptsV1ApSignature, fieldSignatureSendVersion } from '../src/ap-signature.js';
 import { copyExternalRequestAttachmentOnce } from '../src/external-request-attachment-worker.js';
@@ -19,61 +27,14 @@ const pool = new Pool({ connectionString: process.env.FIELD_DATABASE_URL });
 after(async () => { await Promise.all([pool.end(), authPool.end()]); });
 const base = 'http://127.0.0.1:4321';
 const authBase = `${base}/api/auth`;
-type ResponseSchema = { $ref?: string; type?: string | string[]; required?: string[];
-  properties?: Record<string, ResponseSchema>; additionalProperties?: boolean;
-  items?: ResponseSchema; pattern?: string; format?: string; enum?: unknown[] };
-type ContractDocument = { paths: Record<string, Record<string, { responses: Record<string,
-  { content?: { 'application/json'?: { schema?: ResponseSchema } } }> }>>;
-  components: { schemas: Record<string, ResponseSchema> } };
-const contract = JSON.parse(readFileSync(resolve('../../contracts/field-integrator-v1.openapi.json'),
-  'utf8')) as ContractDocument;
+const contractVerifier = createContractVerifier('field');
 const canonical = (value: unknown): string => JSON.stringify(value,
   (_key, entry) => entry && typeof entry === 'object' && !Array.isArray(entry)
     ? Object.fromEntries(Object.entries(entry).sort(([left], [right]) => left.localeCompare(right))) : entry);
 const digest = (value: unknown) => createHash('sha256').update(canonical(value)).digest('hex');
 
 function assertContract(path: string, actual: unknown, method = 'get', status = '200') {
-  const declared = contract.paths[path]?.[method]?.responses?.[status]?.content?.['application/json']?.schema;
-  assert.ok(declared, `OpenAPI ${method.toUpperCase()} ${path} ${status}`);
-  function check(schema: ResponseSchema, value: unknown, location: string): void {
-    if (schema.$ref) {
-      const name = schema.$ref.split('/').at(-1);
-      assert.ok(name);
-      const referenced = contract.components.schemas[name];
-      assert.ok(referenced);
-      check(referenced, value, location);
-      return;
-    }
-    if (schema.type === 'object') {
-      assert.ok(value !== null && typeof value === 'object' && !Array.isArray(value), location);
-      const item = value as Record<string, unknown>;
-      for (const key of schema.required ?? []) assert.ok(key in item, `${location}.${key}`);
-      if (schema.additionalProperties === false)
-        for (const key of Object.keys(item)) assert.ok(key in (schema.properties ?? {}), `${location}.${key}`);
-      for (const [key, entry] of Object.entries(schema.properties ?? {}))
-        if (key in item) check(entry, item[key], `${location}.${key}`);
-      return;
-    }
-    if (schema.type === 'array') {
-      assert.ok(Array.isArray(value), location);
-      const element = schema.items;
-      assert.ok(element);
-      value.forEach((part, index) => check(element, part, `${location}[${index}]`));
-      return;
-    }
-    if (Array.isArray(schema.type) && value === null && schema.type.includes('null')) return;
-    if (schema.type === 'integer' || (Array.isArray(schema.type) && schema.type.includes('integer')))
-      assert.ok(Number.isInteger(value), location);
-    else if (schema.type === 'boolean') assert.equal(typeof value, 'boolean', location);
-    else if (schema.type === 'string') {
-      assert.equal(typeof value, 'string', location);
-      if (schema.pattern) assert.match(value as string, new RegExp(schema.pattern), location);
-      if (schema.format === 'uuid') assert.match(value as string, /^[0-9a-f-]{36}$/i, location);
-      if (schema.format === 'date-time') assert.ok(!Number.isNaN(Date.parse(value as string)), location);
-    }
-    if (schema.enum) assert.ok(schema.enum.includes(value), location);
-  }
-  check(declared, actual, `${method.toUpperCase()} ${path}`);
+  contractVerifier.assertResponse(path, method, Number(status), actual);
 }
 
 async function actor() {

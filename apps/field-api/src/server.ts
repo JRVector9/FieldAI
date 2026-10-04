@@ -14,6 +14,7 @@ import { apConnectorFromEnvironment } from './ap-connector.js';
 import { assertLifecycleServing, lifecycleJournalFromEnvironment } from './oauth-lifecycle-journal.js';
 import { assertProductionProfile } from './production-profile.js';
 import { createGracefulShutdown } from './shutdown.js';
+import { assertAccountDeletionServing } from './account-deletion-journal.js';
 
 assertProductionProfile();
 
@@ -52,6 +53,7 @@ const host = process.env.FIELD_HOST ?? '127.0.0.1';
 app.addHook('onClose', async () => { siteQueue?.close(); });
 
 try {
+  await assertAccountDeletionServing(pool);
   await app.listen({ host, port });
   process.stdout.write(`field-api listening on ${host}:${port}\n`);
 } catch (error) {

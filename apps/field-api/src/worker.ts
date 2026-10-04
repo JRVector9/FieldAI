@@ -1,3 +1,4 @@
+import { assertAccountDeletionServing } from './account-deletion-journal.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { createFieldOpenAIProvider } from './field-openai.js';
@@ -31,6 +32,7 @@ try {
   await reconcileQueuedSiteJobs(runtime);
   process.stdout.write('field site generation worker ready\n');
   while (!stopping) {
+    await assertAccountDeletionServing(pool);
     try {
       const id = await siteQueue.dequeue(1);
       if (id) await runSiteGenerationJob(runtime, id);

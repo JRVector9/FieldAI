@@ -21,7 +21,8 @@ export async function requireAdmin(request: FastifyRequest, reply: FastifyReply,
   const mfa = session && session.userId === userId ? (await runtime.pool.query<{ enabled: boolean | null; verified: boolean }>(
     `select u."twoFactorEnabled" as enabled, s."twoFactorVerified" as verified
        from "session" s join "user" u on u.id = s."userId"
-      where s.id = $1 and s."userId" = $2 and s."expiresAt" > now()`, [session.id, userId])).rows[0] : undefined;
+      where s.id = $1 and s."userId" = $2 and s."expiresAt" > now()
+        and s."createdAt" <= now() and s."createdAt" > now() - interval '8 hours'`, [session.id, userId])).rows[0] : undefined;
   if (mfa?.enabled !== true || mfa.verified !== true) { reply.code(403).send({ error: 'mfa_required' }); return null; }
   return { userId, role };
 }

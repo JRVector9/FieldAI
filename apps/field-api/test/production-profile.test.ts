@@ -3,12 +3,27 @@ import { test } from 'node:test';
 import { isAbsolute, resolve } from 'node:path';
 import { assertProductionProfile } from '../src/production-profile.js';
 import { journalDirectoryFromEnvironment } from '../src/revocation-journal.js';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
 test('production requires FIELD_PROFILE to be exactly live', () => {
   assert.doesNotThrow(() => assertProductionProfile({ NODE_ENV: 'production', FIELD_PROFILE: 'live' }));
   // 누락·mock·sandbox·대소문자/공백 오타는 모두 거부한다.
   for (const FIELD_PROFILE of [undefined, '', 'mock', 'sandbox', 'Live', 'live ', 'prod'])
     assert.throws(() => assertProductionProfile({ NODE_ENV: 'production', FIELD_PROFILE }), /FIELD_PROFILE must be "live" in production/);
+});
+
+test('all five offline CLIs reject production non-live before database and filesystem access',async()=>{
+  for(const [script,flag] of [['oauth-lifecycle-cli.ts','--baseline-quiesced'],['revocation-checkpoint-cli.ts','--quiesced'],
+    ['revocation-restore-cli.ts','--offline-restored'],['retention-checkpoint-cli.ts','--quiesced'],['retention-restore-cli.ts','--offline-restored']]){
+    for(const profile of ['mock','sandbox',undefined]){
+      const env:NodeJS.ProcessEnv={...process.env,NODE_ENV:'production',FIELD_DATABASE_URL:'intentionally-not-a-database-url',
+        FIELD_REVOCATION_JOURNAL_DIRECTORY:'/nonexistent-profile-test-journal',FIELD_RETENTION_JOURNAL_DIRECTORY:'/nonexistent-profile-test-journal'};
+      if(profile===undefined)delete env.FIELD_PROFILE;else env.FIELD_PROFILE=profile;
+      await assert.rejects(promisify(execFile)(process.execPath,['--import','tsx',`src/${script}`,flag!],{env,maxBuffer:1024*1024}),
+        error=>error instanceof Error&&error.message.includes('FIELD_PROFILE must be "live" in production'));
+    }
+  }
 });
 
 test('non-production profiles are not restricted by the production guard', () => {

@@ -30,9 +30,11 @@ export function isolatedApiEnvironment(product, source, base = {}) {
   for (const name of required) if (!source[name]) throw new Error(`${name} is required`);
   const optional = product === 'agent'
     ? ['AP_PUBLIC_WEB_ORIGIN', 'AP_INQUIRY_MEDIA_DIRECTORY',
-      'AP_REVOCATION_JOURNAL_DIRECTORY', 'AP_REVOCATION_JOURNAL_SECRET']
+      'AP_REVOCATION_JOURNAL_DIRECTORY', 'AP_REVOCATION_JOURNAL_SECRET',
+      'AP_RETENTION_JOURNAL_DIRECTORY', 'AP_RETENTION_JOURNAL_SECRET']
     : ['FIELD_PUBLIC_WEB_ORIGIN', 'FIELD_VALKEY_URL', 'FIELD_MEDIA_DIRECTORY',
-      'FIELD_INQUIRY_MEDIA_DIRECTORY'];
+      'FIELD_INQUIRY_MEDIA_DIRECTORY', 'FIELD_REVOCATION_JOURNAL_DIRECTORY', 'FIELD_REVOCATION_JOURNAL_SECRET',
+      'FIELD_RETENTION_JOURNAL_DIRECTORY', 'FIELD_RETENTION_JOURNAL_SECRET'];
   return { ...base, ...Object.fromEntries([...required, ...optional]
     .filter(name => source[name] !== undefined).map(name => [name, source[name]])),
   [`${config.prefix}_PROFILE`]: 'mock' };

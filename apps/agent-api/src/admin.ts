@@ -5,6 +5,20 @@ import { requireAdmin } from './admin-auth.js';
 import { retentionAdminFor } from './retention-routes.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function decodeCursor(value:string|undefined) {
+  if(value===undefined)return null;
+  if(value.length>256||!/^[A-Za-z0-9_-]+$/.test(value))return undefined;
+  try {
+    const decoded=Buffer.from(value,'base64url');if(decoded.toString('base64url')!==value)return undefined;
+    const cursor=JSON.parse(decoded.toString('utf8')) as {at?:unknown;id?:unknown};
+    if(!cursor||Object.keys(cursor).length!==2||typeof cursor.id!=='string'||!uuid.test(cursor.id)
+      ||typeof cursor.at!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(cursor.at)
+      ||cursor.at.startsWith('0000')||!Number.isFinite(Date.parse(cursor.at))
+      ||new Date(cursor.at).toISOString()!==cursor.at.slice(0,-4)+'Z')return undefined;
+    return {at:cursor.at,id:cursor.id};
+  }catch{return undefined;}
+}
+const encodeCursor=(row:{id:string;cursorAt:string})=>Buffer.from(JSON.stringify({at:row.cursorAt,id:row.id})).toString('base64url');
 
 type AdminCounts = {
   organizations: string;
@@ -28,6 +42,50 @@ type AdminIncident = {
 };
 
 export function registerAgentAdminRoutes(app: FastifyInstance, runtime: BusinessRuntime) {
+  // A-02: same 24-hour cutoff as close-unknown. Never return customer content or reusable request payloads.
+  app.get<{ Querystring: { state?: string; unreconcilable?: string; cursor?: string } }>('/v1/admin/field-actions', async (request, reply) => {
+    reply.header('Cache-Control', 'private, no-store');
+    const admin = await requireAdmin(request, reply, runtime);
+    if (!admin) return reply;
+    if (request.query.state !== 'delivery_unknown' || request.query.unreconcilable !== 'true')
+      return reply.code(400).send({ error: 'invalid_filter' });
+    const cursor = decodeCursor(request.query.cursor);
+    if (cursor === undefined)
+      return reply.code(400).send({ error: 'invalid_cursor' });
+    const rows = (await runtime.pool.query(`select a.id,a.organization_id as "organizationId",o.name as "organizationName",
+        a.inquiry_id as "inquiryId",a.connection_id as "connectionId",a.kind,a.consent_confirmed_at as "consentConfirmedAt",
+        a.state,a.error_code as "errorCode",to_char(a.consent_confirmed_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "cursorAt"
+      from ap.field_action_requests a join ap.organizations o on o.id=a.organization_id
+      where a.state='delivery_unknown' and a.consent_confirmed_at<clock_timestamp()-interval '24 hours'
+        and ($1::timestamptz is null or (a.consent_confirmed_at,a.id)>($1::timestamptz,$2::uuid))
+      order by a.consent_confirmed_at,a.id limit 101`, [cursor?.at ?? null,cursor?.id??null])).rows;
+    const page=rows.slice(0,100),actions=page.map(row=>{const action={...row};delete action.cursorAt;return action;});
+    await runtime.pool.query("insert into ap.admin_access_audit(actor_user_id,resource) values ($1,'field_actions')", [admin.userId]);
+    return { product: 'agent', role: admin.role, actions, nextCursor: rows.length > 100 ? encodeCursor(page.at(-1)!) : null };
+  });
+
+  // A-03: email content contains authentication links even in mock. Only masked delivery metadata leaves this API.
+  app.get<{ Querystring: { state?: string; cursor?: string } }>('/v1/admin/email-outbox', async (request, reply) => {
+    reply.header('Cache-Control', 'private, no-store');
+    const admin = await requireAdmin(request, reply, runtime);
+    if (!admin) return reply;
+    const state = request.query.state, cursor = decodeCursor(request.query.cursor);
+    if (state !== undefined && !['pending', 'sent', 'failed', 'blocked_integration', 'suppressed_duplicate'].includes(state))
+      return reply.code(400).send({ error: 'invalid_state' });
+    if (cursor === undefined)
+      return reply.code(400).send({ error: 'invalid_cursor' });
+    const rows = (await runtime.pool.query(`select id,
+        case when position('@' in "to")>1 then left(split_part("to",'@',1),1)||'***@'||left(split_part("to",'@',2),1)||'***'
+          else '주소 비공개' end as "maskedTo",purpose,state,error_code as "errorCode",created_at as "createdAt",sent_at as "sentAt",
+        to_char(created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "cursorAt"
+      from ap.email_outbox e where ($1::text is null or e.state=$1)
+        and ($2::timestamptz is null or (e.created_at,e.id)<($2::timestamptz,$3::uuid))
+      order by e.created_at desc,e.id desc limit 101`, [state ?? null,cursor?.at??null,cursor?.id??null])).rows;
+    const page=rows.slice(0,100),emails=page.map(row=>{const email={...row};delete email.cursorAt;return email;});
+    await runtime.pool.query("insert into ap.admin_access_audit(actor_user_id,resource) values ($1,'email_outbox')", [admin.userId]);
+    return { product: 'agent', role: admin.role, emails, nextCursor: rows.length > 100 ? encodeCursor(page.at(-1)!) : null };
+  });
+
   app.get('/v1/admin/overview', async (request, reply) => {
     const admin = await requireAdmin(request, reply, runtime);
     if (!admin) return reply;

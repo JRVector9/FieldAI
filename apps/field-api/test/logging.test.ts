@@ -108,3 +108,26 @@ test('Field request timeout defaults to 30 seconds and validates FIELD_REQUEST_T
     if (previous === undefined) delete process.env.FIELD_REQUEST_TIMEOUT_MS; else process.env.FIELD_REQUEST_TIMEOUT_MS = previous;
   }
 });
+
+test('Field rejects NUL in decoded text before handlers and preserves binary bodies',async()=>{
+  let calls=0;
+  const app=createFieldApp(async()=>undefined,async()=>{calls++;return Response.json({ok:true});});
+  app.post('/synthetic/text/:id',async()=>{calls++;return {ok:true};});
+  app.post('/synthetic/binary',async request=>{calls++;return {bytes:[...(request.body as Buffer)]};});
+  try {
+    for(const request of [
+      {method:'POST' as const,url:'/synthetic/text/abc',payload:{message:'hello\0there'}},
+      {method:'POST' as const,url:'/synthetic/text/abc',payload:{nested:[{message:'\0'}]}},
+      {method:'POST' as const,url:'/synthetic/text/abc',payload:{['bad\0key']:'hello'}},
+      {method:'POST' as const,url:'/synthetic/text/abc?message=%00',payload:{}},
+      {method:'POST' as const,url:'/synthetic/text/%00',payload:{}},
+      {method:'POST' as const,url:'/api/auth/sign-in/email',headers:{'content-type':'application/x-www-form-urlencoded'},payload:'email=hello%00example&password=x'},
+    ]){
+      const response=await app.inject(request);assert.equal(response.statusCode,400,request.url);assert.deepEqual(response.json(),{error:'invalid_text'});
+    }
+    assert.equal(calls,0);
+    const binary=await app.inject({method:'POST',url:'/synthetic/binary',headers:{'content-type':'application/octet-stream'},payload:Buffer.from([1,0,2])});
+    assert.equal(binary.statusCode,200);assert.deepEqual(binary.json(),{bytes:[1,0,2]});assert.equal(calls,1);
+    assert.equal((await app.inject({method:'POST',url:'/synthetic/text/abc',payload:{message:'한글🙂'}})).statusCode,200);
+  }finally{await app.close();}
+});

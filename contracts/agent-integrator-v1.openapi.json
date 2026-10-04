@@ -373,11 +373,19 @@
         }, "additionalProperties": false
       },
       "FieldNotificationRouteClosure": {
-        "allOf": [
-          { "$ref": "#/components/schemas/FieldNotificationRouteClose" },
-          { "type": "object", "required": ["closedAt"],
-            "properties": { "closedAt": { "type": "string", "format": "date-time" } } }
-        ]
+        "type": "object",
+        "required": ["transferId", "connectionId", "actionRequestId", "reservationId", "latestRevision", "latestEventId", "routeGeneration", "closedAt"],
+        "properties": {
+          "transferId": { "type": "string", "format": "uuid" },
+          "connectionId": { "type": "string", "format": "uuid" },
+          "actionRequestId": { "type": "string", "format": "uuid" },
+          "reservationId": { "type": "string", "format": "uuid" },
+          "latestRevision": { "type": "integer", "minimum": 0 },
+          "latestEventId": { "type": "string", "format": "uuid" },
+          "routeGeneration": { "type": "integer", "enum": [2] },
+          "closedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
       },
       "Error": {
         "type": "object",

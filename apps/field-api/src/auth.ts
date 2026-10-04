@@ -92,9 +92,13 @@ export const auth = betterAuth({
     },
     session: {
       create: {
-        before: async (session, context) => ({
-          data: { ...session, twoFactorVerified: TWO_FACTOR_SESSION_PATHS.has(context?.path ?? '') },
-        }),
+        before: async (session, context) => {
+          // MFA's absolute lifetime is checked against the database clock. Keep
+          // issuance on that same clock when the API host runs slightly ahead.
+          const createdAt=(await authPool.query<{at:Date}>('select clock_timestamp() as at')).rows[0]!.at;
+          return {data:{...session,createdAt,updatedAt:createdAt,
+            twoFactorVerified:TWO_FACTOR_SESSION_PATHS.has(context?.path??'')}};
+        },
       },
     },
   },

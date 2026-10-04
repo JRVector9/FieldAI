@@ -7,6 +7,11 @@ export const agentAdminSections = [
   { id: "audit", title: "AP 신고·감사", description: "운영 조회 기록을 확인합니다." },
 ] as const;
 export type AgentAdminSection = typeof agentAdminSections[number]["id"];
+export const adminSignOutFailureMessage = '로그아웃하지 못했습니다. 다시 시도해 주세요. 현재 관리자 세션을 유지합니다.';
+export function adminResourceLabel(resource: string) {
+  return ({ overview: '운영 상태 조회', field_actions: '미해결 전달 요청 목록 조회', email_outbox: '인증 메일 발송 상태 조회' } as Record<string, string>)[resource]
+    ?? '관리자 조회';
+}
 export function isAgentAdminSection(value: string): value is AgentAdminSection {
   return agentAdminSections.some(item => item.id === value);
 }

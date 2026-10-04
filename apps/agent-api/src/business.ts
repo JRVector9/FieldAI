@@ -10,6 +10,7 @@ import type { FieldConnectorConfig } from './field-connector.js';
 import type { AgentRevocationJournal } from './revocation-journal.js';
 import type { EmailDeliveryState } from './email-provider.js';
 import { rejectExpiredTrial } from './trial-access.js';
+import type { AgentAccountDeletionJournal } from './account-deletion-journal.js';
 
 export type BusinessRuntime = {
   notification?: NotificationContext;
@@ -17,6 +18,8 @@ export type BusinessRuntime = {
   pool: Pool;
   revocationJournal?: Pick<AgentRevocationJournal, 'read' | 'append'>;
   oauthLifecycleGuard?: () => Promise<void>;
+  accountDeletionJournal?: AgentAccountDeletionJournal;
+  accountDeletionGuard?: () => Promise<void>;
   resolveUserId: (headers: IncomingHttpHeaders) => Promise<string | null>;
   resolveSession?: (headers: IncomingHttpHeaders) => Promise<{ id: string; userId: string } | null>;
   modelProvider?: AgentModelProvider;

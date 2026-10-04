@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { link,mkdir,mkdtemp,rm,symlink,unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { S3Client } from '@aws-sdk/client-s3';
 import { FieldFileMediaStore, FieldS3MediaStore, MediaPermissionError } from '../src/site-media.js';
+import { createRestoredSiteMediaStore } from '../src/restored-site-media.js';
 
 const key = `${randomUUID()}/${randomUUID()}.webp`;
 // S3 오류 형태만 흉내 내는 최소 client. 실제 공급사 호출은 하지 않는다.
@@ -39,4 +40,25 @@ test('Field local media store confirms deletion by absence', async () => {
     assert.equal(await store.get(key), null);
     await store.delete(key);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('offline site media rejects overlapping roots, nested symlinks, file symlinks and hard links without touching active bytes',async()=>{
+  const root=await mkdtemp(join(tmpdir(),'field-media-confinement-')),active=join(root,'active'),restored=join(root,'restored');
+  await mkdir(active);await mkdir(restored);const [org,file]=key.split('/'),activeStore=new FieldFileMediaStore(active);
+  try {
+    await activeStore.put(key,Buffer.from('ACTIVE'));
+    await mkdir(join(active,'nested'));
+    await assert.rejects(createRestoredSiteMediaStore(join(active,'nested'),active),/disjoint/);
+    await assert.rejects(createRestoredSiteMediaStore(active,active),/disjoint/);
+    const store=await createRestoredSiteMediaStore(restored,active);
+    await symlink(join(active,org!),join(restored,org!),'dir');
+    await assert.rejects(store.delete(key),/not confined/);await assert.rejects(store.exists!(key),/not confined/);
+    await unlink(join(restored,org!));await mkdir(join(restored,org!));
+    await symlink(join(active,org!,file!),join(restored,org!,file!));
+    await assert.rejects(store.delete(key),/not confined/);await assert.rejects(store.get(key),/not confined/);
+    await unlink(join(restored,org!,file!));await link(join(active,org!,file!),join(restored,org!,file!));
+    await assert.rejects(store.delete(key),/not confined/);await assert.rejects(store.get(key),/not confined/);
+    assert.deepEqual(await activeStore.get(key),Buffer.from('ACTIVE'));
+    await unlink(join(restored,org!,file!));assert.equal(await store.exists!(key),false);await store.delete(key);
+  }finally{await rm(root,{recursive:true,force:true});}
 });

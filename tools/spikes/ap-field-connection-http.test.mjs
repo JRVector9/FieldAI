@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { test } from 'node:test';
@@ -11,7 +11,8 @@ import { copyExternalRequestAttachmentOnce } from '../../apps/field-api/dist/ext
 import { createFieldInquiryMediaStore } from '../../apps/field-api/dist/inquiry-media.js';
 import { processFieldEventInboxOnce } from '../../apps/agent-api/dist/field-event-inbox.js';
 import { deliverFieldConnectionRevokeOnce } from '../../apps/agent-api/dist/field-connection-revoke-worker.js';
-import { fieldConnectorFromEnvironment } from '../../apps/agent-api/dist/field-connector.js';
+import { fieldConnectorFromEnvironment, unsealFieldEventSecret } from '../../apps/agent-api/dist/field-connector.js';
+import { deliverFieldAgentEventOnce } from '../../apps/agent-api/dist/field-webhook-sender.js';
 import { reconcileFactsChangeDeliveries, deliverFactsChangeOnce } from '../../apps/field-api/dist/facts-change-delivery.js';
 import { processFieldFactsEventOnce } from '../../apps/agent-api/dist/field-facts-events.js';
 import { processFieldSourceRefreshOnce } from '../../apps/agent-api/dist/source-refresh-worker.js';
@@ -864,6 +865,146 @@ test('local AP OAuth code crosses HTTP into Field encrypted pending connection',
       }
       browserReply('retry');
     }
+    // A-20 / QA31, QA140, QA149: a separate action leaves the original reservation's
+    // revision/notification assertions intact while exercising both public HTTP directions.
+    const proposalPreview = await customerJson(`${ap}/v1/inquiries/${inquiryId}/field-availability`,
+      customerReceipt, 'POST', { connectionId: connections.value.connections[0].id,
+        serviceId: fieldServiceId, request: details });
+    assert.equal(proposalPreview.response.status, 200, JSON.stringify(proposalPreview.value));
+    const proposalAction = await customerJson(`${ap}/v1/inquiries/${inquiryId}/field-actions`,
+      customerReceipt, 'POST', { ...externalBody, summary: 'HTTP 고객 결정 검수 예약',
+        expectedServiceRevision: proposalPreview.value.catalogRevision,
+        expectedPolicyRevision: proposalPreview.value.policyRevision,
+        conditionsHash: proposalPreview.value.conditionsHash }, randomBytes(32).toString('base64url'));
+    assert.equal(proposalAction.response.status, 201, JSON.stringify(proposalAction.value));
+    assert.equal(proposalAction.value.state, 'accepted_external');
+    assert.notEqual(proposalAction.value.reservationId, submittedField.value.reservationId);
+    const fieldEventConnector = fieldConnectorFromEnvironment();
+    assert.ok(fieldEventConnector);
+    const drainProposalEvent = async revision => {
+      if (process.env.FIELD_EVENT_WORKERS_RUNNING === '1') {
+        await awaitAutomaticEvent(proposalAction.value.actionRequestId, proposalAction.value.reservationId, revision);
+        return;
+      }
+      await reconcileApEventDeliveries(fieldPool);
+      const until = Date.now() + 10_000;
+      while (Date.now() < until) {
+        await deliverApEventOnce(fieldPool, eventConnector);
+        await processFieldEventInboxOnce(apPool, fieldEventConnector);
+        const [delivered, received] = await Promise.all([
+          fieldPool.query(`select d.state from field.ap_event_deliveries d
+            join field.reservation_events e on e.id = d.event_id
+            where e.reservation_id = $1 and e.revision = $2`, [proposalAction.value.reservationId, revision]),
+          apPool.query(`select state from ap.field_event_inbox where action_request_id = $1 and revision = $2`,
+            [proposalAction.value.actionRequestId, revision]),
+        ]);
+        if (delivered.rows[0]?.state === 'acked' && received.rows[0]?.state === 'processed') return;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      assert.fail(`proposal reservation event revision ${revision} was not drained`);
+    };
+    await drainProposalEvent(0);
+    const proposalStart = new Date(nextMonday);
+    proposalStart.setUTCHours(8, 0, 0, 0);
+    const proposal = await json(`${field}/v1/owner/reservations/${proposalAction.value.reservationId}/proposals`,
+      'POST', { startAt: proposalStart.toISOString(), expectedRevision: 0,
+        expectedCatalogRevision: proposalPreview.value.catalogRevision }, fieldOwner.cookie);
+    assert.equal(proposal.response.status, 201, JSON.stringify(proposal.value));
+    assert.equal(proposal.value.state, 'proposed');
+    assert.equal(proposal.value.revision, 1);
+    await drainProposalEvent(1);
+    const proposalPath = `${ap}/v1/inquiries/${inquiryId}/field-actions/${proposalAction.value.actionRequestId}`;
+    const readProposal = await customerJson(proposalPath, customerReceipt);
+    assert.equal(readProposal.response.status, 200, JSON.stringify(readProposal.value));
+    assert.equal(readProposal.value.canRespond, true);
+    assert.equal(readProposal.value.field.readState, 'current');
+    assert.deepEqual(readProposal.value.field.proposal, { revision: 1,
+      startAt: proposalStart.toISOString(),
+      endAt: new Date(proposalStart.getTime() + 30 * 60_000).toISOString(), state: 'awaiting_customer' });
+    const decisionPath = `${proposalPath}/customer-decisions`;
+    const staleDecision = await customerJson(decisionPath, customerReceipt, 'POST',
+      { decision: 'accept', proposalRevision: 2 });
+    assert.equal(staleDecision.response.status, 409, JSON.stringify(staleDecision.value));
+    assert.equal(staleDecision.value.error, 'proposal_mismatch');
+    assert.equal(staleDecision.value.decisionState, 'rejected');
+    const acceptBody = { decision: 'accept', proposalRevision: 1 };
+    const acceptedProposal = await customerJson(decisionPath, customerReceipt, 'POST', acceptBody);
+    assert.equal(acceptedProposal.response.status, 201, JSON.stringify(acceptedProposal.value));
+    assert.equal(acceptedProposal.value.decisionState, 'recorded');
+    assert.equal(acceptedProposal.value.reservationState, 'customer_accepted');
+    assert.equal(acceptedProposal.value.revision, 2);
+    assert.equal(acceptedProposal.value.bookingConfirmedBy, 'field_owner');
+    const replayDecision = await customerJson(decisionPath, customerReceipt, 'POST', acceptBody);
+    assert.equal(replayDecision.response.status, 200, JSON.stringify(replayDecision.value));
+    assert.deepEqual(replayDecision.value, acceptedProposal.value);
+    await drainProposalEvent(2);
+    const acceptedReservation = await json(`${field}/v1/owner/reservations/${proposalAction.value.reservationId}`,
+      'GET', undefined, fieldOwner.cookie);
+    assert.equal(acceptedReservation.response.status, 200, JSON.stringify(acceptedReservation.value));
+    assert.equal(acceptedReservation.value.state, 'customer_accepted');
+    assert.equal(acceptedReservation.value.confirmedStartAt, null);
+    assert.equal((await apPool.query(`select count(*)::integer as count from ap.field_customer_decisions
+      where action_request_id = $1 and state = 'recorded'`, [proposalAction.value.actionRequestId])).rows[0]?.count, 1);
+    assert.equal((await fieldPool.query(`select count(*)::integer as count from field.external_request_customer_decisions
+      where external_request_id = $1`, [proposalAction.value.externalRequestId])).rows[0]?.count, 1);
+
+    // The production sender signs the persisted envelope and crosses the real HTTP receiver.
+    // Replays use that same raw body; only IDs/status are in the envelope, never customer PII.
+    const untilWebhook = Date.now() + 10_000;
+    let sentWebhook;
+    while (Date.now() < untilWebhook) {
+      if (process.env.FIELD_EVENT_WORKERS_RUNNING !== '1')
+        await deliverFieldAgentEventOnce(apPool, fieldEventConnector);
+      const outbox = await apPool.query(`select id,body,state,last_http_status from ap.field_agent_event_outbox
+        where aggregate_id = $1`, [proposalAction.value.actionRequestId]);
+      assert.equal(outbox.rows.length, 1, 'decision replay must not enqueue another event');
+      if (outbox.rows[0]?.state === 'acked') { sentWebhook = outbox.rows[0]; break; }
+      assert.notEqual(outbox.rows[0]?.state, 'blocked', 'AP webhook sender must not become blocked');
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.ok(sentWebhook, 'AP decision event must be durably acknowledged by Field');
+    assert.equal(sentWebhook.last_http_status, 202);
+    const envelope = JSON.parse(sentWebhook.body);
+    assert.equal(envelope.event_type, 'agent.action.delivery_updated');
+    assert.equal(envelope.aggregate_id, proposalAction.value.actionRequestId);
+    assert.deepEqual(envelope.data, { resource_id: proposalAction.value.actionRequestId,
+      status: 'customer_decided_accept' });
+    assert.doesNotMatch(sentWebhook.body, /HTTP 전달 고객|010-3333-4444|방문 상담을 받고/);
+    const signingRoute = (await apPool.query(`select event_key_id,event_secret_cipher
+      from ap.field_connections where id = $1`, [connections.value.connections[0].id])).rows[0];
+    const eventSecret = Buffer.from(unsealFieldEventSecret(signingRoute.event_secret_cipher,
+      fieldEventConnector.tokenKey), 'base64url');
+    const webhook = async (raw, prefix = 'v2:ap->field.', secret = eventSecret) => {
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      const response = await fetch(`${field}/integrations/v1/webhooks/agent`, { method: 'POST',
+        signal: AbortSignal.timeout(10_000), headers: {
+        'content-type': 'application/vnd.agent-event+json', 'x-event-id': sentWebhook.id,
+        'x-key-id': signingRoute.event_key_id, 'x-timestamp': timestamp, 'x-signature-version': '2',
+        'x-signature': createHmac('sha256', secret)
+          .update(Buffer.concat([Buffer.from(`${prefix}${timestamp}.${sentWebhook.id}.`), raw])).digest('hex'),
+      }, body: raw });
+      return { response, value: await response.json() };
+    };
+    const rawWebhook = Buffer.from(sentWebhook.body);
+    const replayWebhook = await webhook(rawWebhook);
+    assert.equal(replayWebhook.response.status, 202, JSON.stringify(replayWebhook.value));
+    assert.deepEqual(replayWebhook.value, { received: true });
+    const conflictingWebhook = await webhook(Buffer.from(JSON.stringify({ ...envelope,
+      data: { ...envelope.data, status: 'customer_decided_withdraw' } })));
+    assert.equal(conflictingWebhook.response.status, 409);
+    assert.equal(conflictingWebhook.value.error, 'event_id_conflict');
+    const wrongSignature = await webhook(rawWebhook, 'v2:ap->field.', randomBytes(32));
+    assert.equal(wrongSignature.response.status, 401);
+    assert.equal(wrongSignature.value.error, 'invalid_event_signature');
+    const reflectedSignature = await webhook(rawWebhook, 'v2:field->ap.');
+    assert.equal(reflectedSignature.response.status, 401);
+    assert.equal(reflectedSignature.value.error, 'invalid_event_signature');
+    const receivedWebhook = await fieldPool.query(`select state,event_type,data_status,body_hash
+      from field.ap_webhook_inbox where source_event_id = $1`, [sentWebhook.id]);
+    assert.equal(receivedWebhook.rows.length, 1);
+    assert.deepEqual(receivedWebhook.rows[0], { state: 'recorded',
+      event_type: 'agent.action.delivery_updated', data_status: 'customer_decided_accept',
+      body_hash: createHash('sha256').update(rawWebhook).digest('hex') });
     const apStoredBefore = await apPool.query('select refresh_token_cipher from ap.field_connections where id = $1',
       [connections.value.connections[0].id]);
     await apPool.query("update ap.field_connections set access_expires_at = now() - interval '1 second' where id = $1",

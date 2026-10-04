@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { assertAccountDeletionServing } from './account-deletion-journal.js';
 import { lifecycleJournalFromEnvironment } from './oauth-lifecycle-journal.js';
 import { finalizeApRouteKeyRequestsOnce } from './ap-route-key-lifecycle.js';
 import { assertProductionProfile } from './production-profile.js';
@@ -12,6 +13,7 @@ try{
   if(journal)await journal.initialize(pool);
   process.stdout.write(`Field route-key worker ready (${journal?'local_reconciliation':'blocked_integration'})\n`);
   while(!stopping){
+    await assertAccountDeletionServing(pool);
     try{if(journal)await finalizeApRouteKeyRequestsOnce(pool,journal);}
     catch{process.stderr.write('Field route-key reconciliation failed; keys remain protected by the durable proof\n');}
     if(!stopping)await new Promise<void>(resolve=>{wake=resolve;timer=setTimeout(resolve,2000);});

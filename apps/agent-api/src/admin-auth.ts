@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { BusinessRuntime } from './business.js';
 
 export type AdminActor = { userId: string; role: 'operator' | 'auditor' };
+export const ADMIN_MFA_MAX_AGE_HOURS=8;
 
 // AP 관리자 공통 게이트: 세션 → 플랫폼 관리자 멤버십 → (mock 외) 2단계 인증으로 시작한 현재 세션.
 // better-auth twoFactor 플러그인은 2FA 사용자의 로그인 세션을 TOTP 검증 뒤에만 만든다.
@@ -21,7 +22,8 @@ export async function requireAdmin(request: FastifyRequest, reply: FastifyReply,
   const mfa = session && session.userId === userId ? (await runtime.pool.query<{ enabled: boolean | null; verified: boolean }>(
     `select u."twoFactorEnabled" as enabled, s."twoFactorVerified" as verified
        from "session" s join "user" u on u.id = s."userId"
-      where s.id = $1 and s."userId" = $2 and s."expiresAt" > now()`, [session.id, userId])).rows[0] : undefined;
+      where s.id = $1 and s."userId" = $2 and s."expiresAt" > now()
+        and s."createdAt"<=now() and s."createdAt">now()-make_interval(hours=>$3)`, [session.id, userId,ADMIN_MFA_MAX_AGE_HOURS])).rows[0] : undefined;
   if (mfa?.enabled !== true || mfa.verified !== true) { reply.code(403).send({ error: 'mfa_required' }); return null; }
   return { userId, role };
 }

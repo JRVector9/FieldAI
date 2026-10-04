@@ -9,6 +9,8 @@ test("AP deletion_scheduled refusals (403 access gate or 409 start refusal) map 
   assert.match(DELETION_SCHEDULED_OWNER_MESSAGE, /삭제 예정입니다/);
   assert.match(DELETION_SCHEDULED_OWNER_MESSAGE, /새 체험·결제·연결을 시작할 수 없습니다/);
   assert.match(DELETION_SCHEDULED_OWNER_MESSAGE, /계정·조직 삭제 화면/);
+  assert.match(DELETION_SCHEDULED_OWNER_MESSAGE, /AI·사업 정보 승인/);
+  assert.match(DELETION_SCHEDULED_OWNER_MESSAGE, /홍보/);
   assert.equal(isDeletionScheduledError(403, { error: "deletion_scheduled", accessMode: "cleanup_only" }), true);
   assert.equal(isDeletionScheduledError(409, { error: "deletion_scheduled" }), true);
   assert.equal(isDeletionScheduledError(403, { error: "trial_ended" }), false);

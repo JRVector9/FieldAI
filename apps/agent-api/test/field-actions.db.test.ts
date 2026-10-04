@@ -7,7 +7,15 @@ import { fromNodeHeaders } from 'better-auth/node';
 import { Pool } from 'pg';
 import sharp from 'sharp';
 import { agentRevocationJournalFromEnvironment } from '../src/revocation-journal.js';
-import { createAgentApp } from '../src/app.js';
+import { createAgentApp as createUnobservedApp } from '../src/app.js';
+import { observeContractResponses } from '../../../tools/test/integrator-contract.mjs';
+
+// QA158: compare every emitted public success response with the pinned OpenAPI contract.
+const createAgentApp: typeof createUnobservedApp = (...args) => {
+  const app = createUnobservedApp(...args);
+  observeContractResponses(app, 'agent');
+  return app;
+};
 import { processFieldEventInboxOnce } from '../src/field-event-inbox.js';
 import { acceptsV1FieldSignature } from '../src/field-signature.js';
 

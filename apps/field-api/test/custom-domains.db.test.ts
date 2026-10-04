@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
+import { mkdir,mkdtemp,rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { after, before, test } from 'node:test';
 import { createFieldApp } from '../src/app.js';
@@ -31,6 +33,12 @@ async function fixture(withAp=false) {
   assert.ok(routes, 'custom domain routes are not implemented');
   assert.ok(execution, 'custom domain worker execution is not implemented');
   const source = new URL(databaseUrl), name = `fieldai_field_test_${randomUUID().replaceAll('-', '')}`;
+  // Each domain fixture has its own database and deletion-proof binding.
+  // A signed decision from an earlier fixture is not an empty journal for this DB.
+  const journalRoot=await mkdtemp(resolve(tmpdir(),'field-domain-deletion-proof-'));
+  await mkdir(resolve(journalRoot,'account-deletion'),{mode:0o700});
+  process.env.FIELD_RETENTION_JOURNAL_DIRECTORY=journalRoot;
+  process.env.FIELD_RETENTION_JOURNAL_SECRET='synthetic-field-domain-deletion-proof-secret';
   await admin.query(`create database "${name}"`); databases.add(name);
   source.pathname = `/${name}`;
   const migrated=spawnSync(process.execPath,['tools/run-migrations.mjs','field'],{cwd:resolve('../..'),env:{...process.env,FIELD_DATABASE_URL:source.toString()},stdio:'inherit'});
@@ -76,7 +84,7 @@ async function fixture(withAp=false) {
     due:()=>pool.query('update field.site_domains set next_check_at=now()'),
     as:(value:string|null)=>{actor=value;}, dns:(a:boolean,b:boolean)=>{ownership=a;routing=b;}, mode:(value:typeof providerMode)=>{providerMode=value;},removeMode:(value:typeof removeMode)=>{removeMode=value;},
     hold:()=>{hold=new Promise<void>(r=>{release=r;});},release:()=>{release?.();hold=undefined;},
-    close:async()=>{release?.();await app.close();await pool.end();await admin.query(`drop database "${name}"`);databases.delete(name);},};
+    close:async()=>{release?.();await app.close();await pool.end();await admin.query(`drop database "${name}"`);databases.delete(name);await rm(journalRoot,{recursive:true,force:true});},};
 }
 
 test('Field domain registration requires owner and exact CSRF origin; UUID retry does not transfer a hostname',async()=>{

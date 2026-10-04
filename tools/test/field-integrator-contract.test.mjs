@@ -1,8 +1,27 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { createContractVerifier, assertSourceRoutes } from './integrator-contract.mjs';
 
 const document = JSON.parse(readFileSync(new URL('../../contracts/field-integrator-v1.openapi.json', import.meta.url), 'utf8'));
+
+test('QA158 Field schemas reject forged webhook receipts and invalid decision states', () => {
+  const verifier = createContractVerifier('field');
+  assert.throws(() => verifier.assertResponse('/integrations/v1/webhooks/agent', 'post', 202,
+    { received: 'true' }), /boolean/);
+  const uuid = '00000000-0000-4000-8000-000000000001';
+  const decision = { decisionId: uuid, externalRequestId: uuid, reservationId: uuid,
+    decision: 'accept', proposalRevision: 1, state: 'customer_accepted', revision: 2, retryable: false };
+  verifier.assertResponse('/integrations/v1/external-requests/{id}/customer-decisions', 'post', 201, decision);
+  assert.throws(() => verifier.assertResponse('/integrations/v1/external-requests/{id}/customer-decisions', 'post', 201,
+    { ...decision, state: 'confirmed' }), /allowed values/);
+  assert.throws(() => verifier.assertResponse('/integrations/v1/external-requests/{id}/customer-decisions', 'post', 201,
+    { ...decision, retryable: true }), /constant/);
+});
+
+test('QA158 Field route methods and paths match actual source registrations', () => {
+  assertSourceRoutes('field');
+});
 
 test('Field public integrator preview declares implemented bearer reads and explicit binding', () => {
   assert.equal(document.openapi, '3.1.0');

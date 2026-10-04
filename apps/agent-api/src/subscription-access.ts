@@ -4,9 +4,7 @@ import { periodAt } from './billing-period.js';
 export async function subscriptionAccess(db:Pool|PoolClient,organizationId:string,at?:Date) {
   const clock=(await db.query<{now:Date}>('select coalesce($1::timestamptz,now()) as now',[at??null])).rows[0]!.now;
   // 조직 삭제 예약·완료 뒤에는 새 업무를 막는다. 기존 업무 열람·처리·내보내기는 cleanup_only 규칙대로 유지한다.
-  // 이전 스키마를 재현하는 마이그레이션 검사(count 지정)에서는 표가 아직 없으므로 존재를 먼저 확인한다(트랜잭션 중단 방지).
-  const deletionTable=(await db.query<{present:boolean}>("select to_regclass('ap.organization_deletion_requests') is not null as present")).rows[0]!.present;
-  if(deletionTable&&(await db.query("select 1 from ap.organization_deletion_requests where organization_id=$1 and status in ('scheduled','executed') limit 1",[organizationId])).rowCount)
+  if((await db.query("select 1 from ap.organization_deletion_requests where organization_id=$1 and status in ('scheduled','executed') limit 1",[organizationId])).rowCount)
     return {mode:'cleanup_only' as const,canStartNew:false,endsAt:null,graceEndsAt:null,reason:'deletion_scheduled'};
   const mode=['mock','sandbox'].includes(process.env.AP_PROFILE??'')?'test':'live';
   const paid=(await db.query(`select p.id,p.subscription_id,p.billing_period,p.starts_at,p.ends_at,

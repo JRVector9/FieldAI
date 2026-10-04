@@ -4,7 +4,15 @@ import { resolve } from 'node:path';
 import { after, test } from 'node:test';
 import { fromNodeHeaders } from 'better-auth/node';
 import { Pool } from 'pg';
-import { createFieldApp } from '../src/app.js';
+import { createFieldApp as createUnobservedApp } from '../src/app.js';
+import { observeContractResponses } from '../../../tools/test/integrator-contract.mjs';
+
+// QA158: compare every emitted public success response with the pinned OpenAPI contract.
+const createFieldApp: typeof createUnobservedApp = (...args) => {
+  const app = createUnobservedApp(...args);
+  observeContractResponses(app, 'field');
+  return app;
+};
 import { deliverApConnectionRevokeOnce } from '../src/ap-connection-revoke.js';
 import { deliverFactsChangeOnce, reconcileFactsChangeDeliveries } from '../src/facts-change-delivery.js';
 
@@ -20,6 +28,87 @@ const apAgentId = randomUUID();
 const apGrantId = randomUUID();
 const apDeploymentId = randomUUID();
 const apConversationId = randomUUID();
+
+// A-10 / QA129, QA131, QA150, QA153: 삭제 예약은 callback과 직렬화되며 이미 끝난 callback 재생도 새 연결 성공으로 안내하지 않는다.
+test('Field AP callback rejects deletion scheduling before token exchange and completed replay', async () => {
+  const owner = randomUUID(), organizationId = randomUUID();
+  let tokenCalls = 0;
+  const scopes = ['ap.agent.read', 'ap.conversations.read', 'ap.conversations.reply', 'ap.sources.refresh'];
+  const app = createFieldApp(async () => undefined, undefined, base, { pool, resolveUserId: async () => owner,
+    apConnector: { issuer, clientId: 'callback-deletion-client', clientSecret: 'synthetic-secret', tokenKey: randomBytes(32),
+      redirectUri: `${base}/v1/connections/ap/callback`, webOrigin: 'http://localhost:3002', reverseClientId: '',
+      fetcher: async input => {
+        const url = String(input);
+        if (url.endsWith('/oauth2/token')) {
+          tokenCalls++;
+          return Response.json({ access_token: 'synthetic-access', refresh_token: 'synthetic-refresh', token_type: 'Bearer',
+            expires_in: 600, scope: ['offline_access', ...scopes].join(' ') });
+        }
+        if (url.endsWith('/me')) return Response.json({ grantId: apGrantId, organizationId: apOrganizationId,
+          agentId: apAgentId, deploymentIds: [apDeploymentId], scopes, state: 'active' });
+        if (url.endsWith('/agent')) return Response.json({ organizationId: apOrganizationId, agentId: apAgentId, name: 'Synthetic', revision: 1 });
+        throw new Error('unexpected callback HTTP request');
+      } } });
+  const start = async () => {
+    const response = await app.inject({ method: 'POST', url: '/v1/connections/ap/start', payload: { organizationId } });
+    assert.equal(response.statusCode, 201, response.body);
+    return new URL(response.json().authorizationUrl).searchParams.get('state')!;
+  };
+  const callback = (state: string) => app.inject({ url: `/v1/connections/ap/callback?${new URLSearchParams({ state, code: 'synthetic-code', iss: issuer })}` });
+  const blocked = (response: { statusCode: number; body: string; json(): Record<string, unknown> }) => {
+    assert.equal(response.statusCode, 409, response.body);
+    assert.equal(response.json().error, 'deletion_scheduled');
+    assert.equal(response.json().remoteGrantRevocationRequired, true);
+    assert.match(String(response.json().message), /AP.*회수/);
+  };
+  try {
+    await pool.query('insert into "user"(id,name,email,"emailVerified") values ($1,$1,$2,true)', [owner, `${owner}@example.invalid`]);
+    await pool.query('insert into field.organizations(id,owner_user_id,name) values ($1,$2,$3)', [organizationId, owner, 'Callback deletion org']);
+    await pool.query("insert into field.memberships(organization_id,user_id,role) values ($1,$2,'owner')", [organizationId, owner]);
+    const state = await start(), deletionId = randomUUID();
+    await pool.query(`insert into field.organization_deletion_requests(id,organization_id,requested_by,confirmation,status,scheduled_at,next_attempt_at)
+      values ($1,$2,$3,'{}','scheduled',now()+interval '14 days',now()+interval '14 days')`, [deletionId, organizationId, owner]);
+    blocked(await callback(state));
+    assert.equal(tokenCalls, 0);
+    assert.equal((await pool.query('select 1 from field.ap_connections where organization_id=$1', [organizationId])).rowCount, 0);
+    await pool.query("update field.organization_deletion_requests set status='canceled',canceled_at=now(),canceled_by=$2 where id=$1", [deletionId, owner]);
+    const completed = await callback(state);
+    assert.equal(completed.statusCode, 303, completed.body);
+    assert.equal(tokenCalls, 1);
+    assert.equal((await callback(state)).headers.location, completed.headers.location);
+    assert.equal(tokenCalls, 1);
+    const connectionId = new URL(completed.headers.location!).searchParams.get('connectionId');
+    await pool.query("update field.ap_connections set status='revoked' where id=$1", [connectionId]);
+    const secondState = await start();
+    // 조직 FOR UPDATE를 먼저 잡은 삭제 예약이 callback의 FOR SHARE를 기다리게 한다.
+    const lock = await pool.connect();
+    let raced: ReturnType<typeof callback> | undefined;
+    try {
+      await lock.query('begin');
+      await lock.query('select id from field.organizations where id=$1 for update', [organizationId]);
+      await lock.query(`insert into field.organization_deletion_requests(id,organization_id,requested_by,confirmation,status,scheduled_at,next_attempt_at)
+        values ($1,$2,$3,'{}','scheduled',now()+interval '14 days',now()+interval '14 days')`, [randomUUID(), organizationId, owner]);
+      raced = callback(secondState);
+      let waiting = false;
+      for (let index = 0; index < 100; index++) {
+        waiting = Boolean((await pool.query(`select 1 from pg_stat_activity where datname=current_database()
+          and wait_event_type='Lock' and query like 'select deleted_at is not null as deleted from field.organizations%'`)).rowCount);
+        if (waiting) break;
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      assert.equal(waiting, true, 'callback must wait on the organization deletion lock');
+      assert.equal(tokenCalls, 1, 'waiting callback does not exchange the code');
+      await lock.query('commit');
+      blocked(await raced);
+    } finally {
+      await lock.query('rollback'); lock.release();
+      if (raced) await raced;
+    }
+    blocked(await callback(state));
+    assert.equal(tokenCalls, 1, 'completed replay does not exchange the code');
+    assert.equal((await pool.query("select 1 from field.ap_connections where organization_id=$1 and status<>'revoked'", [organizationId])).rowCount, 0);
+  } finally { await app.close(); }
+});
 
 async function actor() {
   const email = `ap-connector-${randomUUID()}@example.invalid`;
@@ -50,6 +139,9 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
   let bindEventKeyId = '';
   let factsChangeCalls = 0;
   let factsChangeEventId = '';
+  // 발신 함수는 fetch 예외를 'retry'로 삼키므로, stub 안의 검증 실패를 따로 기록해 원인을 드러낸다.
+  let factsStubError: unknown;
+  let revokeStubError: unknown;
   let sentRevocationId = '';
   let apRevision = 1;
   // FIELD_EVENT_SIGNATURE_SEND_VERSION으로 고른 발신 서명 버전. '1'이면 헤더·접두사가 없어야 한다.
@@ -64,23 +156,31 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
     if (url === 'http://127.0.0.1:4311/integrations/v1/field-events'
       && init?.method === 'POST') {
       factsChangeCalls++;
-      const headers = init.headers as Record<string, string>;
-      const raw = Buffer.from(init.body as Buffer);
-      const event = JSON.parse(raw.toString()) as Record<string, unknown>;
-      assert.equal(event.event_type, 'field.facts.changed');
-      assert.equal(event.source_product, 'field');
-      assert.equal(event.aggregate_type, 'facts');
-      assert.equal(event.connection_id, refreshConnectionId);
-      assert.equal(headers['x-event-id'], event.event_id);
-      assert.equal(headers['x-key-id'], bindEventKeyId);
-      // Field 사건 발신은 기본 v2(`v2:field->ap.` 방향 접두사)로, 전환 설정 v1이면 헤더·접두사 없이 서명한다.
-      assert.equal(headers['x-signature-version'], expectedSendVersion === '2' ? '2' : undefined);
-      assert.equal(headers['x-signature'], createHmac('sha256', Buffer.from(revokeSecret, 'base64url'))
-        .update(Buffer.concat([Buffer.from(`${expectedSendVersion === '2' ? 'v2:field->ap.' : ''}${headers['x-timestamp']}.${event.event_id}.`), raw]))
-        .digest('hex'));
-      assert.doesNotMatch(raw.toString(), /010-|priceAmount|introduction|server-only-secret/);
-      if (factsChangeEventId) assert.equal(event.event_id, factsChangeEventId);
-      else factsChangeEventId = String(event.event_id);
+      try {
+        const headers = init.headers as Record<string, string>;
+        const raw = Buffer.from(init.body as Buffer);
+        const event = JSON.parse(raw.toString()) as Record<string, unknown>;
+        // 사건 원문은 아래 필드만 가진다(전화·가격·소개·비밀값이 들어갈 자리가 없다).
+        assert.deepEqual(Object.keys(event).sort(), ['aggregate_id', 'aggregate_type', 'aggregate_version',
+          'connection_id', 'correlation_id', 'data', 'event_id', 'event_type', 'occurred_at',
+          'route_generation', 'source_product', 'spec_version']);
+        assert.deepEqual(Object.keys(event.data as object).sort(), ['resource_id', 'source_revision', 'status']);
+        assert.equal(event.event_type, 'field.facts.changed');
+        assert.equal(event.source_product, 'field');
+        assert.equal(event.aggregate_type, 'facts');
+        assert.equal(event.connection_id, refreshConnectionId);
+        assert.equal(headers['x-event-id'], event.event_id);
+        assert.equal(headers['x-key-id'], bindEventKeyId);
+        // Field 사건 발신은 기본 v2(`v2:field->ap.` 방향 접두사)로, 전환 설정 v1이면 헤더·접두사 없이 서명한다.
+        assert.equal(headers['x-signature-version'], expectedSendVersion === '2' ? '2' : undefined);
+        assert.equal(headers['x-signature'], createHmac('sha256', Buffer.from(revokeSecret, 'base64url'))
+          .update(Buffer.concat([Buffer.from(`${expectedSendVersion === '2' ? 'v2:field->ap.' : ''}${headers['x-timestamp']}.${event.event_id}.`), raw]))
+          .digest('hex'));
+        // 전화번호는 숫자 구간까지 맞춘다. 단순 `010-`은 무작위 UUID 구간 끝(예: `...a010-`)과 약 0.3% 확률로 겹쳐 오탐한다.
+        assert.doesNotMatch(raw.toString(), /\b010-\d{3,4}-\d{4}\b|priceAmount|introduction|server-only-secret/);
+        if (factsChangeEventId) assert.equal(event.event_id, factsChangeEventId);
+        else factsChangeEventId = String(event.event_id);
+      } catch (error) { factsStubError ??= error; throw error; }
       if (factsChangeCalls === 1) throw new Error('AP facts event receipt lost');
       return Response.json({ received: true }, { status: 202 });
     }
@@ -89,14 +189,16 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
       const headers = init.headers as Record<string, string>;
       const revocationId = headers['x-revocation-id'];
       const connectionId = revokeTarget.split('/').at(-2);
-      assert.ok(connectionId && revocationId);
-      // Field 해제 발신도 같은 연결 키를 쓰므로 기본 v2 방향 접두사로, 전환 설정 v1이면 헤더·접두사 없이 서명한다.
-      assert.equal(headers['x-signature-version'], expectedSendVersion === '2' ? '2' : undefined);
-      assert.equal(headers['x-signature'], createHmac('sha256', Buffer.from(revokeSecret, 'base64url'))
-        .update(`${expectedSendVersion === '2' ? 'v2:field->ap.' : ''}${headers['x-timestamp']}.${revocationId}.${connectionId}.revoke`).digest('hex'));
-      assert.equal(headers['x-key-id'], bindEventKeyId);
-      assert.equal(sentRevocationId === '' || sentRevocationId === revocationId, true);
-      sentRevocationId = revocationId;
+      try {
+        assert.ok(connectionId && revocationId);
+        // Field 해제 발신도 같은 연결 키를 쓰므로 기본 v2 방향 접두사로, 전환 설정 v1이면 헤더·접두사 없이 서명한다.
+        assert.equal(headers['x-signature-version'], expectedSendVersion === '2' ? '2' : undefined);
+        assert.equal(headers['x-signature'], createHmac('sha256', Buffer.from(revokeSecret, 'base64url'))
+          .update(`${expectedSendVersion === '2' ? 'v2:field->ap.' : ''}${headers['x-timestamp']}.${revocationId}.${connectionId}.revoke`).digest('hex'));
+        assert.equal(headers['x-key-id'], bindEventKeyId);
+        assert.equal(sentRevocationId === '' || sentRevocationId === revocationId, true);
+        sentRevocationId = revocationId;
+      } catch (error) { revokeStubError ??= error; throw error; }
       if (remoteRevokeDown) throw new Error('AP unavailable');
       return Response.json({ connectionId, status: 'revoked', revocationId });
     }
@@ -327,12 +429,16 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
     // 첫 시도는 전환 설정 v1로 보낸다(재시도는 기본 v2). 같은 사건이 버전만 바꿔 다시 나간다.
     process.env.FIELD_EVENT_SIGNATURE_SEND_VERSION = '1'; expectedSendVersion = '1';
     try {
-      assert.equal(await deliverFactsChangeOnce(pool, runtime.apConnector!), 'retry');
+      const firstFacts = await deliverFactsChangeOnce(pool, runtime.apConnector!);
+      assert.ifError(factsStubError);
+      assert.equal(firstFacts, 'retry');
     } finally { delete process.env.FIELD_EVENT_SIGNATURE_SEND_VERSION; expectedSendVersion = '2'; }
     assert.equal(factsChangeCalls, 1);
     await pool.query(`update field.facts_change_deliveries set next_attempt_at = now()
       where connection_id = $1`, [connectionId]);
-    assert.equal(await deliverFactsChangeOnce(pool, runtime.apConnector!), 'acked');
+    const retriedFacts = await deliverFactsChangeOnce(pool, runtime.apConnector!);
+    assert.ifError(factsStubError);
+    assert.equal(retriedFacts, 'acked');
     assert.equal(factsChangeCalls, 2);
     assert.equal((await pool.query<{ state: string }>(
       'select state from field.facts_change_deliveries where connection_id = $1',
@@ -499,7 +605,9 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
     // 해제 첫 시도는 전환 설정 v1, 재시도는 기본 v2로 서명한다.
     process.env.FIELD_EVENT_SIGNATURE_SEND_VERSION = '1'; expectedSendVersion = '1';
     try {
-      assert.equal(await deliverApConnectionRevokeOnce(pool, runtime.apConnector), 'retry');
+      const firstRevoke = await deliverApConnectionRevokeOnce(pool, runtime.apConnector);
+      assert.ifError(revokeStubError);
+      assert.equal(firstRevoke, 'retry');
     } finally { delete process.env.FIELD_EVENT_SIGNATURE_SEND_VERSION; expectedSendVersion = '2'; }
     assert.equal(revokeCalls, 1);
     assert.equal((await app.inject({ url: '/v1/connections/ap',
@@ -508,7 +616,9 @@ test('Field BFF stores an AP owner grant after state, issuer, and scope validati
     await pool.query(`update field.ap_connection_revocations set next_attempt_at = now()
       where connection_id = $1`, [connectionId]);
     remoteRevokeDown = false;
-    assert.equal(await deliverApConnectionRevokeOnce(pool, runtime.apConnector), 'acked');
+    const retriedRevoke = await deliverApConnectionRevokeOnce(pool, runtime.apConnector);
+    assert.ifError(revokeStubError);
+    assert.equal(retriedRevoke, 'acked');
     assert.equal(revokeCalls, 2);
     assert.equal(sentRevocationId, revokedConnection.json().revocationId);
     assert.equal(await deliverApConnectionRevokeOnce(pool, runtime.apConnector), 'empty');

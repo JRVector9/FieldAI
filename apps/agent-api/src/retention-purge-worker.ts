@@ -10,6 +10,7 @@ import { purgeAccountDeletionPasswordWindows, runOrganizationDeletionOnce } from
 import { purgeBillingWebhookRecords } from './billing-webhook.js';
 import { purgeAckedFieldAgentEvents } from './field-webhook-sender.js';
 import { agentRevocationJournalFromEnvironment } from './revocation-journal.js';
+import { accountDeletionJournalFromEnvironment, assertAccountDeletionServing } from './account-deletion-journal.js';
 
 assertProductionProfile();
 const databaseUrl = process.env.AP_DATABASE_URL;
@@ -30,6 +31,7 @@ if (journal && directory) {
 }
 // 조직 삭제 실행이 외부 통합 권한을 회수할 때 쓰는 회수 저널(API와 같은 설정). 없으면 회수가 필요한 삭제만 보류된다
 const revocationJournal = agentRevocationJournalFromEnvironment();
+const accountDeletionJournal = accountDeletionJournalFromEnvironment();
 // media 의존 단계 미설정 안내는 이 간격에 한 번만 남긴다
 const BLOCKED_LOG_INTERVAL_MS = 60 * 60_000;
 let blockedLoggedAt = 0;
@@ -40,11 +42,13 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => co
 try {
   await pool.query('select 1 from ap.work_retention_jobs limit 1');
   if (journal) await verifyAgentRetentionJournal(pool, journal);
+  await assertAccountDeletionServing(pool,accountDeletionJournal);
   process.stdout.write(`agent retention worker ready (media retention: ${journal ? 'configured' : 'blocked_integration'})\n`);
   do {
     try {
       // 유예가 끝난 조직 삭제 요청을 같은 주기에 하나씩 실행한다(문의·예약 원본은 아래 보존 작업이 정리).
-      const deletion = await runOrganizationDeletionOnce({ pool, revocationJournal });
+      await assertAccountDeletionServing(pool,accountDeletionJournal);
+      const deletion = await runOrganizationDeletionOnce({ pool, revocationJournal,accountDeletionJournal });
       if (deletion !== 'empty') process.stdout.write(`agent organization deletion: ${deletion}\n`);
       // 토스 웹훅 수신 기록(30일)·만료된 IP 창과 계정 삭제 비밀번호 시도 창을 같은 주기에 정리한다.
       const webhook = await purgeBillingWebhookRecords(pool);

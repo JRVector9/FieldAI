@@ -1,8 +1,9 @@
-import { reapplyAgentRevocationJournal } from './revocation-restore.js';
+import { applyAgentRevocationEntries, reapplyAgentRevocationJournal } from './revocation-restore.js';
 import { recordAgentRevocation, type AgentRevocationJournal } from './revocation-journal.js';
 import { familyIntent, tokenIntent } from './oauth-lifecycle-provider.js';
 import type { Pool, PoolClient } from 'pg';
 import { fingerprint, persistLifecycle, verifyLifecycle, type LifecycleEntry, type LifecycleJournal } from './oauth-lifecycle-journal.js';
+import { liveBaselineSnapshot, liveBaselineTables } from './oauth-live-baseline.js';
 
 export async function applyLifecycleEntry(db:PoolClient,entry:LifecycleEntry) {
   if(entry.kind==='route-key') {
@@ -29,11 +30,21 @@ export async function reapplyLifecycleJournal(pool:Pool,journal:LifecycleJournal
   }catch(error){await db.query('rollback');throw error;}finally{db.release();}
 }
 
-// Local CLI only: callers must stop issuer/connector writers before collecting a legacy baseline.
-export async function baselineLifecycle(pool:Pool,journal:LifecycleJournal,native:AgentRevocationJournal) {
+// Callers must stop every issuer/connector writer before collecting a baseline.
+export async function baselineLifecycle(pool:Pool,journal:LifecycleJournal,native:AgentRevocationJournal,
+  confirmation?: { databaseFingerprint: string; planDigest: string }) {
   const db=await pool.connect();try{
-    await db.query('begin');const entries=await verifyLifecycle(db,journal);const nativeEntries=await native.read();
-    await db.query('lock table "oauthAccessToken","oauthRefreshToken",ap.oauth_selections,ap.field_connections in share row exclusive mode');
+    await db.query('begin');
+    if (confirmation) {
+      await db.query("set local lock_timeout='1s'"); await db.query("set local statement_timeout='15s'");
+      if (!(await db.query("select pg_try_advisory_xact_lock(hashtext('ap-live-oauth-baseline')) as locked")).rows[0].locked)
+        throw new Error('another live baseline is already running');
+      await db.query(`lock table ${liveBaselineTables.join(',')} in share row exclusive mode`);
+      const plan = await liveBaselineSnapshot(db, journal, native);
+      if (plan.databaseFingerprint !== confirmation.databaseFingerprint) throw new Error('database confirmation mismatch');
+      if (plan.planDigest !== confirmation.planDigest) throw new Error('baseline plan changed; run dry-run again');
+    } else await db.query('lock table "oauthAccessToken","oauthRefreshToken",ap.oauth_selections,ap.field_connections in share row exclusive mode');
+    const entries=await verifyLifecycle(db,journal);const nativeEntries=await native.read();
     for(const entry of entries){await persistLifecycle(db,entry);await applyLifecycleEntry(db,entry);}
     const selections=await db.query('select id,organization_id from ap.oauth_selections where revoked_at is not null');
     const connections=await db.query(`select c.id,c.ap_organization_id as organization_id,c.ap_grant_id as selection_id,
@@ -60,8 +71,9 @@ export async function baselineLifecycle(pool:Pool,journal:LifecycleJournal,nativ
       entries.push(baseline);
     }
     await persistLifecycle(db,baseline);await applyLifecycleEntry(db,baseline);
+    if (confirmation) await applyAgentRevocationEntries(db, await native.read(true));
     await db.query('commit');
-    await reapplyAgentRevocationJournal(pool,native,await native.checkpoint());
+    if (!confirmation) await reapplyAgentRevocationJournal(pool,native,await native.checkpoint());
     return {selections:selections.rowCount,connections:connections.rowCount,entries:entries.length};
   }catch(error){await db.query('rollback');throw error;}finally{db.release();}
 }

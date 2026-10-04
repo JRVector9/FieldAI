@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Brand } from "@fieldai/ui";
 import { DistributionMetricsPanel } from "./distribution-metrics-panel";
+import { DELETION_SCHEDULED_OWNER_MESSAGE, isDeletionScheduledError } from "./deletion-scheduled-copy";
 import "./agent-campaigns.css";
 
 type Card = { businessName: string; serviceName: string; description: string; advertisementLabel: "광고"; ctaLabel: "상담하기" };
@@ -87,7 +88,8 @@ export function AgentCampaigns() {
       if (created.status === 201) {
         await load((created.data as { id: string }).id);
         setNotice("카드 초안을 만들었습니다. 고객에게는 아직 공개되지 않습니다.");
-      } else setNotice(created.status === 409 ? "승인 정보가 변경되었습니다. 목록을 새로고침해 주세요." : `카드를 만들지 못했습니다 (${created.status}).`);
+      } else setNotice(isDeletionScheduledError(created.status, created.data) ? DELETION_SCHEDULED_OWNER_MESSAGE
+        : created.status === 409 ? "승인 정보가 변경되었습니다. 목록을 새로고침해 주세요." : `카드를 만들지 못했습니다 (${created.status}).`);
     } catch { setNotice("카드 생성 요청의 응답을 받지 못했습니다. 목록을 확인해 주세요."); }
     finally { setBusy(false); }
   }
@@ -122,7 +124,8 @@ export function AgentCampaigns() {
         pendingApproval.current = null;
         await load(detail.id);
         setNotice(result.status === 200 ? "앞서 승인한 카드 버전을 확인했습니다." : "사업자가 승인한 카드 버전을 공개했습니다. 매체 배치는 별도 승인이 필요합니다.");
-      } else setNotice(result.status === 409 ? "초안 버전이나 승인 정보가 변경되어 공개하지 못했습니다." : `공개하지 못했습니다 (${result.status}).`);
+      } else setNotice(isDeletionScheduledError(result.status, result.data) ? DELETION_SCHEDULED_OWNER_MESSAGE
+        : result.status === 409 ? "초안 버전이나 승인 정보가 변경되어 공개하지 못했습니다." : `공개하지 못했습니다 (${result.status}).`);
     } catch { setNotice("공개 요청의 응답을 받지 못했습니다. 같은 버튼으로 재시도하면 기존 승인 결과를 확인합니다."); }
     finally { setBusy(false); }
   }
@@ -133,7 +136,8 @@ export function AgentCampaigns() {
     try {
       const result = await api(`/v1/campaigns/${detail.id}/${action}`, "POST", { expectedReleaseId: detail.currentReleaseId });
       if (result.status === 200) { await load(detail.id); setNotice(action === "pause" ? "카드 공개를 중지했습니다." : "현재 승인 버전을 다시 공개했습니다."); }
-      else setNotice(result.status === 409 ? "카드 버전이나 승인 정보가 바뀌었습니다. 다시 확인해 주세요." : `상태를 변경하지 못했습니다 (${result.status}).`);
+      else setNotice(isDeletionScheduledError(result.status, result.data) ? DELETION_SCHEDULED_OWNER_MESSAGE
+        : result.status === 409 ? "카드 버전이나 승인 정보가 바뀌었습니다. 다시 확인해 주세요." : `상태를 변경하지 못했습니다 (${result.status}).`);
     } catch { setNotice("상태 변경 요청의 응답을 받지 못했습니다. 현재 상태를 새로고침해 주세요."); }
     finally { setBusy(false); }
   }
@@ -153,7 +157,8 @@ export function AgentCampaigns() {
         pendingPlacement.current = null;
         await load(detail.id);
         setNotice(result.status === 201 ? "배치를 요청했습니다. 매체가 이 카드 버전을 확인해야 노출됩니다." : "이미 접수된 배치를 확인했습니다.");
-      } else setNotice(result.status === 409 ? "카드·위치 상태가 변경됐습니다. 새로고침 후 다시 확인해 주세요." : `배치를 요청하지 못했습니다 (${result.status}).`);
+      } else setNotice(isDeletionScheduledError(result.status, result.data) ? DELETION_SCHEDULED_OWNER_MESSAGE
+        : result.status === 409 ? "카드·위치 상태가 변경됐습니다. 새로고침 후 다시 확인해 주세요." : `배치를 요청하지 못했습니다 (${result.status}).`);
     } catch { setNotice("배치 요청의 응답을 받지 못했습니다. 같은 위치에서 재시도하면 기존 요청을 확인합니다."); }
     finally { setBusy(false); }
   }

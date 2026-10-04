@@ -477,6 +477,14 @@ export function registerApConnectorRoutes(app: FastifyInstance, runtime: FieldBu
         await db.query('rollback');
         return reply.code(400).send({ error: 'invalid_oauth_state' });
       }
+      // A-10: start 뒤 생성된 삭제 예약도 조직 잠금으로 직렬화한다. 완료 callback 재생 역시 새 연결 안내를 중단한다.
+      // 아직 code를 교환하지 않았으므로 상대 grant는 AP의 연결 권한 화면에서 회수해야 한다.
+      if (await organizationDeletionScheduled(db, attempt.organization_id)) {
+        await db.query('rollback');
+        return reply.header('Cache-Control', 'no-store').code(409).send({ error: 'deletion_scheduled',
+          remoteGrantRevocationRequired: true,
+          message: '삭제 예정 사업장이므로 연결을 진행할 수 없습니다. AP에서 승인한 연결 권한을 확인하고 회수해 주세요.' });
+      }
       if (attempt.status !== 'pending') {
         await db.query('commit');
         const result = attempt.status === 'completed' ? 'pending_field_consent'
