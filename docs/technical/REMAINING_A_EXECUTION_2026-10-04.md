@@ -52,6 +52,12 @@ Coordinator만 TASKS 상단·18 잔여 상태·이 phase 체크·CODEX_HANDOFF·
 
 A18 구체 복원/identity/role/교착/사진/부분복원 결함은 실제PG red→green 후 제한된 재리뷰에서 남은 P1/P2 없음. UPDATE **FOR SHARE NOWAIT**, INSERT FOR SHARE. 상세는19리뷰. A19 native HEIC 실제API Docker2종/Linux arm64/nodeUID1000/network none proof exit0. 초기 실패와 기존 완료 이력은 인계에 보존했다.
 
-기존 main a9fea58 GitHub run37196988683 전체 success는 확인했다. B #12(A04)는 해결돼 열린 결정13건. C01 새 CI 실제 Actions·C02공급사·C03live기동·C04운영/PITR/원장checkpoint 동시rollback/RPO/RTO·C05관측·C06실기기/접근성/최종시안·C07약관/HEVC-LGPL/amd64/실폰HEIC·C08외부보안·C09서명전환은 별도 미완료. 정식 인수160 status=not_run을 보존하며 QA31개 test reference만 연결했다. 원본 main 통합/실행환경 재시작은 하지 않는다.
+기존 main a9fea58 GitHub run37196988683 전체 success는 확인했다. B #12(A04)는 해결돼 열린 결정13건. C01/A01 새 independence 포함 실제 Actions는 run37200484232에서 완료. C02공급사·C03live기동·C04운영/PITR/원장checkpoint 동시rollback/RPO/RTO·C05관측·C06실기기/접근성/최종시안·C07약관/HEVC-LGPL/amd64/실폰HEIC·C08외부보안·C09서명전환은 별도 미완료. 정식 인수160 status=not_run을 보존하며 QA31개 test reference만 연결했다. 원본 main 통합/실행환경 재시작은 하지 않는다.
 
 문서 패키지: build_report.py·check_package.py exit0(46 Task·160 not_run 인수·21 결정·12 경계·schema3). 분할 문서의 상대 링크를 마스터에서 해석할 수 없는 첫 실패는 저장소 경로 표기로 수정했고, 서비스 코드는 바꾸지 않았다. 마스터/HTML과 SHA256SUMS를 함께 갱신한다.
+
+## C01/A01 후속 실제 Actions 완료
+
+[run37200484232](https://github.com/JRVector9/FieldAI/actions/runs/37200484232) (`146f5c4`) 13job 모두 success. 실제 AP/Field independence 각 Chromium1/1·fail/skip0, AP DB191/191·Field DB215/215·UUID91개 제거, unit408pass/선택DB환경skip2, 계약32pass·실제응답43/43, E2E12/11/2·보안410/410·통합장애26/26. 이미지6종·lint/typecheck/API/web build 모두 success.
+
+A절코드를main에통합(확인기준146f5c4)했고기존서버/원장은보존했다. 실제CI21문서와사용자결정/키입력22문서를다음기준으로사용한다.

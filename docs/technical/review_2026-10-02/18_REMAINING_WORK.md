@@ -2,7 +2,7 @@
 
 이 문서는 2026-10-02~03의 검토·수정 7개 커밋(`8e7abd7`→`cbebc38`) 이후 **착수 당시 미완료 작업**을 한곳에 모은 것이다. 출처는 `01_SUMMARY.md` §3·§9~§14, 리뷰 원문 `03`~`17`, 각 수정 에이전트의 "손대지 않은 것" 보고다. 새 작업은 이 문서의 ID로 시작하고, 완료 시 `TASKS.md` 상단과 이 문서의 상태를 같은 커밋에서 갱신한다(AGENTS §6.1).
 
-A-01~A-25 내부 구현·검수 완료. 아래 요구 설명은 착수 원문이고 최신 상태는 마지막 열/coverage/인계를 따른다. 코드 `a5eac8c`, 외부 `a9fea58` 보존 병합 `0507bfc`, 전용 branch `fix/remaining-a-20261004`. 기존 main a9fea58 GitHub run37196988683 전체 success는 확인했다. B #12(A04)는 해결돼 열린 결정13건. C01 새 CI 실제 Actions·C02공급사·C03live기동·C04운영/PITR/원장checkpoint 동시rollback/RPO/RTO·C05관측·C06실기기/접근성/최종시안·C07약관/HEVC-LGPL/amd64/실폰HEIC·C08외부보안·C09서명전환은 별도 미완료. 정식 인수160 status=not_run을 보존하며 QA31개 test reference만 연결했다.
+A-01~A-25 내부 구현·검수 완료. 아래 요구 설명은 착수 원문이고 최신 상태는 마지막 열/coverage/인계를 따른다. 코드 `a5eac8c`, 외부 `a9fea58` 보존 병합 `0507bfc`, 전용 branch `fix/remaining-a-20261004`. 기존 main a9fea58 GitHub run37196988683 전체 success는 확인했다. B #12(A04)는 해결돼 열린 결정13건. C01/A01 새 independence 포함 실제 Actions는 run37200484232에서 완료. C02공급사·C03live기동·C04운영/PITR/원장checkpoint 동시rollback/RPO/RTO·C05관측·C06실기기/접근성/최종시안·C07약관/HEVC-LGPL/amd64/실폰HEIC·C08외부보안·C09서명전환은 별도 미완료. 정식 인수160 status=not_run을 보존하며 QA31개 test reference만 연결했다.
 
 상태 범례: **코드** = 결정 없이 바로 구현 가능 / **결정 후 코드** = 사용자·운영 결정이 먼저 필요 / **외부** = 공급사 계약·실환경·사람의 검수가 필요.
 
@@ -63,7 +63,7 @@ A-01~A-25 내부 구현·검수 완료. 아래 요구 설명은 착수 원문이
 
 | ID | 작업 | 현재 상태 | 필요한 것 |
 |---|---|---|---|
-| C-01 | GitHub Actions 실제 실행 | **[x] 기존 CI:** 첫 `a9fea58` run37196988683 및 최신 main `4ddf93b` [run37198414880](https://github.com/JRVector9/FieldAI/actions/runs/37198414880)의 기존11job 전체 success(API 재확인). 이전 `c135fbb` run37195003617 faults 실패는 외부 fixture 수리 후 해결. **[ ] 새 A절 CI:** 코드 `a5eac8c`/independence matrix는 actionlint만 통과, push/Actions 미실행 | 별도 A절 branch의 새 commit·independence job 전체 Actions 결과 확인 |
+| C-01 | GitHub Actions 실제 실행 | **[x] 신규 CI 완료:** [run37200484232](https://github.com/JRVector9/FieldAI/actions/runs/37200484232) (`146f5c4`) 13job 모두 success. 실제 AP/Field independence 각 Chromium1/1·fail/skip0, AP DB191/191·Field DB215/215·UUID91개 제거, unit408pass/선택DB환경skip2, 계약32pass·실제응답43/43, E2E12/11/2·보안410/410·통합장애26/26. 이미지6종·lint/typecheck/API/web build 모두 success. 기존 a9fea58/4ddf93b의11job 성공도 보존 | 이후 main/branch push의13job 결과 확인; 제품별 외부 공급사·출시 검수 별도 |
 | C-02 | 실 공급사 연결 검증 | 모두 `blocked_integration` | SMTP(`smtps:`), 카카오 앱·Redirect URI, Toss sandbox(인증·청구·환불·웹훅), S3(ListBucket·HeadObject 404), OpenAI 키·`AP_CUSTOMER_DAILY_LIMIT`, 솔라피·web-push, Caddy+ACME DNS-01 와일드카드 |
 | C-03 | live compose 기동 리허설 | `docker compose config`와 임시 PG 기동만 확인 | 실제 서버에서 `compose.live` up, `/health/ready`, worker 상시 실행, 로그·헬스체크 확인 |
 | C-04 | 백업·PITR·복원 리허설 | runbook은 mock 전용 | 운영 PG 백업, 복원 후 lifecycle/revocation/retention 저널 재검증, A-18 |
@@ -88,6 +88,8 @@ A-01~A-25 내부 구현·검수 완료. 아래 요구 설명은 착수 원문이
 
 1. **A-01** 독립성 재실행(회귀 확인이 가장 먼저) → **A-07·A-08·A-09·A-10** 삭제·노출 경계 마감 → **A-06·A-02·A-03** 운영자·사업자 화면 공백 → **A-04·A-05** live 절차 → **A-20·A-21** 검수 확대 → 나머지 A.
 2. B절은 사용자 결정을 모아 한 번에 처리한다(1·2·14는 설계 검토 필요, 나머지는 소규모).
-3. C절은 공급사 키가 들어오는 순서대로 진행하되 C-01은 새 A절 commit/independence job의 실제 Actions 결과를 확인해야 한다.
+3. C절은 공급사 키가 들어오는 순서대로 진행하되 C-01/A-01 신규13job 실제 성공을 확인했다. 이후 C02~09는 공급사·운영 정보가 준비되는 순서로 진행한다.
 
 현재 저장소·C-01/A-01 재확인과 우선순위는 `20_CURRENT_STATUS_AND_NEXT_WORK.md`를 따른다. A절 내부 완료와 main 미통합·신규 CI 미실행을 구분한다.
+
+최신 순차 실행: A절 main 코드 통합 완료(확인기준146f5c4), 실제CI13job검수는21문서, 결정/외부입력은22문서를 따른다. 기존 실행환경을 자동 재시작하거나 키·저널을 바꾸지 않았다.

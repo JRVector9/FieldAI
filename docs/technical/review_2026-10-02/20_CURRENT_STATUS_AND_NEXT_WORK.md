@@ -1,5 +1,13 @@
 # 전체 상태·C-01/A-01 확인과 다음 작업 — 2026-10-04
 
+## 후속 완료 — 사용자 순차 실행 지시 이후
+
+[run37200484232](https://github.com/JRVector9/FieldAI/actions/runs/37200484232) (`146f5c4`) 13job 모두 success. 실제 AP/Field independence 각 Chromium1/1·fail/skip0, AP DB191/191·Field DB215/215·UUID91개 제거, unit408pass/선택DB환경skip2, 계약32pass·실제응답43/43, E2E12/11/2·보안410/410·통합장애26/26. 이미지6종·lint/typecheck/API/web build 모두 success.
+
+A절branch를실제push하고main4ddf93b clean/ancestor를재확인해146f5c4로코드통합했다. 현재다음작업은22문서의결정13개·외부입력과A18기존저널cutover/배포정보준비다. 이전의새CI미실행/main미통합문구는아래착수당시이력이다. 현재13job증거는21문서를따른다.
+
+## 이력 — 실제 CI 실행 전 상태 확인
+
 사용자 요청: 현재 전체 상태와 남은 작업을 정리하고 C-01/A-01의 문제 유무를 확인한다. 이번 범위는 저장소·CI·실행 증거의 대조이며 main 통합, push, 서버 재시작, 공급사 연결은 실행하지 않는다.
 
 ## 현재 저장소와 실행 환경

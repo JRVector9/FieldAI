@@ -1,5 +1,30 @@
 # CODEX 인수인계 — 2026-10-04
 
+## C01/A01 실제 CI 완료·A절 main 코드 통합·사용자 입력 목록 — 2026-10-04
+
+- Objective/state: 사용자 순차 지시의 CI·독립성 내부 범위 verified. 결정·외부입력은 미답변이며 현행 정책을 유지한다. A절 코드 main통합(확인기준146f5c4), 최종 문서commit은 git log로 확인한다.
+- Completed/modified: 새 matrix가 있는 branchpush→13job 성공→원본main4ddf93b clean/ancestor/새commit없음 재확인→ff-only146f5c4. CI구현은 a5eac8c의기존추가를검증했고 기능코드수리없음. TASKS·18·phase·coverage·20/21/22·handoff/마스터/체크섬을갱신한다. 원본서버·DB·저널/실발송/청구/운영데이터삭제 보존.
+- Tests actually run: [run37200484232](https://github.com/JRVector9/FieldAI/actions/runs/37200484232) (`146f5c4`) 13job 모두 success. 실제 AP/Field independence 각 Chromium1/1·fail/skip0, AP DB191/191·Field DB215/215·UUID91개 제거, unit408pass/선택DB환경skip2, 계약32pass·실제응답43/43, E2E12/11/2·보안410/410·통합장애26/26. 이미지6종·lint/typecheck/API/web build 모두 success. Ubuntu24.04 GitHub fresh runners. 최초DIND증거와runtime990파일해시모두동일. metadata/step별집계/로그는 `/private/tmp/fieldai-a-ci-20261004`. `actionlint`·diffcheck0. 이번unit의2skip는DB_SUITE_ADMIN_INTEGRATION=1/POSIX local Field PG가필요한actualadmincreate/drop응답fault선택검사.
+- Document checks: 이번 build_report.py/check_package.py exit0, runtime990파일 동일 확인. 신규21/22를 포함한49개SHA256SUMS와git diff --check를검증해마감한다. 문서 HTML 디자인/과거 스크린샷은 재검수 완료로 표시하지 않는다.
+- Design: 각independence runner는자기제품env/compose만생성, 상대container/port와secret부재 검사, actualowner/guest Chromium. shell:bash/pipefail과alwayscleanup. 정책변경/키없는성공모의처리없음. B12livebaseline은이미해결, B13개선택과외부키입력은22에분리.
+- Failed approaches: 제품검수실패없음. 진행중전체run의gh run view --log 제한은공식joblogs API로완료된job로그를받아검증했다. API다운로드로그와최초CLI거절을보존했으며CI실패로오인하지않는다.
+- Remaining: 최종문서의mainpush CI는동일runtime코드의새run 결과를확인한다. 다음필수는배포대상/제품별도메인/secret보관경로, SMTP/카카오→Toss/S3/AI→발송·법적/체험입력. A18최초저널전환/writer정지→migrate/build/restart는별도환경단계다. 계정연결비활성/번호변경미구현 scope와실공급사/live/PITR/관측/서명전환/법무/실기기/외부보안/정식인수160not_run 유지.
+- Exact next commands: `cd /Users/jr/Desktop/projects/FieldAI`; `git status --short --branch`; `git log -4 --oneline`; `gh run list --repo JRVector9/FieldAI --branch main --limit 3 --json databaseId,headSha,status,conclusion,url`; 최신commit의run을선택해 `gh run view <run-id> --repo JRVector9/FieldAI --json status,conclusion,jobs`; `cat docs/technical/review_2026-10-02/22_USER_DECISIONS_AND_REQUIRED_INPUTS.md`; `shasum -a 256 -c SHA256SUMS.txt`. 신규CI를중복시작하지말고실행중run부터확인한다.
+
+## 이력 — 아래 checkpoint는 실제CI 진행 당시 상태
+
+## 사용자 순차 실행 착수 — C01/A01 실제Actions, 결정·키목록 — 2026-10-04
+
+- Objective/state: 사용자 지시로 CI·독립성을 실제실행하고 다음작업을순차진행. 기존완료A코드재구현없이 실제CI gate만재개. 제품정책·외부입력은22문서에분리하며 답변전현행유지.
+- Completed: actionlint/diffcheck0, 원본main4ddf93b·own146f5c4clean, branchpush성공. run37200484232의새independence(agent/field) 실제job실행중. 원본서버/DB/원장은보존.
+- Modified: docs21실행체크·22결정13개/외부키정보/내부생성가능키목록·handoff. 코드변경없음. 예시env만읽고secret값기록없음.
+- Evidence/pending: `gh run view 37200484232 --repo JRVector9/FieldAI --json status,conclusion,jobs`; SHA146f5c4. 현재in_progress이며 완료판정금지. CI에는외부키불필요, local `.env.live`/edge.env는없고원격보관여부미확인.
+- Next:13job특히independence2실행결과/실패원인확인→필요하면같은ID에재개근거기록후최소수리→실제CI전부성공→원장·문서검수/commit, 다른agent변경확인/main통합·A18환경준비. live/실발송/청구/운영삭제별도.
+- Exact commands: `cd /private/tmp/fieldai-remaining-a-20261004`; `gh run view 37200484232 --repo JRVector9/FieldAI --json status,conclusion,jobs`; 실패시 `gh run view 37200484232 --repo JRVector9/FieldAI --log-failed`; docs21/22참조.
+
+
+- CI 중간 checkpoint: actual independence AP/Field 모두success·Chromium각1/1·fail/skip0, joblogs직접APIfetch0(`/private/tmp/fieldai-a-ci-20261004`). static408pass/skip2·APDB191/Field215·계약32pass/actual43/43·이미지6종 포함12job success. E2E3종step성공, 보안/통합장애는아직전체run완료전이다. run37200484232 결과를확인해이어가며 같은CI를중복시작하지않는다.
+
 ## 전체 상태·C-01/A-01 재확인 — 2026-10-04
 
 - Current objective: 사용자 요청으로 전체 상태·다음 작업·C-01/A-01 문제 유무를 대조했다. 구현/운영 변경은 없고 원본main은4ddf93b clean, A절branch는 확인 기준00cd6c9 clean였다. 이번 보고서는별도branch docs만 갱신한다.

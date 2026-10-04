@@ -1,5 +1,11 @@
 # 로컬 기능 검수 현황 — 2026-10-04
 
+## 실제 GitHub CI·독립성 최신 증거 — 2026-10-04
+
+[run37200484232](https://github.com/JRVector9/FieldAI/actions/runs/37200484232) (`146f5c4`) 13job 모두 success. 실제 AP/Field independence 각 Chromium1/1·fail/skip0, AP DB191/191·Field DB215/215·UUID91개 제거, unit408pass/선택DB환경skip2, 계약32pass·실제응답43/43, E2E12/11/2·보안410/410·통합장애26/26. 이미지6종·lint/typecheck/API/web build 모두 success.
+
+Ubuntu24.04 GitHub runner, Node24.18.0/pnpm10.33.4, 제품별fresh env/compose/PG와Playwright. 실제job/step결과·전체로그는 `/private/tmp/fieldai-a-ci-20261004`와21문서. 선택적으로DB를띄워야하는admin create/drop response fault검사2건은static에서skip이며숨기지않았다. A절main코드통합완료, 기존실행서버/DB/저널은보존. 실공급사/운영/정식QA160not_run은별도다.
+
 
 ## 최신 A절 검수 — 2026-10-04 (내부 완료)
 
