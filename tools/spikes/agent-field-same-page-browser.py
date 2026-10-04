@@ -2,7 +2,7 @@ import asyncio
 import json
 import re
 import sys
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, expect
 
 
 async def main(public_id: str, mode: str):
@@ -15,7 +15,8 @@ async def main(public_id: str, mode: str):
         try:
             response = await page.goto(f"http://localhost:3001/consult/{public_id}", wait_until="networkidle")
             assert response and response.status == 200
-            await page.get_by_role("heading", name="HTTP AP 조직").wait_for()
+            # 고정 디자인(2026-09-27)의 상담 화면은 조직명을 제목이 아니라 헤더의 strong으로 표시한다.
+            await page.locator(".agent-public-header-business strong", has_text="HTTP AP 조직").wait_for()
             question = {
                 "ai_fallback": "AI 안내 뒤 Field 사업장에 문의하고 싶습니다",
                 "direct": "AI 질문 없이 Field 사업장에 문의합니다",
@@ -192,8 +193,8 @@ async def main(public_id: str, mode: str):
                     async with page.expect_response(lambda result: "/messages" in result.url
                             and result.request.method == "POST"):
                         await page.get_by_role("button", name="AI에 질문").click()
-                    await page.wait_for_function("Array.from(document.querySelectorAll('button'))"
-                        ".find(button => button.textContent === 'AI에 질문')?.disabled === false")
+                    # 버튼 문구 뒤에 장식용 화살표(aria-hidden)가 붙으므로 textContent 비교 대신 접근성 이름으로 기다린다.
+                    await expect(page.get_by_role("button", name="AI에 질문")).to_be_enabled()
                     assert await page.get_by_label("문의 내용").input_value() == expected_draft
                 assert await page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
                 assert not errors, errors
