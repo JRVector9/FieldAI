@@ -53,6 +53,8 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
   let sentRevocationId = '';
   // 해제 발신마다 받은 서명 버전 헤더와 그 버전 원문으로 계산한 서명 일치 여부(호출 뒤 단언한다)
   const revokeSignatures: { version: string | null; valid: boolean }[] = [];
+  // 발신기가 fetcher 예외를 'retry'로 삼키므로 stub 안의 단언 실패를 기록해 호출 뒤 원인을 드러낸다
+  let revokeStubError: unknown;
   let factsCalls = 0;
   let refreshFails = false;
   // refresh 응답을 붙잡아 두는 관문. 갱신 중에 다른 요청이 같은 refresh token을 다시 쓰지 않는지(임대 CAS) 확인한다
@@ -74,15 +76,17 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
       revokeCalls++;
       const headers = init.headers as Record<string, string>;
       const revocationId = headers['x-revocation-id'];
-      assert.ok(revocationId);
-      assert.equal(headers['x-key-id'], eventKeyId);
-      // 발신 버전 2는 `v2:ap->field.` 방향 접두사, 1(전환 기간)은 버전 헤더와 접두사가 없는 원문으로 서명한다.
-      // fetcher 안의 단언 실패는 발신기가 전송 실패(retry)로 삼키므로 결과를 기록해 호출 뒤 단언한다
-      const version = headers['x-signature-version'] ?? null;
-      revokeSignatures.push({ version, valid: headers['x-signature'] === createHmac('sha256',
-        Buffer.from(eventSecret, 'base64url')).update(`${version === '2' ? 'v2:ap->field.' : ''}${
-        headers['x-timestamp']}.${revocationId}.${fieldConnectionId}.revoke`).digest('hex') });
-      assert.equal(sentRevocationId === '' || sentRevocationId === revocationId, true);
+      try {
+        assert.ok(revocationId);
+        assert.equal(headers['x-key-id'], eventKeyId);
+        // 발신 버전 2는 `v2:ap->field.` 방향 접두사, 1(전환 기간)은 버전 헤더와 접두사가 없는 원문으로 서명한다.
+        // fetcher 안의 단언 실패는 발신기가 전송 실패(retry)로 삼키므로 결과를 기록해 호출 뒤 단언한다
+        const version = headers['x-signature-version'] ?? null;
+        revokeSignatures.push({ version, valid: headers['x-signature'] === createHmac('sha256',
+          Buffer.from(eventSecret, 'base64url')).update(`${version === '2' ? 'v2:ap->field.' : ''}${
+          headers['x-timestamp']}.${revocationId}.${fieldConnectionId}.revoke`).digest('hex') });
+        assert.equal(sentRevocationId === '' || sentRevocationId === revocationId, true);
+      } catch (error) { revokeStubError ??= error; throw error; }
       sentRevocationId = revocationId;
       if (remoteRevokeDown) throw new Error('Field unavailable');
       return Response.json({ connectionId: fieldConnectionId, status: 'revoked', revocationId });
@@ -875,7 +879,9 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
     // 전환 기간 발신 버전 1: 버전 헤더 없이 v1 원문으로 서명한다(이번 시도는 Field 장애로 재시도)
     process.env.AP_EVENT_SIGNATURE_SEND_VERSION = '1';
     try {
-      assert.equal(await deliverFieldConnectionRevokeOnce(pool, runtime.fieldConnector), 'retry');
+      const firstRevoke = await deliverFieldConnectionRevokeOnce(pool, runtime.fieldConnector);
+      assert.ifError(revokeStubError);
+      assert.equal(firstRevoke, 'retry');
     } finally { delete process.env.AP_EVENT_SIGNATURE_SEND_VERSION; }
     assert.equal(revokeCalls, 1);
     assert.deepEqual(revokeSignatures, [{ version: null, valid: true }]);
@@ -883,7 +889,9 @@ test('AP BFF accepts a separate Field grant only for the AP actor and pending co
       where connection_id = $1`, [fieldConnectionId]);
     remoteRevokeDown = false;
     // 기본 발신 버전 2: X-Signature-Version: 2와 방향 접두사 원문으로 서명한다
-    assert.equal(await deliverFieldConnectionRevokeOnce(pool, runtime.fieldConnector), 'acked');
+    const retriedRevoke = await deliverFieldConnectionRevokeOnce(pool, runtime.fieldConnector);
+    assert.ifError(revokeStubError);
+    assert.equal(retriedRevoke, 'acked');
     assert.equal(revokeCalls, 2);
     assert.deepEqual(revokeSignatures, [{ version: null, valid: true }, { version: '2', valid: true }]);
     assert.equal(sentRevocationId, revoked.json().revocationId);
