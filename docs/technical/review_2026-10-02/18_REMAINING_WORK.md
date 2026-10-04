@@ -63,7 +63,7 @@ A-01~A-25 내부 구현·검수 완료. 아래 요구 설명은 착수 원문이
 
 | ID | 작업 | 현재 상태 | 필요한 것 |
 |---|---|---|---|
-| C-01 | GitHub Actions 실제 실행 | **[x] 기존 CI:** 외부 `a9fea58` [run37196988683](https://github.com/JRVector9/FieldAI/actions/runs/37196988683) 전체 success. 이전 `c135fbb` run37195003617 faults 실패는 외부 fixture 수리 후 해결. **[ ] 새 A절 CI:** 코드 `a5eac8c`/independence matrix는 actionlint만 통과, push/Actions 미실행 | 별도 A절 branch의 새 commit·independence job 전체 Actions 결과 확인 |
+| C-01 | GitHub Actions 실제 실행 | **[x] 기존 CI:** 첫 `a9fea58` run37196988683 및 최신 main `4ddf93b` [run37198414880](https://github.com/JRVector9/FieldAI/actions/runs/37198414880)의 기존11job 전체 success(API 재확인). 이전 `c135fbb` run37195003617 faults 실패는 외부 fixture 수리 후 해결. **[ ] 새 A절 CI:** 코드 `a5eac8c`/independence matrix는 actionlint만 통과, push/Actions 미실행 | 별도 A절 branch의 새 commit·independence job 전체 Actions 결과 확인 |
 | C-02 | 실 공급사 연결 검증 | 모두 `blocked_integration` | SMTP(`smtps:`), 카카오 앱·Redirect URI, Toss sandbox(인증·청구·환불·웹훅), S3(ListBucket·HeadObject 404), OpenAI 키·`AP_CUSTOMER_DAILY_LIMIT`, 솔라피·web-push, Caddy+ACME DNS-01 와일드카드 |
 | C-03 | live compose 기동 리허설 | `docker compose config`와 임시 PG 기동만 확인 | 실제 서버에서 `compose.live` up, `/health/ready`, worker 상시 실행, 로그·헬스체크 확인 |
 | C-04 | 백업·PITR·복원 리허설 | runbook은 mock 전용 | 운영 PG 백업, 복원 후 lifecycle/revocation/retention 저널 재검증, A-18 |
@@ -89,3 +89,5 @@ A-01~A-25 내부 구현·검수 완료. 아래 요구 설명은 착수 원문이
 1. **A-01** 독립성 재실행(회귀 확인이 가장 먼저) → **A-07·A-08·A-09·A-10** 삭제·노출 경계 마감 → **A-06·A-02·A-03** 운영자·사업자 화면 공백 → **A-04·A-05** live 절차 → **A-20·A-21** 검수 확대 → 나머지 A.
 2. B절은 사용자 결정을 모아 한 번에 처리한다(1·2·14는 설계 검토 필요, 나머지는 소규모).
 3. C절은 공급사 키가 들어오는 순서대로 진행하되 C-01은 새 A절 commit/independence job의 실제 Actions 결과를 확인해야 한다.
+
+현재 저장소·C-01/A-01 재확인과 우선순위는 `20_CURRENT_STATUS_AND_NEXT_WORK.md`를 따른다. A절 내부 완료와 main 미통합·신규 CI 미실행을 구분한다.

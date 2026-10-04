@@ -1,5 +1,16 @@
 # CODEX 인수인계 — 2026-10-04
 
+## 전체 상태·C-01/A-01 재확인 — 2026-10-04
+
+- Current objective: 사용자 요청으로 전체 상태·다음 작업·C-01/A-01 문제 유무를 대조했다. 구현/운영 변경은 없고 원본main은4ddf93b clean, A절branch는 확인 기준00cd6c9 clean였다. 이번 보고서는별도branch docs만 갱신한다.
+- Completed/modified: `20_CURRENT_STATUS_AND_NEXT_WORK.md`에 현재상태·우선순위·실제명령/로그를 기록하고18의C01 최신run을 갱신했다. 원본서버/DB/원장/push/main통합은 수행하지 않는다.
+- Evidence: 최신 main run37198414880의11job 모두success, e2e3/security/faults 실제step 성공을GitHub API 재확인. 새independence matrix는main/원격에없고 아직실행안됨. AP/Fieldready200/emailmock. `merge-base --is-ancestor main fix/remaining-a-20261004`0, ls-remote는main만반환.
+- Document checks: 이번 문서 패키지 check_package.py exit0, SHA256SUMS47/47 통과, git diff --check0. 서비스 코드 변경은 없으며 전체 DB/E2E 통과 이력은 앞선 실제 검수를 보존한다.
+- A01 verification: 보존된최종DIND 정확명령양방향exit0/Chromium각1/1/skip0와상대부재증거, 현재런타임990해시동일. 이번unit2/2+actionlint0. `shell:bash`의pipefail 규칙 공식문서대조. 검토범위에새결함없음; 전체독립성/DB/E2E를이번에새로실행한것은아니다.
+- Remaining/order: 별도branch push→신규CI13job(agent/fieldindependence포함) 실제통과→다른agent변경확인/main통합→A18최초journalcutover/migrate/build/restart준비→B13결정/실공급사→live/PITR/관측/서명전환→실기기/법무/외부보안/정식인수160not_run. 기존A내부완료재구현금지. 계정연결은의도적disabled/번호변경미구현은별도scope확정필요.
+- Exact next commands: `cd /private/tmp/fieldai-remaining-a-20261004`; `git status --short --branch`; `cat docs/technical/review_2026-10-02/20_CURRENT_STATUS_AND_NEXT_WORK.md`; `git push -u origin fix/remaining-a-20261004`; `gh run list --repo JRVector9/FieldAI --branch fix/remaining-a-20261004 --limit 3`; 실제run ID로 `gh run view <run-id> --repo JRVector9/FieldAI`. 이번turn에서는push하지않았다.
+
+
 ## A절 구현·리뷰·전체 검수 완료 — 2026-10-04
 
 - Current objective/state: 사용자 A-01~A-25 내부 범위 완료. 코드 `a5eac8c`, 외부 `a9fea58` 보존 병합 `0507bfc`, 전용 branch `fix/remaining-a-20261004`. worktree `/private/tmp/fieldai-remaining-a-20261004`. 원본main/서버/컨테이너/공유 원장 보존. 새작업은 remaining만 따르고 완료A를 이유없이 다시 구현하지 않는다.
