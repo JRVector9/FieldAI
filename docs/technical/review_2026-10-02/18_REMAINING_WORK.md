@@ -61,7 +61,7 @@
 
 | ID | 작업 | 현재 상태 | 필요한 것 |
 |---|---|---|---|
-| C-01 | GitHub Actions 실제 실행 | `ci.yml`은 actionlint 통과만. `main`이 origin보다 앞서 Actions가 한 번도 돌지 않음 | push 후 첫 실행 결과 확인(Actions 결제 상태 포함), e2e job의 same-page 브라우저 단계 첫 실행 red 가능 |
+| C-01 | GitHub Actions 실제 실행 | **완료(2026-10-04)**: 5차 실행 `37196988683`(commit `a9fea58`)에서 static·agent·field·contracts·이미지 6종·e2e(mock 기동, E2E 3종, 보안, 통합장애) 전부 success. 1~4차 실패 원인은 CI env의 `AP_PUBLIC_WEB_ORIGIN` 누락, Field 회수 저널 디렉터리 미생성, same-page spike의 낡은 선택자 2곳, Field 테스트 정규식의 UUID 오탐(0.3%)이었고 모두 수정했다 | 이후 push마다 결과 확인. `test:independence` job은 A-01 |
 | C-02 | 실 공급사 연결 검증 | 모두 `blocked_integration` | SMTP(`smtps:`), 카카오 앱·Redirect URI, Toss sandbox(인증·청구·환불·웹훅), S3(ListBucket·HeadObject 404), OpenAI 키·`AP_CUSTOMER_DAILY_LIMIT`, 솔라피·web-push, Caddy+ACME DNS-01 와일드카드 |
 | C-03 | live compose 기동 리허설 | `docker compose config`와 임시 PG 기동만 확인 | 실제 서버에서 `compose.live` up, `/health/ready`, worker 상시 실행, 로그·헬스체크 확인 |
 | C-04 | 백업·PITR·복원 리허설 | runbook은 mock 전용 | 운영 PG 백업, 복원 후 lifecycle/revocation/retention 저널 재검증, A-18 |

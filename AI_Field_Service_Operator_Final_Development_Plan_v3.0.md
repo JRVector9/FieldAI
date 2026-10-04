@@ -1271,6 +1271,8 @@ Owner / reviewed_at / blocker / next action:
 
 ### 완료 체크 — 재작업 방지 기준 (2026-09-27)
 
+**[x] C-01 GitHub Actions 첫 실행 통과(2026-10-04, 커밋 c36a407·653de60·c135fbb·a9fea58):** 원격 push 후 CI 5회 실행으로 전 job success(`37196988683`). 수정: `setup-mock-env.mjs`에 `AP_PUBLIC_WEB_ORIGIN`·Field 회수 저널 디렉터리 생성, lifecycle CLI의 `realpath` 전 mkdir, same-page 브라우저 spike 선택자 2곳(고정 디자인에 맞춤, UI 변경 없음), Field facts stub 정규식 `/010-/`의 UUID 오탐 제거+stub 단언 기록(`assert.ifError`), lifecycle 테스트 연결 수 확인을 2초 대기로. 제품 코드 결함은 없었다. 세부는 `18_REMAINING_WORK.md` C-01.
+
 **[ ] 남은 작업 전체 목록(2026-10-04):** 코드 25건(A-01~A-25)·결정 대기 14건(B, `01_SUMMARY.md` §13)·외부 검증 9건(C)·문서 유지 4건(D)을 `docs/technical/review_2026-10-02/18_REMAINING_WORK.md`에 정리했다. 새 작업은 이 문서의 ID로 시작하고 완료 시 이 문서와 본 원장을 같은 커밋에서 갱신한다. 권장 순서: A-01 독립성 재실행 → A-07~A-10 경계 마감 → A-06·A-02·A-03 화면 공백 → A-04·A-05 live 절차 → A-20·A-21 검수 확대.
 
 **[x] 종합 리뷰(놓친 것 점검)·반영(2026-10-03, commit은 이 항목 아래 실제 해시 참조):** 84af59a 이후 전체 변경을 5관점(AP API·Field API·웹·인프라/문서/CI·보안)으로 재검토하고 반영했다(`docs/technical/review_2026-10-02/13`~`17`, `01_SUMMARY.md` §14). 핵심: 삭제 유예 중 결제·체험·연결 시작 차단(양 제품 409 `deletion_scheduled`), retention worker S3 없이 기동+compose 상시 실행, 해제 연결의 미해결 요청 종결(AP 000094 `unresolved`), 삭제 시 통합 grant 회수·매체/OAuth client 차단 사유, Field 삭제 실행기 S3 I/O 제거, CI compose 기반 DB+e2e job, 5xx 원문 숨김·NUL 거부·인증 링크 자동 로그인 해제·미인증 계정 정리·DB rateLimit·메일 중복 억제·요청 timeout·IPv6 /64, 웹 삭제 유예 안내·오류 문구·처리방침·`/preview` live 숨김·사진 삭제 복구 패널, 마스터 문서·SHA256SUMS 재생성. Mac local mock 전체 검수 exit0: `test:db:agent` 177/177/`test:db:field` 200/200/contracts 14/14/`e2e` 10·8·2/`integration:faults` 15/15/`security` 381/381. 남긴 것은 §14.
